@@ -1,0 +1,49 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go
+/bin/
+/dist/
+*.test
+*.out
+*.prof
+*.coverprofile
+coverage/
+
+# Node / Next.js
+node_modules/
+node_modules.stale/
+.pnpm-store/
+.next/
+out/
+.turbo/
+.cache/
+*.tsbuildinfo
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test and browser automation artifacts
+test-results/
+playwright-report/
+blob-report/
+junit.xml
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local runtime files
+*.log
+tmp/
+
+# Local tool state
+.claude/
+.codex/
