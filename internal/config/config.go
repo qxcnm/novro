@@ -220,8 +220,8 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 
 	publicURL := strings.TrimRight(getString("NOVRO_PUBLIC_URL", "http://localhost:3000"), "/")
 	parsedPublicURL, err := url.Parse(publicURL)
-	if err != nil || parsedPublicURL.Host == "" || (parsedPublicURL.Scheme != "http" && parsedPublicURL.Scheme != "https") || parsedPublicURL.RawQuery != "" || parsedPublicURL.Fragment != "" {
-		return Config{}, errors.New("NOVRO_PUBLIC_URL must be an absolute http or https URL without query or fragment")
+	if err != nil || !isHTTPOrigin(parsedPublicURL) {
+		return Config{}, errors.New("NOVRO_PUBLIC_URL must be an absolute http or https origin without a path, credentials, query, or fragment")
 	}
 	if environment == "production" && parsedPublicURL.Scheme != "https" {
 		return Config{}, errors.New("production requires an https NOVRO_PUBLIC_URL")
@@ -260,9 +260,7 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 			continue
 		}
 		parsedOrigin, parseErr := url.Parse(origin)
-		if parseErr != nil || parsedOrigin.Host == "" || parsedOrigin.User != nil ||
-			(parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") ||
-			parsedOrigin.Path != "" || parsedOrigin.RawPath != "" || parsedOrigin.RawQuery != "" || parsedOrigin.Fragment != "" {
+		if parseErr != nil || !isHTTPOrigin(parsedOrigin) {
 			return Config{}, errors.New("NOVRO_ALLOWED_ORIGINS must contain only absolute http or https origins without paths, credentials, queries, or fragments")
 		}
 		if environment == "production" && parsedOrigin.Scheme != "https" {
@@ -319,6 +317,12 @@ func isLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+func isHTTPOrigin(parsed *url.URL) bool {
+	return parsed != nil && parsed.Host != "" && parsed.User == nil &&
+		(parsed.Scheme == "http" || parsed.Scheme == "https") &&
+		parsed.Path == "" && parsed.RawPath == "" && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
 func (c DatabaseConfig) DSN() string {

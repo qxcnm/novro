@@ -182,6 +182,21 @@ func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresPublicURLOrigin(t *testing.T) {
+	for _, publicURL := range []string{
+		"https://user@novro.example.com",
+		"https://novro.example.com/console",
+		"https://novro.example.com?source=test",
+		"https://novro.example.com#fragment",
+	} {
+		values := testEnv()
+		values["NOVRO_PUBLIC_URL"] = publicURL
+		if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "NOVRO_PUBLIC_URL") {
+			t.Fatalf("public URL %q was not rejected: %v", publicURL, err)
+		}
+	}
+}
+
 func redactDSN(dsn string) string {
 	if index := strings.Index(dsn, "@tcp("); index >= 0 {
 		return "<redacted>" + dsn[index:]

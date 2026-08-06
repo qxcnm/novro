@@ -42,6 +42,8 @@ NOVRO_ALLOWED_ORIGINS=https://novro.example.com
 每项来源必须是无路径、查询、片段或用户信息的 HTTPS Origin。生产环境的
 `NOVRO_HTTP_ADDR` 也必须使用 loopback 主机，避免绕过反向代理直接访问 Go 服务。
 `/v1/*` 的 API Key 请求不依赖浏览器 `Origin`，可由非浏览器客户端直接调用。
+`NOVRO_PUBLIC_URL` 同样必须是无路径、查询、片段或用户信息的站点 Origin；OIDC
+回调地址由该值拼接 `/api/auth/oidc/callback` 得到。
 
 Next.js 进程只需要服务端变量：
 
