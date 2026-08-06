@@ -9,10 +9,12 @@ requirements below.
 - Build Novro as a modular monolith: one Go API service and one Next.js console.
 - Keep domain boundaries explicit inside the monolith. Do not add network
   services merely to separate modules.
-- The current milestone covers authentication and administrator user
-  management only.
-- Do not implement payments, plans, subscriptions, organizations, projects,
-  provider administration, or model routing until the roadmap reaches them.
+- The current milestone includes authentication, administrator user management,
+  API keys, wallets, provider configuration, model routing, and the unified
+  model gateway documented in the completed first-version roadmap.
+- Do not implement payments, plans, subscriptions, coupons, organizations,
+  projects, complex provider orchestration, multi-region deployment, or
+  microservice decomposition until a later roadmap explicitly reaches them.
 
 ## Repository Layout
 

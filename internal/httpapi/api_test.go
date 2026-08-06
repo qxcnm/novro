@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -542,5 +543,31 @@ func TestAuthenticationErrorsAreStable(t *testing.T) {
 	testAPI(authService, &fakeAPIUsers{}).ServeHTTP(response, request)
 	if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), "database") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestResponsesIncludeServerGeneratedRequestID(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	request.Header.Set("X-Novro-Request-ID", "00000000-0000-0000-0000-000000000001")
+	response := httptest.NewRecorder()
+	testAPI(&fakeAPIAuth{authErr: auth.ErrUnauthenticated}, &fakeAPIUsers{}).ServeHTTP(response, request)
+	requestID := response.Header().Get("X-Novro-Request-ID")
+	if _, err := uuid.Parse(requestID); err != nil {
+		t.Fatalf("invalid request id header %q: %v", requestID, err)
+	}
+	if requestID == request.Header.Get("X-Novro-Request-ID") {
+		t.Fatal("server accepted client request id")
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+		Error     struct {
+			Type string `json:"type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.RequestID != requestID || body.Error.Type != "novro_error" {
+		t.Fatalf("request id/type mismatch header=%q body=%+v", requestID, body)
 	}
 }

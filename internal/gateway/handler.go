@@ -20,6 +20,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/requestid"
 )
 
 const (
@@ -73,6 +74,9 @@ func New(deps Dependencies) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, id := requestid.Ensure(r.Context())
+	r = r.WithContext(ctx)
+	w.Header().Set(requestid.Header, id.String())
 	actor, ok := h.authenticate(w, r)
 	if !ok {
 		return
@@ -111,7 +115,7 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (apikey.A
 			writeError(w, http.StatusUnauthorized, "invalid_api_key", "API Key 无效或已撤销")
 			return apikey.Actor{}, false
 		}
-		h.logger.Error("authenticate gateway request", "error", err)
+		h.logger.Error("authenticate gateway request", "request_id", requestid.FromContext(r.Context()), "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 		return apikey.Actor{}, false
 	}
@@ -121,7 +125,7 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (apikey.A
 func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, _ apikey.Actor) {
 	routes, err := h.routes.ListActive(r.Context())
 	if err != nil {
-		h.logger.Error("list gateway models", "error", err)
+		h.logger.Error("list gateway models", "request_id", requestid.FromContext(r.Context()), "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 		return
 	}
@@ -155,7 +159,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			writeError(w, http.StatusNotFound, "model_not_found", "模型不存在或当前不可用")
 			return
 		}
-		h.logger.Error("resolve gateway model", "error", err)
+		h.logger.Error("resolve gateway model", "request_id", requestid.FromContext(r.Context()), "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 		return
 	}
@@ -185,7 +189,10 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	}
 	inputEstimate := len(upstreamBody) + 256
 	reserved := priceForTokens(inputEstimate, route.InputPriceMicros) + priceForTokens(maximum, route.OutputPriceMicros)
-	requestID := uuid.New()
+	requestID := requestid.FromContext(r.Context())
+	if requestID == uuid.Nil {
+		requestID = requestid.New()
+	}
 	if reserved > 0 {
 		if err := h.billing.Reserve(r.Context(), actor.User.ID, requestID, reserved, "调用 "+route.PublicName); err != nil {
 			if errors.Is(err, billing.ErrInsufficientBalance) {
@@ -507,5 +514,9 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]any{"error": map[string]any{"message": message, "type": "novro_error", "code": code}})
+	value := map[string]any{"error": map[string]any{"message": message, "type": "novro_error", "code": code}}
+	if id := requestid.ResponseID(w); id != uuid.Nil {
+		value["request_id"] = id.String()
+	}
+	writeJSON(w, status, value)
 }

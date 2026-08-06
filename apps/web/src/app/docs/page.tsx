@@ -169,14 +169,12 @@ const structuredExample = `const response = await client.chat.completions.create
 });`;
 
 const errors = [
-  ["400", "invalid_request_error", "请求字段、模型或参数不合法", "修正请求后再发，不要原样重试"],
-  ["401", "authentication_error", "API Key 缺失、无效或已撤销", "检查服务端环境中的 Key"],
+  ["400", "invalid_request / unsupported_endpoint", "请求字段、参数或 API 协议不合法", "修正请求后再发，不要原样重试"],
+  ["401", "invalid_api_key", "API Key 缺失、无效或已撤销", "检查服务端环境中的 Key"],
   ["402", "insufficient_balance", "账户余额不足，网关未调用上游", "调整余额后再重试"],
-  ["403", "permission_denied", "用户或模型没有调用权限", "检查账号状态和模型权限"],
-  ["404", "not_found", "路径或模型标识不存在", "检查 Base URL、路径和模型 ID"],
-  ["429", "rate_limit_error", "超过并发或速率限制", "遵循 Retry-After 并指数退避"],
-  ["500", "internal_error", "网关内部错误", "记录 request_id 后有限重试"],
-  ["502/503", "upstream_unavailable", "上游暂时不可用", "指数退避并设置最大重试次数"],
+  ["404", "not_found / model_not_found", "路径或模型标识不存在", "检查 Base URL、路径和模型 ID"],
+  ["500", "internal_error / billing_error", "网关内部或计费记录错误", "记录 request_id 后有限重试"],
+  ["502", "upstream_unavailable / upstream_error", "上游暂时不可用或响应无效", "指数退避并设置最大重试次数"],
 ];
 
 export function ApiDocumentation() {
@@ -326,16 +324,16 @@ export function ApiDocumentation() {
 
             <section id="errors" className="scroll-mt-24">
               <SectionHeading eyebrow="07 · 错误处理" title="按错误类型决定是否重试">
-                错误响应使用稳定的 <code>error.type</code>、面向用户的 <code>error.message</code> 和可追踪的 <code>request_id</code>。不要仅根据文案做程序分支。
+                错误响应使用稳定的 <code>error.code</code>、固定的 <code>error.type</code>、面向用户的 <code>error.message</code> 和可追踪的 <code>request_id</code>。程序应根据状态码和错误代码分支，不要依赖文案。
               </SectionHeading>
               <div className="mt-7 overflow-x-auto rounded-lg border">
                 <table className="w-full min-w-[44rem] text-left text-sm">
                   <thead className="border-b bg-muted/50 text-xs text-muted-foreground">
-                    <tr><th className="px-4 py-3">状态</th><th className="px-4 py-3">类型</th><th className="px-4 py-3">含义</th><th className="px-4 py-3">处理</th></tr>
+                    <tr><th className="px-4 py-3">状态</th><th className="px-4 py-3">错误代码</th><th className="px-4 py-3">含义</th><th className="px-4 py-3">处理</th></tr>
                   </thead>
                   <tbody className="divide-y">
-                    {errors.map(([status, type, meaning, action]) => (
-                      <tr key={status}><td className="px-4 py-3 font-mono text-xs">{status}</td><td className="px-4 py-3 font-mono text-xs">{type}</td><td className="px-4 py-3 text-muted-foreground">{meaning}</td><td className="px-4 py-3 text-muted-foreground">{action}</td></tr>
+                    {errors.map(([status, code, meaning, action]) => (
+                      <tr key={status}><td className="px-4 py-3 font-mono text-xs">{status}</td><td className="px-4 py-3 font-mono text-xs">{code}</td><td className="px-4 py-3 text-muted-foreground">{meaning}</td><td className="px-4 py-3 text-muted-foreground">{action}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -343,7 +341,7 @@ export function ApiDocumentation() {
               <Accordion type="single" collapsible className="mt-6">
                 <AccordionItem value="retry">
                   <AccordionTrigger>推荐的重试策略</AccordionTrigger>
-                  <AccordionContent className="leading-6 text-muted-foreground">只重试 429、500、502 和 503。使用带随机抖动的指数退避，例如 1 秒、2 秒、4 秒，最多 3 次；优先遵循 <code>Retry-After</code>，并为整个请求设置总超时。</AccordionContent>
+                  <AccordionContent className="leading-6 text-muted-foreground">只重试 500 和 502。使用带随机抖动的指数退避，例如 1 秒、2 秒、4 秒，最多 3 次，并为整个请求设置总超时。余额不足、鉴权失败、请求参数错误和模型不存在不应自动重试。</AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="request-id">
                   <AccordionTrigger>排查问题需要保留什么</AccordionTrigger>

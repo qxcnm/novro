@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -98,6 +99,10 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	}
 	if biller.reserved <= 180 || biller.usage.CostMicros != 180 || biller.usage.InputTokens != 10 || biller.usage.OutputTokens != 20 || biller.usage.UpstreamRequestID != "up-1" {
 		t.Fatalf("unexpected billing reservation=%d usage=%+v", biller.reserved, biller.usage)
+	}
+	requestID, err := uuid.Parse(response.Header().Get("X-Novro-Request-ID"))
+	if err != nil || biller.usage.RequestID != requestID {
+		t.Fatalf("response and billing request ids differ: header=%q usage=%s err=%v", response.Header().Get("X-Novro-Request-ID"), biller.usage.RequestID, err)
 	}
 }
 
@@ -264,6 +269,60 @@ func TestModelListRequiresAPIKey(t *testing.T) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d", response.Code)
 	}
+	assertErrorRequestID(t, response)
+}
+
+func TestGatewayErrorsIncludeRequestID(t *testing.T) {
+	tests := []struct {
+		name    string
+		routes  fakeRoutes
+		billing *fakeBilling
+		client  *http.Client
+		status  int
+	}{
+		{
+			name: "model not found", routes: fakeRoutes{err: modelroute.ErrNotFound},
+			billing: &fakeBilling{}, client: &http.Client{}, status: http.StatusNotFound,
+		},
+		{
+			name: "insufficient balance", routes: fakeRoutes{route: openAIRoute()},
+			billing: &fakeBilling{reserveErr: billing.ErrInsufficientBalance}, client: &http.Client{}, status: http.StatusPaymentRequired,
+		},
+		{
+			name: "upstream failure", routes: fakeRoutes{route: openAIRoute()}, billing: &fakeBilling{},
+			client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("timeout") })},
+			status: http.StatusBadGateway,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: tt.routes, Billing: tt.billing, Client: tt.client})
+			request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20}`))
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tt.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			assertErrorRequestID(t, response)
+		})
+	}
+}
+
+func assertErrorRequestID(t *testing.T, response *httptest.ResponseRecorder) uuid.UUID {
+	t.Helper()
+	requestID := response.Header().Get("X-Novro-Request-ID")
+	parsed, err := uuid.Parse(requestID)
+	if err != nil {
+		t.Fatalf("invalid request id header %q: %v", requestID, err)
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.RequestID != requestID {
+		t.Fatalf("request id mismatch header=%q body=%q err=%v", requestID, body.RequestID, err)
+	}
+	return parsed
 }
 
 func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {

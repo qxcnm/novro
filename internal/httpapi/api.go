@@ -21,6 +21,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/requestid"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -175,7 +176,7 @@ func New(deps Dependencies) http.Handler {
 	if deps.Gateway != nil {
 		mux.Handle("/v1/", deps.Gateway)
 	}
-	return h.securityHeaders(h.validateOrigin(mux))
+	return requestid.Middleware(h.securityHeaders(h.validateOrigin(mux)))
 }
 
 func (h *apiHandler) authOptions(w http.ResponseWriter, r *http.Request) {
@@ -937,7 +938,7 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 }
 
 func (h *apiHandler) internalError(w http.ResponseWriter, operation string, err error) {
-	h.logger.Error(operation, "error", err)
+	h.logger.Error(operation, "request_id", requestid.ResponseID(w), "error", err)
 	writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 }
 
@@ -994,7 +995,11 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]any{
-		"error": map[string]string{"code": code, "message": message},
-	})
+	value := map[string]any{
+		"error": map[string]string{"code": code, "message": message, "type": "novro_error"},
+	}
+	if id := requestid.ResponseID(w); id != uuid.Nil {
+		value["request_id"] = id.String()
+	}
+	writeJSON(w, status, value)
 }
