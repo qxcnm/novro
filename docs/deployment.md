@@ -165,9 +165,14 @@ $target = 'novro_restore_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
   -CompareSourceRowCounts
 ```
 
-`-CompareSourceRowCounts` 适合源库仍在线的演练：它逐表比较 11 张业务/元数据表的精确
-行数。脚本还会验证 SHA-256、完整表集合，以及恢复库中的迁移版本是否与当前仓库完全
-一致。源库不可用的灾难恢复仍会执行校验和、表集合和迁移版本检查，但无法比较源行数。
+`-CompareSourceRowCounts` 适合源库仍在线的演练：它逐表比较恢复点所含业务/元数据表的
+精确行数。脚本默认要求并验证备份的 SHA-256 文件，再检查表集合与迁移记录一致；已
+应用的迁移必须是当前仓库的连续前缀，若元数据已有迁移 checksum，还会逐条与仓库 SQL
+比对。恢复点可以缺少尚未应用的后续迁移，第 9 节的 `migrate` 会向前补齐。旧备份若
+尚无迁移 checksum 列，脚本会明确返回 `MigrationChecksumsVerified=False`，恢复后必须
+先运行 `migrate` 建立校验和基线。只有经过审查的灾难恢复才能显式使用
+`-AllowMissingBackupChecksum` 跳过缺失的备份校验文件，并应记录原因。源库不可用时
+无法比较行数，其余检查仍会执行。
 
 恢复后使用一个只读检查账号连接目标库，抽查管理员、钱包、流水、Key 前缀、提供商和
 模型路由数量；不要查询或导出密码哈希、Key 哈希或加密提供商凭据。验证完的演练库由
@@ -177,8 +182,9 @@ $target = 'novro_restore_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
 
 1. 停止所有 Novro 写流量并记录故障时间点。
 2. 选择故障前最后一份校验通过的备份，恢复到新的 `novro_restore_*` 数据库。
-3. 运行脚本验证和只读业务抽查；记录恢复点带来的最大数据丢失窗口。
-4. 使用 `check-db` 和 `migrate` 检查恢复库，迁移只允许向前补齐。
+3. 运行脚本验证和只读业务抽查；记录恢复点带来的最大数据丢失窗口及待补迁移数。
+4. 使用 `check-db` 和 `migrate` 检查恢复库，迁移只允许向前补齐；旧备份在此建立迁移
+   checksum 基线。
 5. 更新部署秘密中的 `NOVRO_DATABASE_NAME`，重启 Go 服务并确认 `/readyz`。
 6. 恢复只读流量并完成登录、余额、Key、模型列表检查后，再恢复写流量。
 7. 原数据库保持只读并按保留策略归档，不立即删除。

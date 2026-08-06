@@ -12,6 +12,8 @@ param(
 
     [switch]$AllowNonTestTarget,
 
+    [switch]$AllowMissingBackupChecksum,
+
     [switch]$CompareSourceRowCounts
 )
 
@@ -135,6 +137,7 @@ $sslMode = switch ($tlsText.ToLowerInvariant()) {
 
 $fullBackupPath = (Resolve-Path -LiteralPath $BackupPath).Path
 $checksumPath = "$fullBackupPath.sha256"
+$backupChecksumVerified = $false
 if (Test-Path -LiteralPath $checksumPath -PathType Leaf) {
     $expectedHash = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
     if ($expectedHash -notmatch '^[a-f0-9]{64}$') {
@@ -144,30 +147,39 @@ if (Test-Path -LiteralPath $checksumPath -PathType Leaf) {
     if ($expectedHash -ne $actualHash) {
         throw "Backup checksum does not match $checksumPath"
     }
+    $backupChecksumVerified = $true
+}
+elseif (-not $AllowMissingBackupChecksum) {
+    throw "Backup checksum file is required: $checksumPath. Pass -AllowMissingBackupChecksum only for a reviewed disaster recovery."
 }
 
 $executable = Resolve-NativeExecutable $MySQLPath
-$expectedTables = @(
-    "api_keys",
-    "api_usages",
-    "model_routes",
-    "novro_schema_migrations",
-    "providers",
-    "system_settings",
-    "user_identities",
-    "user_sessions",
-    "users",
-    "wallet_entries",
-    "wallets"
-)
 $migrationDirectory = Join-Path (Split-Path -Parent $PSScriptRoot) "ent\migrate\migrations"
 $expectedMigrations = @(
     Get-ChildItem -LiteralPath $migrationDirectory -Filter "*.sql" -File |
         Sort-Object Name |
-        ForEach-Object { $_.BaseName }
+        ForEach-Object {
+            [pscustomobject]@{
+                Version = $_.BaseName
+                Checksum = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
 )
 if ($expectedMigrations.Count -eq 0) {
     throw "No versioned migrations were found in $migrationDirectory"
+}
+$tablesIntroducedByMigration = @{
+    "0001_users_and_sessions" = @("user_sessions", "users")
+    "0002_registration_oidc_and_setup" = @("system_settings", "user_identities")
+    "0003_api_keys" = @("api_keys")
+    "0004_providers" = @("providers")
+    "0005_wallets_model_routes_and_usage" = @("api_usages", "model_routes", "wallet_entries", "wallets")
+    "0006_idempotent_wallet_entries" = @()
+}
+foreach ($migration in $expectedMigrations) {
+    if (-not $tablesIntroducedByMigration.ContainsKey($migration.Version)) {
+        throw "Restore table manifest is missing migration $($migration.Version)"
+    }
 }
 $optionFile = New-MySQLClientOptionFile $password
 $preflightFile = Join-Path ([IO.Path]::GetTempPath()) ("novro-preflight-" + [guid]::NewGuid().ToString("N") + ".sql")
@@ -204,18 +216,57 @@ try {
 
     [IO.File]::WriteAllText(
         $verifyFile,
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = '$TargetDatabase' AND table_type = 'BASE TABLE' ORDER BY table_name;`r`nSELECT CONCAT('migration:', version) FROM ``$TargetDatabase``.novro_schema_migrations ORDER BY version;`r`n",
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = '$TargetDatabase' AND table_type = 'BASE TABLE' ORDER BY table_name;`r`nSELECT CONCAT('migration:', version) FROM ``$TargetDatabase``.novro_schema_migrations ORDER BY version;`r`nSELECT CONCAT('checksum-column:', COUNT(*)) FROM information_schema.columns WHERE table_schema = '$TargetDatabase' AND table_name = 'novro_schema_migrations' AND column_name = 'checksum';`r`n",
         [Text.UTF8Encoding]::new($false)
     )
     $verifyOutput = Invoke-MySQLFile -Executable $executable -BaseArguments $queryArguments -InputPath $verifyFile
     $values = @($verifyOutput -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $actualTables = @($values | Where-Object { -not $_.StartsWith("migration:") })
+    $actualTables = @($values | Where-Object { -not $_.StartsWith("migration:") -and -not $_.StartsWith("checksum-column:") })
     $actualMigrations = @($values | Where-Object { $_.StartsWith("migration:") } | ForEach-Object { $_.Substring(10) })
-    if (($actualTables -join "`n") -ne ($expectedTables -join "`n")) {
-        throw "Restore verification failed: restored table set does not match the Novro schema"
+    $checksumColumnValues = @($values | Where-Object { $_.StartsWith("checksum-column:") } | ForEach-Object { $_.Substring(16) })
+    if ($actualMigrations.Count -eq 0) {
+        throw "Restore verification failed: restored database has no migration records"
     }
-    if (($actualMigrations -join "`n") -ne ($expectedMigrations -join "`n")) {
-        throw "Restore verification failed: restored migration versions do not match the repository"
+    if ($actualMigrations.Count -gt $expectedMigrations.Count) {
+        throw "Restore verification failed: restored database contains migrations missing from the repository"
+    }
+    for ($index = 0; $index -lt $actualMigrations.Count; $index++) {
+        if ($actualMigrations[$index] -ne $expectedMigrations[$index].Version) {
+            throw "Restore verification failed: restored migrations are not a contiguous repository prefix"
+        }
+    }
+    if ($checksumColumnValues.Count -ne 1 -or ($checksumColumnValues[0] -ne "0" -and $checksumColumnValues[0] -ne "1")) {
+        throw "Restore verification failed: migration checksum metadata is invalid"
+    }
+
+    $expectedTables = @("novro_schema_migrations")
+    foreach ($version in $actualMigrations) {
+        $expectedTables += $tablesIntroducedByMigration[$version]
+    }
+    $expectedTables = @($expectedTables | Sort-Object -Unique)
+    if (($actualTables -join "`n") -ne ($expectedTables -join "`n")) {
+        throw "Restore verification failed: restored table set does not match its migration history"
+    }
+
+    $migrationChecksumsVerified = $false
+    if ($checksumColumnValues[0] -eq "1") {
+        [IO.File]::WriteAllText(
+            $verifyFile,
+            "SELECT version, checksum FROM ``$TargetDatabase``.novro_schema_migrations ORDER BY version;`r`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $migrationChecksumOutput = Invoke-MySQLFile -Executable $executable -BaseArguments $queryArguments -InputPath $verifyFile
+        $migrationChecksumLines = @($migrationChecksumOutput -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($migrationChecksumLines.Count -ne $actualMigrations.Count) {
+            throw "Restore verification failed: migration checksum count does not match migration history"
+        }
+        for ($index = 0; $index -lt $migrationChecksumLines.Count; $index++) {
+            $parts = @($migrationChecksumLines[$index] -split "`t")
+            if ($parts.Count -ne 2 -or $parts[0] -ne $expectedMigrations[$index].Version -or $parts[1] -notmatch '^[a-fA-F0-9]{64}$' -or $parts[1] -ine $expectedMigrations[$index].Checksum) {
+                throw "Restore verification failed: migration checksum does not match the repository for $($actualMigrations[$index])"
+            }
+        }
+        $migrationChecksumsVerified = $true
     }
 
     $comparedTableCount = 0
@@ -242,8 +293,11 @@ try {
         RestoredDatabase = $TargetDatabase
         TableCount = $actualTables.Count
         MigrationCount = $actualMigrations.Count
+        PendingMigrationCount = $expectedMigrations.Count - $actualMigrations.Count
         ComparedTableCount = $comparedTableCount
-        ChecksumVerified = (Test-Path -LiteralPath $checksumPath -PathType Leaf)
+        ChecksumVerified = $backupChecksumVerified
+        BackupChecksumVerified = $backupChecksumVerified
+        MigrationChecksumsVerified = $migrationChecksumsVerified
     }
 }
 finally {
