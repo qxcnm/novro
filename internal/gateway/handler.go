@@ -53,12 +53,13 @@ type Dependencies struct {
 }
 
 type Handler struct {
-	apiKeys KeyAuthenticator
-	routes  RouteService
-	billing BillingService
-	client  *http.Client
-	logger  *slog.Logger
-	now     func() time.Time
+	apiKeys               KeyAuthenticator
+	routes                RouteService
+	billing               BillingService
+	client                *http.Client
+	logger                *slog.Logger
+	now                   func() time.Time
+	settlementRetryDelays []time.Duration
 }
 
 func New(deps Dependencies) *Handler {
@@ -70,7 +71,10 @@ func New(deps Dependencies) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, client: client, logger: logger, now: func() time.Time { return time.Now().UTC() }}
+	return &Handler{
+		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, client: client, logger: logger,
+		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
+	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -362,9 +366,7 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 		cost = reserved
 		usage.Estimated = true
 	}
-	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, cost, usage, startedAt); err != nil {
-		h.logger.Error("finalize streamed gateway usage", "request_id", requestID, "error", err)
-	}
+	_ = h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, cost, usage, startedAt)
 }
 
 func streamCompleted(endpoint string, data []byte) bool {
@@ -390,9 +392,10 @@ func streamCompleted(endpoint string, data []byte) bool {
 func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved, cost int64, usage tokenUsage, startedAt time.Time) error {
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	err := h.billing.Finalize(finalizeCtx, billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, RequestID: requestID, Endpoint: endpoint, InputTokens: usage.Input, OutputTokens: usage.Output, CostMicros: cost, ReservedMicros: reserved, Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, CreatedAt: startedAt, FinishedAt: h.now()})
+	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, RequestID: requestID, Endpoint: endpoint, InputTokens: usage.Input, OutputTokens: usage.Output, CostMicros: cost, ReservedMicros: reserved, Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, CreatedAt: startedAt, FinishedAt: h.now()}
+	err, attempts := h.retrySettlement(finalizeCtx, func() error { return h.billing.Finalize(finalizeCtx, input) })
 	if err != nil {
-		h.logger.Error("finalize gateway usage", "request_id", requestID, "error", err)
+		h.logger.Error("finalize gateway usage", "request_id", requestID, "attempts", attempts, "error", err)
 	}
 	return err
 }
@@ -403,9 +406,41 @@ func (h *Handler) refund(userID, requestID uuid.UUID, amount int64, description 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := h.billing.Refund(ctx, userID, requestID, amount, description); err != nil {
-		h.logger.Error("refund gateway reservation", "request_id", requestID, "error", err)
+	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.Refund(ctx, userID, requestID, amount, description) }); err != nil {
+		h.logger.Error("refund gateway reservation", "request_id", requestID, "attempts", attempts, "error", err)
 	}
+}
+
+func (h *Handler) retrySettlement(ctx context.Context, operation func() error) (error, int) {
+	for attempt := 0; ; attempt++ {
+		err := operation()
+		if err == nil || !retryableSettlementError(err) || attempt >= len(h.settlementRetryDelays) {
+			return err, attempt + 1
+		}
+		delay := h.settlementRetryDelays[attempt]
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return fmt.Errorf("wait to retry settlement after %v: %w", err, ctx.Err()), attempt + 1
+		}
+	}
+}
+
+func retryableSettlementError(err error) bool {
+	return err != nil &&
+		!errors.Is(err, billing.ErrInvalidInput) && !errors.Is(err, billing.ErrWalletNotFound) &&
+		!errors.Is(err, billing.ErrInsufficientBalance) && !errors.Is(err, billing.ErrRequestConflict) &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
 type tokenUsage struct {

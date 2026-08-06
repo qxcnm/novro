@@ -41,10 +41,14 @@ func (f fakeRoutes) Resolve(context.Context, string) (modelroute.Resolved, error
 func (f fakeRoutes) ListActive(context.Context) ([]modelroute.Record, error) { return f.records, f.err }
 
 type fakeBilling struct {
-	reserveErr error
-	reserved   int64
-	refunded   int64
-	usage      billing.UsageInput
+	reserveErr     error
+	refundErrors   []error
+	finalizeErrors []error
+	reserved       int64
+	refunded       int64
+	refundCalls    int
+	finalizeCalls  int
+	usage          billing.UsageInput
 }
 
 func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
@@ -52,10 +56,26 @@ func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _
 	return f.reserveErr
 }
 func (f *fakeBilling) Refund(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
+	f.refundCalls++
+	if len(f.refundErrors) > 0 {
+		err := f.refundErrors[0]
+		f.refundErrors = f.refundErrors[1:]
+		if err != nil {
+			return err
+		}
+	}
 	f.refunded += amount
 	return nil
 }
 func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) error {
+	f.finalizeCalls++
+	if len(f.finalizeErrors) > 0 {
+		err := f.finalizeErrors[0]
+		f.finalizeErrors = f.finalizeErrors[1:]
+		if err != nil {
+			return err
+		}
+	}
 	f.usage = input
 	return nil
 }
@@ -118,6 +138,51 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	requestID, err := uuid.Parse(response.Header().Get("X-Novro-Request-ID"))
 	if err != nil || biller.usage.RequestID != requestID {
 		t.Fatalf("response and billing request ids differ: header=%q usage=%s err=%v", response.Header().Get("X-Novro-Request-ID"), biller.usage.RequestID, err)
+	}
+}
+
+func TestFinalizationRetriesTransientErrors(t *testing.T) {
+	biller := &fakeBilling{finalizeErrors: []error{errors.New("temporary database failure"), nil}}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"up-1","usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	handler.settlementRetryDelays = []time.Duration{0, 0}
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || biller.finalizeCalls != 2 || biller.usage.InputTokens != 10 || biller.usage.OutputTokens != 20 {
+		t.Fatalf("status=%d finalize_calls=%d usage=%+v", response.Code, biller.finalizeCalls, biller.usage)
+	}
+}
+
+func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
+	biller := &fakeBilling{finalizeErrors: []error{billing.ErrRequestConflict}}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"up-1","usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	handler.settlementRetryDelays = []time.Duration{0, 0}
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusInternalServerError || biller.finalizeCalls != 1 {
+		t.Fatalf("status=%d finalize_calls=%d body=%s", response.Code, biller.finalizeCalls, response.Body.String())
+	}
+}
+
+func TestSettlementRetryStopsWhenContextIsCanceled(t *testing.T) {
+	handler := New(Dependencies{})
+	handler.settlementRetryDelays = []time.Duration{time.Hour}
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	err, attempts := handler.retrySettlement(ctx, func() error {
+		calls++
+		cancel()
+		return errors.New("temporary database failure")
+	})
+	if !errors.Is(err, context.Canceled) || attempts != 1 || calls != 1 {
+		t.Fatalf("err=%v attempts=%d calls=%d", err, attempts, calls)
 	}
 }
 
@@ -431,14 +496,15 @@ func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
 }
 
 func TestUpstreamFailureRefundsReservation(t *testing.T) {
-	biller := &fakeBilling{}
+	biller := &fakeBilling{refundErrors: []error{errors.New("temporary database failure"), nil}}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("timeout") })}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	handler.settlementRetryDelays = []time.Duration{0, 0}
 	handler.now = func() time.Time { return time.Unix(1, 0) }
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusBadGateway || biller.refunded != biller.reserved {
-		t.Fatalf("status=%d reserved=%d refunded=%d", response.Code, biller.reserved, biller.refunded)
+	if response.Code != http.StatusBadGateway || biller.refundCalls != 2 || biller.refunded != biller.reserved {
+		t.Fatalf("status=%d refund_calls=%d reserved=%d refunded=%d", response.Code, biller.refundCalls, biller.reserved, biller.refunded)
 	}
 }
