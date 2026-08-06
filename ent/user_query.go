@@ -14,22 +14,30 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx            *QueryContext
-	order          []user.OrderOption
-	inters         []Interceptor
-	predicates     []predicate.User
-	withSessions   *UserSessionQuery
-	withIdentities *UserIdentityQuery
-	modifiers      []func(*sql.Selector)
+	ctx               *QueryContext
+	order             []user.OrderOption
+	inters            []Interceptor
+	predicates        []predicate.User
+	withSessions      *UserSessionQuery
+	withIdentities    *UserIdentityQuery
+	withAPIKeys       *APIKeyQuery
+	withWallet        *WalletQuery
+	withWalletEntries *WalletEntryQuery
+	withAPIUsages     *APIUsageQuery
+	modifiers         []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -103,6 +111,94 @@ func (_q *UserQuery) QueryIdentities() *UserIdentityQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(useridentity.Table, useridentity.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.IdentitiesTable, user.IdentitiesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAPIKeys chains the current query on the "api_keys" edge.
+func (_q *UserQuery) QueryAPIKeys() *APIKeyQuery {
+	query := (&APIKeyClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.APIKeysTable, user.APIKeysColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryWallet chains the current query on the "wallet" edge.
+func (_q *UserQuery) QueryWallet() *WalletQuery {
+	query := (&WalletClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(wallet.Table, wallet.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, user.WalletTable, user.WalletColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryWalletEntries chains the current query on the "wallet_entries" edge.
+func (_q *UserQuery) QueryWalletEntries() *WalletEntryQuery {
+	query := (&WalletEntryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(walletentry.Table, walletentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.WalletEntriesTable, user.WalletEntriesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAPIUsages chains the current query on the "api_usages" edge.
+func (_q *UserQuery) QueryAPIUsages() *APIUsageQuery {
+	query := (&APIUsageClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -297,13 +393,17 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:         _q.config,
-		ctx:            _q.ctx.Clone(),
-		order:          append([]user.OrderOption{}, _q.order...),
-		inters:         append([]Interceptor{}, _q.inters...),
-		predicates:     append([]predicate.User{}, _q.predicates...),
-		withSessions:   _q.withSessions.Clone(),
-		withIdentities: _q.withIdentities.Clone(),
+		config:            _q.config,
+		ctx:               _q.ctx.Clone(),
+		order:             append([]user.OrderOption{}, _q.order...),
+		inters:            append([]Interceptor{}, _q.inters...),
+		predicates:        append([]predicate.User{}, _q.predicates...),
+		withSessions:      _q.withSessions.Clone(),
+		withIdentities:    _q.withIdentities.Clone(),
+		withAPIKeys:       _q.withAPIKeys.Clone(),
+		withWallet:        _q.withWallet.Clone(),
+		withWalletEntries: _q.withWalletEntries.Clone(),
+		withAPIUsages:     _q.withAPIUsages.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -329,6 +429,50 @@ func (_q *UserQuery) WithIdentities(opts ...func(*UserIdentityQuery)) *UserQuery
 		opt(query)
 	}
 	_q.withIdentities = query
+	return _q
+}
+
+// WithAPIKeys tells the query-builder to eager-load the nodes that are connected to
+// the "api_keys" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithAPIKeys(opts ...func(*APIKeyQuery)) *UserQuery {
+	query := (&APIKeyClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAPIKeys = query
+	return _q
+}
+
+// WithWallet tells the query-builder to eager-load the nodes that are connected to
+// the "wallet" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithWallet(opts ...func(*WalletQuery)) *UserQuery {
+	query := (&WalletClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withWallet = query
+	return _q
+}
+
+// WithWalletEntries tells the query-builder to eager-load the nodes that are connected to
+// the "wallet_entries" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithWalletEntries(opts ...func(*WalletEntryQuery)) *UserQuery {
+	query := (&WalletEntryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withWalletEntries = query
+	return _q
+}
+
+// WithAPIUsages tells the query-builder to eager-load the nodes that are connected to
+// the "api_usages" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *UserQuery {
+	query := (&APIUsageClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAPIUsages = query
 	return _q
 }
 
@@ -410,9 +554,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [6]bool{
 			_q.withSessions != nil,
 			_q.withIdentities != nil,
+			_q.withAPIKeys != nil,
+			_q.withWallet != nil,
+			_q.withWalletEntries != nil,
+			_q.withAPIUsages != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -447,6 +595,33 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadIdentities(ctx, query, nodes,
 			func(n *User) { n.Edges.Identities = []*UserIdentity{} },
 			func(n *User, e *UserIdentity) { n.Edges.Identities = append(n.Edges.Identities, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAPIKeys; query != nil {
+		if err := _q.loadAPIKeys(ctx, query, nodes,
+			func(n *User) { n.Edges.APIKeys = []*APIKey{} },
+			func(n *User, e *APIKey) { n.Edges.APIKeys = append(n.Edges.APIKeys, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withWallet; query != nil {
+		if err := _q.loadWallet(ctx, query, nodes, nil,
+			func(n *User, e *Wallet) { n.Edges.Wallet = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withWalletEntries; query != nil {
+		if err := _q.loadWalletEntries(ctx, query, nodes,
+			func(n *User) { n.Edges.WalletEntries = []*WalletEntry{} },
+			func(n *User, e *WalletEntry) { n.Edges.WalletEntries = append(n.Edges.WalletEntries, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAPIUsages; query != nil {
+		if err := _q.loadAPIUsages(ctx, query, nodes,
+			func(n *User) { n.Edges.APIUsages = []*APIUsage{} },
+			func(n *User, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -498,6 +673,126 @@ func (_q *UserQuery) loadIdentities(ctx context.Context, query *UserIdentityQuer
 	}
 	query.Where(predicate.UserIdentity(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(user.IdentitiesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadAPIKeys(ctx context.Context, query *APIKeyQuery, nodes []*User, init func(*User), assign func(*User, *APIKey)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(apikey.FieldUserID)
+	}
+	query.Where(predicate.APIKey(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.APIKeysColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadWallet(ctx context.Context, query *WalletQuery, nodes []*User, init func(*User), assign func(*User, *Wallet)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(wallet.FieldUserID)
+	}
+	query.Where(predicate.Wallet(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.WalletColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadWalletEntries(ctx context.Context, query *WalletEntryQuery, nodes []*User, init func(*User), assign func(*User, *WalletEntry)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(walletentry.FieldActorUserID)
+	}
+	query.Where(predicate.WalletEntry(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.WalletEntriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ActorUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "actor_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "actor_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, nodes []*User, init func(*User), assign func(*User, *APIUsage)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(apiusage.FieldUserID)
+	}
+	query.Where(predicate.APIUsage(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.APIUsagesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

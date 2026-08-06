@@ -2,11 +2,18 @@
 
 - Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-a857d24c-f4ad-48ee-b6a9-a622096aca8e.png`,
   `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-3143c202-ecb3-4a56-a9af-cfa793eeba97.png`,
-  and the supplied QuarkMux product-page reference.
+  the supplied QuarkMux product-page reference, and the current account/navigation references
+  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-a2240999-5676-4527-9827-dec0ef4e67d4.png`,
+  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-88a9b95f-6b6d-4b34-ae7a-a40ae31d1a68.png`, and
+  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-448c6bcc-1654-4077-8025-6b339acbe3f9.png`.
 - Implementation: `http://127.0.0.1:3000/`, `/models`, and `/docs`.
 - Implementation screenshots: `tmp/qa/models-desktop-light-final.png`,
   `tmp/qa/models-mobile-light-final.png`, `tmp/qa/models-mobile-dark-final.png`,
   `tmp/qa/home-desktop-light-final.png`, and `tmp/qa/docs-mobile-light-final.png`.
+  The current authenticated account capture is `tmp/qa/account-dashboard-desktop.png`, with
+  focused content evidence in `tmp/qa/account-dashboard-content.png`. The latest persistent-shell
+  captures are `tmp/qa/console-desktop-current.jpg`, `tmp/qa/console-mobile-current.jpg`, and
+  `tmp/qa/api-key-mobile-current.jpg`.
   These local QA images are intentionally ignored by Git.
 - Side-by-side comparison: `tmp/qa/models-reference-comparison-final.png`.
 - Homepage copy review: `tmp/qa/home-desktop-product-copy.png` and
@@ -63,6 +70,45 @@ guide rather than a development manual and remains visually consistent with the 
 - `/setup`, `/register`, `/login`, and `/console` were checked at 1280 x 720 and
   390 x 844 as applicable. Labels and button names remained accessible, themes switched
   correctly, and no authentication page had horizontal overflow.
+- The authenticated console sidebar and administrator user management were rechecked at
+  1280 x 800 and 390 x 844 after the navigation refresh. Desktop uses a fixed 240px
+  sidebar; mobile replaces it with a left navigation drawer and has no page-level
+  horizontal overflow.
+- The current production build was rechecked against the current Go backend and an isolated MySQL
+  8.4.9 database at 1280 x 800 and 390 x 844. Navigating through account, API documentation,
+  user management, Key audit, providers, and model routes kept the desktop sidebar visible,
+  never rendered the full-screen `正在加载控制台...` state, and produced no horizontal overflow.
+- On mobile, the persistent desktop sidebar correctly becomes a navigation drawer. Selecting
+  `/console/docs` closes the drawer, retains the console header, and only replaces the content
+  region. The account screen, drawer, and API Key modal all fit the 390px viewport.
+- Create and reset forms use dialogs, status changes use a confirmation dialog, and user
+  details/editing use a right drawer. Dialogs remained inside the mobile viewport, the
+  details drawer stayed independently scrollable, and no write action was submitted during QA.
+- The authenticated account page displayed a balance of `¥43.71`, safe API Key prefixes, and
+  a one-time full key after creation. Copying placed the exact full key in the clipboard and the
+  active count changed from one to two.
+- The current account page created a new Key against the current backend. The full 47-character
+  key appeared only in the save dialog, the list retained only its safe prefix, and the copy
+  button placed the exact full value in the browser clipboard. No browser console warnings or
+  errors were recorded during the current desktop/mobile navigation and Key flow.
+- On 2026-08-06, the current Go service, Next.js console, and migrated cloud MySQL were verified
+  together rather than against a mocked or stale backend. A temporary member registered and
+  received an empty wallet, created and copied a one-time 47-character Key, and used it to obtain
+  a `200` model list. After a temporary provider and route were added, the public model appeared
+  in `/v1/models`; an upstream `502` reserved 360 micros and refunded the same 360 micros, leaving
+  the 10,000-micro balance unchanged. Revoking the Key from the audit page made the same Key return
+  `401` immediately. The temporary user, Key, provider, route, wallet entries, and session were
+  removed after verification.
+- The live console was also rechecked with an explicit 390 x 844 viewport. The page width remained
+  390px with no out-of-bounds buttons; the navigation drawer was about 293px wide, and the 801px
+  Key-audit table stayed inside a 358px local horizontal scroller instead of widening the page.
+- Live QA exposed a typed-nil OIDC assembly bug: an unconfigured `*OIDCClient` assigned to an
+  interface caused the login options endpoint to report enterprise sign-in as enabled. The service
+  assembly now preserves a true nil interface, a regression test covers both states, and the live
+  endpoint returns `oidc_enabled=false` when OIDC is not configured.
+- Navigating from `/console` to `/admin/users` kept the sidebar mounted. The API documentation
+  menu targets `/console/docs`; the current build completed this route and all other console
+  menu transitions without showing the full-screen authentication loader.
 
 ## Comparison history
 
@@ -83,7 +129,9 @@ guide rather than a development manual and remains visually consistent with the 
 
 ## Findings
 
-No actionable P0, P1, or P2 differences remain.
+No actionable P0, P1, or P2 differences were visible in the current desktop or mobile console
+captures. The sidebar/header persistence behavior, local content replacement, mobile drawer,
+one-time Key presentation, and copy interaction are directly verified against the current build.
 
 The page intentionally does not reproduce vendor brand logos because no approved Novro
 brand assets or reusable official logo files were supplied. Neutral standard icons keep

@@ -16,10 +16,16 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // Client is the client that holds all ent builders.
@@ -27,6 +33,14 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// APIKey is the client for interacting with the APIKey builders.
+	APIKey *APIKeyClient
+	// APIUsage is the client for interacting with the APIUsage builders.
+	APIUsage *APIUsageClient
+	// ModelRoute is the client for interacting with the ModelRoute builders.
+	ModelRoute *ModelRouteClient
+	// Provider is the client for interacting with the Provider builders.
+	Provider *ProviderClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
 	// User is the client for interacting with the User builders.
@@ -35,6 +49,10 @@ type Client struct {
 	UserIdentity *UserIdentityClient
 	// UserSession is the client for interacting with the UserSession builders.
 	UserSession *UserSessionClient
+	// Wallet is the client for interacting with the Wallet builders.
+	Wallet *WalletClient
+	// WalletEntry is the client for interacting with the WalletEntry builders.
+	WalletEntry *WalletEntryClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -46,10 +64,16 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.APIKey = NewAPIKeyClient(c.config)
+	c.APIUsage = NewAPIUsageClient(c.config)
+	c.ModelRoute = NewModelRouteClient(c.config)
+	c.Provider = NewProviderClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserIdentity = NewUserIdentityClient(c.config)
 	c.UserSession = NewUserSessionClient(c.config)
+	c.Wallet = NewWalletClient(c.config)
+	c.WalletEntry = NewWalletEntryClient(c.config)
 }
 
 type (
@@ -142,10 +166,16 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:           ctx,
 		config:        cfg,
+		APIKey:        NewAPIKeyClient(cfg),
+		APIUsage:      NewAPIUsageClient(cfg),
+		ModelRoute:    NewModelRouteClient(cfg),
+		Provider:      NewProviderClient(cfg),
 		SystemSetting: NewSystemSettingClient(cfg),
 		User:          NewUserClient(cfg),
 		UserIdentity:  NewUserIdentityClient(cfg),
 		UserSession:   NewUserSessionClient(cfg),
+		Wallet:        NewWalletClient(cfg),
+		WalletEntry:   NewWalletEntryClient(cfg),
 	}, nil
 }
 
@@ -165,17 +195,23 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:           ctx,
 		config:        cfg,
+		APIKey:        NewAPIKeyClient(cfg),
+		APIUsage:      NewAPIUsageClient(cfg),
+		ModelRoute:    NewModelRouteClient(cfg),
+		Provider:      NewProviderClient(cfg),
 		SystemSetting: NewSystemSettingClient(cfg),
 		User:          NewUserClient(cfg),
 		UserIdentity:  NewUserIdentityClient(cfg),
 		UserSession:   NewUserSessionClient(cfg),
+		Wallet:        NewWalletClient(cfg),
+		WalletEntry:   NewWalletEntryClient(cfg),
 	}, nil
 }
 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		SystemSetting.
+//		APIKey.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -197,24 +233,36 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.SystemSetting.Use(hooks...)
-	c.User.Use(hooks...)
-	c.UserIdentity.Use(hooks...)
-	c.UserSession.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.APIKey, c.APIUsage, c.ModelRoute, c.Provider, c.SystemSetting, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.SystemSetting.Intercept(interceptors...)
-	c.User.Intercept(interceptors...)
-	c.UserIdentity.Intercept(interceptors...)
-	c.UserSession.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.APIKey, c.APIUsage, c.ModelRoute, c.Provider, c.SystemSetting, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *APIKeyMutation:
+		return c.APIKey.mutate(ctx, m)
+	case *APIUsageMutation:
+		return c.APIUsage.mutate(ctx, m)
+	case *ModelRouteMutation:
+		return c.ModelRoute.mutate(ctx, m)
+	case *ProviderMutation:
+		return c.Provider.mutate(ctx, m)
 	case *SystemSettingMutation:
 		return c.SystemSetting.mutate(ctx, m)
 	case *UserMutation:
@@ -223,8 +271,672 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserIdentity.mutate(ctx, m)
 	case *UserSessionMutation:
 		return c.UserSession.mutate(ctx, m)
+	case *WalletMutation:
+		return c.Wallet.mutate(ctx, m)
+	case *WalletEntryMutation:
+		return c.WalletEntry.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// APIKeyClient is a client for the APIKey schema.
+type APIKeyClient struct {
+	config
+}
+
+// NewAPIKeyClient returns a client for the APIKey from the given config.
+func NewAPIKeyClient(c config) *APIKeyClient {
+	return &APIKeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `apikey.Hooks(f(g(h())))`.
+func (c *APIKeyClient) Use(hooks ...Hook) {
+	c.hooks.APIKey = append(c.hooks.APIKey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `apikey.Intercept(f(g(h())))`.
+func (c *APIKeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.APIKey = append(c.inters.APIKey, interceptors...)
+}
+
+// Create returns a builder for creating a APIKey entity.
+func (c *APIKeyClient) Create() *APIKeyCreate {
+	mutation := newAPIKeyMutation(c.config, OpCreate)
+	return &APIKeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of APIKey entities.
+func (c *APIKeyClient) CreateBulk(builders ...*APIKeyCreate) *APIKeyCreateBulk {
+	return &APIKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *APIKeyClient) MapCreateBulk(slice any, setFunc func(*APIKeyCreate, int)) *APIKeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &APIKeyCreateBulk{err: fmt.Errorf("calling to APIKeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*APIKeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &APIKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for APIKey.
+func (c *APIKeyClient) Update() *APIKeyUpdate {
+	mutation := newAPIKeyMutation(c.config, OpUpdate)
+	return &APIKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *APIKeyClient) UpdateOne(_m *APIKey) *APIKeyUpdateOne {
+	mutation := newAPIKeyMutation(c.config, OpUpdateOne, withAPIKey(_m))
+	return &APIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *APIKeyClient) UpdateOneID(id uuid.UUID) *APIKeyUpdateOne {
+	mutation := newAPIKeyMutation(c.config, OpUpdateOne, withAPIKeyID(id))
+	return &APIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for APIKey.
+func (c *APIKeyClient) Delete() *APIKeyDelete {
+	mutation := newAPIKeyMutation(c.config, OpDelete)
+	return &APIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *APIKeyClient) DeleteOne(_m *APIKey) *APIKeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *APIKeyClient) DeleteOneID(id uuid.UUID) *APIKeyDeleteOne {
+	builder := c.Delete().Where(apikey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &APIKeyDeleteOne{builder}
+}
+
+// Query returns a query builder for APIKey.
+func (c *APIKeyClient) Query() *APIKeyQuery {
+	return &APIKeyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAPIKey},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a APIKey entity by its id.
+func (c *APIKeyClient) Get(ctx context.Context, id uuid.UUID) (*APIKey, error) {
+	return c.Query().Where(apikey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *APIKeyClient) GetX(ctx context.Context, id uuid.UUID) *APIKey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a APIKey.
+func (c *APIKeyClient) QueryUser(_m *APIKey) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apikey.UserTable, apikey.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIUsages queries the api_usages edge of a APIKey.
+func (c *APIKeyClient) QueryAPIUsages(_m *APIKey) *APIUsageQuery {
+	query := (&APIUsageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.APIUsagesTable, apikey.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *APIKeyClient) Hooks() []Hook {
+	return c.hooks.APIKey
+}
+
+// Interceptors returns the client interceptors.
+func (c *APIKeyClient) Interceptors() []Interceptor {
+	return c.inters.APIKey
+}
+
+func (c *APIKeyClient) mutate(ctx context.Context, m *APIKeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&APIKeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&APIKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&APIKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&APIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown APIKey mutation op: %q", m.Op())
+	}
+}
+
+// APIUsageClient is a client for the APIUsage schema.
+type APIUsageClient struct {
+	config
+}
+
+// NewAPIUsageClient returns a client for the APIUsage from the given config.
+func NewAPIUsageClient(c config) *APIUsageClient {
+	return &APIUsageClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `apiusage.Hooks(f(g(h())))`.
+func (c *APIUsageClient) Use(hooks ...Hook) {
+	c.hooks.APIUsage = append(c.hooks.APIUsage, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `apiusage.Intercept(f(g(h())))`.
+func (c *APIUsageClient) Intercept(interceptors ...Interceptor) {
+	c.inters.APIUsage = append(c.inters.APIUsage, interceptors...)
+}
+
+// Create returns a builder for creating a APIUsage entity.
+func (c *APIUsageClient) Create() *APIUsageCreate {
+	mutation := newAPIUsageMutation(c.config, OpCreate)
+	return &APIUsageCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of APIUsage entities.
+func (c *APIUsageClient) CreateBulk(builders ...*APIUsageCreate) *APIUsageCreateBulk {
+	return &APIUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *APIUsageClient) MapCreateBulk(slice any, setFunc func(*APIUsageCreate, int)) *APIUsageCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &APIUsageCreateBulk{err: fmt.Errorf("calling to APIUsageClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*APIUsageCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &APIUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for APIUsage.
+func (c *APIUsageClient) Update() *APIUsageUpdate {
+	mutation := newAPIUsageMutation(c.config, OpUpdate)
+	return &APIUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *APIUsageClient) UpdateOne(_m *APIUsage) *APIUsageUpdateOne {
+	mutation := newAPIUsageMutation(c.config, OpUpdateOne, withAPIUsage(_m))
+	return &APIUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *APIUsageClient) UpdateOneID(id uuid.UUID) *APIUsageUpdateOne {
+	mutation := newAPIUsageMutation(c.config, OpUpdateOne, withAPIUsageID(id))
+	return &APIUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for APIUsage.
+func (c *APIUsageClient) Delete() *APIUsageDelete {
+	mutation := newAPIUsageMutation(c.config, OpDelete)
+	return &APIUsageDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *APIUsageClient) DeleteOne(_m *APIUsage) *APIUsageDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *APIUsageClient) DeleteOneID(id uuid.UUID) *APIUsageDeleteOne {
+	builder := c.Delete().Where(apiusage.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &APIUsageDeleteOne{builder}
+}
+
+// Query returns a query builder for APIUsage.
+func (c *APIUsageClient) Query() *APIUsageQuery {
+	return &APIUsageQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAPIUsage},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a APIUsage entity by its id.
+func (c *APIUsageClient) Get(ctx context.Context, id uuid.UUID) (*APIUsage, error) {
+	return c.Query().Where(apiusage.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *APIUsageClient) GetX(ctx context.Context, id uuid.UUID) *APIUsage {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a APIUsage.
+func (c *APIUsageClient) QueryUser(_m *APIUsage) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apiusage.Table, apiusage.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apiusage.UserTable, apiusage.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIKey queries the api_key edge of a APIUsage.
+func (c *APIUsageClient) QueryAPIKey(_m *APIUsage) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apiusage.Table, apiusage.FieldID, id),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apiusage.APIKeyTable, apiusage.APIKeyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryModelRoute queries the model_route edge of a APIUsage.
+func (c *APIUsageClient) QueryModelRoute(_m *APIUsage) *ModelRouteQuery {
+	query := (&ModelRouteClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apiusage.Table, apiusage.FieldID, id),
+			sqlgraph.To(modelroute.Table, modelroute.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apiusage.ModelRouteTable, apiusage.ModelRouteColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *APIUsageClient) Hooks() []Hook {
+	return c.hooks.APIUsage
+}
+
+// Interceptors returns the client interceptors.
+func (c *APIUsageClient) Interceptors() []Interceptor {
+	return c.inters.APIUsage
+}
+
+func (c *APIUsageClient) mutate(ctx context.Context, m *APIUsageMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&APIUsageCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&APIUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&APIUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&APIUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown APIUsage mutation op: %q", m.Op())
+	}
+}
+
+// ModelRouteClient is a client for the ModelRoute schema.
+type ModelRouteClient struct {
+	config
+}
+
+// NewModelRouteClient returns a client for the ModelRoute from the given config.
+func NewModelRouteClient(c config) *ModelRouteClient {
+	return &ModelRouteClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `modelroute.Hooks(f(g(h())))`.
+func (c *ModelRouteClient) Use(hooks ...Hook) {
+	c.hooks.ModelRoute = append(c.hooks.ModelRoute, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `modelroute.Intercept(f(g(h())))`.
+func (c *ModelRouteClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ModelRoute = append(c.inters.ModelRoute, interceptors...)
+}
+
+// Create returns a builder for creating a ModelRoute entity.
+func (c *ModelRouteClient) Create() *ModelRouteCreate {
+	mutation := newModelRouteMutation(c.config, OpCreate)
+	return &ModelRouteCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ModelRoute entities.
+func (c *ModelRouteClient) CreateBulk(builders ...*ModelRouteCreate) *ModelRouteCreateBulk {
+	return &ModelRouteCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ModelRouteClient) MapCreateBulk(slice any, setFunc func(*ModelRouteCreate, int)) *ModelRouteCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ModelRouteCreateBulk{err: fmt.Errorf("calling to ModelRouteClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ModelRouteCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ModelRouteCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ModelRoute.
+func (c *ModelRouteClient) Update() *ModelRouteUpdate {
+	mutation := newModelRouteMutation(c.config, OpUpdate)
+	return &ModelRouteUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ModelRouteClient) UpdateOne(_m *ModelRoute) *ModelRouteUpdateOne {
+	mutation := newModelRouteMutation(c.config, OpUpdateOne, withModelRoute(_m))
+	return &ModelRouteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ModelRouteClient) UpdateOneID(id uuid.UUID) *ModelRouteUpdateOne {
+	mutation := newModelRouteMutation(c.config, OpUpdateOne, withModelRouteID(id))
+	return &ModelRouteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ModelRoute.
+func (c *ModelRouteClient) Delete() *ModelRouteDelete {
+	mutation := newModelRouteMutation(c.config, OpDelete)
+	return &ModelRouteDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ModelRouteClient) DeleteOne(_m *ModelRoute) *ModelRouteDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ModelRouteClient) DeleteOneID(id uuid.UUID) *ModelRouteDeleteOne {
+	builder := c.Delete().Where(modelroute.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ModelRouteDeleteOne{builder}
+}
+
+// Query returns a query builder for ModelRoute.
+func (c *ModelRouteClient) Query() *ModelRouteQuery {
+	return &ModelRouteQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeModelRoute},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ModelRoute entity by its id.
+func (c *ModelRouteClient) Get(ctx context.Context, id uuid.UUID) (*ModelRoute, error) {
+	return c.Query().Where(modelroute.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ModelRouteClient) GetX(ctx context.Context, id uuid.UUID) *ModelRoute {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryProvider queries the provider edge of a ModelRoute.
+func (c *ModelRouteClient) QueryProvider(_m *ModelRoute) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelroute.Table, modelroute.FieldID, id),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, modelroute.ProviderTable, modelroute.ProviderColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIUsages queries the api_usages edge of a ModelRoute.
+func (c *ModelRouteClient) QueryAPIUsages(_m *ModelRoute) *APIUsageQuery {
+	query := (&APIUsageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelroute.Table, modelroute.FieldID, id),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, modelroute.APIUsagesTable, modelroute.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ModelRouteClient) Hooks() []Hook {
+	return c.hooks.ModelRoute
+}
+
+// Interceptors returns the client interceptors.
+func (c *ModelRouteClient) Interceptors() []Interceptor {
+	return c.inters.ModelRoute
+}
+
+func (c *ModelRouteClient) mutate(ctx context.Context, m *ModelRouteMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ModelRouteCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ModelRouteUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ModelRouteUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ModelRouteDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ModelRoute mutation op: %q", m.Op())
+	}
+}
+
+// ProviderClient is a client for the Provider schema.
+type ProviderClient struct {
+	config
+}
+
+// NewProviderClient returns a client for the Provider from the given config.
+func NewProviderClient(c config) *ProviderClient {
+	return &ProviderClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `provider.Hooks(f(g(h())))`.
+func (c *ProviderClient) Use(hooks ...Hook) {
+	c.hooks.Provider = append(c.hooks.Provider, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `provider.Intercept(f(g(h())))`.
+func (c *ProviderClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Provider = append(c.inters.Provider, interceptors...)
+}
+
+// Create returns a builder for creating a Provider entity.
+func (c *ProviderClient) Create() *ProviderCreate {
+	mutation := newProviderMutation(c.config, OpCreate)
+	return &ProviderCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Provider entities.
+func (c *ProviderClient) CreateBulk(builders ...*ProviderCreate) *ProviderCreateBulk {
+	return &ProviderCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProviderClient) MapCreateBulk(slice any, setFunc func(*ProviderCreate, int)) *ProviderCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProviderCreateBulk{err: fmt.Errorf("calling to ProviderClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProviderCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProviderCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Provider.
+func (c *ProviderClient) Update() *ProviderUpdate {
+	mutation := newProviderMutation(c.config, OpUpdate)
+	return &ProviderUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProviderClient) UpdateOne(_m *Provider) *ProviderUpdateOne {
+	mutation := newProviderMutation(c.config, OpUpdateOne, withProvider(_m))
+	return &ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProviderClient) UpdateOneID(id uuid.UUID) *ProviderUpdateOne {
+	mutation := newProviderMutation(c.config, OpUpdateOne, withProviderID(id))
+	return &ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Provider.
+func (c *ProviderClient) Delete() *ProviderDelete {
+	mutation := newProviderMutation(c.config, OpDelete)
+	return &ProviderDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProviderClient) DeleteOne(_m *Provider) *ProviderDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProviderClient) DeleteOneID(id uuid.UUID) *ProviderDeleteOne {
+	builder := c.Delete().Where(provider.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProviderDeleteOne{builder}
+}
+
+// Query returns a query builder for Provider.
+func (c *ProviderClient) Query() *ProviderQuery {
+	return &ProviderQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProvider},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Provider entity by its id.
+func (c *ProviderClient) Get(ctx context.Context, id uuid.UUID) (*Provider, error) {
+	return c.Query().Where(provider.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProviderClient) GetX(ctx context.Context, id uuid.UUID) *Provider {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryModelRoutes queries the model_routes edge of a Provider.
+func (c *ProviderClient) QueryModelRoutes(_m *Provider) *ModelRouteQuery {
+	query := (&ModelRouteClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(modelroute.Table, modelroute.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, provider.ModelRoutesTable, provider.ModelRoutesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ProviderClient) Hooks() []Hook {
+	return c.hooks.Provider
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProviderClient) Interceptors() []Interceptor {
+	return c.inters.Provider
+}
+
+func (c *ProviderClient) mutate(ctx context.Context, m *ProviderMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProviderCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProviderUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProviderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Provider mutation op: %q", m.Op())
 	}
 }
 
@@ -494,6 +1206,70 @@ func (c *UserClient) QueryIdentities(_m *User) *UserIdentityQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(useridentity.Table, useridentity.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.IdentitiesTable, user.IdentitiesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIKeys queries the api_keys edge of a User.
+func (c *UserClient) QueryAPIKeys(_m *User) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.APIKeysTable, user.APIKeysColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryWallet queries the wallet edge of a User.
+func (c *UserClient) QueryWallet(_m *User) *WalletQuery {
+	query := (&WalletClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(wallet.Table, wallet.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, user.WalletTable, user.WalletColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryWalletEntries queries the wallet_entries edge of a User.
+func (c *UserClient) QueryWalletEntries(_m *User) *WalletEntryQuery {
+	query := (&WalletEntryClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(walletentry.Table, walletentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.WalletEntriesTable, user.WalletEntriesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIUsages queries the api_usages edge of a User.
+func (c *UserClient) QueryAPIUsages(_m *User) *APIUsageQuery {
+	query := (&APIUsageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -824,12 +1600,344 @@ func (c *UserSessionClient) mutate(ctx context.Context, m *UserSessionMutation) 
 	}
 }
 
+// WalletClient is a client for the Wallet schema.
+type WalletClient struct {
+	config
+}
+
+// NewWalletClient returns a client for the Wallet from the given config.
+func NewWalletClient(c config) *WalletClient {
+	return &WalletClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `wallet.Hooks(f(g(h())))`.
+func (c *WalletClient) Use(hooks ...Hook) {
+	c.hooks.Wallet = append(c.hooks.Wallet, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `wallet.Intercept(f(g(h())))`.
+func (c *WalletClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Wallet = append(c.inters.Wallet, interceptors...)
+}
+
+// Create returns a builder for creating a Wallet entity.
+func (c *WalletClient) Create() *WalletCreate {
+	mutation := newWalletMutation(c.config, OpCreate)
+	return &WalletCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Wallet entities.
+func (c *WalletClient) CreateBulk(builders ...*WalletCreate) *WalletCreateBulk {
+	return &WalletCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WalletClient) MapCreateBulk(slice any, setFunc func(*WalletCreate, int)) *WalletCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WalletCreateBulk{err: fmt.Errorf("calling to WalletClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WalletCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WalletCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Wallet.
+func (c *WalletClient) Update() *WalletUpdate {
+	mutation := newWalletMutation(c.config, OpUpdate)
+	return &WalletUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WalletClient) UpdateOne(_m *Wallet) *WalletUpdateOne {
+	mutation := newWalletMutation(c.config, OpUpdateOne, withWallet(_m))
+	return &WalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WalletClient) UpdateOneID(id uuid.UUID) *WalletUpdateOne {
+	mutation := newWalletMutation(c.config, OpUpdateOne, withWalletID(id))
+	return &WalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Wallet.
+func (c *WalletClient) Delete() *WalletDelete {
+	mutation := newWalletMutation(c.config, OpDelete)
+	return &WalletDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WalletClient) DeleteOne(_m *Wallet) *WalletDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WalletClient) DeleteOneID(id uuid.UUID) *WalletDeleteOne {
+	builder := c.Delete().Where(wallet.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WalletDeleteOne{builder}
+}
+
+// Query returns a query builder for Wallet.
+func (c *WalletClient) Query() *WalletQuery {
+	return &WalletQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWallet},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Wallet entity by its id.
+func (c *WalletClient) Get(ctx context.Context, id uuid.UUID) (*Wallet, error) {
+	return c.Query().Where(wallet.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WalletClient) GetX(ctx context.Context, id uuid.UUID) *Wallet {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a Wallet.
+func (c *WalletClient) QueryUser(_m *Wallet) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(wallet.Table, wallet.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, wallet.UserTable, wallet.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryEntries queries the entries edge of a Wallet.
+func (c *WalletClient) QueryEntries(_m *Wallet) *WalletEntryQuery {
+	query := (&WalletEntryClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(wallet.Table, wallet.FieldID, id),
+			sqlgraph.To(walletentry.Table, walletentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, wallet.EntriesTable, wallet.EntriesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *WalletClient) Hooks() []Hook {
+	return c.hooks.Wallet
+}
+
+// Interceptors returns the client interceptors.
+func (c *WalletClient) Interceptors() []Interceptor {
+	return c.inters.Wallet
+}
+
+func (c *WalletClient) mutate(ctx context.Context, m *WalletMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WalletCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WalletUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WalletDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Wallet mutation op: %q", m.Op())
+	}
+}
+
+// WalletEntryClient is a client for the WalletEntry schema.
+type WalletEntryClient struct {
+	config
+}
+
+// NewWalletEntryClient returns a client for the WalletEntry from the given config.
+func NewWalletEntryClient(c config) *WalletEntryClient {
+	return &WalletEntryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `walletentry.Hooks(f(g(h())))`.
+func (c *WalletEntryClient) Use(hooks ...Hook) {
+	c.hooks.WalletEntry = append(c.hooks.WalletEntry, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `walletentry.Intercept(f(g(h())))`.
+func (c *WalletEntryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WalletEntry = append(c.inters.WalletEntry, interceptors...)
+}
+
+// Create returns a builder for creating a WalletEntry entity.
+func (c *WalletEntryClient) Create() *WalletEntryCreate {
+	mutation := newWalletEntryMutation(c.config, OpCreate)
+	return &WalletEntryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WalletEntry entities.
+func (c *WalletEntryClient) CreateBulk(builders ...*WalletEntryCreate) *WalletEntryCreateBulk {
+	return &WalletEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WalletEntryClient) MapCreateBulk(slice any, setFunc func(*WalletEntryCreate, int)) *WalletEntryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WalletEntryCreateBulk{err: fmt.Errorf("calling to WalletEntryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WalletEntryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WalletEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WalletEntry.
+func (c *WalletEntryClient) Update() *WalletEntryUpdate {
+	mutation := newWalletEntryMutation(c.config, OpUpdate)
+	return &WalletEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WalletEntryClient) UpdateOne(_m *WalletEntry) *WalletEntryUpdateOne {
+	mutation := newWalletEntryMutation(c.config, OpUpdateOne, withWalletEntry(_m))
+	return &WalletEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WalletEntryClient) UpdateOneID(id uuid.UUID) *WalletEntryUpdateOne {
+	mutation := newWalletEntryMutation(c.config, OpUpdateOne, withWalletEntryID(id))
+	return &WalletEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WalletEntry.
+func (c *WalletEntryClient) Delete() *WalletEntryDelete {
+	mutation := newWalletEntryMutation(c.config, OpDelete)
+	return &WalletEntryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WalletEntryClient) DeleteOne(_m *WalletEntry) *WalletEntryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WalletEntryClient) DeleteOneID(id uuid.UUID) *WalletEntryDeleteOne {
+	builder := c.Delete().Where(walletentry.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WalletEntryDeleteOne{builder}
+}
+
+// Query returns a query builder for WalletEntry.
+func (c *WalletEntryClient) Query() *WalletEntryQuery {
+	return &WalletEntryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWalletEntry},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WalletEntry entity by its id.
+func (c *WalletEntryClient) Get(ctx context.Context, id uuid.UUID) (*WalletEntry, error) {
+	return c.Query().Where(walletentry.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WalletEntryClient) GetX(ctx context.Context, id uuid.UUID) *WalletEntry {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryWallet queries the wallet edge of a WalletEntry.
+func (c *WalletEntryClient) QueryWallet(_m *WalletEntry) *WalletQuery {
+	query := (&WalletClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(walletentry.Table, walletentry.FieldID, id),
+			sqlgraph.To(wallet.Table, wallet.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, walletentry.WalletTable, walletentry.WalletColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryActor queries the actor edge of a WalletEntry.
+func (c *WalletEntryClient) QueryActor(_m *WalletEntry) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(walletentry.Table, walletentry.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, walletentry.ActorTable, walletentry.ActorColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *WalletEntryClient) Hooks() []Hook {
+	return c.hooks.WalletEntry
+}
+
+// Interceptors returns the client interceptors.
+func (c *WalletEntryClient) Interceptors() []Interceptor {
+	return c.inters.WalletEntry
+}
+
+func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WalletEntryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WalletEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WalletEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WalletEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WalletEntry mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		SystemSetting, User, UserIdentity, UserSession []ent.Hook
+		APIKey, APIUsage, ModelRoute, Provider, SystemSetting, User, UserIdentity,
+		UserSession, Wallet, WalletEntry []ent.Hook
 	}
 	inters struct {
-		SystemSetting, User, UserIdentity, UserSession []ent.Interceptor
+		APIKey, APIUsage, ModelRoute, Provider, SystemSetting, User, UserIdentity,
+		UserSession, Wallet, WalletEntry []ent.Interceptor
 	}
 )

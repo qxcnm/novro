@@ -22,7 +22,7 @@ export default function ModelsPage() {
             <p className="text-sm font-medium text-muted-foreground">模型目录</p>
             <h1 className="mt-3 text-4xl font-semibold sm:text-5xl">模型与官方牌价</h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-              共 {modelCatalog.length} 款目录项。价格为模型厂商公开的按量牌价，单位人民币 / 百万 tokens；Novro 网关与实际销售价格尚未上线。
+              共 {modelCatalog.length} 款目录项。价格为模型厂商公开的按量牌价，单位人民币 / 百万 tokens；实际 Novro 结算价以管理员模型路由配置为准。
             </p>
             <p className="mt-3 text-sm text-muted-foreground">
               官方价格核验日期：{PRICE_VERIFIED_AT}。厂商可能随时调整价格，结算前请复核卡片中的官方来源。

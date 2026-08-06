@@ -11,9 +11,13 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -169,6 +173,70 @@ func (_c *UserCreate) AddIdentities(v ...*UserIdentity) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddIdentityIDs(ids...)
+}
+
+// AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
+func (_c *UserCreate) AddAPIKeyIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddAPIKeyIDs(ids...)
+	return _c
+}
+
+// AddAPIKeys adds the "api_keys" edges to the APIKey entity.
+func (_c *UserCreate) AddAPIKeys(v ...*APIKey) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAPIKeyIDs(ids...)
+}
+
+// SetWalletID sets the "wallet" edge to the Wallet entity by ID.
+func (_c *UserCreate) SetWalletID(id uuid.UUID) *UserCreate {
+	_c.mutation.SetWalletID(id)
+	return _c
+}
+
+// SetNillableWalletID sets the "wallet" edge to the Wallet entity by ID if the given value is not nil.
+func (_c *UserCreate) SetNillableWalletID(id *uuid.UUID) *UserCreate {
+	if id != nil {
+		_c = _c.SetWalletID(*id)
+	}
+	return _c
+}
+
+// SetWallet sets the "wallet" edge to the Wallet entity.
+func (_c *UserCreate) SetWallet(v *Wallet) *UserCreate {
+	return _c.SetWalletID(v.ID)
+}
+
+// AddWalletEntryIDs adds the "wallet_entries" edge to the WalletEntry entity by IDs.
+func (_c *UserCreate) AddWalletEntryIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddWalletEntryIDs(ids...)
+	return _c
+}
+
+// AddWalletEntries adds the "wallet_entries" edges to the WalletEntry entity.
+func (_c *UserCreate) AddWalletEntries(v ...*WalletEntry) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddWalletEntryIDs(ids...)
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
+func (_c *UserCreate) AddAPIUsageIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddAPIUsageIDs(ids...)
+	return _c
+}
+
+// AddAPIUsages adds the "api_usages" edges to the APIUsage entity.
+func (_c *UserCreate) AddAPIUsages(v ...*APIUsage) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAPIUsageIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -364,6 +432,70 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(useridentity.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.WalletIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.WalletTable,
+			Columns: []string{user.WalletColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(wallet.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.WalletEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.APIUsagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

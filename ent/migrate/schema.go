@@ -8,6 +8,169 @@ import (
 )
 
 var (
+	// APIKeysColumns holds the columns for the "api_keys" table.
+	APIKeysColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "name", Type: field.TypeString, Size: 64},
+		{Name: "key_prefix", Type: field.TypeString, Size: 16},
+		{Name: "key_hash", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "revoked"}, Default: "active"},
+		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// APIKeysTable holds the schema information for the "api_keys" table.
+	APIKeysTable = &schema.Table{
+		Name:       "api_keys",
+		Columns:    APIKeysColumns,
+		PrimaryKey: []*schema.Column{APIKeysColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "api_keys_users_api_keys",
+				Columns:    []*schema.Column{APIKeysColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "apikey_user_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[8], APIKeysColumns[4]},
+			},
+			{
+				Name:    "apikey_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[4], APIKeysColumns[6]},
+			},
+		},
+	}
+	// APIUsagesColumns holds the columns for the "api_usages" table.
+	APIUsagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "request_id", Type: field.TypeUUID, Unique: true},
+		{Name: "endpoint", Type: field.TypeEnum, Enums: []string{"chat_completions", "responses", "messages"}},
+		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "output_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "cost_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "reserved_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "estimated", Type: field.TypeBool, Default: false},
+		{Name: "upstream_request_id", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "finished_at", Type: field.TypeTime},
+		{Name: "api_key_id", Type: field.TypeUUID},
+		{Name: "model_route_id", Type: field.TypeUUID},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// APIUsagesTable holds the schema information for the "api_usages" table.
+	APIUsagesTable = &schema.Table{
+		Name:       "api_usages",
+		Columns:    APIUsagesColumns,
+		PrimaryKey: []*schema.Column{APIUsagesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "api_usages_api_keys_api_usages",
+				Columns:    []*schema.Column{APIUsagesColumns[11]},
+				RefColumns: []*schema.Column{APIKeysColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "api_usages_model_routes_api_usages",
+				Columns:    []*schema.Column{APIUsagesColumns[12]},
+				RefColumns: []*schema.Column{ModelRoutesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "api_usages_users_api_usages",
+				Columns:    []*schema.Column{APIUsagesColumns[13]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "apiusage_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[13], APIUsagesColumns[9]},
+			},
+			{
+				Name:    "apiusage_api_key_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[11], APIUsagesColumns[9]},
+			},
+			{
+				Name:    "apiusage_model_route_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[12], APIUsagesColumns[9]},
+			},
+		},
+	}
+	// ModelRoutesColumns holds the columns for the "model_routes" table.
+	ModelRoutesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "public_name", Type: field.TypeString, Unique: true, Size: 128},
+		{Name: "display_name", Type: field.TypeString, Size: 128},
+		{Name: "upstream_name", Type: field.TypeString, Size: 256},
+		{Name: "input_price_micros", Type: field.TypeInt64},
+		{Name: "output_price_micros", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "provider_id", Type: field.TypeUUID},
+	}
+	// ModelRoutesTable holds the schema information for the "model_routes" table.
+	ModelRoutesTable = &schema.Table{
+		Name:       "model_routes",
+		Columns:    ModelRoutesColumns,
+		PrimaryKey: []*schema.Column{ModelRoutesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "model_routes_providers_model_routes",
+				Columns:    []*schema.Column{ModelRoutesColumns[9]},
+				RefColumns: []*schema.Column{ProvidersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "modelroute_provider_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{ModelRoutesColumns[9], ModelRoutesColumns[6]},
+			},
+			{
+				Name:    "modelroute_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ModelRoutesColumns[6], ModelRoutesColumns[7]},
+			},
+		},
+	}
+	// ProvidersColumns holds the columns for the "providers" table.
+	ProvidersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "code", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "display_name", Type: field.TypeString, Size: 128},
+		{Name: "protocol", Type: field.TypeEnum, Enums: []string{"openai", "anthropic"}},
+		{Name: "base_url", Type: field.TypeString, Size: 512},
+		{Name: "encrypted_api_key", Type: field.TypeString, Size: 2048},
+		{Name: "api_key_hint", Type: field.TypeString, Size: 8},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// ProvidersTable holds the schema information for the "providers" table.
+	ProvidersTable = &schema.Table{
+		Name:       "providers",
+		Columns:    ProvidersColumns,
+		PrimaryKey: []*schema.Column{ProvidersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "provider_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ProvidersColumns[7], ProvidersColumns[8]},
+			},
+		},
+	}
 	// SystemSettingsColumns holds the columns for the "system_settings" table.
 	SystemSettingsColumns = []*schema.Column{
 		{Name: "key", Type: field.TypeString, Size: 128},
@@ -106,16 +269,96 @@ var (
 			},
 		},
 	}
+	// WalletsColumns holds the columns for the "wallets" table.
+	WalletsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "balance_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeUUID, Unique: true},
+	}
+	// WalletsTable holds the schema information for the "wallets" table.
+	WalletsTable = &schema.Table{
+		Name:       "wallets",
+		Columns:    WalletsColumns,
+		PrimaryKey: []*schema.Column{WalletsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "wallets_users_wallet",
+				Columns:    []*schema.Column{WalletsColumns[4]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// WalletEntriesColumns holds the columns for the "wallet_entries" table.
+	WalletEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "reference_id", Type: field.TypeUUID},
+		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "usage_reservation", "usage_refund"}},
+		{Name: "amount_micros", Type: field.TypeInt64},
+		{Name: "balance_after_micros", Type: field.TypeInt64},
+		{Name: "description", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "actor_user_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "wallet_id", Type: field.TypeUUID},
+	}
+	// WalletEntriesTable holds the schema information for the "wallet_entries" table.
+	WalletEntriesTable = &schema.Table{
+		Name:       "wallet_entries",
+		Columns:    WalletEntriesColumns,
+		PrimaryKey: []*schema.Column{WalletEntriesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "wallet_entries_users_wallet_entries",
+				Columns:    []*schema.Column{WalletEntriesColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "wallet_entries_wallets_entries",
+				Columns:    []*schema.Column{WalletEntriesColumns[8]},
+				RefColumns: []*schema.Column{WalletsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "walletentry_wallet_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{WalletEntriesColumns[8], WalletEntriesColumns[6]},
+			},
+			{
+				Name:    "walletentry_reference_id",
+				Unique:  false,
+				Columns: []*schema.Column{WalletEntriesColumns[1]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		APIKeysTable,
+		APIUsagesTable,
+		ModelRoutesTable,
+		ProvidersTable,
 		SystemSettingsTable,
 		UsersTable,
 		UserIdentitiesTable,
 		UserSessionsTable,
+		WalletsTable,
+		WalletEntriesTable,
 	}
 )
 
 func init() {
+	APIKeysTable.ForeignKeys[0].RefTable = UsersTable
+	APIUsagesTable.ForeignKeys[0].RefTable = APIKeysTable
+	APIUsagesTable.ForeignKeys[1].RefTable = ModelRoutesTable
+	APIUsagesTable.ForeignKeys[2].RefTable = UsersTable
+	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
 	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	UserSessionsTable.ForeignKeys[0].RefTable = UsersTable
+	WalletsTable.ForeignKeys[0].RefTable = UsersTable
+	WalletEntriesTable.ForeignKeys[0].RefTable = UsersTable
+	WalletEntriesTable.ForeignKeys[1].RefTable = WalletsTable
 }

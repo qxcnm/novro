@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/user"
+	"github.com/novro-gateway/novro/ent/wallet"
 )
 
 // User is the model entity for the User schema.
@@ -46,9 +47,17 @@ type UserEdges struct {
 	Sessions []*UserSession `json:"sessions,omitempty"`
 	// Identities holds the value of the identities edge.
 	Identities []*UserIdentity `json:"identities,omitempty"`
+	// APIKeys holds the value of the api_keys edge.
+	APIKeys []*APIKey `json:"api_keys,omitempty"`
+	// Wallet holds the value of the wallet edge.
+	Wallet *Wallet `json:"wallet,omitempty"`
+	// WalletEntries holds the value of the wallet_entries edge.
+	WalletEntries []*WalletEntry `json:"wallet_entries,omitempty"`
+	// APIUsages holds the value of the api_usages edge.
+	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [6]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -67,6 +76,44 @@ func (e UserEdges) IdentitiesOrErr() ([]*UserIdentity, error) {
 		return e.Identities, nil
 	}
 	return nil, &NotLoadedError{edge: "identities"}
+}
+
+// APIKeysOrErr returns the APIKeys value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) APIKeysOrErr() ([]*APIKey, error) {
+	if e.loadedTypes[2] {
+		return e.APIKeys, nil
+	}
+	return nil, &NotLoadedError{edge: "api_keys"}
+}
+
+// WalletOrErr returns the Wallet value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e UserEdges) WalletOrErr() (*Wallet, error) {
+	if e.Wallet != nil {
+		return e.Wallet, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: wallet.Label}
+	}
+	return nil, &NotLoadedError{edge: "wallet"}
+}
+
+// WalletEntriesOrErr returns the WalletEntries value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) WalletEntriesOrErr() ([]*WalletEntry, error) {
+	if e.loadedTypes[4] {
+		return e.WalletEntries, nil
+	}
+	return nil, &NotLoadedError{edge: "wallet_entries"}
+}
+
+// APIUsagesOrErr returns the APIUsages value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) APIUsagesOrErr() ([]*APIUsage, error) {
+	if e.loadedTypes[5] {
+		return e.APIUsages, nil
+	}
+	return nil, &NotLoadedError{edge: "api_usages"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -172,6 +219,26 @@ func (_m *User) QuerySessions() *UserSessionQuery {
 // QueryIdentities queries the "identities" edge of the User entity.
 func (_m *User) QueryIdentities() *UserIdentityQuery {
 	return NewUserClient(_m.config).QueryIdentities(_m)
+}
+
+// QueryAPIKeys queries the "api_keys" edge of the User entity.
+func (_m *User) QueryAPIKeys() *APIKeyQuery {
+	return NewUserClient(_m.config).QueryAPIKeys(_m)
+}
+
+// QueryWallet queries the "wallet" edge of the User entity.
+func (_m *User) QueryWallet() *WalletQuery {
+	return NewUserClient(_m.config).QueryWallet(_m)
+}
+
+// QueryWalletEntries queries the "wallet_entries" edge of the User entity.
+func (_m *User) QueryWalletEntries() *WalletEntryQuery {
+	return NewUserClient(_m.config).QueryWalletEntries(_m)
+}
+
+// QueryAPIUsages queries the "api_usages" edge of the User entity.
+func (_m *User) QueryAPIUsages() *APIUsageQuery {
+	return NewUserClient(_m.config).QueryAPIUsages(_m)
 }
 
 // Update returns a builder for updating this User.

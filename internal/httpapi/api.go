@@ -16,7 +16,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
+	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/modelroute"
+	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -35,8 +39,37 @@ type UserService interface {
 	InitializeAdmin(context.Context, user.RegisterInput) (user.Record, error)
 	SetupRequired(context.Context) (bool, error)
 	List(context.Context, user.ListFilter) (user.Page, error)
+	Update(context.Context, uuid.UUID, user.UpdateInput) (user.Record, error)
 	SetStatus(context.Context, uuid.UUID, user.Status) (user.Record, error)
 	ResetPassword(context.Context, uuid.UUID, string) error
+}
+
+type APIKeyService interface {
+	Create(context.Context, uuid.UUID, string) (apikey.CreateResult, error)
+	ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error)
+	RevokeForUser(context.Context, uuid.UUID, uuid.UUID) error
+	ListAll(context.Context, apikey.ListFilter) (apikey.Page, error)
+	Revoke(context.Context, uuid.UUID) error
+}
+
+type ProviderService interface {
+	Create(context.Context, provider.CreateInput) (provider.Record, error)
+	List(context.Context, provider.ListFilter) ([]provider.Record, error)
+	Update(context.Context, uuid.UUID, provider.UpdateInput) (provider.Record, error)
+	SetStatus(context.Context, uuid.UUID, provider.Status) (provider.Record, error)
+}
+
+type BillingService interface {
+	Summary(context.Context, uuid.UUID) (billing.Summary, error)
+	Usage(context.Context, uuid.UUID) ([]billing.Usage, error)
+	Adjust(context.Context, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
+}
+
+type ModelRouteService interface {
+	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
+	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
+	Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error)
+	SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error)
 }
 
 type OIDCService interface {
@@ -48,6 +81,11 @@ type Dependencies struct {
 	Database            databasePinger
 	Auth                AuthService
 	Users               UserService
+	APIKeys             APIKeyService
+	Providers           ProviderService
+	Billing             BillingService
+	ModelRoutes         ModelRouteService
+	Gateway             http.Handler
 	Logger              *slog.Logger
 	CookieName          string
 	CookieSecure        bool
@@ -61,6 +99,10 @@ type Dependencies struct {
 type apiHandler struct {
 	auth                AuthService
 	users               UserService
+	apiKeys             APIKeyService
+	providers           ProviderService
+	billing             BillingService
+	modelRoutes         ModelRouteService
 	logger              *slog.Logger
 	cookieName          string
 	cookieSecure        bool
@@ -79,6 +121,10 @@ func New(deps Dependencies) http.Handler {
 	h := &apiHandler{
 		auth:                deps.Auth,
 		users:               deps.Users,
+		apiKeys:             deps.APIKeys,
+		providers:           deps.Providers,
+		billing:             deps.Billing,
+		modelRoutes:         deps.ModelRoutes,
 		logger:              logger,
 		cookieName:          deps.CookieName,
 		cookieSecure:        deps.CookieSecure,
@@ -104,10 +150,31 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/auth/me", h.me)
+	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
+	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
+	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
+	mux.HandleFunc("GET /api/account/balance", h.myBalance)
+	mux.HandleFunc("GET /api/account/usage", h.myUsage)
 	mux.HandleFunc("GET /api/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/admin/users", h.createUser)
+	mux.HandleFunc("PATCH /api/admin/users/{id}", h.updateUser)
 	mux.HandleFunc("PATCH /api/admin/users/{id}/status", h.setUserStatus)
 	mux.HandleFunc("POST /api/admin/users/{id}/reset-password", h.resetUserPassword)
+	mux.HandleFunc("GET /api/admin/users/{id}/balance", h.userBalance)
+	mux.HandleFunc("POST /api/admin/users/{id}/balance-adjustments", h.adjustUserBalance)
+	mux.HandleFunc("GET /api/admin/api-keys", h.listAPIKeys)
+	mux.HandleFunc("POST /api/admin/api-keys/{id}/revoke", h.revokeAPIKey)
+	mux.HandleFunc("GET /api/admin/providers", h.listProviders)
+	mux.HandleFunc("POST /api/admin/providers", h.createProvider)
+	mux.HandleFunc("PATCH /api/admin/providers/{id}", h.updateProvider)
+	mux.HandleFunc("PATCH /api/admin/providers/{id}/status", h.setProviderStatus)
+	mux.HandleFunc("GET /api/admin/model-routes", h.listModelRoutes)
+	mux.HandleFunc("POST /api/admin/model-routes", h.createModelRoute)
+	mux.HandleFunc("PATCH /api/admin/model-routes/{id}", h.updateModelRoute)
+	mux.HandleFunc("PATCH /api/admin/model-routes/{id}/status", h.setModelRouteStatus)
+	if deps.Gateway != nil {
+		mux.Handle("/v1/", deps.Gateway)
+	}
 	return h.securityHeaders(h.validateOrigin(mux))
 }
 
@@ -261,11 +328,7 @@ func (h *apiHandler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setSessionCookie(w, result.Token, result.ExpiresAt)
-	destination := "/console"
-	if result.User.Role == user.RoleAdmin {
-		destination = "/admin/users"
-	}
-	http.Redirect(w, r, destination, http.StatusFound)
+	http.Redirect(w, r, "/console", http.StatusFound)
 }
 
 func (h *apiHandler) login(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +369,56 @@ func (h *apiHandler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": record})
+}
+
+func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	keys, err := h.apiKeys.ListForUser(r.Context(), record.ID)
+	if err != nil {
+		h.writeAPIKeyError(w, "list user API keys", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"api_keys": keys})
+}
+
+func (h *apiHandler) createMyAPIKey(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "API Key 信息格式无效")
+		return
+	}
+	created, err := h.apiKeys.Create(r.Context(), record.ID, request.Name)
+	if err != nil {
+		h.writeAPIKeyError(w, "create API key", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *apiHandler) revokeMyAPIKey(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "API Key ID 无效")
+		return
+	}
+	if err := h.apiKeys.RevokeForUser(r.Context(), record.ID, id); err != nil {
+		h.writeAPIKeyError(w, "revoke user API key", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *apiHandler) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -350,6 +463,28 @@ func (h *apiHandler) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"user": created})
+}
+
+func (h *apiHandler) updateUser(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户 ID 无效")
+		return
+	}
+	var input user.UpdateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户信息格式无效")
+		return
+	}
+	updated, err := h.users.Update(r.Context(), id, input)
+	if err != nil {
+		h.writeUserError(w, "update user", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
 func (h *apiHandler) setUserStatus(w http.ResponseWriter, r *http.Request) {
@@ -397,6 +532,271 @@ func (h *apiHandler) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) listAPIKeys(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 50)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	page, err := h.apiKeys.ListAll(r.Context(), apikey.ListFilter{
+		Search: r.URL.Query().Get("search"),
+		Status: apikey.Status(r.URL.Query().Get("status")),
+		Offset: offset,
+		Limit:  limit,
+	})
+	if err != nil {
+		h.writeAPIKeyError(w, "list API keys", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *apiHandler) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "API Key ID 无效")
+		return
+	}
+	if err := h.apiKeys.Revoke(r.Context(), id); err != nil {
+		h.writeAPIKeyError(w, "revoke API key", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) listProviders(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	records, err := h.providers.List(r.Context(), provider.ListFilter{
+		Search: r.URL.Query().Get("search"),
+		Status: provider.Status(r.URL.Query().Get("status")),
+	})
+	if err != nil {
+		h.writeProviderError(w, "list providers", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": records})
+}
+
+func (h *apiHandler) createProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var input provider.CreateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商信息格式无效")
+		return
+	}
+	created, err := h.providers.Create(r.Context(), input)
+	if err != nil {
+		h.writeProviderError(w, "create provider", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"provider": created})
+}
+
+func (h *apiHandler) updateProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商 ID 无效")
+		return
+	}
+	var input provider.UpdateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商信息格式无效")
+		return
+	}
+	updated, err := h.providers.Update(r.Context(), id, input)
+	if err != nil {
+		h.writeProviderError(w, "update provider", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"provider": updated})
+}
+
+func (h *apiHandler) setProviderStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商 ID 无效")
+		return
+	}
+	var request struct {
+		Status provider.Status `json:"status"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商状态格式无效")
+		return
+	}
+	updated, err := h.providers.SetStatus(r.Context(), id, request.Status)
+	if err != nil {
+		h.writeProviderError(w, "set provider status", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"provider": updated})
+}
+
+func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	summary, err := h.billing.Summary(r.Context(), record.ID)
+	if err != nil {
+		h.writeBillingError(w, "read account balance", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	usage, err := h.billing.Usage(r.Context(), record.ID)
+	if err != nil {
+		h.writeBillingError(w, "list account usage", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"usage": usage})
+}
+
+func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户 ID 无效")
+		return
+	}
+	summary, err := h.billing.Summary(r.Context(), id)
+	if err != nil {
+		h.writeBillingError(w, "read user balance", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (h *apiHandler) adjustUserBalance(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户 ID 无效")
+		return
+	}
+	var request struct {
+		AmountMicros int64  `json:"amount_micros"`
+		Note         string `json:"note"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "余额调整信息无效")
+		return
+	}
+	summary, err := h.billing.Adjust(r.Context(), id, admin.ID, request.AmountMicros, request.Note)
+	if err != nil {
+		h.writeBillingError(w, "adjust user balance", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (h *apiHandler) listModelRoutes(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	records, err := h.modelRoutes.List(r.Context(), modelroute.ListFilter{Search: r.URL.Query().Get("search"), Status: modelroute.Status(r.URL.Query().Get("status"))})
+	if err != nil {
+		h.writeModelRouteError(w, "list model routes", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"model_routes": records})
+}
+
+func (h *apiHandler) createModelRoute(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var input modelroute.CreateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由信息无效")
+		return
+	}
+	created, err := h.modelRoutes.Create(r.Context(), input)
+	if err != nil {
+		h.writeModelRouteError(w, "create model route", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"model_route": created})
+}
+
+func (h *apiHandler) updateModelRoute(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由 ID 无效")
+		return
+	}
+	var input modelroute.UpdateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由信息无效")
+		return
+	}
+	updated, err := h.modelRoutes.Update(r.Context(), id, input)
+	if err != nil {
+		h.writeModelRouteError(w, "update model route", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"model_route": updated})
+}
+
+func (h *apiHandler) setModelRouteStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由 ID 无效")
+		return
+	}
+	var request struct {
+		Status modelroute.Status `json:"status"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由状态无效")
+		return
+	}
+	updated, err := h.modelRoutes.SetStatus(r.Context(), id, request.Status)
+	if err != nil {
+		h.writeModelRouteError(w, "set model route status", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"model_route": updated})
 }
 
 func (h *apiHandler) requireUser(w http.ResponseWriter, r *http.Request) (user.Record, bool) {
@@ -476,9 +876,61 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 	case errors.Is(err, user.ErrUsernameTaken):
 		writeError(w, http.StatusConflict, "username_taken", "用户名已存在")
 	case errors.Is(err, user.ErrLastActiveAdmin):
-		writeError(w, http.StatusConflict, "last_active_admin", "不能停用最后一个启用的管理员")
+		writeError(w, http.StatusConflict, "last_active_admin", "不能停用或降级最后一个启用的管理员")
 	case errors.Is(err, user.ErrAlreadyInitialized):
 		writeError(w, http.StatusConflict, "already_initialized", "管理员账号已经初始化")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, apikey.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "API Key 信息无效")
+	case errors.Is(err, apikey.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "API Key 不存在")
+	case errors.Is(err, apikey.ErrLimitReached):
+		writeError(w, http.StatusConflict, "api_key_limit_reached", "启用的 API Key 已达到上限")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, provider.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商信息无效")
+	case errors.Is(err, provider.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "提供商不存在")
+	case errors.Is(err, provider.ErrCodeTaken):
+		writeError(w, http.StatusConflict, "provider_code_taken", "提供商标识已存在")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, billing.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "余额操作信息无效")
+	case errors.Is(err, billing.ErrWalletNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "用户钱包不存在")
+	case errors.Is(err, billing.ErrInsufficientBalance):
+		writeError(w, http.StatusConflict, "insufficient_balance", "余额不足")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, modelroute.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由信息无效")
+	case errors.Is(err, modelroute.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "模型路由不存在")
+	case errors.Is(err, modelroute.ErrNameTaken):
+		writeError(w, http.StatusConflict, "model_name_taken", "对外模型名称已存在")
 	default:
 		h.internalError(w, operation, err)
 	}

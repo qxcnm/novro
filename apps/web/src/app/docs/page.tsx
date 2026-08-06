@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { DocsFrame } from "@/components/docs-frame";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -170,6 +171,7 @@ const structuredExample = `const response = await client.chat.completions.create
 const errors = [
   ["400", "invalid_request_error", "请求字段、模型或参数不合法", "修正请求后再发，不要原样重试"],
   ["401", "authentication_error", "API Key 缺失、无效或已撤销", "检查服务端环境中的 Key"],
+  ["402", "insufficient_balance", "账户余额不足，网关未调用上游", "调整余额后再重试"],
   ["403", "permission_denied", "用户或模型没有调用权限", "检查账号状态和模型权限"],
   ["404", "not_found", "路径或模型标识不存在", "检查 Base URL、路径和模型 ID"],
   ["429", "rate_limit_error", "超过并发或速率限制", "遵循 Retry-After 并指数退避"],
@@ -177,12 +179,9 @@ const errors = [
   ["502/503", "upstream_unavailable", "上游暂时不可用", "指数退避并设置最大重试次数"],
 ];
 
-export default function DocsPage() {
+export function ApiDocumentation() {
   return (
-    <div className="min-h-screen bg-background">
-      <SiteHeader />
-      <main>
-        <div className="mx-auto grid w-full max-w-7xl gap-12 px-5 py-12 sm:px-8 lg:grid-cols-[13rem_minmax(0,1fr)] lg:px-10 lg:py-16">
+    <DocsFrame publicFooter={<SiteFooter />} publicHeader={<SiteHeader />}>
           <aside className="hidden lg:block">
             <nav className="sticky top-24 space-y-1" aria-label="接入文档目录">
               <p className="mb-3 px-2 text-xs font-medium text-muted-foreground">API 接入文档</p>
@@ -204,9 +203,9 @@ export default function DocsPage() {
 
               <Alert className="mt-8">
                 <CircleDashed aria-hidden="true" />
-                <AlertTitle>模型网关即将开放</AlertTitle>
+                <AlertTitle>模型网关已开放</AlertTitle>
                 <AlertDescription>
-                  本页是预先公布的接入契约，用于客户端集成准备；API Key 创建、余额和 <code>/v1</code> 模型请求当前尚未启用。示例域名 <code>api.novro.example</code> 不是生产地址，正式 Base URL 将在开放时替换。
+                  管理员完成提供商和模型路由配置后，API Key、余额和 <code>/v1</code> 模型请求即可使用。示例域名 <code>api.novro.example</code> 不是生产地址，请替换为部署地址。
                 </AlertDescription>
               </Alert>
 
@@ -276,7 +275,7 @@ export default function DocsPage() {
               </Tabs>
 
               <h3 className="mt-10 text-xl font-semibold">OpenAI Responses</h3>
-              <p className="mt-3 leading-7 text-muted-foreground"><code>POST /v1/responses</code>，计划兼容文本输入、流式输出和基本工具调用。</p>
+              <p className="mt-3 leading-7 text-muted-foreground"><code>POST /v1/responses</code>，转发文本输入、流式输出和基本工具调用字段，能力取决于上游模型。</p>
               <CodeBlock label="TypeScript">{responsesExample}</CodeBlock>
 
               <h3 className="mt-10 text-xl font-semibold">Anthropic Messages</h3>
@@ -395,11 +394,12 @@ export default function DocsPage() {
               </div>
             </section>
           </article>
-        </div>
-      </main>
-      <SiteFooter />
-    </div>
+    </DocsFrame>
   );
+}
+
+export default function DocsPage() {
+  return <ApiDocumentation />;
 }
 
 function SectionHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {

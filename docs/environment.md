@@ -9,7 +9,7 @@
 | Go | 1.26.5 | 已下载并可执行 | `C:\Users\qxnm\tools\go1.26.5` |
 | Node.js | 24.18.0 | 已存在 | `C:\nvm4w\nodejs` |
 | pnpm | 10.30.3 | 已存在 | `C:\nvm4w\nodejs` |
-| MySQL | 云端实例 | 应用直连与首个迁移已验证 | `117.72.17.16:3306` |
+| MySQL | 云端 `8.0.46` | 应用账号、TLS 与 `0001`-`0005` 已验证 | `117.72.17.16:3306` |
 
 Go 用户级 `bin` 目录已加入当前用户 PATH。新开的终端可以直接执行 `go version`；当前会话也可以直接使用完整路径验证 Go。
 
@@ -27,7 +27,7 @@ Database: novro-db
 
 应用运行时使用独立的 `novro_app` 用户，并通过部署环境变量注入密码。MySQL 的 `3306` 端口只允许开发机和应用服务器的固定公网 IP 访问，不允许向整个公网开放。
 
-建议由数据库管理员首次执行：
+数据库管理员已为当前开发来源创建受限账号。其他部署来源按同样边界执行：
 
 ```sql
 CREATE DATABASE `novro-db`
@@ -35,9 +35,11 @@ CREATE DATABASE `novro-db`
   COLLATE utf8mb4_0900_ai_ci;
 
 CREATE USER 'novro_app'@'<APP_SERVER_IP>'
-  IDENTIFIED BY '<GENERATED_STRONG_PASSWORD>';
+  IDENTIFIED BY '<GENERATED_STRONG_PASSWORD>'
+  REQUIRE SSL;
 
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES,
+  CREATE TEMPORARY TABLES, LOCK TABLES
   ON `novro-db`.* TO 'novro_app'@'<APP_SERVER_IP>';
 
 FLUSH PRIVILEGES;
@@ -67,6 +69,17 @@ NOVRO_DATABASE_TLS=true
 
 同日已通过仅注入进程环境的管理员凭据执行 `init-db`，创建 `novro-db`，随后完成
 连接检查并应用 `0001_users_and_sessions` 迁移。真实密码没有写入文件或日志。
+
+2026-08-06 已先生成迁移前备份和 SHA-256 校验文件，再使用固定来源、强制 TLS、仅限
+`novro-db` 权限的 `novro_app` 执行连接检查与显式迁移。云库现有 11 张业务/元数据表，
+`novro_schema_migrations` 已记录 `0001` 到 `0005`；两个既有用户均已回填钱包。迁移后
+再次确认应用连接使用 TLS，且不存在 `novro_app@'%'` 通配账号。
+
+同日通过当前 Go 服务和 Next.js 控制台完成云库端到端验证：注册与登录、余额读取、
+API Key 一次性展示和复制、`/v1/models` 鉴权、管理员用户/Key/提供商/模型路由页面、
+提供商凭据密文存储、失败上游请求的等额预占退款，以及 Key 撤销后的即时 `401`。
+验收创建的用户、Key、提供商、模型路由和钱包流水随后在限定事务中清理，云库恢复为
+原有两个用户、两个钱包且无测试 Key、提供商、模型路由或流水。
 
 Next.js、TypeScript、原始 shadcn/ui、Ent 和 MySQL 驱动已经初始化。应用账号与
 按开发启动说明显式执行连接检查和迁移。

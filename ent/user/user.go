@@ -36,6 +36,14 @@ const (
 	EdgeSessions = "sessions"
 	// EdgeIdentities holds the string denoting the identities edge name in mutations.
 	EdgeIdentities = "identities"
+	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
+	EdgeAPIKeys = "api_keys"
+	// EdgeWallet holds the string denoting the wallet edge name in mutations.
+	EdgeWallet = "wallet"
+	// EdgeWalletEntries holds the string denoting the wallet_entries edge name in mutations.
+	EdgeWalletEntries = "wallet_entries"
+	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
+	EdgeAPIUsages = "api_usages"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// SessionsTable is the table that holds the sessions relation/edge.
@@ -52,6 +60,34 @@ const (
 	IdentitiesInverseTable = "user_identities"
 	// IdentitiesColumn is the table column denoting the identities relation/edge.
 	IdentitiesColumn = "user_id"
+	// APIKeysTable is the table that holds the api_keys relation/edge.
+	APIKeysTable = "api_keys"
+	// APIKeysInverseTable is the table name for the APIKey entity.
+	// It exists in this package in order to avoid circular dependency with the "apikey" package.
+	APIKeysInverseTable = "api_keys"
+	// APIKeysColumn is the table column denoting the api_keys relation/edge.
+	APIKeysColumn = "user_id"
+	// WalletTable is the table that holds the wallet relation/edge.
+	WalletTable = "wallets"
+	// WalletInverseTable is the table name for the Wallet entity.
+	// It exists in this package in order to avoid circular dependency with the "wallet" package.
+	WalletInverseTable = "wallets"
+	// WalletColumn is the table column denoting the wallet relation/edge.
+	WalletColumn = "user_id"
+	// WalletEntriesTable is the table that holds the wallet_entries relation/edge.
+	WalletEntriesTable = "wallet_entries"
+	// WalletEntriesInverseTable is the table name for the WalletEntry entity.
+	// It exists in this package in order to avoid circular dependency with the "walletentry" package.
+	WalletEntriesInverseTable = "wallet_entries"
+	// WalletEntriesColumn is the table column denoting the wallet_entries relation/edge.
+	WalletEntriesColumn = "actor_user_id"
+	// APIUsagesTable is the table that holds the api_usages relation/edge.
+	APIUsagesTable = "api_usages"
+	// APIUsagesInverseTable is the table name for the APIUsage entity.
+	// It exists in this package in order to avoid circular dependency with the "apiusage" package.
+	APIUsagesInverseTable = "api_usages"
+	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
+	APIUsagesColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -221,6 +257,55 @@ func ByIdentities(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newIdentitiesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByAPIKeysCount orders the results by api_keys count.
+func ByAPIKeysCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAPIKeysStep(), opts...)
+	}
+}
+
+// ByAPIKeys orders the results by api_keys terms.
+func ByAPIKeys(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAPIKeysStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByWalletField orders the results by wallet field.
+func ByWalletField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newWalletStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByWalletEntriesCount orders the results by wallet_entries count.
+func ByWalletEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newWalletEntriesStep(), opts...)
+	}
+}
+
+// ByWalletEntries orders the results by wallet_entries terms.
+func ByWalletEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newWalletEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByAPIUsagesCount orders the results by api_usages count.
+func ByAPIUsagesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAPIUsagesStep(), opts...)
+	}
+}
+
+// ByAPIUsages orders the results by api_usages terms.
+func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAPIUsagesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newSessionsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -233,5 +318,33 @@ func newIdentitiesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(IdentitiesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, IdentitiesTable, IdentitiesColumn),
+	)
+}
+func newAPIKeysStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(APIKeysInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, APIKeysTable, APIKeysColumn),
+	)
+}
+func newWalletStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(WalletInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, false, WalletTable, WalletColumn),
+	)
+}
+func newWalletEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(WalletEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, WalletEntriesTable, WalletEntriesColumn),
+	)
+}
+func newAPIUsagesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(APIUsagesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
 	)
 }

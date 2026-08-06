@@ -20,8 +20,6 @@ type AuthOptions = {
   oidc_enabled: boolean;
   oidc_display_name: string;
 };
-type LoginResponse = { user: { role: "admin" | "member" } };
-
 export default function LoginPage() {
   return (
     <Suspense fallback={<LoginPageShell />}>
@@ -71,9 +69,7 @@ function LoginForm() {
         const body = (await response.json().catch(() => ({}))) as ErrorResponse;
         throw new Error(body.error?.message ?? "登录失败，请稍后重试");
       }
-      const body = (await response.json()) as LoginResponse;
-      router.replace(body.user.role === "admin" ? "/admin/users" : "/console");
-      router.refresh();
+      router.replace("/console");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败，请稍后重试");
     } finally {

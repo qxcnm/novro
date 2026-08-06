@@ -11,12 +11,17 @@ import (
 	"time"
 
 	"github.com/novro-gateway/novro/ent/migrate"
+	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/app"
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/auth/password"
+	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/config"
 	"github.com/novro-gateway/novro/internal/database"
+	"github.com/novro-gateway/novro/internal/gateway"
 	"github.com/novro-gateway/novro/internal/httpapi"
+	"github.com/novro-gateway/novro/internal/modelroute"
+	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -67,6 +72,15 @@ func main() {
 
 	passwordHasher := password.Hasher{}
 	userService := user.NewService(user.NewEntStore(application.Ent), passwordHasher)
+	apiKeyService := apikey.NewService(apikey.NewEntStore(application.Ent))
+	providerCipher, err := provider.NewCipher(cfg.Provider.EncryptionSecret)
+	if err != nil {
+		logger.Error("provider encryption initialization failed", "error", err)
+		os.Exit(1)
+	}
+	providerService := provider.NewService(provider.NewEntStore(application.Ent), providerCipher)
+	billingService := billing.NewService(billing.NewEntStore(application.Ent))
+	modelRouteService := modelroute.NewService(modelroute.NewEntStore(application.Ent), providerCipher)
 	if len(os.Args) > 1 && os.Args[1] == "bootstrap-admin" {
 		username := os.Getenv("NOVRO_BOOTSTRAP_USERNAME")
 		displayName := os.Getenv("NOVRO_BOOTSTRAP_DISPLAY_NAME")
@@ -106,6 +120,7 @@ func main() {
 		logger.Error("OIDC initialization failed", "error", err)
 		os.Exit(1)
 	}
+	oidcService := optionalOIDCService(oidcClient)
 
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
@@ -113,18 +128,23 @@ func main() {
 			Database:            application.DB,
 			Auth:                authService,
 			Users:               userService,
+			APIKeys:             apiKeyService,
+			Providers:           providerService,
+			Billing:             billingService,
+			ModelRoutes:         modelRouteService,
+			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,
 			CookieSecure:        cfg.Session.CookieSecure,
 			AllowedOrigins:      cfg.AllowedOrigin,
 			SetupToken:          cfg.Auth.SetupToken,
 			RegistrationEnabled: cfg.Auth.RegistrationEnabled,
-			OIDC:                oidcClient,
+			OIDC:                oidcService,
 			OIDCDisplayName:     cfg.Auth.OIDC.DisplayName,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      0,
 		IdleTimeout:       60 * time.Second,
 	}
 
@@ -147,4 +167,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func optionalOIDCService(client *auth.OIDCClient) httpapi.OIDCService {
+	if client == nil {
+		return nil
+	}
+	return client
 }

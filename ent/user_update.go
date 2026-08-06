@@ -12,10 +12,14 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -163,6 +167,70 @@ func (_u *UserUpdate) AddIdentities(v ...*UserIdentity) *UserUpdate {
 	return _u.AddIdentityIDs(ids...)
 }
 
+// AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
+func (_u *UserUpdate) AddAPIKeyIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddAPIKeyIDs(ids...)
+	return _u
+}
+
+// AddAPIKeys adds the "api_keys" edges to the APIKey entity.
+func (_u *UserUpdate) AddAPIKeys(v ...*APIKey) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAPIKeyIDs(ids...)
+}
+
+// SetWalletID sets the "wallet" edge to the Wallet entity by ID.
+func (_u *UserUpdate) SetWalletID(id uuid.UUID) *UserUpdate {
+	_u.mutation.SetWalletID(id)
+	return _u
+}
+
+// SetNillableWalletID sets the "wallet" edge to the Wallet entity by ID if the given value is not nil.
+func (_u *UserUpdate) SetNillableWalletID(id *uuid.UUID) *UserUpdate {
+	if id != nil {
+		_u = _u.SetWalletID(*id)
+	}
+	return _u
+}
+
+// SetWallet sets the "wallet" edge to the Wallet entity.
+func (_u *UserUpdate) SetWallet(v *Wallet) *UserUpdate {
+	return _u.SetWalletID(v.ID)
+}
+
+// AddWalletEntryIDs adds the "wallet_entries" edge to the WalletEntry entity by IDs.
+func (_u *UserUpdate) AddWalletEntryIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddWalletEntryIDs(ids...)
+	return _u
+}
+
+// AddWalletEntries adds the "wallet_entries" edges to the WalletEntry entity.
+func (_u *UserUpdate) AddWalletEntries(v ...*WalletEntry) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddWalletEntryIDs(ids...)
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
+func (_u *UserUpdate) AddAPIUsageIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddAPIUsageIDs(ids...)
+	return _u
+}
+
+// AddAPIUsages adds the "api_usages" edges to the APIUsage entity.
+func (_u *UserUpdate) AddAPIUsages(v ...*APIUsage) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAPIUsageIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -208,6 +276,75 @@ func (_u *UserUpdate) RemoveIdentities(v ...*UserIdentity) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveIdentityIDs(ids...)
+}
+
+// ClearAPIKeys clears all "api_keys" edges to the APIKey entity.
+func (_u *UserUpdate) ClearAPIKeys() *UserUpdate {
+	_u.mutation.ClearAPIKeys()
+	return _u
+}
+
+// RemoveAPIKeyIDs removes the "api_keys" edge to APIKey entities by IDs.
+func (_u *UserUpdate) RemoveAPIKeyIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveAPIKeyIDs(ids...)
+	return _u
+}
+
+// RemoveAPIKeys removes "api_keys" edges to APIKey entities.
+func (_u *UserUpdate) RemoveAPIKeys(v ...*APIKey) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAPIKeyIDs(ids...)
+}
+
+// ClearWallet clears the "wallet" edge to the Wallet entity.
+func (_u *UserUpdate) ClearWallet() *UserUpdate {
+	_u.mutation.ClearWallet()
+	return _u
+}
+
+// ClearWalletEntries clears all "wallet_entries" edges to the WalletEntry entity.
+func (_u *UserUpdate) ClearWalletEntries() *UserUpdate {
+	_u.mutation.ClearWalletEntries()
+	return _u
+}
+
+// RemoveWalletEntryIDs removes the "wallet_entries" edge to WalletEntry entities by IDs.
+func (_u *UserUpdate) RemoveWalletEntryIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveWalletEntryIDs(ids...)
+	return _u
+}
+
+// RemoveWalletEntries removes "wallet_entries" edges to WalletEntry entities.
+func (_u *UserUpdate) RemoveWalletEntries(v ...*WalletEntry) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveWalletEntryIDs(ids...)
+}
+
+// ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
+func (_u *UserUpdate) ClearAPIUsages() *UserUpdate {
+	_u.mutation.ClearAPIUsages()
+	return _u
+}
+
+// RemoveAPIUsageIDs removes the "api_usages" edge to APIUsage entities by IDs.
+func (_u *UserUpdate) RemoveAPIUsageIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveAPIUsageIDs(ids...)
+	return _u
+}
+
+// RemoveAPIUsages removes "api_usages" edges to APIUsage entities.
+func (_u *UserUpdate) RemoveAPIUsages(v ...*APIUsage) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAPIUsageIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -400,6 +537,170 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.APIKeysCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAPIKeysIDs(); len(nodes) > 0 && !_u.mutation.APIKeysCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.APIKeysIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.WalletCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.WalletTable,
+			Columns: []string{user.WalletColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(wallet.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.WalletIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.WalletTable,
+			Columns: []string{user.WalletColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(wallet.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.WalletEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedWalletEntriesIDs(); len(nodes) > 0 && !_u.mutation.WalletEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.WalletEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.APIUsagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAPIUsagesIDs(); len(nodes) > 0 && !_u.mutation.APIUsagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.APIUsagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -552,6 +853,70 @@ func (_u *UserUpdateOne) AddIdentities(v ...*UserIdentity) *UserUpdateOne {
 	return _u.AddIdentityIDs(ids...)
 }
 
+// AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
+func (_u *UserUpdateOne) AddAPIKeyIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddAPIKeyIDs(ids...)
+	return _u
+}
+
+// AddAPIKeys adds the "api_keys" edges to the APIKey entity.
+func (_u *UserUpdateOne) AddAPIKeys(v ...*APIKey) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAPIKeyIDs(ids...)
+}
+
+// SetWalletID sets the "wallet" edge to the Wallet entity by ID.
+func (_u *UserUpdateOne) SetWalletID(id uuid.UUID) *UserUpdateOne {
+	_u.mutation.SetWalletID(id)
+	return _u
+}
+
+// SetNillableWalletID sets the "wallet" edge to the Wallet entity by ID if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableWalletID(id *uuid.UUID) *UserUpdateOne {
+	if id != nil {
+		_u = _u.SetWalletID(*id)
+	}
+	return _u
+}
+
+// SetWallet sets the "wallet" edge to the Wallet entity.
+func (_u *UserUpdateOne) SetWallet(v *Wallet) *UserUpdateOne {
+	return _u.SetWalletID(v.ID)
+}
+
+// AddWalletEntryIDs adds the "wallet_entries" edge to the WalletEntry entity by IDs.
+func (_u *UserUpdateOne) AddWalletEntryIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddWalletEntryIDs(ids...)
+	return _u
+}
+
+// AddWalletEntries adds the "wallet_entries" edges to the WalletEntry entity.
+func (_u *UserUpdateOne) AddWalletEntries(v ...*WalletEntry) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddWalletEntryIDs(ids...)
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
+func (_u *UserUpdateOne) AddAPIUsageIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddAPIUsageIDs(ids...)
+	return _u
+}
+
+// AddAPIUsages adds the "api_usages" edges to the APIUsage entity.
+func (_u *UserUpdateOne) AddAPIUsages(v ...*APIUsage) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAPIUsageIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -597,6 +962,75 @@ func (_u *UserUpdateOne) RemoveIdentities(v ...*UserIdentity) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveIdentityIDs(ids...)
+}
+
+// ClearAPIKeys clears all "api_keys" edges to the APIKey entity.
+func (_u *UserUpdateOne) ClearAPIKeys() *UserUpdateOne {
+	_u.mutation.ClearAPIKeys()
+	return _u
+}
+
+// RemoveAPIKeyIDs removes the "api_keys" edge to APIKey entities by IDs.
+func (_u *UserUpdateOne) RemoveAPIKeyIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveAPIKeyIDs(ids...)
+	return _u
+}
+
+// RemoveAPIKeys removes "api_keys" edges to APIKey entities.
+func (_u *UserUpdateOne) RemoveAPIKeys(v ...*APIKey) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAPIKeyIDs(ids...)
+}
+
+// ClearWallet clears the "wallet" edge to the Wallet entity.
+func (_u *UserUpdateOne) ClearWallet() *UserUpdateOne {
+	_u.mutation.ClearWallet()
+	return _u
+}
+
+// ClearWalletEntries clears all "wallet_entries" edges to the WalletEntry entity.
+func (_u *UserUpdateOne) ClearWalletEntries() *UserUpdateOne {
+	_u.mutation.ClearWalletEntries()
+	return _u
+}
+
+// RemoveWalletEntryIDs removes the "wallet_entries" edge to WalletEntry entities by IDs.
+func (_u *UserUpdateOne) RemoveWalletEntryIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveWalletEntryIDs(ids...)
+	return _u
+}
+
+// RemoveWalletEntries removes "wallet_entries" edges to WalletEntry entities.
+func (_u *UserUpdateOne) RemoveWalletEntries(v ...*WalletEntry) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveWalletEntryIDs(ids...)
+}
+
+// ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
+func (_u *UserUpdateOne) ClearAPIUsages() *UserUpdateOne {
+	_u.mutation.ClearAPIUsages()
+	return _u
+}
+
+// RemoveAPIUsageIDs removes the "api_usages" edge to APIUsage entities by IDs.
+func (_u *UserUpdateOne) RemoveAPIUsageIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveAPIUsageIDs(ids...)
+	return _u
+}
+
+// RemoveAPIUsages removes "api_usages" edges to APIUsage entities.
+func (_u *UserUpdateOne) RemoveAPIUsages(v ...*APIUsage) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAPIUsageIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -812,6 +1246,170 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(useridentity.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.APIKeysCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAPIKeysIDs(); len(nodes) > 0 && !_u.mutation.APIKeysCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.APIKeysIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIKeysTable,
+			Columns: []string{user.APIKeysColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.WalletCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.WalletTable,
+			Columns: []string{user.WalletColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(wallet.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.WalletIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.WalletTable,
+			Columns: []string{user.WalletColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(wallet.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.WalletEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedWalletEntriesIDs(); len(nodes) > 0 && !_u.mutation.WalletEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.WalletEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.WalletEntriesTable,
+			Columns: []string{user.WalletEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(walletentry.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.APIUsagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAPIUsagesIDs(); len(nodes) > 0 && !_u.mutation.APIUsagesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.APIUsagesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.APIUsagesTable,
+			Columns: []string{user.APIUsagesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

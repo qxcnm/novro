@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { RouteShell } from "@/components/route-shell";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import "./globals.css";
@@ -33,7 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <RouteShell>{children}</RouteShell>
         </ThemeProvider>
       </body>
     </html>

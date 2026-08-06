@@ -145,7 +145,7 @@ export function ModelsClient({ initialModels }: ModelsClientProps) {
 
       <div className="mt-6 flex items-center justify-between gap-4 border-y py-3 text-sm text-muted-foreground">
         <span>{models.length} / {initialModels.length} 款</span>
-        <span>全部状态：即将开放</span>
+        <span>网关状态：以启用的模型路由为准</span>
       </div>
 
       {models.length ? (
@@ -234,7 +234,7 @@ function ModelCard({ model }: { model: ModelEntry }) {
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-4 text-xs text-muted-foreground">
-          <span>Novro 状态：即将开放</span>
+          <span>Novro 状态：以管理员路由为准</span>
           <a
             className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
             href={model.officialSource}

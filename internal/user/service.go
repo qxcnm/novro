@@ -16,6 +16,7 @@ type Store interface {
 	CreateInitialAdmin(context.Context, CreateParams) (Record, error)
 	IsInitialized(context.Context) (bool, error)
 	List(context.Context, ListFilter) (Page, error)
+	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
 	ResetPassword(context.Context, uuid.UUID, string) error
 }
@@ -29,6 +30,11 @@ type CreateParams struct {
 	DisplayName  string
 	PasswordHash string
 	Role         Role
+}
+
+type UpdateParams struct {
+	DisplayName *string
+	Role        *Role
 }
 
 type Service struct {
@@ -104,6 +110,24 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
 		return Page{}, ErrInvalidInput
 	}
 	return s.store.List(ctx, filter)
+}
+
+func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil) {
+		return Record{}, ErrInvalidInput
+	}
+	params := UpdateParams{Role: input.Role}
+	if input.DisplayName != nil {
+		displayName := strings.TrimSpace(*input.DisplayName)
+		if len([]rune(displayName)) > 128 {
+			return Record{}, ErrInvalidInput
+		}
+		params.DisplayName = &displayName
+	}
+	if input.Role != nil && *input.Role != RoleAdmin && *input.Role != RoleMember {
+		return Record{}, ErrInvalidInput
+	}
+	return s.store.Update(ctx, id, params)
 }
 
 func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {

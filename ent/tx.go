@@ -12,6 +12,14 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// APIKey is the client for interacting with the APIKey builders.
+	APIKey *APIKeyClient
+	// APIUsage is the client for interacting with the APIUsage builders.
+	APIUsage *APIUsageClient
+	// ModelRoute is the client for interacting with the ModelRoute builders.
+	ModelRoute *ModelRouteClient
+	// Provider is the client for interacting with the Provider builders.
+	Provider *ProviderClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
 	// User is the client for interacting with the User builders.
@@ -20,6 +28,10 @@ type Tx struct {
 	UserIdentity *UserIdentityClient
 	// UserSession is the client for interacting with the UserSession builders.
 	UserSession *UserSessionClient
+	// Wallet is the client for interacting with the Wallet builders.
+	Wallet *WalletClient
+	// WalletEntry is the client for interacting with the WalletEntry builders.
+	WalletEntry *WalletEntryClient
 
 	// lazily loaded.
 	client     *Client
@@ -151,10 +163,16 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.APIKey = NewAPIKeyClient(tx.config)
+	tx.APIUsage = NewAPIUsageClient(tx.config)
+	tx.ModelRoute = NewModelRouteClient(tx.config)
+	tx.Provider = NewProviderClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserIdentity = NewUserIdentityClient(tx.config)
 	tx.UserSession = NewUserSessionClient(tx.config)
+	tx.Wallet = NewWalletClient(tx.config)
+	tx.WalletEntry = NewWalletEntryClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -164,7 +182,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: SystemSetting.QueryXXX(), the query will be executed
+// applies a query, for example: APIKey.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

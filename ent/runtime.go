@@ -6,17 +6,319 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/schema"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // The init function reads all schema descriptors with runtime code
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	apikeyFields := schema.APIKey{}.Fields()
+	_ = apikeyFields
+	// apikeyDescName is the schema descriptor for name field.
+	apikeyDescName := apikeyFields[2].Descriptor()
+	// apikey.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	apikey.NameValidator = func() func(string) error {
+		validators := apikeyDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// apikeyDescKeyPrefix is the schema descriptor for key_prefix field.
+	apikeyDescKeyPrefix := apikeyFields[3].Descriptor()
+	// apikey.KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
+	apikey.KeyPrefixValidator = func() func(string) error {
+		validators := apikeyDescKeyPrefix.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(key_prefix string) error {
+			for _, fn := range fns {
+				if err := fn(key_prefix); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// apikeyDescKeyHash is the schema descriptor for key_hash field.
+	apikeyDescKeyHash := apikeyFields[4].Descriptor()
+	// apikey.KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
+	apikey.KeyHashValidator = func() func(string) error {
+		validators := apikeyDescKeyHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(key_hash string) error {
+			for _, fn := range fns {
+				if err := fn(key_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// apikeyDescCreatedAt is the schema descriptor for created_at field.
+	apikeyDescCreatedAt := apikeyFields[7].Descriptor()
+	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
+	// apikeyDescID is the schema descriptor for id field.
+	apikeyDescID := apikeyFields[0].Descriptor()
+	// apikey.DefaultID holds the default value on creation for the id field.
+	apikey.DefaultID = apikeyDescID.Default.(func() uuid.UUID)
+	apiusageFields := schema.APIUsage{}.Fields()
+	_ = apiusageFields
+	// apiusageDescInputTokens is the schema descriptor for input_tokens field.
+	apiusageDescInputTokens := apiusageFields[6].Descriptor()
+	// apiusage.DefaultInputTokens holds the default value on creation for the input_tokens field.
+	apiusage.DefaultInputTokens = apiusageDescInputTokens.Default.(int)
+	// apiusage.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
+	apiusage.InputTokensValidator = apiusageDescInputTokens.Validators[0].(func(int) error)
+	// apiusageDescOutputTokens is the schema descriptor for output_tokens field.
+	apiusageDescOutputTokens := apiusageFields[7].Descriptor()
+	// apiusage.DefaultOutputTokens holds the default value on creation for the output_tokens field.
+	apiusage.DefaultOutputTokens = apiusageDescOutputTokens.Default.(int)
+	// apiusage.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
+	apiusage.OutputTokensValidator = apiusageDescOutputTokens.Validators[0].(func(int) error)
+	// apiusageDescCostMicros is the schema descriptor for cost_micros field.
+	apiusageDescCostMicros := apiusageFields[8].Descriptor()
+	// apiusage.DefaultCostMicros holds the default value on creation for the cost_micros field.
+	apiusage.DefaultCostMicros = apiusageDescCostMicros.Default.(int64)
+	// apiusage.CostMicrosValidator is a validator for the "cost_micros" field. It is called by the builders before save.
+	apiusage.CostMicrosValidator = apiusageDescCostMicros.Validators[0].(func(int64) error)
+	// apiusageDescReservedMicros is the schema descriptor for reserved_micros field.
+	apiusageDescReservedMicros := apiusageFields[9].Descriptor()
+	// apiusage.DefaultReservedMicros holds the default value on creation for the reserved_micros field.
+	apiusage.DefaultReservedMicros = apiusageDescReservedMicros.Default.(int64)
+	// apiusage.ReservedMicrosValidator is a validator for the "reserved_micros" field. It is called by the builders before save.
+	apiusage.ReservedMicrosValidator = apiusageDescReservedMicros.Validators[0].(func(int64) error)
+	// apiusageDescEstimated is the schema descriptor for estimated field.
+	apiusageDescEstimated := apiusageFields[10].Descriptor()
+	// apiusage.DefaultEstimated holds the default value on creation for the estimated field.
+	apiusage.DefaultEstimated = apiusageDescEstimated.Default.(bool)
+	// apiusageDescUpstreamRequestID is the schema descriptor for upstream_request_id field.
+	apiusageDescUpstreamRequestID := apiusageFields[11].Descriptor()
+	// apiusage.DefaultUpstreamRequestID holds the default value on creation for the upstream_request_id field.
+	apiusage.DefaultUpstreamRequestID = apiusageDescUpstreamRequestID.Default.(string)
+	// apiusage.UpstreamRequestIDValidator is a validator for the "upstream_request_id" field. It is called by the builders before save.
+	apiusage.UpstreamRequestIDValidator = apiusageDescUpstreamRequestID.Validators[0].(func(string) error)
+	// apiusageDescCreatedAt is the schema descriptor for created_at field.
+	apiusageDescCreatedAt := apiusageFields[12].Descriptor()
+	// apiusage.DefaultCreatedAt holds the default value on creation for the created_at field.
+	apiusage.DefaultCreatedAt = apiusageDescCreatedAt.Default.(func() time.Time)
+	// apiusageDescFinishedAt is the schema descriptor for finished_at field.
+	apiusageDescFinishedAt := apiusageFields[13].Descriptor()
+	// apiusage.DefaultFinishedAt holds the default value on creation for the finished_at field.
+	apiusage.DefaultFinishedAt = apiusageDescFinishedAt.Default.(func() time.Time)
+	// apiusageDescID is the schema descriptor for id field.
+	apiusageDescID := apiusageFields[0].Descriptor()
+	// apiusage.DefaultID holds the default value on creation for the id field.
+	apiusage.DefaultID = apiusageDescID.Default.(func() uuid.UUID)
+	modelrouteFields := schema.ModelRoute{}.Fields()
+	_ = modelrouteFields
+	// modelrouteDescPublicName is the schema descriptor for public_name field.
+	modelrouteDescPublicName := modelrouteFields[2].Descriptor()
+	// modelroute.PublicNameValidator is a validator for the "public_name" field. It is called by the builders before save.
+	modelroute.PublicNameValidator = func() func(string) error {
+		validators := modelrouteDescPublicName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(public_name string) error {
+			for _, fn := range fns {
+				if err := fn(public_name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelrouteDescDisplayName is the schema descriptor for display_name field.
+	modelrouteDescDisplayName := modelrouteFields[3].Descriptor()
+	// modelroute.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
+	modelroute.DisplayNameValidator = func() func(string) error {
+		validators := modelrouteDescDisplayName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(display_name string) error {
+			for _, fn := range fns {
+				if err := fn(display_name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelrouteDescUpstreamName is the schema descriptor for upstream_name field.
+	modelrouteDescUpstreamName := modelrouteFields[4].Descriptor()
+	// modelroute.UpstreamNameValidator is a validator for the "upstream_name" field. It is called by the builders before save.
+	modelroute.UpstreamNameValidator = func() func(string) error {
+		validators := modelrouteDescUpstreamName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(upstream_name string) error {
+			for _, fn := range fns {
+				if err := fn(upstream_name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelrouteDescInputPriceMicros is the schema descriptor for input_price_micros field.
+	modelrouteDescInputPriceMicros := modelrouteFields[5].Descriptor()
+	// modelroute.InputPriceMicrosValidator is a validator for the "input_price_micros" field. It is called by the builders before save.
+	modelroute.InputPriceMicrosValidator = modelrouteDescInputPriceMicros.Validators[0].(func(int64) error)
+	// modelrouteDescOutputPriceMicros is the schema descriptor for output_price_micros field.
+	modelrouteDescOutputPriceMicros := modelrouteFields[6].Descriptor()
+	// modelroute.OutputPriceMicrosValidator is a validator for the "output_price_micros" field. It is called by the builders before save.
+	modelroute.OutputPriceMicrosValidator = modelrouteDescOutputPriceMicros.Validators[0].(func(int64) error)
+	// modelrouteDescCreatedAt is the schema descriptor for created_at field.
+	modelrouteDescCreatedAt := modelrouteFields[8].Descriptor()
+	// modelroute.DefaultCreatedAt holds the default value on creation for the created_at field.
+	modelroute.DefaultCreatedAt = modelrouteDescCreatedAt.Default.(func() time.Time)
+	// modelrouteDescUpdatedAt is the schema descriptor for updated_at field.
+	modelrouteDescUpdatedAt := modelrouteFields[9].Descriptor()
+	// modelroute.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	modelroute.DefaultUpdatedAt = modelrouteDescUpdatedAt.Default.(func() time.Time)
+	// modelroute.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	modelroute.UpdateDefaultUpdatedAt = modelrouteDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// modelrouteDescID is the schema descriptor for id field.
+	modelrouteDescID := modelrouteFields[0].Descriptor()
+	// modelroute.DefaultID holds the default value on creation for the id field.
+	modelroute.DefaultID = modelrouteDescID.Default.(func() uuid.UUID)
+	providerFields := schema.Provider{}.Fields()
+	_ = providerFields
+	// providerDescCode is the schema descriptor for code field.
+	providerDescCode := providerFields[1].Descriptor()
+	// provider.CodeValidator is a validator for the "code" field. It is called by the builders before save.
+	provider.CodeValidator = func() func(string) error {
+		validators := providerDescCode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(code string) error {
+			for _, fn := range fns {
+				if err := fn(code); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// providerDescDisplayName is the schema descriptor for display_name field.
+	providerDescDisplayName := providerFields[2].Descriptor()
+	// provider.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
+	provider.DisplayNameValidator = func() func(string) error {
+		validators := providerDescDisplayName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(display_name string) error {
+			for _, fn := range fns {
+				if err := fn(display_name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// providerDescBaseURL is the schema descriptor for base_url field.
+	providerDescBaseURL := providerFields[4].Descriptor()
+	// provider.BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
+	provider.BaseURLValidator = func() func(string) error {
+		validators := providerDescBaseURL.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(base_url string) error {
+			for _, fn := range fns {
+				if err := fn(base_url); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// providerDescEncryptedAPIKey is the schema descriptor for encrypted_api_key field.
+	providerDescEncryptedAPIKey := providerFields[5].Descriptor()
+	// provider.EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
+	provider.EncryptedAPIKeyValidator = func() func(string) error {
+		validators := providerDescEncryptedAPIKey.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(encrypted_api_key string) error {
+			for _, fn := range fns {
+				if err := fn(encrypted_api_key); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// providerDescAPIKeyHint is the schema descriptor for api_key_hint field.
+	providerDescAPIKeyHint := providerFields[6].Descriptor()
+	// provider.APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
+	provider.APIKeyHintValidator = func() func(string) error {
+		validators := providerDescAPIKeyHint.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(api_key_hint string) error {
+			for _, fn := range fns {
+				if err := fn(api_key_hint); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// providerDescCreatedAt is the schema descriptor for created_at field.
+	providerDescCreatedAt := providerFields[8].Descriptor()
+	// provider.DefaultCreatedAt holds the default value on creation for the created_at field.
+	provider.DefaultCreatedAt = providerDescCreatedAt.Default.(func() time.Time)
+	// providerDescUpdatedAt is the schema descriptor for updated_at field.
+	providerDescUpdatedAt := providerFields[9].Descriptor()
+	// provider.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	provider.DefaultUpdatedAt = providerDescUpdatedAt.Default.(func() time.Time)
+	// provider.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	provider.UpdateDefaultUpdatedAt = providerDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// providerDescID is the schema descriptor for id field.
+	providerDescID := providerFields[0].Descriptor()
+	// provider.DefaultID holds the default value on creation for the id field.
+	provider.DefaultID = providerDescID.Default.(func() uuid.UUID)
 	systemsettingFields := schema.SystemSetting{}.Fields()
 	_ = systemsettingFields
 	// systemsettingDescValue is the schema descriptor for value field.
@@ -171,4 +473,46 @@ func init() {
 	usersessionDescID := usersessionFields[0].Descriptor()
 	// usersession.DefaultID holds the default value on creation for the id field.
 	usersession.DefaultID = usersessionDescID.Default.(func() uuid.UUID)
+	walletFields := schema.Wallet{}.Fields()
+	_ = walletFields
+	// walletDescBalanceMicros is the schema descriptor for balance_micros field.
+	walletDescBalanceMicros := walletFields[2].Descriptor()
+	// wallet.DefaultBalanceMicros holds the default value on creation for the balance_micros field.
+	wallet.DefaultBalanceMicros = walletDescBalanceMicros.Default.(int64)
+	// wallet.BalanceMicrosValidator is a validator for the "balance_micros" field. It is called by the builders before save.
+	wallet.BalanceMicrosValidator = walletDescBalanceMicros.Validators[0].(func(int64) error)
+	// walletDescCreatedAt is the schema descriptor for created_at field.
+	walletDescCreatedAt := walletFields[3].Descriptor()
+	// wallet.DefaultCreatedAt holds the default value on creation for the created_at field.
+	wallet.DefaultCreatedAt = walletDescCreatedAt.Default.(func() time.Time)
+	// walletDescUpdatedAt is the schema descriptor for updated_at field.
+	walletDescUpdatedAt := walletFields[4].Descriptor()
+	// wallet.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	wallet.DefaultUpdatedAt = walletDescUpdatedAt.Default.(func() time.Time)
+	// wallet.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	wallet.UpdateDefaultUpdatedAt = walletDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// walletDescID is the schema descriptor for id field.
+	walletDescID := walletFields[0].Descriptor()
+	// wallet.DefaultID holds the default value on creation for the id field.
+	wallet.DefaultID = walletDescID.Default.(func() uuid.UUID)
+	walletentryFields := schema.WalletEntry{}.Fields()
+	_ = walletentryFields
+	// walletentryDescBalanceAfterMicros is the schema descriptor for balance_after_micros field.
+	walletentryDescBalanceAfterMicros := walletentryFields[6].Descriptor()
+	// walletentry.BalanceAfterMicrosValidator is a validator for the "balance_after_micros" field. It is called by the builders before save.
+	walletentry.BalanceAfterMicrosValidator = walletentryDescBalanceAfterMicros.Validators[0].(func(int64) error)
+	// walletentryDescDescription is the schema descriptor for description field.
+	walletentryDescDescription := walletentryFields[7].Descriptor()
+	// walletentry.DefaultDescription holds the default value on creation for the description field.
+	walletentry.DefaultDescription = walletentryDescDescription.Default.(string)
+	// walletentry.DescriptionValidator is a validator for the "description" field. It is called by the builders before save.
+	walletentry.DescriptionValidator = walletentryDescDescription.Validators[0].(func(string) error)
+	// walletentryDescCreatedAt is the schema descriptor for created_at field.
+	walletentryDescCreatedAt := walletentryFields[8].Descriptor()
+	// walletentry.DefaultCreatedAt holds the default value on creation for the created_at field.
+	walletentry.DefaultCreatedAt = walletentryDescCreatedAt.Default.(func() time.Time)
+	// walletentryDescID is the schema descriptor for id field.
+	walletentryDescID := walletentryFields[0].Descriptor()
+	// walletentry.DefaultID holds the default value on creation for the id field.
+	walletentry.DefaultID = walletentryDescID.Default.(func() uuid.UUID)
 }

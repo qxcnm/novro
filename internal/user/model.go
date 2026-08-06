@@ -47,6 +47,11 @@ type CreateInput struct {
 	Role        Role   `json:"role"`
 }
 
+type UpdateInput struct {
+	DisplayName *string `json:"display_name"`
+	Role        *Role   `json:"role"`
+}
+
 type RegisterInput struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`

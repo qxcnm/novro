@@ -18,7 +18,7 @@
 - 产品全称：`Novro Gateway`
 - 中文称呼：`诺沃网关`
 - 仓库：`novro`
-- Go 模块：`github.com/<organization>/novro`
+- Go 模块：`github.com/novro-gateway/novro`
 - 前端：`novro-web`
 - 后端：`novro-server`
 - 管理后台：`Novro Console`

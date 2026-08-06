@@ -13,6 +13,7 @@ type fakeStore struct {
 	initialParams CreateParams
 	initialized   bool
 	listFilter    ListFilter
+	updateParams  UpdateParams
 	status        Status
 	resetHash     string
 }
@@ -37,6 +38,18 @@ func (f *fakeStore) List(_ context.Context, filter ListFilter) (Page, error) {
 func (f *fakeStore) SetStatus(_ context.Context, id uuid.UUID, status Status) (Record, error) {
 	f.status = status
 	return Record{ID: id, Status: status}, nil
+}
+
+func (f *fakeStore) Update(_ context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
+	f.updateParams = params
+	record := Record{ID: id}
+	if params.DisplayName != nil {
+		record.DisplayName = *params.DisplayName
+	}
+	if params.Role != nil {
+		record.Role = *params.Role
+	}
+	return record, nil
 }
 
 func (f *fakeStore) ResetPassword(_ context.Context, _ uuid.UUID, hash string) error {
@@ -129,6 +142,31 @@ func TestResetPasswordHashesBeforeStore(t *testing.T) {
 	}
 	if store.resetHash != "hashed:new-password" {
 		t.Fatalf("unexpected stored hash %q", store.resetHash)
+	}
+}
+
+func TestUpdateNormalizesEditableFields(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, fakeHasher{})
+	displayName := "  Alice Chen  "
+	role := RoleAdmin
+	updated, err := service.Update(context.Background(), uuid.New(), UpdateInput{DisplayName: &displayName, Role: &role})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.DisplayName != "Alice Chen" || updated.Role != RoleAdmin {
+		t.Fatalf("unexpected update: record=%+v params=%+v", updated, store.updateParams)
+	}
+}
+
+func TestUpdateRejectsEmptyAndInvalidRole(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeHasher{})
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected empty update to fail, got %v", err)
+	}
+	role := Role("owner")
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Role: &role}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected invalid role to fail, got %v", err)
 	}
 }
 

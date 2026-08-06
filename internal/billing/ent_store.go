@@ -1,0 +1,189 @@
+package billing
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent"
+	entapiusage "github.com/novro-gateway/novro/ent/apiusage"
+	entwallet "github.com/novro-gateway/novro/ent/wallet"
+	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
+)
+
+type EntStore struct{ client *ent.Client }
+
+func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
+
+func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, limit int) (Summary, error) {
+	walletEntity, err := s.client.Wallet.Query().Where(entwallet.UserIDEQ(userID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return Summary{}, ErrWalletNotFound
+	}
+	if err != nil {
+		return Summary{}, fmt.Errorf("read wallet: %w", err)
+	}
+	entries, err := walletEntity.QueryEntries().Order(ent.Desc(entwalletentry.FieldCreatedAt)).Limit(limit).All(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list wallet entries: %w", err)
+	}
+	return Summary{Wallet: walletFromEnt(walletEntity), Entries: entriesFromEnt(entries)}, nil
+}
+
+func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) ([]Usage, error) {
+	entities, err := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID)).WithModelRoute().Order(ent.Desc(entapiusage.FieldCreatedAt)).Limit(limit).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list API usage: %w", err)
+	}
+	items := make([]Usage, 0, len(entities))
+	for _, entity := range entities {
+		model, _ := entity.Edges.ModelRouteOrErr()
+		modelName := ""
+		if model != nil {
+			modelName = model.PublicName
+		}
+		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens, OutputTokens: entity.OutputTokens, CostMicros: entity.CostMicros, Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
+	}
+	return items, nil
+}
+
+func (s *EntStore) Adjust(ctx context.Context, userID, actorID uuid.UUID, amount int64, note string) (Summary, error) {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("begin balance adjustment: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	walletEntity, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(userID)).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Summary{}, ErrWalletNotFound
+	}
+	if err != nil {
+		return Summary{}, fmt.Errorf("lock wallet: %w", err)
+	}
+	if (amount < 0 && walletEntity.BalanceMicros < -amount) || (amount > 0 && walletEntity.BalanceMicros > math.MaxInt64-amount) {
+		return Summary{}, ErrInsufficientBalance
+	}
+	next := walletEntity.BalanceMicros + amount
+	updated, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("update wallet balance: %w", err)
+	}
+	if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetActorUserID(actorID).SetReferenceID(uuid.New()).SetEntryType(entwalletentry.EntryTypeManualAdjustment).SetAmountMicros(amount).SetBalanceAfterMicros(next).SetDescription(note).Save(ctx); err != nil {
+		return Summary{}, fmt.Errorf("record balance adjustment: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Summary{}, fmt.Errorf("commit balance adjustment: %w", err)
+	}
+	return s.GetSummary(ctx, updated.UserID, 20)
+}
+
+func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin usage reservation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	walletEntity, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(userID)).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrWalletNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock wallet for usage: %w", err)
+	}
+	if walletEntity.BalanceMicros < amount {
+		return ErrInsufficientBalance
+	}
+	next := walletEntity.BalanceMicros - amount
+	if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
+		return fmt.Errorf("reserve usage balance: %w", err)
+	}
+	if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(referenceID).SetEntryType(entwalletentry.EntryTypeUsageReservation).SetAmountMicros(-amount).SetBalanceAfterMicros(next).SetDescription(limitDescription(description)).Save(ctx); err != nil {
+		return fmt.Errorf("record usage reservation: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit usage reservation: %w", err)
+	}
+	return nil
+}
+
+func (s *EntStore) Refund(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin usage refund: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	walletEntity, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(userID)).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrWalletNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock wallet for refund: %w", err)
+	}
+	if walletEntity.BalanceMicros > math.MaxInt64-amount {
+		return ErrInvalidInput
+	}
+	next := walletEntity.BalanceMicros + amount
+	if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
+		return fmt.Errorf("refund usage balance: %w", err)
+	}
+	if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(referenceID).SetEntryType(entwalletentry.EntryTypeUsageRefund).SetAmountMicros(amount).SetBalanceAfterMicros(next).SetDescription(limitDescription(description)).Save(ctx); err != nil {
+		return fmt.Errorf("record usage refund: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit usage refund: %w", err)
+	}
+	return nil
+}
+
+func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin usage finalization: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	walletEntity, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(input.UserID)).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrWalletNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock wallet for usage finalization: %w", err)
+	}
+	refund := input.ReservedMicros - input.CostMicros
+	next := walletEntity.BalanceMicros + refund
+	if refund > 0 {
+		if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
+			return fmt.Errorf("release unused usage balance: %w", err)
+		}
+		if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(input.RequestID).SetEntryType(entwalletentry.EntryTypeUsageRefund).SetAmountMicros(refund).SetBalanceAfterMicros(next).SetDescription("释放未使用的调用预占").Save(ctx); err != nil {
+			return fmt.Errorf("record unused usage balance: %w", err)
+		}
+	}
+	if _, err := tx.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetInputTokens(input.InputTokens).SetOutputTokens(input.OutputTokens).SetCostMicros(input.CostMicros).SetReservedMicros(input.ReservedMicros).SetEstimated(input.Estimated).SetUpstreamRequestID(input.UpstreamRequestID).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt).Save(ctx); err != nil {
+		return fmt.Errorf("record API usage: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit usage finalization: %w", err)
+	}
+	return nil
+}
+
+func walletFromEnt(entity *ent.Wallet) Wallet {
+	return Wallet{ID: entity.ID, UserID: entity.UserID, BalanceMicros: entity.BalanceMicros, UpdatedAt: entity.UpdatedAt}
+}
+func entriesFromEnt(entities []*ent.WalletEntry) []Entry {
+	entries := make([]Entry, 0, len(entities))
+	for _, entity := range entities {
+		entries = append(entries, Entry{ID: entity.ID, ReferenceID: entity.ReferenceID, Type: EntryType(entity.EntryType), AmountMicros: entity.AmountMicros, BalanceAfterMicros: entity.BalanceAfterMicros, Description: entity.Description, CreatedAt: entity.CreatedAt})
+	}
+	return entries
+}
+
+func limitDescription(value string) string {
+	if utf8.RuneCountInString(value) <= 255 {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:255])
+}

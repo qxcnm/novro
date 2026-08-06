@@ -32,6 +32,10 @@ func (User) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("sessions", UserSession.Type),
 		edge.To("identities", UserIdentity.Type),
+		edge.To("api_keys", APIKey.Type),
+		edge.To("wallet", Wallet.Type).Unique(),
+		edge.To("wallet_entries", WalletEntry.Type),
+		edge.To("api_usages", APIUsage.Type),
 	}
 }
 

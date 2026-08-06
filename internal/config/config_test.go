@@ -15,6 +15,7 @@ func testEnv() map[string]string {
 		"NOVRO_DATABASE_PASSWORD":          "temporary-password",
 		"NOVRO_DATABASE_TLS":               "true",
 		"NOVRO_SESSION_SECRET":             "01234567890123456789012345678901",
+		"NOVRO_PROVIDER_ENCRYPTION_SECRET": "provider-secret-0123456789012345",
 		"NOVRO_SESSION_TTL":                "2h",
 		"NOVRO_PUBLIC_URL":                 "http://localhost:3000",
 		"NOVRO_ALLOWED_ORIGINS":            "http://localhost:3000, http://localhost:3001/",
@@ -91,6 +92,13 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 	values["NOVRO_DATABASE_TLS"] = "false"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "production") {
 		t.Fatalf("expected production transport error, got %v", err)
+	}
+
+	values = testEnv()
+	values["NOVRO_ENVIRONMENT"] = "production"
+	delete(values, "NOVRO_PROVIDER_ENCRYPTION_SECRET")
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "PROVIDER_ENCRYPTION_SECRET") {
+		t.Fatalf("expected missing provider encryption secret error, got %v", err)
 	}
 
 }

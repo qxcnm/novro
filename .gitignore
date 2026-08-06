@@ -43,6 +43,7 @@ Thumbs.db
 # Local runtime files
 *.log
 tmp/
+backups/
 
 # Local tool state
 .claude/

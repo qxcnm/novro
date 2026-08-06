@@ -32,7 +32,12 @@ type Config struct {
 	Database      DatabaseConfig
 	Session       SessionConfig
 	Auth          AuthConfig
+	Provider      ProviderConfig
 	AllowedOrigin []string
+}
+
+type ProviderConfig struct {
+	EncryptionSecret string
 }
 
 type AuthConfig struct {
@@ -187,6 +192,16 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	if len([]byte(sessionSecret)) < 32 {
 		return Config{}, errors.New("NOVRO_SESSION_SECRET must be at least 32 bytes")
 	}
+	providerEncryptionSecret := getString("NOVRO_PROVIDER_ENCRYPTION_SECRET", "")
+	if providerEncryptionSecret == "" {
+		if environment == "production" {
+			return Config{}, errors.New("NOVRO_PROVIDER_ENCRYPTION_SECRET is required in production")
+		}
+		providerEncryptionSecret = sessionSecret
+	}
+	if len([]byte(providerEncryptionSecret)) < 32 {
+		return Config{}, errors.New("NOVRO_PROVIDER_ENCRYPTION_SECRET must be at least 32 bytes")
+	}
 	sessionTTL, err := parseDuration("NOVRO_SESSION_TTL", defaultSessionTTL)
 	if err != nil {
 		return Config{}, err
@@ -276,6 +291,7 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 				AutoRegister: oidcAutoRegister,
 			},
 		},
+		Provider:      ProviderConfig{EncryptionSecret: providerEncryptionSecret},
 		AllowedOrigin: origins,
 	}, nil
 }

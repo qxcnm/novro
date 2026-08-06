@@ -24,7 +24,12 @@ func NewEntStore(client *ent.Client) *EntStore {
 }
 
 func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, error) {
-	created, err := s.client.User.Create().
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin user creation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	created, err := tx.User.Create().
 		SetUsername(params.Username).
 		SetDisplayName(params.DisplayName).
 		SetPasswordHash(params.PasswordHash).
@@ -36,6 +41,12 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create user: %w", err)
+	}
+	if _, err := tx.Wallet.Create().SetUserID(created.ID).Save(ctx); err != nil {
+		return Record{}, fmt.Errorf("create user wallet: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit user creation: %w", err)
 	}
 	return fromEnt(created), nil
 }
@@ -75,6 +86,9 @@ func (s *EntStore) CreateInitialAdmin(ctx context.Context, params CreateParams) 
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create initial administrator: %w", err)
+	}
+	if _, err := tx.Wallet.Create().SetUserID(created.ID).Save(ctx); err != nil {
+		return Record{}, fmt.Errorf("create initial administrator wallet: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Record{}, fmt.Errorf("commit administrator initialization: %w", err)
@@ -127,6 +141,50 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) (Page, error) {
 		records = append(records, fromEnt(entity))
 	}
 	return Page{Users: records, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
+}
+
+func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin user update transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	entity, err := tx.User.Query().Where(entuser.IDEQ(id)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrNotFound
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("read user for update: %w", err)
+	}
+	if params.Role != nil && entity.Role == entuser.RoleAdmin && entity.Status == entuser.StatusActive && *params.Role == RoleMember {
+		activeAdminIDs, err := tx.User.Query().
+			Where(entuser.RoleEQ(entuser.RoleAdmin), entuser.StatusEQ(entuser.StatusActive)).
+			ForUpdate().
+			IDs(ctx)
+		if err != nil {
+			return Record{}, fmt.Errorf("lock active administrators: %w", err)
+		}
+		if len(activeAdminIDs) <= 1 {
+			return Record{}, ErrLastActiveAdmin
+		}
+	}
+
+	update := tx.User.UpdateOneID(id)
+	if params.DisplayName != nil {
+		update.SetDisplayName(*params.DisplayName)
+	}
+	if params.Role != nil {
+		update.SetRole(entuser.Role(*params.Role))
+	}
+	updated, err := update.Save(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("update user: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit user update: %w", err)
+	}
+	return fromEnt(updated), nil
 }
 
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {

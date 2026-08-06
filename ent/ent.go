@@ -12,10 +12,16 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -76,10 +82,16 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			apikey.Table:        apikey.ValidColumn,
+			apiusage.Table:      apiusage.ValidColumn,
+			modelroute.Table:    modelroute.ValidColumn,
+			provider.Table:      provider.ValidColumn,
 			systemsetting.Table: systemsetting.ValidColumn,
 			user.Table:          user.ValidColumn,
 			useridentity.Table:  useridentity.ValidColumn,
 			usersession.Table:   usersession.ValidColumn,
+			wallet.Table:        wallet.ValidColumn,
+			walletentry.Table:   walletentry.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

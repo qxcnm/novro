@@ -9,6 +9,54 @@ import (
 	"github.com/novro-gateway/novro/ent"
 )
 
+// The APIKeyFunc type is an adapter to allow the use of ordinary
+// function as APIKey mutator.
+type APIKeyFunc func(context.Context, *ent.APIKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f APIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.APIKeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyMutation", m)
+}
+
+// The APIUsageFunc type is an adapter to allow the use of ordinary
+// function as APIUsage mutator.
+type APIUsageFunc func(context.Context, *ent.APIUsageMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f APIUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.APIUsageMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIUsageMutation", m)
+}
+
+// The ModelRouteFunc type is an adapter to allow the use of ordinary
+// function as ModelRoute mutator.
+type ModelRouteFunc func(context.Context, *ent.ModelRouteMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ModelRouteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ModelRouteMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ModelRouteMutation", m)
+}
+
+// The ProviderFunc type is an adapter to allow the use of ordinary
+// function as Provider mutator.
+type ProviderFunc func(context.Context, *ent.ProviderMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProviderFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProviderMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProviderMutation", m)
+}
+
 // The SystemSettingFunc type is an adapter to allow the use of ordinary
 // function as SystemSetting mutator.
 type SystemSettingFunc func(context.Context, *ent.SystemSettingMutation) (ent.Value, error)
@@ -55,6 +103,30 @@ func (f UserSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserSessionMutation", m)
+}
+
+// The WalletFunc type is an adapter to allow the use of ordinary
+// function as Wallet mutator.
+type WalletFunc func(context.Context, *ent.WalletMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WalletFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WalletMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WalletMutation", m)
+}
+
+// The WalletEntryFunc type is an adapter to allow the use of ordinary
+// function as WalletEntry mutator.
+type WalletEntryFunc func(context.Context, *ent.WalletEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WalletEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WalletEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WalletEntryMutation", m)
 }
 
 // Condition is a hook condition function.

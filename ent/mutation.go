@@ -12,11 +12,17 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
+	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
+	"github.com/novro-gateway/novro/ent/wallet"
+	"github.com/novro-gateway/novro/ent/walletentry"
 )
 
 const (
@@ -28,11 +34,3997 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeAPIKey        = "APIKey"
+	TypeAPIUsage      = "APIUsage"
+	TypeModelRoute    = "ModelRoute"
+	TypeProvider      = "Provider"
 	TypeSystemSetting = "SystemSetting"
 	TypeUser          = "User"
 	TypeUserIdentity  = "UserIdentity"
 	TypeUserSession   = "UserSession"
+	TypeWallet        = "Wallet"
+	TypeWalletEntry   = "WalletEntry"
 )
+
+// APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
+type APIKeyMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *uuid.UUID
+	name              *string
+	key_prefix        *string
+	key_hash          *string
+	status            *apikey.Status
+	last_used_at      *time.Time
+	created_at        *time.Time
+	revoked_at        *time.Time
+	clearedFields     map[string]struct{}
+	user              *uuid.UUID
+	cleareduser       bool
+	api_usages        map[uuid.UUID]struct{}
+	removedapi_usages map[uuid.UUID]struct{}
+	clearedapi_usages bool
+	done              bool
+	oldValue          func(context.Context) (*APIKey, error)
+	predicates        []predicate.APIKey
+}
+
+var _ ent.Mutation = (*APIKeyMutation)(nil)
+
+// apikeyOption allows management of the mutation configuration using functional options.
+type apikeyOption func(*APIKeyMutation)
+
+// newAPIKeyMutation creates new mutation for the APIKey entity.
+func newAPIKeyMutation(c config, op Op, opts ...apikeyOption) *APIKeyMutation {
+	m := &APIKeyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAPIKey,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAPIKeyID sets the ID field of the mutation.
+func withAPIKeyID(id uuid.UUID) apikeyOption {
+	return func(m *APIKeyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *APIKey
+		)
+		m.oldValue = func(ctx context.Context) (*APIKey, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().APIKey.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAPIKey sets the old APIKey of the mutation.
+func withAPIKey(node *APIKey) apikeyOption {
+	return func(m *APIKeyMutation) {
+		m.oldValue = func(context.Context) (*APIKey, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m APIKeyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m APIKeyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of APIKey entities.
+func (m *APIKeyMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *APIKeyMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *APIKeyMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().APIKey.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *APIKeyMutation) SetUserID(u uuid.UUID) {
+	m.user = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *APIKeyMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldUserID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *APIKeyMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetName sets the "name" field.
+func (m *APIKeyMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *APIKeyMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *APIKeyMutation) ResetName() {
+	m.name = nil
+}
+
+// SetKeyPrefix sets the "key_prefix" field.
+func (m *APIKeyMutation) SetKeyPrefix(s string) {
+	m.key_prefix = &s
+}
+
+// KeyPrefix returns the value of the "key_prefix" field in the mutation.
+func (m *APIKeyMutation) KeyPrefix() (r string, exists bool) {
+	v := m.key_prefix
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyPrefix returns the old "key_prefix" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldKeyPrefix(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyPrefix is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyPrefix requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyPrefix: %w", err)
+	}
+	return oldValue.KeyPrefix, nil
+}
+
+// ResetKeyPrefix resets all changes to the "key_prefix" field.
+func (m *APIKeyMutation) ResetKeyPrefix() {
+	m.key_prefix = nil
+}
+
+// SetKeyHash sets the "key_hash" field.
+func (m *APIKeyMutation) SetKeyHash(s string) {
+	m.key_hash = &s
+}
+
+// KeyHash returns the value of the "key_hash" field in the mutation.
+func (m *APIKeyMutation) KeyHash() (r string, exists bool) {
+	v := m.key_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyHash returns the old "key_hash" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldKeyHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyHash: %w", err)
+	}
+	return oldValue.KeyHash, nil
+}
+
+// ResetKeyHash resets all changes to the "key_hash" field.
+func (m *APIKeyMutation) ResetKeyHash() {
+	m.key_hash = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *APIKeyMutation) SetStatus(a apikey.Status) {
+	m.status = &a
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *APIKeyMutation) Status() (r apikey.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldStatus(ctx context.Context) (v apikey.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *APIKeyMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetLastUsedAt sets the "last_used_at" field.
+func (m *APIKeyMutation) SetLastUsedAt(t time.Time) {
+	m.last_used_at = &t
+}
+
+// LastUsedAt returns the value of the "last_used_at" field in the mutation.
+func (m *APIKeyMutation) LastUsedAt() (r time.Time, exists bool) {
+	v := m.last_used_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastUsedAt returns the old "last_used_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldLastUsedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastUsedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastUsedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastUsedAt: %w", err)
+	}
+	return oldValue.LastUsedAt, nil
+}
+
+// ClearLastUsedAt clears the value of the "last_used_at" field.
+func (m *APIKeyMutation) ClearLastUsedAt() {
+	m.last_used_at = nil
+	m.clearedFields[apikey.FieldLastUsedAt] = struct{}{}
+}
+
+// LastUsedAtCleared returns if the "last_used_at" field was cleared in this mutation.
+func (m *APIKeyMutation) LastUsedAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldLastUsedAt]
+	return ok
+}
+
+// ResetLastUsedAt resets all changes to the "last_used_at" field.
+func (m *APIKeyMutation) ResetLastUsedAt() {
+	m.last_used_at = nil
+	delete(m.clearedFields, apikey.FieldLastUsedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *APIKeyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *APIKeyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *APIKeyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetRevokedAt sets the "revoked_at" field.
+func (m *APIKeyMutation) SetRevokedAt(t time.Time) {
+	m.revoked_at = &t
+}
+
+// RevokedAt returns the value of the "revoked_at" field in the mutation.
+func (m *APIKeyMutation) RevokedAt() (r time.Time, exists bool) {
+	v := m.revoked_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevokedAt returns the old "revoked_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldRevokedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevokedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevokedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevokedAt: %w", err)
+	}
+	return oldValue.RevokedAt, nil
+}
+
+// ClearRevokedAt clears the value of the "revoked_at" field.
+func (m *APIKeyMutation) ClearRevokedAt() {
+	m.revoked_at = nil
+	m.clearedFields[apikey.FieldRevokedAt] = struct{}{}
+}
+
+// RevokedAtCleared returns if the "revoked_at" field was cleared in this mutation.
+func (m *APIKeyMutation) RevokedAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldRevokedAt]
+	return ok
+}
+
+// ResetRevokedAt resets all changes to the "revoked_at" field.
+func (m *APIKeyMutation) ResetRevokedAt() {
+	m.revoked_at = nil
+	delete(m.clearedFields, apikey.FieldRevokedAt)
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *APIKeyMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[apikey.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *APIKeyMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *APIKeyMutation) UserIDs() (ids []uuid.UUID) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *APIKeyMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by ids.
+func (m *APIKeyMutation) AddAPIUsageIDs(ids ...uuid.UUID) {
+	if m.api_usages == nil {
+		m.api_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.api_usages[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAPIUsages clears the "api_usages" edge to the APIUsage entity.
+func (m *APIKeyMutation) ClearAPIUsages() {
+	m.clearedapi_usages = true
+}
+
+// APIUsagesCleared reports if the "api_usages" edge to the APIUsage entity was cleared.
+func (m *APIKeyMutation) APIUsagesCleared() bool {
+	return m.clearedapi_usages
+}
+
+// RemoveAPIUsageIDs removes the "api_usages" edge to the APIUsage entity by IDs.
+func (m *APIKeyMutation) RemoveAPIUsageIDs(ids ...uuid.UUID) {
+	if m.removedapi_usages == nil {
+		m.removedapi_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.api_usages, ids[i])
+		m.removedapi_usages[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAPIUsages returns the removed IDs of the "api_usages" edge to the APIUsage entity.
+func (m *APIKeyMutation) RemovedAPIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.removedapi_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// APIUsagesIDs returns the "api_usages" edge IDs in the mutation.
+func (m *APIKeyMutation) APIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.api_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAPIUsages resets all changes to the "api_usages" edge.
+func (m *APIKeyMutation) ResetAPIUsages() {
+	m.api_usages = nil
+	m.clearedapi_usages = false
+	m.removedapi_usages = nil
+}
+
+// Where appends a list predicates to the APIKeyMutation builder.
+func (m *APIKeyMutation) Where(ps ...predicate.APIKey) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the APIKeyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *APIKeyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.APIKey, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *APIKeyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *APIKeyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (APIKey).
+func (m *APIKeyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *APIKeyMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.user != nil {
+		fields = append(fields, apikey.FieldUserID)
+	}
+	if m.name != nil {
+		fields = append(fields, apikey.FieldName)
+	}
+	if m.key_prefix != nil {
+		fields = append(fields, apikey.FieldKeyPrefix)
+	}
+	if m.key_hash != nil {
+		fields = append(fields, apikey.FieldKeyHash)
+	}
+	if m.status != nil {
+		fields = append(fields, apikey.FieldStatus)
+	}
+	if m.last_used_at != nil {
+		fields = append(fields, apikey.FieldLastUsedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, apikey.FieldCreatedAt)
+	}
+	if m.revoked_at != nil {
+		fields = append(fields, apikey.FieldRevokedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case apikey.FieldUserID:
+		return m.UserID()
+	case apikey.FieldName:
+		return m.Name()
+	case apikey.FieldKeyPrefix:
+		return m.KeyPrefix()
+	case apikey.FieldKeyHash:
+		return m.KeyHash()
+	case apikey.FieldStatus:
+		return m.Status()
+	case apikey.FieldLastUsedAt:
+		return m.LastUsedAt()
+	case apikey.FieldCreatedAt:
+		return m.CreatedAt()
+	case apikey.FieldRevokedAt:
+		return m.RevokedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case apikey.FieldUserID:
+		return m.OldUserID(ctx)
+	case apikey.FieldName:
+		return m.OldName(ctx)
+	case apikey.FieldKeyPrefix:
+		return m.OldKeyPrefix(ctx)
+	case apikey.FieldKeyHash:
+		return m.OldKeyHash(ctx)
+	case apikey.FieldStatus:
+		return m.OldStatus(ctx)
+	case apikey.FieldLastUsedAt:
+		return m.OldLastUsedAt(ctx)
+	case apikey.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case apikey.FieldRevokedAt:
+		return m.OldRevokedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown APIKey field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case apikey.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case apikey.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case apikey.FieldKeyPrefix:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyPrefix(v)
+		return nil
+	case apikey.FieldKeyHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyHash(v)
+		return nil
+	case apikey.FieldStatus:
+		v, ok := value.(apikey.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case apikey.FieldLastUsedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastUsedAt(v)
+		return nil
+	case apikey.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case apikey.FieldRevokedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevokedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown APIKey field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *APIKeyMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIKeyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown APIKey numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *APIKeyMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(apikey.FieldLastUsedAt) {
+		fields = append(fields, apikey.FieldLastUsedAt)
+	}
+	if m.FieldCleared(apikey.FieldRevokedAt) {
+		fields = append(fields, apikey.FieldRevokedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *APIKeyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *APIKeyMutation) ClearField(name string) error {
+	switch name {
+	case apikey.FieldLastUsedAt:
+		m.ClearLastUsedAt()
+		return nil
+	case apikey.FieldRevokedAt:
+		m.ClearRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKey nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *APIKeyMutation) ResetField(name string) error {
+	switch name {
+	case apikey.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case apikey.FieldName:
+		m.ResetName()
+		return nil
+	case apikey.FieldKeyPrefix:
+		m.ResetKeyPrefix()
+		return nil
+	case apikey.FieldKeyHash:
+		m.ResetKeyHash()
+		return nil
+	case apikey.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case apikey.FieldLastUsedAt:
+		m.ResetLastUsedAt()
+		return nil
+	case apikey.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case apikey.FieldRevokedAt:
+		m.ResetRevokedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKey field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *APIKeyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, apikey.EdgeUser)
+	}
+	if m.api_usages != nil {
+		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *APIKeyMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case apikey.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case apikey.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.api_usages))
+		for id := range m.api_usages {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *APIKeyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedapi_usages != nil {
+		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *APIKeyMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case apikey.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.removedapi_usages))
+		for id := range m.removedapi_usages {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *APIKeyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, apikey.EdgeUser)
+	}
+	if m.clearedapi_usages {
+		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *APIKeyMutation) EdgeCleared(name string) bool {
+	switch name {
+	case apikey.EdgeUser:
+		return m.cleareduser
+	case apikey.EdgeAPIUsages:
+		return m.clearedapi_usages
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *APIKeyMutation) ClearEdge(name string) error {
+	switch name {
+	case apikey.EdgeUser:
+		m.ClearUser()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKey unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *APIKeyMutation) ResetEdge(name string) error {
+	switch name {
+	case apikey.EdgeUser:
+		m.ResetUser()
+		return nil
+	case apikey.EdgeAPIUsages:
+		m.ResetAPIUsages()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKey edge %s", name)
+}
+
+// APIUsageMutation represents an operation that mutates the APIUsage nodes in the graph.
+type APIUsageMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *uuid.UUID
+	request_id          *uuid.UUID
+	endpoint            *apiusage.Endpoint
+	input_tokens        *int
+	addinput_tokens     *int
+	output_tokens       *int
+	addoutput_tokens    *int
+	cost_micros         *int64
+	addcost_micros      *int64
+	reserved_micros     *int64
+	addreserved_micros  *int64
+	estimated           *bool
+	upstream_request_id *string
+	created_at          *time.Time
+	finished_at         *time.Time
+	clearedFields       map[string]struct{}
+	user                *uuid.UUID
+	cleareduser         bool
+	api_key             *uuid.UUID
+	clearedapi_key      bool
+	model_route         *uuid.UUID
+	clearedmodel_route  bool
+	done                bool
+	oldValue            func(context.Context) (*APIUsage, error)
+	predicates          []predicate.APIUsage
+}
+
+var _ ent.Mutation = (*APIUsageMutation)(nil)
+
+// apiusageOption allows management of the mutation configuration using functional options.
+type apiusageOption func(*APIUsageMutation)
+
+// newAPIUsageMutation creates new mutation for the APIUsage entity.
+func newAPIUsageMutation(c config, op Op, opts ...apiusageOption) *APIUsageMutation {
+	m := &APIUsageMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAPIUsage,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAPIUsageID sets the ID field of the mutation.
+func withAPIUsageID(id uuid.UUID) apiusageOption {
+	return func(m *APIUsageMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *APIUsage
+		)
+		m.oldValue = func(ctx context.Context) (*APIUsage, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().APIUsage.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAPIUsage sets the old APIUsage of the mutation.
+func withAPIUsage(node *APIUsage) apiusageOption {
+	return func(m *APIUsageMutation) {
+		m.oldValue = func(context.Context) (*APIUsage, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m APIUsageMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m APIUsageMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of APIUsage entities.
+func (m *APIUsageMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *APIUsageMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *APIUsageMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().APIUsage.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *APIUsageMutation) SetUserID(u uuid.UUID) {
+	m.user = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *APIUsageMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldUserID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *APIUsageMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *APIUsageMutation) SetAPIKeyID(u uuid.UUID) {
+	m.api_key = &u
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *APIUsageMutation) APIKeyID() (r uuid.UUID, exists bool) {
+	v := m.api_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldAPIKeyID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *APIUsageMutation) ResetAPIKeyID() {
+	m.api_key = nil
+}
+
+// SetModelRouteID sets the "model_route_id" field.
+func (m *APIUsageMutation) SetModelRouteID(u uuid.UUID) {
+	m.model_route = &u
+}
+
+// ModelRouteID returns the value of the "model_route_id" field in the mutation.
+func (m *APIUsageMutation) ModelRouteID() (r uuid.UUID, exists bool) {
+	v := m.model_route
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelRouteID returns the old "model_route_id" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldModelRouteID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelRouteID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelRouteID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelRouteID: %w", err)
+	}
+	return oldValue.ModelRouteID, nil
+}
+
+// ResetModelRouteID resets all changes to the "model_route_id" field.
+func (m *APIUsageMutation) ResetModelRouteID() {
+	m.model_route = nil
+}
+
+// SetRequestID sets the "request_id" field.
+func (m *APIUsageMutation) SetRequestID(u uuid.UUID) {
+	m.request_id = &u
+}
+
+// RequestID returns the value of the "request_id" field in the mutation.
+func (m *APIUsageMutation) RequestID() (r uuid.UUID, exists bool) {
+	v := m.request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestID returns the old "request_id" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldRequestID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestID: %w", err)
+	}
+	return oldValue.RequestID, nil
+}
+
+// ResetRequestID resets all changes to the "request_id" field.
+func (m *APIUsageMutation) ResetRequestID() {
+	m.request_id = nil
+}
+
+// SetEndpoint sets the "endpoint" field.
+func (m *APIUsageMutation) SetEndpoint(a apiusage.Endpoint) {
+	m.endpoint = &a
+}
+
+// Endpoint returns the value of the "endpoint" field in the mutation.
+func (m *APIUsageMutation) Endpoint() (r apiusage.Endpoint, exists bool) {
+	v := m.endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpoint returns the old "endpoint" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldEndpoint(ctx context.Context) (v apiusage.Endpoint, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpoint: %w", err)
+	}
+	return oldValue.Endpoint, nil
+}
+
+// ResetEndpoint resets all changes to the "endpoint" field.
+func (m *APIUsageMutation) ResetEndpoint() {
+	m.endpoint = nil
+}
+
+// SetInputTokens sets the "input_tokens" field.
+func (m *APIUsageMutation) SetInputTokens(i int) {
+	m.input_tokens = &i
+	m.addinput_tokens = nil
+}
+
+// InputTokens returns the value of the "input_tokens" field in the mutation.
+func (m *APIUsageMutation) InputTokens() (r int, exists bool) {
+	v := m.input_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInputTokens returns the old "input_tokens" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldInputTokens(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInputTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInputTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInputTokens: %w", err)
+	}
+	return oldValue.InputTokens, nil
+}
+
+// AddInputTokens adds i to the "input_tokens" field.
+func (m *APIUsageMutation) AddInputTokens(i int) {
+	if m.addinput_tokens != nil {
+		*m.addinput_tokens += i
+	} else {
+		m.addinput_tokens = &i
+	}
+}
+
+// AddedInputTokens returns the value that was added to the "input_tokens" field in this mutation.
+func (m *APIUsageMutation) AddedInputTokens() (r int, exists bool) {
+	v := m.addinput_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInputTokens resets all changes to the "input_tokens" field.
+func (m *APIUsageMutation) ResetInputTokens() {
+	m.input_tokens = nil
+	m.addinput_tokens = nil
+}
+
+// SetOutputTokens sets the "output_tokens" field.
+func (m *APIUsageMutation) SetOutputTokens(i int) {
+	m.output_tokens = &i
+	m.addoutput_tokens = nil
+}
+
+// OutputTokens returns the value of the "output_tokens" field in the mutation.
+func (m *APIUsageMutation) OutputTokens() (r int, exists bool) {
+	v := m.output_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutputTokens returns the old "output_tokens" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldOutputTokens(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutputTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutputTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutputTokens: %w", err)
+	}
+	return oldValue.OutputTokens, nil
+}
+
+// AddOutputTokens adds i to the "output_tokens" field.
+func (m *APIUsageMutation) AddOutputTokens(i int) {
+	if m.addoutput_tokens != nil {
+		*m.addoutput_tokens += i
+	} else {
+		m.addoutput_tokens = &i
+	}
+}
+
+// AddedOutputTokens returns the value that was added to the "output_tokens" field in this mutation.
+func (m *APIUsageMutation) AddedOutputTokens() (r int, exists bool) {
+	v := m.addoutput_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutputTokens resets all changes to the "output_tokens" field.
+func (m *APIUsageMutation) ResetOutputTokens() {
+	m.output_tokens = nil
+	m.addoutput_tokens = nil
+}
+
+// SetCostMicros sets the "cost_micros" field.
+func (m *APIUsageMutation) SetCostMicros(i int64) {
+	m.cost_micros = &i
+	m.addcost_micros = nil
+}
+
+// CostMicros returns the value of the "cost_micros" field in the mutation.
+func (m *APIUsageMutation) CostMicros() (r int64, exists bool) {
+	v := m.cost_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCostMicros returns the old "cost_micros" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldCostMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCostMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCostMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCostMicros: %w", err)
+	}
+	return oldValue.CostMicros, nil
+}
+
+// AddCostMicros adds i to the "cost_micros" field.
+func (m *APIUsageMutation) AddCostMicros(i int64) {
+	if m.addcost_micros != nil {
+		*m.addcost_micros += i
+	} else {
+		m.addcost_micros = &i
+	}
+}
+
+// AddedCostMicros returns the value that was added to the "cost_micros" field in this mutation.
+func (m *APIUsageMutation) AddedCostMicros() (r int64, exists bool) {
+	v := m.addcost_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCostMicros resets all changes to the "cost_micros" field.
+func (m *APIUsageMutation) ResetCostMicros() {
+	m.cost_micros = nil
+	m.addcost_micros = nil
+}
+
+// SetReservedMicros sets the "reserved_micros" field.
+func (m *APIUsageMutation) SetReservedMicros(i int64) {
+	m.reserved_micros = &i
+	m.addreserved_micros = nil
+}
+
+// ReservedMicros returns the value of the "reserved_micros" field in the mutation.
+func (m *APIUsageMutation) ReservedMicros() (r int64, exists bool) {
+	v := m.reserved_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReservedMicros returns the old "reserved_micros" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldReservedMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReservedMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReservedMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReservedMicros: %w", err)
+	}
+	return oldValue.ReservedMicros, nil
+}
+
+// AddReservedMicros adds i to the "reserved_micros" field.
+func (m *APIUsageMutation) AddReservedMicros(i int64) {
+	if m.addreserved_micros != nil {
+		*m.addreserved_micros += i
+	} else {
+		m.addreserved_micros = &i
+	}
+}
+
+// AddedReservedMicros returns the value that was added to the "reserved_micros" field in this mutation.
+func (m *APIUsageMutation) AddedReservedMicros() (r int64, exists bool) {
+	v := m.addreserved_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetReservedMicros resets all changes to the "reserved_micros" field.
+func (m *APIUsageMutation) ResetReservedMicros() {
+	m.reserved_micros = nil
+	m.addreserved_micros = nil
+}
+
+// SetEstimated sets the "estimated" field.
+func (m *APIUsageMutation) SetEstimated(b bool) {
+	m.estimated = &b
+}
+
+// Estimated returns the value of the "estimated" field in the mutation.
+func (m *APIUsageMutation) Estimated() (r bool, exists bool) {
+	v := m.estimated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEstimated returns the old "estimated" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldEstimated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEstimated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEstimated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEstimated: %w", err)
+	}
+	return oldValue.Estimated, nil
+}
+
+// ResetEstimated resets all changes to the "estimated" field.
+func (m *APIUsageMutation) ResetEstimated() {
+	m.estimated = nil
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (m *APIUsageMutation) SetUpstreamRequestID(s string) {
+	m.upstream_request_id = &s
+}
+
+// UpstreamRequestID returns the value of the "upstream_request_id" field in the mutation.
+func (m *APIUsageMutation) UpstreamRequestID() (r string, exists bool) {
+	v := m.upstream_request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamRequestID returns the old "upstream_request_id" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldUpstreamRequestID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamRequestID: %w", err)
+	}
+	return oldValue.UpstreamRequestID, nil
+}
+
+// ResetUpstreamRequestID resets all changes to the "upstream_request_id" field.
+func (m *APIUsageMutation) ResetUpstreamRequestID() {
+	m.upstream_request_id = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *APIUsageMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *APIUsageMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *APIUsageMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (m *APIUsageMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *APIUsageMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldFinishedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *APIUsageMutation) ResetFinishedAt() {
+	m.finished_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *APIUsageMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[apiusage.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *APIUsageMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *APIUsageMutation) UserIDs() (ids []uuid.UUID) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *APIUsageMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearAPIKey clears the "api_key" edge to the APIKey entity.
+func (m *APIUsageMutation) ClearAPIKey() {
+	m.clearedapi_key = true
+	m.clearedFields[apiusage.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyCleared reports if the "api_key" edge to the APIKey entity was cleared.
+func (m *APIUsageMutation) APIKeyCleared() bool {
+	return m.clearedapi_key
+}
+
+// APIKeyIDs returns the "api_key" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// APIKeyID instead. It exists only for internal usage by the builders.
+func (m *APIUsageMutation) APIKeyIDs() (ids []uuid.UUID) {
+	if id := m.api_key; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetAPIKey resets all changes to the "api_key" edge.
+func (m *APIUsageMutation) ResetAPIKey() {
+	m.api_key = nil
+	m.clearedapi_key = false
+}
+
+// ClearModelRoute clears the "model_route" edge to the ModelRoute entity.
+func (m *APIUsageMutation) ClearModelRoute() {
+	m.clearedmodel_route = true
+	m.clearedFields[apiusage.FieldModelRouteID] = struct{}{}
+}
+
+// ModelRouteCleared reports if the "model_route" edge to the ModelRoute entity was cleared.
+func (m *APIUsageMutation) ModelRouteCleared() bool {
+	return m.clearedmodel_route
+}
+
+// ModelRouteIDs returns the "model_route" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ModelRouteID instead. It exists only for internal usage by the builders.
+func (m *APIUsageMutation) ModelRouteIDs() (ids []uuid.UUID) {
+	if id := m.model_route; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetModelRoute resets all changes to the "model_route" edge.
+func (m *APIUsageMutation) ResetModelRoute() {
+	m.model_route = nil
+	m.clearedmodel_route = false
+}
+
+// Where appends a list predicates to the APIUsageMutation builder.
+func (m *APIUsageMutation) Where(ps ...predicate.APIUsage) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the APIUsageMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *APIUsageMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.APIUsage, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *APIUsageMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *APIUsageMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (APIUsage).
+func (m *APIUsageMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *APIUsageMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.user != nil {
+		fields = append(fields, apiusage.FieldUserID)
+	}
+	if m.api_key != nil {
+		fields = append(fields, apiusage.FieldAPIKeyID)
+	}
+	if m.model_route != nil {
+		fields = append(fields, apiusage.FieldModelRouteID)
+	}
+	if m.request_id != nil {
+		fields = append(fields, apiusage.FieldRequestID)
+	}
+	if m.endpoint != nil {
+		fields = append(fields, apiusage.FieldEndpoint)
+	}
+	if m.input_tokens != nil {
+		fields = append(fields, apiusage.FieldInputTokens)
+	}
+	if m.output_tokens != nil {
+		fields = append(fields, apiusage.FieldOutputTokens)
+	}
+	if m.cost_micros != nil {
+		fields = append(fields, apiusage.FieldCostMicros)
+	}
+	if m.reserved_micros != nil {
+		fields = append(fields, apiusage.FieldReservedMicros)
+	}
+	if m.estimated != nil {
+		fields = append(fields, apiusage.FieldEstimated)
+	}
+	if m.upstream_request_id != nil {
+		fields = append(fields, apiusage.FieldUpstreamRequestID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, apiusage.FieldCreatedAt)
+	}
+	if m.finished_at != nil {
+		fields = append(fields, apiusage.FieldFinishedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *APIUsageMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case apiusage.FieldUserID:
+		return m.UserID()
+	case apiusage.FieldAPIKeyID:
+		return m.APIKeyID()
+	case apiusage.FieldModelRouteID:
+		return m.ModelRouteID()
+	case apiusage.FieldRequestID:
+		return m.RequestID()
+	case apiusage.FieldEndpoint:
+		return m.Endpoint()
+	case apiusage.FieldInputTokens:
+		return m.InputTokens()
+	case apiusage.FieldOutputTokens:
+		return m.OutputTokens()
+	case apiusage.FieldCostMicros:
+		return m.CostMicros()
+	case apiusage.FieldReservedMicros:
+		return m.ReservedMicros()
+	case apiusage.FieldEstimated:
+		return m.Estimated()
+	case apiusage.FieldUpstreamRequestID:
+		return m.UpstreamRequestID()
+	case apiusage.FieldCreatedAt:
+		return m.CreatedAt()
+	case apiusage.FieldFinishedAt:
+		return m.FinishedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *APIUsageMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case apiusage.FieldUserID:
+		return m.OldUserID(ctx)
+	case apiusage.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case apiusage.FieldModelRouteID:
+		return m.OldModelRouteID(ctx)
+	case apiusage.FieldRequestID:
+		return m.OldRequestID(ctx)
+	case apiusage.FieldEndpoint:
+		return m.OldEndpoint(ctx)
+	case apiusage.FieldInputTokens:
+		return m.OldInputTokens(ctx)
+	case apiusage.FieldOutputTokens:
+		return m.OldOutputTokens(ctx)
+	case apiusage.FieldCostMicros:
+		return m.OldCostMicros(ctx)
+	case apiusage.FieldReservedMicros:
+		return m.OldReservedMicros(ctx)
+	case apiusage.FieldEstimated:
+		return m.OldEstimated(ctx)
+	case apiusage.FieldUpstreamRequestID:
+		return m.OldUpstreamRequestID(ctx)
+	case apiusage.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case apiusage.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown APIUsage field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIUsageMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case apiusage.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case apiusage.FieldAPIKeyID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case apiusage.FieldModelRouteID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelRouteID(v)
+		return nil
+	case apiusage.FieldRequestID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestID(v)
+		return nil
+	case apiusage.FieldEndpoint:
+		v, ok := value.(apiusage.Endpoint)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpoint(v)
+		return nil
+	case apiusage.FieldInputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInputTokens(v)
+		return nil
+	case apiusage.FieldOutputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutputTokens(v)
+		return nil
+	case apiusage.FieldCostMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCostMicros(v)
+		return nil
+	case apiusage.FieldReservedMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReservedMicros(v)
+		return nil
+	case apiusage.FieldEstimated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEstimated(v)
+		return nil
+	case apiusage.FieldUpstreamRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamRequestID(v)
+		return nil
+	case apiusage.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case apiusage.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown APIUsage field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *APIUsageMutation) AddedFields() []string {
+	var fields []string
+	if m.addinput_tokens != nil {
+		fields = append(fields, apiusage.FieldInputTokens)
+	}
+	if m.addoutput_tokens != nil {
+		fields = append(fields, apiusage.FieldOutputTokens)
+	}
+	if m.addcost_micros != nil {
+		fields = append(fields, apiusage.FieldCostMicros)
+	}
+	if m.addreserved_micros != nil {
+		fields = append(fields, apiusage.FieldReservedMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *APIUsageMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case apiusage.FieldInputTokens:
+		return m.AddedInputTokens()
+	case apiusage.FieldOutputTokens:
+		return m.AddedOutputTokens()
+	case apiusage.FieldCostMicros:
+		return m.AddedCostMicros()
+	case apiusage.FieldReservedMicros:
+		return m.AddedReservedMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIUsageMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case apiusage.FieldInputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInputTokens(v)
+		return nil
+	case apiusage.FieldOutputTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutputTokens(v)
+		return nil
+	case apiusage.FieldCostMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCostMicros(v)
+		return nil
+	case apiusage.FieldReservedMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReservedMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown APIUsage numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *APIUsageMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *APIUsageMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *APIUsageMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown APIUsage nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *APIUsageMutation) ResetField(name string) error {
+	switch name {
+	case apiusage.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case apiusage.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case apiusage.FieldModelRouteID:
+		m.ResetModelRouteID()
+		return nil
+	case apiusage.FieldRequestID:
+		m.ResetRequestID()
+		return nil
+	case apiusage.FieldEndpoint:
+		m.ResetEndpoint()
+		return nil
+	case apiusage.FieldInputTokens:
+		m.ResetInputTokens()
+		return nil
+	case apiusage.FieldOutputTokens:
+		m.ResetOutputTokens()
+		return nil
+	case apiusage.FieldCostMicros:
+		m.ResetCostMicros()
+		return nil
+	case apiusage.FieldReservedMicros:
+		m.ResetReservedMicros()
+		return nil
+	case apiusage.FieldEstimated:
+		m.ResetEstimated()
+		return nil
+	case apiusage.FieldUpstreamRequestID:
+		m.ResetUpstreamRequestID()
+		return nil
+	case apiusage.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case apiusage.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown APIUsage field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *APIUsageMutation) AddedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.user != nil {
+		edges = append(edges, apiusage.EdgeUser)
+	}
+	if m.api_key != nil {
+		edges = append(edges, apiusage.EdgeAPIKey)
+	}
+	if m.model_route != nil {
+		edges = append(edges, apiusage.EdgeModelRoute)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *APIUsageMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case apiusage.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case apiusage.EdgeAPIKey:
+		if id := m.api_key; id != nil {
+			return []ent.Value{*id}
+		}
+	case apiusage.EdgeModelRoute:
+		if id := m.model_route; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *APIUsageMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 3)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *APIUsageMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *APIUsageMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.cleareduser {
+		edges = append(edges, apiusage.EdgeUser)
+	}
+	if m.clearedapi_key {
+		edges = append(edges, apiusage.EdgeAPIKey)
+	}
+	if m.clearedmodel_route {
+		edges = append(edges, apiusage.EdgeModelRoute)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *APIUsageMutation) EdgeCleared(name string) bool {
+	switch name {
+	case apiusage.EdgeUser:
+		return m.cleareduser
+	case apiusage.EdgeAPIKey:
+		return m.clearedapi_key
+	case apiusage.EdgeModelRoute:
+		return m.clearedmodel_route
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *APIUsageMutation) ClearEdge(name string) error {
+	switch name {
+	case apiusage.EdgeUser:
+		m.ClearUser()
+		return nil
+	case apiusage.EdgeAPIKey:
+		m.ClearAPIKey()
+		return nil
+	case apiusage.EdgeModelRoute:
+		m.ClearModelRoute()
+		return nil
+	}
+	return fmt.Errorf("unknown APIUsage unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *APIUsageMutation) ResetEdge(name string) error {
+	switch name {
+	case apiusage.EdgeUser:
+		m.ResetUser()
+		return nil
+	case apiusage.EdgeAPIKey:
+		m.ResetAPIKey()
+		return nil
+	case apiusage.EdgeModelRoute:
+		m.ResetModelRoute()
+		return nil
+	}
+	return fmt.Errorf("unknown APIUsage edge %s", name)
+}
+
+// ModelRouteMutation represents an operation that mutates the ModelRoute nodes in the graph.
+type ModelRouteMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *uuid.UUID
+	public_name            *string
+	display_name           *string
+	upstream_name          *string
+	input_price_micros     *int64
+	addinput_price_micros  *int64
+	output_price_micros    *int64
+	addoutput_price_micros *int64
+	status                 *modelroute.Status
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	provider               *uuid.UUID
+	clearedprovider        bool
+	api_usages             map[uuid.UUID]struct{}
+	removedapi_usages      map[uuid.UUID]struct{}
+	clearedapi_usages      bool
+	done                   bool
+	oldValue               func(context.Context) (*ModelRoute, error)
+	predicates             []predicate.ModelRoute
+}
+
+var _ ent.Mutation = (*ModelRouteMutation)(nil)
+
+// modelrouteOption allows management of the mutation configuration using functional options.
+type modelrouteOption func(*ModelRouteMutation)
+
+// newModelRouteMutation creates new mutation for the ModelRoute entity.
+func newModelRouteMutation(c config, op Op, opts ...modelrouteOption) *ModelRouteMutation {
+	m := &ModelRouteMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeModelRoute,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withModelRouteID sets the ID field of the mutation.
+func withModelRouteID(id uuid.UUID) modelrouteOption {
+	return func(m *ModelRouteMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ModelRoute
+		)
+		m.oldValue = func(ctx context.Context) (*ModelRoute, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ModelRoute.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withModelRoute sets the old ModelRoute of the mutation.
+func withModelRoute(node *ModelRoute) modelrouteOption {
+	return func(m *ModelRouteMutation) {
+		m.oldValue = func(context.Context) (*ModelRoute, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ModelRouteMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ModelRouteMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ModelRoute entities.
+func (m *ModelRouteMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ModelRouteMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ModelRouteMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ModelRoute.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProviderID sets the "provider_id" field.
+func (m *ModelRouteMutation) SetProviderID(u uuid.UUID) {
+	m.provider = &u
+}
+
+// ProviderID returns the value of the "provider_id" field in the mutation.
+func (m *ModelRouteMutation) ProviderID() (r uuid.UUID, exists bool) {
+	v := m.provider
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProviderID returns the old "provider_id" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldProviderID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProviderID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProviderID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProviderID: %w", err)
+	}
+	return oldValue.ProviderID, nil
+}
+
+// ResetProviderID resets all changes to the "provider_id" field.
+func (m *ModelRouteMutation) ResetProviderID() {
+	m.provider = nil
+}
+
+// SetPublicName sets the "public_name" field.
+func (m *ModelRouteMutation) SetPublicName(s string) {
+	m.public_name = &s
+}
+
+// PublicName returns the value of the "public_name" field in the mutation.
+func (m *ModelRouteMutation) PublicName() (r string, exists bool) {
+	v := m.public_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPublicName returns the old "public_name" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldPublicName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPublicName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPublicName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPublicName: %w", err)
+	}
+	return oldValue.PublicName, nil
+}
+
+// ResetPublicName resets all changes to the "public_name" field.
+func (m *ModelRouteMutation) ResetPublicName() {
+	m.public_name = nil
+}
+
+// SetDisplayName sets the "display_name" field.
+func (m *ModelRouteMutation) SetDisplayName(s string) {
+	m.display_name = &s
+}
+
+// DisplayName returns the value of the "display_name" field in the mutation.
+func (m *ModelRouteMutation) DisplayName() (r string, exists bool) {
+	v := m.display_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisplayName returns the old "display_name" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldDisplayName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisplayName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisplayName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisplayName: %w", err)
+	}
+	return oldValue.DisplayName, nil
+}
+
+// ResetDisplayName resets all changes to the "display_name" field.
+func (m *ModelRouteMutation) ResetDisplayName() {
+	m.display_name = nil
+}
+
+// SetUpstreamName sets the "upstream_name" field.
+func (m *ModelRouteMutation) SetUpstreamName(s string) {
+	m.upstream_name = &s
+}
+
+// UpstreamName returns the value of the "upstream_name" field in the mutation.
+func (m *ModelRouteMutation) UpstreamName() (r string, exists bool) {
+	v := m.upstream_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamName returns the old "upstream_name" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldUpstreamName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamName: %w", err)
+	}
+	return oldValue.UpstreamName, nil
+}
+
+// ResetUpstreamName resets all changes to the "upstream_name" field.
+func (m *ModelRouteMutation) ResetUpstreamName() {
+	m.upstream_name = nil
+}
+
+// SetInputPriceMicros sets the "input_price_micros" field.
+func (m *ModelRouteMutation) SetInputPriceMicros(i int64) {
+	m.input_price_micros = &i
+	m.addinput_price_micros = nil
+}
+
+// InputPriceMicros returns the value of the "input_price_micros" field in the mutation.
+func (m *ModelRouteMutation) InputPriceMicros() (r int64, exists bool) {
+	v := m.input_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInputPriceMicros returns the old "input_price_micros" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldInputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInputPriceMicros: %w", err)
+	}
+	return oldValue.InputPriceMicros, nil
+}
+
+// AddInputPriceMicros adds i to the "input_price_micros" field.
+func (m *ModelRouteMutation) AddInputPriceMicros(i int64) {
+	if m.addinput_price_micros != nil {
+		*m.addinput_price_micros += i
+	} else {
+		m.addinput_price_micros = &i
+	}
+}
+
+// AddedInputPriceMicros returns the value that was added to the "input_price_micros" field in this mutation.
+func (m *ModelRouteMutation) AddedInputPriceMicros() (r int64, exists bool) {
+	v := m.addinput_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInputPriceMicros resets all changes to the "input_price_micros" field.
+func (m *ModelRouteMutation) ResetInputPriceMicros() {
+	m.input_price_micros = nil
+	m.addinput_price_micros = nil
+}
+
+// SetOutputPriceMicros sets the "output_price_micros" field.
+func (m *ModelRouteMutation) SetOutputPriceMicros(i int64) {
+	m.output_price_micros = &i
+	m.addoutput_price_micros = nil
+}
+
+// OutputPriceMicros returns the value of the "output_price_micros" field in the mutation.
+func (m *ModelRouteMutation) OutputPriceMicros() (r int64, exists bool) {
+	v := m.output_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutputPriceMicros returns the old "output_price_micros" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldOutputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutputPriceMicros: %w", err)
+	}
+	return oldValue.OutputPriceMicros, nil
+}
+
+// AddOutputPriceMicros adds i to the "output_price_micros" field.
+func (m *ModelRouteMutation) AddOutputPriceMicros(i int64) {
+	if m.addoutput_price_micros != nil {
+		*m.addoutput_price_micros += i
+	} else {
+		m.addoutput_price_micros = &i
+	}
+}
+
+// AddedOutputPriceMicros returns the value that was added to the "output_price_micros" field in this mutation.
+func (m *ModelRouteMutation) AddedOutputPriceMicros() (r int64, exists bool) {
+	v := m.addoutput_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutputPriceMicros resets all changes to the "output_price_micros" field.
+func (m *ModelRouteMutation) ResetOutputPriceMicros() {
+	m.output_price_micros = nil
+	m.addoutput_price_micros = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ModelRouteMutation) SetStatus(value modelroute.Status) {
+	m.status = &value
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ModelRouteMutation) Status() (r modelroute.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldStatus(ctx context.Context) (v modelroute.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ModelRouteMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ModelRouteMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ModelRouteMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ModelRouteMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ModelRouteMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ModelRouteMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ModelRouteMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearProvider clears the "provider" edge to the Provider entity.
+func (m *ModelRouteMutation) ClearProvider() {
+	m.clearedprovider = true
+	m.clearedFields[modelroute.FieldProviderID] = struct{}{}
+}
+
+// ProviderCleared reports if the "provider" edge to the Provider entity was cleared.
+func (m *ModelRouteMutation) ProviderCleared() bool {
+	return m.clearedprovider
+}
+
+// ProviderIDs returns the "provider" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ProviderID instead. It exists only for internal usage by the builders.
+func (m *ModelRouteMutation) ProviderIDs() (ids []uuid.UUID) {
+	if id := m.provider; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetProvider resets all changes to the "provider" edge.
+func (m *ModelRouteMutation) ResetProvider() {
+	m.provider = nil
+	m.clearedprovider = false
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by ids.
+func (m *ModelRouteMutation) AddAPIUsageIDs(ids ...uuid.UUID) {
+	if m.api_usages == nil {
+		m.api_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.api_usages[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAPIUsages clears the "api_usages" edge to the APIUsage entity.
+func (m *ModelRouteMutation) ClearAPIUsages() {
+	m.clearedapi_usages = true
+}
+
+// APIUsagesCleared reports if the "api_usages" edge to the APIUsage entity was cleared.
+func (m *ModelRouteMutation) APIUsagesCleared() bool {
+	return m.clearedapi_usages
+}
+
+// RemoveAPIUsageIDs removes the "api_usages" edge to the APIUsage entity by IDs.
+func (m *ModelRouteMutation) RemoveAPIUsageIDs(ids ...uuid.UUID) {
+	if m.removedapi_usages == nil {
+		m.removedapi_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.api_usages, ids[i])
+		m.removedapi_usages[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAPIUsages returns the removed IDs of the "api_usages" edge to the APIUsage entity.
+func (m *ModelRouteMutation) RemovedAPIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.removedapi_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// APIUsagesIDs returns the "api_usages" edge IDs in the mutation.
+func (m *ModelRouteMutation) APIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.api_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAPIUsages resets all changes to the "api_usages" edge.
+func (m *ModelRouteMutation) ResetAPIUsages() {
+	m.api_usages = nil
+	m.clearedapi_usages = false
+	m.removedapi_usages = nil
+}
+
+// Where appends a list predicates to the ModelRouteMutation builder.
+func (m *ModelRouteMutation) Where(ps ...predicate.ModelRoute) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ModelRouteMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ModelRouteMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ModelRoute, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ModelRouteMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ModelRouteMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ModelRoute).
+func (m *ModelRouteMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ModelRouteMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.provider != nil {
+		fields = append(fields, modelroute.FieldProviderID)
+	}
+	if m.public_name != nil {
+		fields = append(fields, modelroute.FieldPublicName)
+	}
+	if m.display_name != nil {
+		fields = append(fields, modelroute.FieldDisplayName)
+	}
+	if m.upstream_name != nil {
+		fields = append(fields, modelroute.FieldUpstreamName)
+	}
+	if m.input_price_micros != nil {
+		fields = append(fields, modelroute.FieldInputPriceMicros)
+	}
+	if m.output_price_micros != nil {
+		fields = append(fields, modelroute.FieldOutputPriceMicros)
+	}
+	if m.status != nil {
+		fields = append(fields, modelroute.FieldStatus)
+	}
+	if m.created_at != nil {
+		fields = append(fields, modelroute.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, modelroute.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ModelRouteMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case modelroute.FieldProviderID:
+		return m.ProviderID()
+	case modelroute.FieldPublicName:
+		return m.PublicName()
+	case modelroute.FieldDisplayName:
+		return m.DisplayName()
+	case modelroute.FieldUpstreamName:
+		return m.UpstreamName()
+	case modelroute.FieldInputPriceMicros:
+		return m.InputPriceMicros()
+	case modelroute.FieldOutputPriceMicros:
+		return m.OutputPriceMicros()
+	case modelroute.FieldStatus:
+		return m.Status()
+	case modelroute.FieldCreatedAt:
+		return m.CreatedAt()
+	case modelroute.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ModelRouteMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case modelroute.FieldProviderID:
+		return m.OldProviderID(ctx)
+	case modelroute.FieldPublicName:
+		return m.OldPublicName(ctx)
+	case modelroute.FieldDisplayName:
+		return m.OldDisplayName(ctx)
+	case modelroute.FieldUpstreamName:
+		return m.OldUpstreamName(ctx)
+	case modelroute.FieldInputPriceMicros:
+		return m.OldInputPriceMicros(ctx)
+	case modelroute.FieldOutputPriceMicros:
+		return m.OldOutputPriceMicros(ctx)
+	case modelroute.FieldStatus:
+		return m.OldStatus(ctx)
+	case modelroute.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case modelroute.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ModelRoute field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelRouteMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case modelroute.FieldProviderID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProviderID(v)
+		return nil
+	case modelroute.FieldPublicName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPublicName(v)
+		return nil
+	case modelroute.FieldDisplayName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisplayName(v)
+		return nil
+	case modelroute.FieldUpstreamName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamName(v)
+		return nil
+	case modelroute.FieldInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInputPriceMicros(v)
+		return nil
+	case modelroute.FieldOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutputPriceMicros(v)
+		return nil
+	case modelroute.FieldStatus:
+		v, ok := value.(modelroute.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case modelroute.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case modelroute.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelRoute field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ModelRouteMutation) AddedFields() []string {
+	var fields []string
+	if m.addinput_price_micros != nil {
+		fields = append(fields, modelroute.FieldInputPriceMicros)
+	}
+	if m.addoutput_price_micros != nil {
+		fields = append(fields, modelroute.FieldOutputPriceMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ModelRouteMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case modelroute.FieldInputPriceMicros:
+		return m.AddedInputPriceMicros()
+	case modelroute.FieldOutputPriceMicros:
+		return m.AddedOutputPriceMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelRouteMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case modelroute.FieldInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInputPriceMicros(v)
+		return nil
+	case modelroute.FieldOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutputPriceMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelRoute numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ModelRouteMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ModelRouteMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ModelRouteMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ModelRoute nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ModelRouteMutation) ResetField(name string) error {
+	switch name {
+	case modelroute.FieldProviderID:
+		m.ResetProviderID()
+		return nil
+	case modelroute.FieldPublicName:
+		m.ResetPublicName()
+		return nil
+	case modelroute.FieldDisplayName:
+		m.ResetDisplayName()
+		return nil
+	case modelroute.FieldUpstreamName:
+		m.ResetUpstreamName()
+		return nil
+	case modelroute.FieldInputPriceMicros:
+		m.ResetInputPriceMicros()
+		return nil
+	case modelroute.FieldOutputPriceMicros:
+		m.ResetOutputPriceMicros()
+		return nil
+	case modelroute.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case modelroute.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case modelroute.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelRoute field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ModelRouteMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.provider != nil {
+		edges = append(edges, modelroute.EdgeProvider)
+	}
+	if m.api_usages != nil {
+		edges = append(edges, modelroute.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ModelRouteMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case modelroute.EdgeProvider:
+		if id := m.provider; id != nil {
+			return []ent.Value{*id}
+		}
+	case modelroute.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.api_usages))
+		for id := range m.api_usages {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ModelRouteMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedapi_usages != nil {
+		edges = append(edges, modelroute.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ModelRouteMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case modelroute.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.removedapi_usages))
+		for id := range m.removedapi_usages {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ModelRouteMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedprovider {
+		edges = append(edges, modelroute.EdgeProvider)
+	}
+	if m.clearedapi_usages {
+		edges = append(edges, modelroute.EdgeAPIUsages)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ModelRouteMutation) EdgeCleared(name string) bool {
+	switch name {
+	case modelroute.EdgeProvider:
+		return m.clearedprovider
+	case modelroute.EdgeAPIUsages:
+		return m.clearedapi_usages
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ModelRouteMutation) ClearEdge(name string) error {
+	switch name {
+	case modelroute.EdgeProvider:
+		m.ClearProvider()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelRoute unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ModelRouteMutation) ResetEdge(name string) error {
+	switch name {
+	case modelroute.EdgeProvider:
+		m.ResetProvider()
+		return nil
+	case modelroute.EdgeAPIUsages:
+		m.ResetAPIUsages()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelRoute edge %s", name)
+}
+
+// ProviderMutation represents an operation that mutates the Provider nodes in the graph.
+type ProviderMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *uuid.UUID
+	code                *string
+	display_name        *string
+	protocol            *provider.Protocol
+	base_url            *string
+	encrypted_api_key   *string
+	api_key_hint        *string
+	status              *provider.Status
+	created_at          *time.Time
+	updated_at          *time.Time
+	clearedFields       map[string]struct{}
+	model_routes        map[uuid.UUID]struct{}
+	removedmodel_routes map[uuid.UUID]struct{}
+	clearedmodel_routes bool
+	done                bool
+	oldValue            func(context.Context) (*Provider, error)
+	predicates          []predicate.Provider
+}
+
+var _ ent.Mutation = (*ProviderMutation)(nil)
+
+// providerOption allows management of the mutation configuration using functional options.
+type providerOption func(*ProviderMutation)
+
+// newProviderMutation creates new mutation for the Provider entity.
+func newProviderMutation(c config, op Op, opts ...providerOption) *ProviderMutation {
+	m := &ProviderMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeProvider,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withProviderID sets the ID field of the mutation.
+func withProviderID(id uuid.UUID) providerOption {
+	return func(m *ProviderMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Provider
+		)
+		m.oldValue = func(ctx context.Context) (*Provider, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Provider.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withProvider sets the old Provider of the mutation.
+func withProvider(node *Provider) providerOption {
+	return func(m *ProviderMutation) {
+		m.oldValue = func(context.Context) (*Provider, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ProviderMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ProviderMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Provider entities.
+func (m *ProviderMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ProviderMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ProviderMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Provider.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCode sets the "code" field.
+func (m *ProviderMutation) SetCode(s string) {
+	m.code = &s
+}
+
+// Code returns the value of the "code" field in the mutation.
+func (m *ProviderMutation) Code() (r string, exists bool) {
+	v := m.code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCode returns the old "code" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCode: %w", err)
+	}
+	return oldValue.Code, nil
+}
+
+// ResetCode resets all changes to the "code" field.
+func (m *ProviderMutation) ResetCode() {
+	m.code = nil
+}
+
+// SetDisplayName sets the "display_name" field.
+func (m *ProviderMutation) SetDisplayName(s string) {
+	m.display_name = &s
+}
+
+// DisplayName returns the value of the "display_name" field in the mutation.
+func (m *ProviderMutation) DisplayName() (r string, exists bool) {
+	v := m.display_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisplayName returns the old "display_name" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldDisplayName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisplayName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisplayName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisplayName: %w", err)
+	}
+	return oldValue.DisplayName, nil
+}
+
+// ResetDisplayName resets all changes to the "display_name" field.
+func (m *ProviderMutation) ResetDisplayName() {
+	m.display_name = nil
+}
+
+// SetProtocol sets the "protocol" field.
+func (m *ProviderMutation) SetProtocol(pr provider.Protocol) {
+	m.protocol = &pr
+}
+
+// Protocol returns the value of the "protocol" field in the mutation.
+func (m *ProviderMutation) Protocol() (r provider.Protocol, exists bool) {
+	v := m.protocol
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProtocol returns the old "protocol" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldProtocol(ctx context.Context) (v provider.Protocol, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProtocol is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProtocol requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProtocol: %w", err)
+	}
+	return oldValue.Protocol, nil
+}
+
+// ResetProtocol resets all changes to the "protocol" field.
+func (m *ProviderMutation) ResetProtocol() {
+	m.protocol = nil
+}
+
+// SetBaseURL sets the "base_url" field.
+func (m *ProviderMutation) SetBaseURL(s string) {
+	m.base_url = &s
+}
+
+// BaseURL returns the value of the "base_url" field in the mutation.
+func (m *ProviderMutation) BaseURL() (r string, exists bool) {
+	v := m.base_url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBaseURL returns the old "base_url" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldBaseURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBaseURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBaseURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBaseURL: %w", err)
+	}
+	return oldValue.BaseURL, nil
+}
+
+// ResetBaseURL resets all changes to the "base_url" field.
+func (m *ProviderMutation) ResetBaseURL() {
+	m.base_url = nil
+}
+
+// SetEncryptedAPIKey sets the "encrypted_api_key" field.
+func (m *ProviderMutation) SetEncryptedAPIKey(s string) {
+	m.encrypted_api_key = &s
+}
+
+// EncryptedAPIKey returns the value of the "encrypted_api_key" field in the mutation.
+func (m *ProviderMutation) EncryptedAPIKey() (r string, exists bool) {
+	v := m.encrypted_api_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEncryptedAPIKey returns the old "encrypted_api_key" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldEncryptedAPIKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEncryptedAPIKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEncryptedAPIKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEncryptedAPIKey: %w", err)
+	}
+	return oldValue.EncryptedAPIKey, nil
+}
+
+// ResetEncryptedAPIKey resets all changes to the "encrypted_api_key" field.
+func (m *ProviderMutation) ResetEncryptedAPIKey() {
+	m.encrypted_api_key = nil
+}
+
+// SetAPIKeyHint sets the "api_key_hint" field.
+func (m *ProviderMutation) SetAPIKeyHint(s string) {
+	m.api_key_hint = &s
+}
+
+// APIKeyHint returns the value of the "api_key_hint" field in the mutation.
+func (m *ProviderMutation) APIKeyHint() (r string, exists bool) {
+	v := m.api_key_hint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyHint returns the old "api_key_hint" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldAPIKeyHint(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyHint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyHint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyHint: %w", err)
+	}
+	return oldValue.APIKeyHint, nil
+}
+
+// ResetAPIKeyHint resets all changes to the "api_key_hint" field.
+func (m *ProviderMutation) ResetAPIKeyHint() {
+	m.api_key_hint = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ProviderMutation) SetStatus(pr provider.Status) {
+	m.status = &pr
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ProviderMutation) Status() (r provider.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldStatus(ctx context.Context) (v provider.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ProviderMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ProviderMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ProviderMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ProviderMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ProviderMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ProviderMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ProviderMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by ids.
+func (m *ProviderMutation) AddModelRouteIDs(ids ...uuid.UUID) {
+	if m.model_routes == nil {
+		m.model_routes = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.model_routes[ids[i]] = struct{}{}
+	}
+}
+
+// ClearModelRoutes clears the "model_routes" edge to the ModelRoute entity.
+func (m *ProviderMutation) ClearModelRoutes() {
+	m.clearedmodel_routes = true
+}
+
+// ModelRoutesCleared reports if the "model_routes" edge to the ModelRoute entity was cleared.
+func (m *ProviderMutation) ModelRoutesCleared() bool {
+	return m.clearedmodel_routes
+}
+
+// RemoveModelRouteIDs removes the "model_routes" edge to the ModelRoute entity by IDs.
+func (m *ProviderMutation) RemoveModelRouteIDs(ids ...uuid.UUID) {
+	if m.removedmodel_routes == nil {
+		m.removedmodel_routes = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.model_routes, ids[i])
+		m.removedmodel_routes[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedModelRoutes returns the removed IDs of the "model_routes" edge to the ModelRoute entity.
+func (m *ProviderMutation) RemovedModelRoutesIDs() (ids []uuid.UUID) {
+	for id := range m.removedmodel_routes {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ModelRoutesIDs returns the "model_routes" edge IDs in the mutation.
+func (m *ProviderMutation) ModelRoutesIDs() (ids []uuid.UUID) {
+	for id := range m.model_routes {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetModelRoutes resets all changes to the "model_routes" edge.
+func (m *ProviderMutation) ResetModelRoutes() {
+	m.model_routes = nil
+	m.clearedmodel_routes = false
+	m.removedmodel_routes = nil
+}
+
+// Where appends a list predicates to the ProviderMutation builder.
+func (m *ProviderMutation) Where(ps ...predicate.Provider) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ProviderMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ProviderMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Provider, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ProviderMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ProviderMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Provider).
+func (m *ProviderMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ProviderMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.code != nil {
+		fields = append(fields, provider.FieldCode)
+	}
+	if m.display_name != nil {
+		fields = append(fields, provider.FieldDisplayName)
+	}
+	if m.protocol != nil {
+		fields = append(fields, provider.FieldProtocol)
+	}
+	if m.base_url != nil {
+		fields = append(fields, provider.FieldBaseURL)
+	}
+	if m.encrypted_api_key != nil {
+		fields = append(fields, provider.FieldEncryptedAPIKey)
+	}
+	if m.api_key_hint != nil {
+		fields = append(fields, provider.FieldAPIKeyHint)
+	}
+	if m.status != nil {
+		fields = append(fields, provider.FieldStatus)
+	}
+	if m.created_at != nil {
+		fields = append(fields, provider.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, provider.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case provider.FieldCode:
+		return m.Code()
+	case provider.FieldDisplayName:
+		return m.DisplayName()
+	case provider.FieldProtocol:
+		return m.Protocol()
+	case provider.FieldBaseURL:
+		return m.BaseURL()
+	case provider.FieldEncryptedAPIKey:
+		return m.EncryptedAPIKey()
+	case provider.FieldAPIKeyHint:
+		return m.APIKeyHint()
+	case provider.FieldStatus:
+		return m.Status()
+	case provider.FieldCreatedAt:
+		return m.CreatedAt()
+	case provider.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case provider.FieldCode:
+		return m.OldCode(ctx)
+	case provider.FieldDisplayName:
+		return m.OldDisplayName(ctx)
+	case provider.FieldProtocol:
+		return m.OldProtocol(ctx)
+	case provider.FieldBaseURL:
+		return m.OldBaseURL(ctx)
+	case provider.FieldEncryptedAPIKey:
+		return m.OldEncryptedAPIKey(ctx)
+	case provider.FieldAPIKeyHint:
+		return m.OldAPIKeyHint(ctx)
+	case provider.FieldStatus:
+		return m.OldStatus(ctx)
+	case provider.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case provider.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown Provider field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProviderMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case provider.FieldCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCode(v)
+		return nil
+	case provider.FieldDisplayName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisplayName(v)
+		return nil
+	case provider.FieldProtocol:
+		v, ok := value.(provider.Protocol)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProtocol(v)
+		return nil
+	case provider.FieldBaseURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBaseURL(v)
+		return nil
+	case provider.FieldEncryptedAPIKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEncryptedAPIKey(v)
+		return nil
+	case provider.FieldAPIKeyHint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyHint(v)
+		return nil
+	case provider.FieldStatus:
+		v, ok := value.(provider.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case provider.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case provider.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Provider field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ProviderMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ProviderMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProviderMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Provider numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ProviderMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ProviderMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ProviderMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Provider nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ProviderMutation) ResetField(name string) error {
+	switch name {
+	case provider.FieldCode:
+		m.ResetCode()
+		return nil
+	case provider.FieldDisplayName:
+		m.ResetDisplayName()
+		return nil
+	case provider.FieldProtocol:
+		m.ResetProtocol()
+		return nil
+	case provider.FieldBaseURL:
+		m.ResetBaseURL()
+		return nil
+	case provider.FieldEncryptedAPIKey:
+		m.ResetEncryptedAPIKey()
+		return nil
+	case provider.FieldAPIKeyHint:
+		m.ResetAPIKeyHint()
+		return nil
+	case provider.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case provider.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case provider.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown Provider field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ProviderMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.model_routes != nil {
+		edges = append(edges, provider.EdgeModelRoutes)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ProviderMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case provider.EdgeModelRoutes:
+		ids := make([]ent.Value, 0, len(m.model_routes))
+		for id := range m.model_routes {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ProviderMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.removedmodel_routes != nil {
+		edges = append(edges, provider.EdgeModelRoutes)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ProviderMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case provider.EdgeModelRoutes:
+		ids := make([]ent.Value, 0, len(m.removedmodel_routes))
+		for id := range m.removedmodel_routes {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ProviderMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedmodel_routes {
+		edges = append(edges, provider.EdgeModelRoutes)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ProviderMutation) EdgeCleared(name string) bool {
+	switch name {
+	case provider.EdgeModelRoutes:
+		return m.clearedmodel_routes
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ProviderMutation) ClearEdge(name string) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Provider unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ProviderMutation) ResetEdge(name string) error {
+	switch name {
+	case provider.EdgeModelRoutes:
+		m.ResetModelRoutes()
+		return nil
+	}
+	return fmt.Errorf("unknown Provider edge %s", name)
+}
 
 // SystemSettingMutation represents an operation that mutates the SystemSetting nodes in the graph.
 type SystemSettingMutation struct {
@@ -477,27 +4469,38 @@ func (m *SystemSettingMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *uuid.UUID
-	username          *string
-	display_name      *string
-	password_hash     *string
-	role              *user.Role
-	status            *user.Status
-	last_login_at     *time.Time
-	created_at        *time.Time
-	updated_at        *time.Time
-	clearedFields     map[string]struct{}
-	sessions          map[uuid.UUID]struct{}
-	removedsessions   map[uuid.UUID]struct{}
-	clearedsessions   bool
-	identities        map[uuid.UUID]struct{}
-	removedidentities map[uuid.UUID]struct{}
-	clearedidentities bool
-	done              bool
-	oldValue          func(context.Context) (*User, error)
-	predicates        []predicate.User
+	op                    Op
+	typ                   string
+	id                    *uuid.UUID
+	username              *string
+	display_name          *string
+	password_hash         *string
+	role                  *user.Role
+	status                *user.Status
+	last_login_at         *time.Time
+	created_at            *time.Time
+	updated_at            *time.Time
+	clearedFields         map[string]struct{}
+	sessions              map[uuid.UUID]struct{}
+	removedsessions       map[uuid.UUID]struct{}
+	clearedsessions       bool
+	identities            map[uuid.UUID]struct{}
+	removedidentities     map[uuid.UUID]struct{}
+	clearedidentities     bool
+	api_keys              map[uuid.UUID]struct{}
+	removedapi_keys       map[uuid.UUID]struct{}
+	clearedapi_keys       bool
+	wallet                *uuid.UUID
+	clearedwallet         bool
+	wallet_entries        map[uuid.UUID]struct{}
+	removedwallet_entries map[uuid.UUID]struct{}
+	clearedwallet_entries bool
+	api_usages            map[uuid.UUID]struct{}
+	removedapi_usages     map[uuid.UUID]struct{}
+	clearedapi_usages     bool
+	done                  bool
+	oldValue              func(context.Context) (*User, error)
+	predicates            []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -1026,6 +5029,207 @@ func (m *UserMutation) ResetIdentities() {
 	m.removedidentities = nil
 }
 
+// AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
+func (m *UserMutation) AddAPIKeyIDs(ids ...uuid.UUID) {
+	if m.api_keys == nil {
+		m.api_keys = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.api_keys[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAPIKeys clears the "api_keys" edge to the APIKey entity.
+func (m *UserMutation) ClearAPIKeys() {
+	m.clearedapi_keys = true
+}
+
+// APIKeysCleared reports if the "api_keys" edge to the APIKey entity was cleared.
+func (m *UserMutation) APIKeysCleared() bool {
+	return m.clearedapi_keys
+}
+
+// RemoveAPIKeyIDs removes the "api_keys" edge to the APIKey entity by IDs.
+func (m *UserMutation) RemoveAPIKeyIDs(ids ...uuid.UUID) {
+	if m.removedapi_keys == nil {
+		m.removedapi_keys = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.api_keys, ids[i])
+		m.removedapi_keys[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAPIKeys returns the removed IDs of the "api_keys" edge to the APIKey entity.
+func (m *UserMutation) RemovedAPIKeysIDs() (ids []uuid.UUID) {
+	for id := range m.removedapi_keys {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// APIKeysIDs returns the "api_keys" edge IDs in the mutation.
+func (m *UserMutation) APIKeysIDs() (ids []uuid.UUID) {
+	for id := range m.api_keys {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAPIKeys resets all changes to the "api_keys" edge.
+func (m *UserMutation) ResetAPIKeys() {
+	m.api_keys = nil
+	m.clearedapi_keys = false
+	m.removedapi_keys = nil
+}
+
+// SetWalletID sets the "wallet" edge to the Wallet entity by id.
+func (m *UserMutation) SetWalletID(id uuid.UUID) {
+	m.wallet = &id
+}
+
+// ClearWallet clears the "wallet" edge to the Wallet entity.
+func (m *UserMutation) ClearWallet() {
+	m.clearedwallet = true
+}
+
+// WalletCleared reports if the "wallet" edge to the Wallet entity was cleared.
+func (m *UserMutation) WalletCleared() bool {
+	return m.clearedwallet
+}
+
+// WalletID returns the "wallet" edge ID in the mutation.
+func (m *UserMutation) WalletID() (id uuid.UUID, exists bool) {
+	if m.wallet != nil {
+		return *m.wallet, true
+	}
+	return
+}
+
+// WalletIDs returns the "wallet" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// WalletID instead. It exists only for internal usage by the builders.
+func (m *UserMutation) WalletIDs() (ids []uuid.UUID) {
+	if id := m.wallet; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetWallet resets all changes to the "wallet" edge.
+func (m *UserMutation) ResetWallet() {
+	m.wallet = nil
+	m.clearedwallet = false
+}
+
+// AddWalletEntryIDs adds the "wallet_entries" edge to the WalletEntry entity by ids.
+func (m *UserMutation) AddWalletEntryIDs(ids ...uuid.UUID) {
+	if m.wallet_entries == nil {
+		m.wallet_entries = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.wallet_entries[ids[i]] = struct{}{}
+	}
+}
+
+// ClearWalletEntries clears the "wallet_entries" edge to the WalletEntry entity.
+func (m *UserMutation) ClearWalletEntries() {
+	m.clearedwallet_entries = true
+}
+
+// WalletEntriesCleared reports if the "wallet_entries" edge to the WalletEntry entity was cleared.
+func (m *UserMutation) WalletEntriesCleared() bool {
+	return m.clearedwallet_entries
+}
+
+// RemoveWalletEntryIDs removes the "wallet_entries" edge to the WalletEntry entity by IDs.
+func (m *UserMutation) RemoveWalletEntryIDs(ids ...uuid.UUID) {
+	if m.removedwallet_entries == nil {
+		m.removedwallet_entries = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.wallet_entries, ids[i])
+		m.removedwallet_entries[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedWalletEntries returns the removed IDs of the "wallet_entries" edge to the WalletEntry entity.
+func (m *UserMutation) RemovedWalletEntriesIDs() (ids []uuid.UUID) {
+	for id := range m.removedwallet_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// WalletEntriesIDs returns the "wallet_entries" edge IDs in the mutation.
+func (m *UserMutation) WalletEntriesIDs() (ids []uuid.UUID) {
+	for id := range m.wallet_entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetWalletEntries resets all changes to the "wallet_entries" edge.
+func (m *UserMutation) ResetWalletEntries() {
+	m.wallet_entries = nil
+	m.clearedwallet_entries = false
+	m.removedwallet_entries = nil
+}
+
+// AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by ids.
+func (m *UserMutation) AddAPIUsageIDs(ids ...uuid.UUID) {
+	if m.api_usages == nil {
+		m.api_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.api_usages[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAPIUsages clears the "api_usages" edge to the APIUsage entity.
+func (m *UserMutation) ClearAPIUsages() {
+	m.clearedapi_usages = true
+}
+
+// APIUsagesCleared reports if the "api_usages" edge to the APIUsage entity was cleared.
+func (m *UserMutation) APIUsagesCleared() bool {
+	return m.clearedapi_usages
+}
+
+// RemoveAPIUsageIDs removes the "api_usages" edge to the APIUsage entity by IDs.
+func (m *UserMutation) RemoveAPIUsageIDs(ids ...uuid.UUID) {
+	if m.removedapi_usages == nil {
+		m.removedapi_usages = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.api_usages, ids[i])
+		m.removedapi_usages[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAPIUsages returns the removed IDs of the "api_usages" edge to the APIUsage entity.
+func (m *UserMutation) RemovedAPIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.removedapi_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// APIUsagesIDs returns the "api_usages" edge IDs in the mutation.
+func (m *UserMutation) APIUsagesIDs() (ids []uuid.UUID) {
+	for id := range m.api_usages {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAPIUsages resets all changes to the "api_usages" edge.
+func (m *UserMutation) ResetAPIUsages() {
+	m.api_usages = nil
+	m.clearedapi_usages = false
+	m.removedapi_usages = nil
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -1293,12 +5497,24 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 6)
 	if m.sessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
 	if m.identities != nil {
 		edges = append(edges, user.EdgeIdentities)
+	}
+	if m.api_keys != nil {
+		edges = append(edges, user.EdgeAPIKeys)
+	}
+	if m.wallet != nil {
+		edges = append(edges, user.EdgeWallet)
+	}
+	if m.wallet_entries != nil {
+		edges = append(edges, user.EdgeWalletEntries)
+	}
+	if m.api_usages != nil {
+		edges = append(edges, user.EdgeAPIUsages)
 	}
 	return edges
 }
@@ -1319,18 +5535,49 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeAPIKeys:
+		ids := make([]ent.Value, 0, len(m.api_keys))
+		for id := range m.api_keys {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeWallet:
+		if id := m.wallet; id != nil {
+			return []ent.Value{*id}
+		}
+	case user.EdgeWalletEntries:
+		ids := make([]ent.Value, 0, len(m.wallet_entries))
+		for id := range m.wallet_entries {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.api_usages))
+		for id := range m.api_usages {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 6)
 	if m.removedsessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
 	if m.removedidentities != nil {
 		edges = append(edges, user.EdgeIdentities)
+	}
+	if m.removedapi_keys != nil {
+		edges = append(edges, user.EdgeAPIKeys)
+	}
+	if m.removedwallet_entries != nil {
+		edges = append(edges, user.EdgeWalletEntries)
+	}
+	if m.removedapi_usages != nil {
+		edges = append(edges, user.EdgeAPIUsages)
 	}
 	return edges
 }
@@ -1351,18 +5598,48 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeAPIKeys:
+		ids := make([]ent.Value, 0, len(m.removedapi_keys))
+		for id := range m.removedapi_keys {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeWalletEntries:
+		ids := make([]ent.Value, 0, len(m.removedwallet_entries))
+		for id := range m.removedwallet_entries {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeAPIUsages:
+		ids := make([]ent.Value, 0, len(m.removedapi_usages))
+		for id := range m.removedapi_usages {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 6)
 	if m.clearedsessions {
 		edges = append(edges, user.EdgeSessions)
 	}
 	if m.clearedidentities {
 		edges = append(edges, user.EdgeIdentities)
+	}
+	if m.clearedapi_keys {
+		edges = append(edges, user.EdgeAPIKeys)
+	}
+	if m.clearedwallet {
+		edges = append(edges, user.EdgeWallet)
+	}
+	if m.clearedwallet_entries {
+		edges = append(edges, user.EdgeWalletEntries)
+	}
+	if m.clearedapi_usages {
+		edges = append(edges, user.EdgeAPIUsages)
 	}
 	return edges
 }
@@ -1375,6 +5652,14 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedsessions
 	case user.EdgeIdentities:
 		return m.clearedidentities
+	case user.EdgeAPIKeys:
+		return m.clearedapi_keys
+	case user.EdgeWallet:
+		return m.clearedwallet
+	case user.EdgeWalletEntries:
+		return m.clearedwallet_entries
+	case user.EdgeAPIUsages:
+		return m.clearedapi_usages
 	}
 	return false
 }
@@ -1383,6 +5668,9 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *UserMutation) ClearEdge(name string) error {
 	switch name {
+	case user.EdgeWallet:
+		m.ClearWallet()
+		return nil
 	}
 	return fmt.Errorf("unknown User unique edge %s", name)
 }
@@ -1396,6 +5684,18 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeIdentities:
 		m.ResetIdentities()
+		return nil
+	case user.EdgeAPIKeys:
+		m.ResetAPIKeys()
+		return nil
+	case user.EdgeWallet:
+		m.ResetWallet()
+		return nil
+	case user.EdgeWalletEntries:
+		m.ResetWalletEntries()
+		return nil
+	case user.EdgeAPIUsages:
+		m.ResetAPIUsages()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)
@@ -2733,4 +7033,1587 @@ func (m *UserSessionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown UserSession edge %s", name)
+}
+
+// WalletMutation represents an operation that mutates the Wallet nodes in the graph.
+type WalletMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *uuid.UUID
+	balance_micros    *int64
+	addbalance_micros *int64
+	created_at        *time.Time
+	updated_at        *time.Time
+	clearedFields     map[string]struct{}
+	user              *uuid.UUID
+	cleareduser       bool
+	entries           map[uuid.UUID]struct{}
+	removedentries    map[uuid.UUID]struct{}
+	clearedentries    bool
+	done              bool
+	oldValue          func(context.Context) (*Wallet, error)
+	predicates        []predicate.Wallet
+}
+
+var _ ent.Mutation = (*WalletMutation)(nil)
+
+// walletOption allows management of the mutation configuration using functional options.
+type walletOption func(*WalletMutation)
+
+// newWalletMutation creates new mutation for the Wallet entity.
+func newWalletMutation(c config, op Op, opts ...walletOption) *WalletMutation {
+	m := &WalletMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeWallet,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withWalletID sets the ID field of the mutation.
+func withWalletID(id uuid.UUID) walletOption {
+	return func(m *WalletMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Wallet
+		)
+		m.oldValue = func(ctx context.Context) (*Wallet, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Wallet.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withWallet sets the old Wallet of the mutation.
+func withWallet(node *Wallet) walletOption {
+	return func(m *WalletMutation) {
+		m.oldValue = func(context.Context) (*Wallet, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m WalletMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m WalletMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Wallet entities.
+func (m *WalletMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *WalletMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *WalletMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Wallet.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *WalletMutation) SetUserID(u uuid.UUID) {
+	m.user = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *WalletMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the Wallet entity.
+// If the Wallet object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletMutation) OldUserID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *WalletMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetBalanceMicros sets the "balance_micros" field.
+func (m *WalletMutation) SetBalanceMicros(i int64) {
+	m.balance_micros = &i
+	m.addbalance_micros = nil
+}
+
+// BalanceMicros returns the value of the "balance_micros" field in the mutation.
+func (m *WalletMutation) BalanceMicros() (r int64, exists bool) {
+	v := m.balance_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBalanceMicros returns the old "balance_micros" field's value of the Wallet entity.
+// If the Wallet object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletMutation) OldBalanceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBalanceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBalanceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBalanceMicros: %w", err)
+	}
+	return oldValue.BalanceMicros, nil
+}
+
+// AddBalanceMicros adds i to the "balance_micros" field.
+func (m *WalletMutation) AddBalanceMicros(i int64) {
+	if m.addbalance_micros != nil {
+		*m.addbalance_micros += i
+	} else {
+		m.addbalance_micros = &i
+	}
+}
+
+// AddedBalanceMicros returns the value that was added to the "balance_micros" field in this mutation.
+func (m *WalletMutation) AddedBalanceMicros() (r int64, exists bool) {
+	v := m.addbalance_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBalanceMicros resets all changes to the "balance_micros" field.
+func (m *WalletMutation) ResetBalanceMicros() {
+	m.balance_micros = nil
+	m.addbalance_micros = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *WalletMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *WalletMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Wallet entity.
+// If the Wallet object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *WalletMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *WalletMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *WalletMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Wallet entity.
+// If the Wallet object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *WalletMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *WalletMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[wallet.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *WalletMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *WalletMutation) UserIDs() (ids []uuid.UUID) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *WalletMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// AddEntryIDs adds the "entries" edge to the WalletEntry entity by ids.
+func (m *WalletMutation) AddEntryIDs(ids ...uuid.UUID) {
+	if m.entries == nil {
+		m.entries = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.entries[ids[i]] = struct{}{}
+	}
+}
+
+// ClearEntries clears the "entries" edge to the WalletEntry entity.
+func (m *WalletMutation) ClearEntries() {
+	m.clearedentries = true
+}
+
+// EntriesCleared reports if the "entries" edge to the WalletEntry entity was cleared.
+func (m *WalletMutation) EntriesCleared() bool {
+	return m.clearedentries
+}
+
+// RemoveEntryIDs removes the "entries" edge to the WalletEntry entity by IDs.
+func (m *WalletMutation) RemoveEntryIDs(ids ...uuid.UUID) {
+	if m.removedentries == nil {
+		m.removedentries = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.entries, ids[i])
+		m.removedentries[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedEntries returns the removed IDs of the "entries" edge to the WalletEntry entity.
+func (m *WalletMutation) RemovedEntriesIDs() (ids []uuid.UUID) {
+	for id := range m.removedentries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// EntriesIDs returns the "entries" edge IDs in the mutation.
+func (m *WalletMutation) EntriesIDs() (ids []uuid.UUID) {
+	for id := range m.entries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetEntries resets all changes to the "entries" edge.
+func (m *WalletMutation) ResetEntries() {
+	m.entries = nil
+	m.clearedentries = false
+	m.removedentries = nil
+}
+
+// Where appends a list predicates to the WalletMutation builder.
+func (m *WalletMutation) Where(ps ...predicate.Wallet) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the WalletMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *WalletMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Wallet, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *WalletMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *WalletMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Wallet).
+func (m *WalletMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *WalletMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.user != nil {
+		fields = append(fields, wallet.FieldUserID)
+	}
+	if m.balance_micros != nil {
+		fields = append(fields, wallet.FieldBalanceMicros)
+	}
+	if m.created_at != nil {
+		fields = append(fields, wallet.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, wallet.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *WalletMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case wallet.FieldUserID:
+		return m.UserID()
+	case wallet.FieldBalanceMicros:
+		return m.BalanceMicros()
+	case wallet.FieldCreatedAt:
+		return m.CreatedAt()
+	case wallet.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *WalletMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case wallet.FieldUserID:
+		return m.OldUserID(ctx)
+	case wallet.FieldBalanceMicros:
+		return m.OldBalanceMicros(ctx)
+	case wallet.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case wallet.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown Wallet field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *WalletMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case wallet.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case wallet.FieldBalanceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBalanceMicros(v)
+		return nil
+	case wallet.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case wallet.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Wallet field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *WalletMutation) AddedFields() []string {
+	var fields []string
+	if m.addbalance_micros != nil {
+		fields = append(fields, wallet.FieldBalanceMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *WalletMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case wallet.FieldBalanceMicros:
+		return m.AddedBalanceMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *WalletMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case wallet.FieldBalanceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBalanceMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Wallet numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *WalletMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *WalletMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *WalletMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Wallet nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *WalletMutation) ResetField(name string) error {
+	switch name {
+	case wallet.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case wallet.FieldBalanceMicros:
+		m.ResetBalanceMicros()
+		return nil
+	case wallet.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case wallet.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown Wallet field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *WalletMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, wallet.EdgeUser)
+	}
+	if m.entries != nil {
+		edges = append(edges, wallet.EdgeEntries)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *WalletMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case wallet.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case wallet.EdgeEntries:
+		ids := make([]ent.Value, 0, len(m.entries))
+		for id := range m.entries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *WalletMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedentries != nil {
+		edges = append(edges, wallet.EdgeEntries)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *WalletMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case wallet.EdgeEntries:
+		ids := make([]ent.Value, 0, len(m.removedentries))
+		for id := range m.removedentries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *WalletMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, wallet.EdgeUser)
+	}
+	if m.clearedentries {
+		edges = append(edges, wallet.EdgeEntries)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *WalletMutation) EdgeCleared(name string) bool {
+	switch name {
+	case wallet.EdgeUser:
+		return m.cleareduser
+	case wallet.EdgeEntries:
+		return m.clearedentries
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *WalletMutation) ClearEdge(name string) error {
+	switch name {
+	case wallet.EdgeUser:
+		m.ClearUser()
+		return nil
+	}
+	return fmt.Errorf("unknown Wallet unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *WalletMutation) ResetEdge(name string) error {
+	switch name {
+	case wallet.EdgeUser:
+		m.ResetUser()
+		return nil
+	case wallet.EdgeEntries:
+		m.ResetEntries()
+		return nil
+	}
+	return fmt.Errorf("unknown Wallet edge %s", name)
+}
+
+// WalletEntryMutation represents an operation that mutates the WalletEntry nodes in the graph.
+type WalletEntryMutation struct {
+	config
+	op                      Op
+	typ                     string
+	id                      *uuid.UUID
+	reference_id            *uuid.UUID
+	entry_type              *walletentry.EntryType
+	amount_micros           *int64
+	addamount_micros        *int64
+	balance_after_micros    *int64
+	addbalance_after_micros *int64
+	description             *string
+	created_at              *time.Time
+	clearedFields           map[string]struct{}
+	wallet                  *uuid.UUID
+	clearedwallet           bool
+	actor                   *uuid.UUID
+	clearedactor            bool
+	done                    bool
+	oldValue                func(context.Context) (*WalletEntry, error)
+	predicates              []predicate.WalletEntry
+}
+
+var _ ent.Mutation = (*WalletEntryMutation)(nil)
+
+// walletentryOption allows management of the mutation configuration using functional options.
+type walletentryOption func(*WalletEntryMutation)
+
+// newWalletEntryMutation creates new mutation for the WalletEntry entity.
+func newWalletEntryMutation(c config, op Op, opts ...walletentryOption) *WalletEntryMutation {
+	m := &WalletEntryMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeWalletEntry,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withWalletEntryID sets the ID field of the mutation.
+func withWalletEntryID(id uuid.UUID) walletentryOption {
+	return func(m *WalletEntryMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *WalletEntry
+		)
+		m.oldValue = func(ctx context.Context) (*WalletEntry, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().WalletEntry.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withWalletEntry sets the old WalletEntry of the mutation.
+func withWalletEntry(node *WalletEntry) walletentryOption {
+	return func(m *WalletEntryMutation) {
+		m.oldValue = func(context.Context) (*WalletEntry, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m WalletEntryMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m WalletEntryMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of WalletEntry entities.
+func (m *WalletEntryMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *WalletEntryMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *WalletEntryMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().WalletEntry.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetWalletID sets the "wallet_id" field.
+func (m *WalletEntryMutation) SetWalletID(u uuid.UUID) {
+	m.wallet = &u
+}
+
+// WalletID returns the value of the "wallet_id" field in the mutation.
+func (m *WalletEntryMutation) WalletID() (r uuid.UUID, exists bool) {
+	v := m.wallet
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWalletID returns the old "wallet_id" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldWalletID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWalletID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWalletID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWalletID: %w", err)
+	}
+	return oldValue.WalletID, nil
+}
+
+// ResetWalletID resets all changes to the "wallet_id" field.
+func (m *WalletEntryMutation) ResetWalletID() {
+	m.wallet = nil
+}
+
+// SetActorUserID sets the "actor_user_id" field.
+func (m *WalletEntryMutation) SetActorUserID(u uuid.UUID) {
+	m.actor = &u
+}
+
+// ActorUserID returns the value of the "actor_user_id" field in the mutation.
+func (m *WalletEntryMutation) ActorUserID() (r uuid.UUID, exists bool) {
+	v := m.actor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActorUserID returns the old "actor_user_id" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldActorUserID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActorUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActorUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActorUserID: %w", err)
+	}
+	return oldValue.ActorUserID, nil
+}
+
+// ClearActorUserID clears the value of the "actor_user_id" field.
+func (m *WalletEntryMutation) ClearActorUserID() {
+	m.actor = nil
+	m.clearedFields[walletentry.FieldActorUserID] = struct{}{}
+}
+
+// ActorUserIDCleared returns if the "actor_user_id" field was cleared in this mutation.
+func (m *WalletEntryMutation) ActorUserIDCleared() bool {
+	_, ok := m.clearedFields[walletentry.FieldActorUserID]
+	return ok
+}
+
+// ResetActorUserID resets all changes to the "actor_user_id" field.
+func (m *WalletEntryMutation) ResetActorUserID() {
+	m.actor = nil
+	delete(m.clearedFields, walletentry.FieldActorUserID)
+}
+
+// SetReferenceID sets the "reference_id" field.
+func (m *WalletEntryMutation) SetReferenceID(u uuid.UUID) {
+	m.reference_id = &u
+}
+
+// ReferenceID returns the value of the "reference_id" field in the mutation.
+func (m *WalletEntryMutation) ReferenceID() (r uuid.UUID, exists bool) {
+	v := m.reference_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReferenceID returns the old "reference_id" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldReferenceID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReferenceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReferenceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReferenceID: %w", err)
+	}
+	return oldValue.ReferenceID, nil
+}
+
+// ResetReferenceID resets all changes to the "reference_id" field.
+func (m *WalletEntryMutation) ResetReferenceID() {
+	m.reference_id = nil
+}
+
+// SetEntryType sets the "entry_type" field.
+func (m *WalletEntryMutation) SetEntryType(wt walletentry.EntryType) {
+	m.entry_type = &wt
+}
+
+// EntryType returns the value of the "entry_type" field in the mutation.
+func (m *WalletEntryMutation) EntryType() (r walletentry.EntryType, exists bool) {
+	v := m.entry_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEntryType returns the old "entry_type" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldEntryType(ctx context.Context) (v walletentry.EntryType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEntryType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEntryType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEntryType: %w", err)
+	}
+	return oldValue.EntryType, nil
+}
+
+// ResetEntryType resets all changes to the "entry_type" field.
+func (m *WalletEntryMutation) ResetEntryType() {
+	m.entry_type = nil
+}
+
+// SetAmountMicros sets the "amount_micros" field.
+func (m *WalletEntryMutation) SetAmountMicros(i int64) {
+	m.amount_micros = &i
+	m.addamount_micros = nil
+}
+
+// AmountMicros returns the value of the "amount_micros" field in the mutation.
+func (m *WalletEntryMutation) AmountMicros() (r int64, exists bool) {
+	v := m.amount_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmountMicros returns the old "amount_micros" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldAmountMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmountMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmountMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmountMicros: %w", err)
+	}
+	return oldValue.AmountMicros, nil
+}
+
+// AddAmountMicros adds i to the "amount_micros" field.
+func (m *WalletEntryMutation) AddAmountMicros(i int64) {
+	if m.addamount_micros != nil {
+		*m.addamount_micros += i
+	} else {
+		m.addamount_micros = &i
+	}
+}
+
+// AddedAmountMicros returns the value that was added to the "amount_micros" field in this mutation.
+func (m *WalletEntryMutation) AddedAmountMicros() (r int64, exists bool) {
+	v := m.addamount_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmountMicros resets all changes to the "amount_micros" field.
+func (m *WalletEntryMutation) ResetAmountMicros() {
+	m.amount_micros = nil
+	m.addamount_micros = nil
+}
+
+// SetBalanceAfterMicros sets the "balance_after_micros" field.
+func (m *WalletEntryMutation) SetBalanceAfterMicros(i int64) {
+	m.balance_after_micros = &i
+	m.addbalance_after_micros = nil
+}
+
+// BalanceAfterMicros returns the value of the "balance_after_micros" field in the mutation.
+func (m *WalletEntryMutation) BalanceAfterMicros() (r int64, exists bool) {
+	v := m.balance_after_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBalanceAfterMicros returns the old "balance_after_micros" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldBalanceAfterMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBalanceAfterMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBalanceAfterMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBalanceAfterMicros: %w", err)
+	}
+	return oldValue.BalanceAfterMicros, nil
+}
+
+// AddBalanceAfterMicros adds i to the "balance_after_micros" field.
+func (m *WalletEntryMutation) AddBalanceAfterMicros(i int64) {
+	if m.addbalance_after_micros != nil {
+		*m.addbalance_after_micros += i
+	} else {
+		m.addbalance_after_micros = &i
+	}
+}
+
+// AddedBalanceAfterMicros returns the value that was added to the "balance_after_micros" field in this mutation.
+func (m *WalletEntryMutation) AddedBalanceAfterMicros() (r int64, exists bool) {
+	v := m.addbalance_after_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBalanceAfterMicros resets all changes to the "balance_after_micros" field.
+func (m *WalletEntryMutation) ResetBalanceAfterMicros() {
+	m.balance_after_micros = nil
+	m.addbalance_after_micros = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *WalletEntryMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *WalletEntryMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *WalletEntryMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *WalletEntryMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *WalletEntryMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the WalletEntry entity.
+// If the WalletEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletEntryMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *WalletEntryMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearWallet clears the "wallet" edge to the Wallet entity.
+func (m *WalletEntryMutation) ClearWallet() {
+	m.clearedwallet = true
+	m.clearedFields[walletentry.FieldWalletID] = struct{}{}
+}
+
+// WalletCleared reports if the "wallet" edge to the Wallet entity was cleared.
+func (m *WalletEntryMutation) WalletCleared() bool {
+	return m.clearedwallet
+}
+
+// WalletIDs returns the "wallet" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// WalletID instead. It exists only for internal usage by the builders.
+func (m *WalletEntryMutation) WalletIDs() (ids []uuid.UUID) {
+	if id := m.wallet; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetWallet resets all changes to the "wallet" edge.
+func (m *WalletEntryMutation) ResetWallet() {
+	m.wallet = nil
+	m.clearedwallet = false
+}
+
+// SetActorID sets the "actor" edge to the User entity by id.
+func (m *WalletEntryMutation) SetActorID(id uuid.UUID) {
+	m.actor = &id
+}
+
+// ClearActor clears the "actor" edge to the User entity.
+func (m *WalletEntryMutation) ClearActor() {
+	m.clearedactor = true
+	m.clearedFields[walletentry.FieldActorUserID] = struct{}{}
+}
+
+// ActorCleared reports if the "actor" edge to the User entity was cleared.
+func (m *WalletEntryMutation) ActorCleared() bool {
+	return m.ActorUserIDCleared() || m.clearedactor
+}
+
+// ActorID returns the "actor" edge ID in the mutation.
+func (m *WalletEntryMutation) ActorID() (id uuid.UUID, exists bool) {
+	if m.actor != nil {
+		return *m.actor, true
+	}
+	return
+}
+
+// ActorIDs returns the "actor" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ActorID instead. It exists only for internal usage by the builders.
+func (m *WalletEntryMutation) ActorIDs() (ids []uuid.UUID) {
+	if id := m.actor; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetActor resets all changes to the "actor" edge.
+func (m *WalletEntryMutation) ResetActor() {
+	m.actor = nil
+	m.clearedactor = false
+}
+
+// Where appends a list predicates to the WalletEntryMutation builder.
+func (m *WalletEntryMutation) Where(ps ...predicate.WalletEntry) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the WalletEntryMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *WalletEntryMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.WalletEntry, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *WalletEntryMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *WalletEntryMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (WalletEntry).
+func (m *WalletEntryMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *WalletEntryMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.wallet != nil {
+		fields = append(fields, walletentry.FieldWalletID)
+	}
+	if m.actor != nil {
+		fields = append(fields, walletentry.FieldActorUserID)
+	}
+	if m.reference_id != nil {
+		fields = append(fields, walletentry.FieldReferenceID)
+	}
+	if m.entry_type != nil {
+		fields = append(fields, walletentry.FieldEntryType)
+	}
+	if m.amount_micros != nil {
+		fields = append(fields, walletentry.FieldAmountMicros)
+	}
+	if m.balance_after_micros != nil {
+		fields = append(fields, walletentry.FieldBalanceAfterMicros)
+	}
+	if m.description != nil {
+		fields = append(fields, walletentry.FieldDescription)
+	}
+	if m.created_at != nil {
+		fields = append(fields, walletentry.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *WalletEntryMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case walletentry.FieldWalletID:
+		return m.WalletID()
+	case walletentry.FieldActorUserID:
+		return m.ActorUserID()
+	case walletentry.FieldReferenceID:
+		return m.ReferenceID()
+	case walletentry.FieldEntryType:
+		return m.EntryType()
+	case walletentry.FieldAmountMicros:
+		return m.AmountMicros()
+	case walletentry.FieldBalanceAfterMicros:
+		return m.BalanceAfterMicros()
+	case walletentry.FieldDescription:
+		return m.Description()
+	case walletentry.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *WalletEntryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case walletentry.FieldWalletID:
+		return m.OldWalletID(ctx)
+	case walletentry.FieldActorUserID:
+		return m.OldActorUserID(ctx)
+	case walletentry.FieldReferenceID:
+		return m.OldReferenceID(ctx)
+	case walletentry.FieldEntryType:
+		return m.OldEntryType(ctx)
+	case walletentry.FieldAmountMicros:
+		return m.OldAmountMicros(ctx)
+	case walletentry.FieldBalanceAfterMicros:
+		return m.OldBalanceAfterMicros(ctx)
+	case walletentry.FieldDescription:
+		return m.OldDescription(ctx)
+	case walletentry.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown WalletEntry field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *WalletEntryMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case walletentry.FieldWalletID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWalletID(v)
+		return nil
+	case walletentry.FieldActorUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActorUserID(v)
+		return nil
+	case walletentry.FieldReferenceID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReferenceID(v)
+		return nil
+	case walletentry.FieldEntryType:
+		v, ok := value.(walletentry.EntryType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEntryType(v)
+		return nil
+	case walletentry.FieldAmountMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmountMicros(v)
+		return nil
+	case walletentry.FieldBalanceAfterMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBalanceAfterMicros(v)
+		return nil
+	case walletentry.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case walletentry.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *WalletEntryMutation) AddedFields() []string {
+	var fields []string
+	if m.addamount_micros != nil {
+		fields = append(fields, walletentry.FieldAmountMicros)
+	}
+	if m.addbalance_after_micros != nil {
+		fields = append(fields, walletentry.FieldBalanceAfterMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *WalletEntryMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case walletentry.FieldAmountMicros:
+		return m.AddedAmountMicros()
+	case walletentry.FieldBalanceAfterMicros:
+		return m.AddedBalanceAfterMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *WalletEntryMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case walletentry.FieldAmountMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmountMicros(v)
+		return nil
+	case walletentry.FieldBalanceAfterMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBalanceAfterMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *WalletEntryMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(walletentry.FieldActorUserID) {
+		fields = append(fields, walletentry.FieldActorUserID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *WalletEntryMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *WalletEntryMutation) ClearField(name string) error {
+	switch name {
+	case walletentry.FieldActorUserID:
+		m.ClearActorUserID()
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *WalletEntryMutation) ResetField(name string) error {
+	switch name {
+	case walletentry.FieldWalletID:
+		m.ResetWalletID()
+		return nil
+	case walletentry.FieldActorUserID:
+		m.ResetActorUserID()
+		return nil
+	case walletentry.FieldReferenceID:
+		m.ResetReferenceID()
+		return nil
+	case walletentry.FieldEntryType:
+		m.ResetEntryType()
+		return nil
+	case walletentry.FieldAmountMicros:
+		m.ResetAmountMicros()
+		return nil
+	case walletentry.FieldBalanceAfterMicros:
+		m.ResetBalanceAfterMicros()
+		return nil
+	case walletentry.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case walletentry.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *WalletEntryMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.wallet != nil {
+		edges = append(edges, walletentry.EdgeWallet)
+	}
+	if m.actor != nil {
+		edges = append(edges, walletentry.EdgeActor)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *WalletEntryMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case walletentry.EdgeWallet:
+		if id := m.wallet; id != nil {
+			return []ent.Value{*id}
+		}
+	case walletentry.EdgeActor:
+		if id := m.actor; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *WalletEntryMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *WalletEntryMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *WalletEntryMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedwallet {
+		edges = append(edges, walletentry.EdgeWallet)
+	}
+	if m.clearedactor {
+		edges = append(edges, walletentry.EdgeActor)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *WalletEntryMutation) EdgeCleared(name string) bool {
+	switch name {
+	case walletentry.EdgeWallet:
+		return m.clearedwallet
+	case walletentry.EdgeActor:
+		return m.clearedactor
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *WalletEntryMutation) ClearEdge(name string) error {
+	switch name {
+	case walletentry.EdgeWallet:
+		m.ClearWallet()
+		return nil
+	case walletentry.EdgeActor:
+		m.ClearActor()
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *WalletEntryMutation) ResetEdge(name string) error {
+	switch name {
+	case walletentry.EdgeWallet:
+		m.ResetWallet()
+		return nil
+	case walletentry.EdgeActor:
+		m.ResetActor()
+		return nil
+	}
+	return fmt.Errorf("unknown WalletEntry edge %s", name)
 }

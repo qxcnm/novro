@@ -507,6 +507,98 @@ func HasIdentitiesWith(preds ...predicate.UserIdentity) predicate.User {
 	})
 }
 
+// HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.
+func HasAPIKeys() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, APIKeysTable, APIKeysColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAPIKeysWith applies the HasEdge predicate on the "api_keys" edge with a given conditions (other predicates).
+func HasAPIKeysWith(preds ...predicate.APIKey) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newAPIKeysStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasWallet applies the HasEdge predicate on the "wallet" edge.
+func HasWallet() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, WalletTable, WalletColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasWalletWith applies the HasEdge predicate on the "wallet" edge with a given conditions (other predicates).
+func HasWalletWith(preds ...predicate.Wallet) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newWalletStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasWalletEntries applies the HasEdge predicate on the "wallet_entries" edge.
+func HasWalletEntries() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, WalletEntriesTable, WalletEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasWalletEntriesWith applies the HasEdge predicate on the "wallet_entries" edge with a given conditions (other predicates).
+func HasWalletEntriesWith(preds ...predicate.WalletEntry) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newWalletEntriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasAPIUsages applies the HasEdge predicate on the "api_usages" edge.
+func HasAPIUsages() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAPIUsagesWith applies the HasEdge predicate on the "api_usages" edge with a given conditions (other predicates).
+func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newAPIUsagesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.User) predicate.User {
 	return predicate.User(sql.AndPredicates(predicates...))

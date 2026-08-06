@@ -1,0 +1,108 @@
+package modelroute
+
+import (
+	"context"
+	"regexp"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/internal/provider"
+)
+
+var publicNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{1,127}$`)
+
+type Store interface {
+	Create(context.Context, CreateInput) (Record, error)
+	List(context.Context, ListFilter) ([]Record, error)
+	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
+	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
+	Resolve(context.Context, string) (Record, string, string, error)
+	ListActive(context.Context) ([]Record, error)
+}
+
+type Service struct {
+	store  Store
+	cipher *provider.Cipher
+}
+
+func NewService(store Store, cipher *provider.Cipher) *Service {
+	return &Service{store: store, cipher: cipher}
+}
+
+func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error) {
+	input.PublicName = strings.TrimSpace(input.PublicName)
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	input.UpstreamName = strings.TrimSpace(input.UpstreamName)
+	if input.ProviderID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) || !validText(input.UpstreamName, 256) || !validPrices(input.InputPriceMicros, input.OutputPriceMicros) {
+		return Record{}, ErrInvalidInput
+	}
+	return s.store.Create(ctx, input)
+}
+
+func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error) {
+	filter.Search = strings.TrimSpace(filter.Search)
+	if filter.Status != "" && filter.Status != StatusActive && filter.Status != StatusDisabled {
+		return nil, ErrInvalidInput
+	}
+	return s.store.List(ctx, filter)
+}
+
+func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
+	if id == uuid.Nil || (input.ProviderID == nil && input.DisplayName == nil && input.UpstreamName == nil && input.InputPriceMicros == nil && input.OutputPriceMicros == nil) {
+		return Record{}, ErrInvalidInput
+	}
+	if input.ProviderID != nil && *input.ProviderID == uuid.Nil {
+		return Record{}, ErrInvalidInput
+	}
+	if input.DisplayName != nil {
+		value := strings.TrimSpace(*input.DisplayName)
+		if !validText(value, 128) {
+			return Record{}, ErrInvalidInput
+		}
+		input.DisplayName = &value
+	}
+	if input.UpstreamName != nil {
+		value := strings.TrimSpace(*input.UpstreamName)
+		if !validText(value, 256) {
+			return Record{}, ErrInvalidInput
+		}
+		input.UpstreamName = &value
+	}
+	if input.InputPriceMicros != nil && !validPrice(*input.InputPriceMicros) {
+		return Record{}, ErrInvalidInput
+	}
+	if input.OutputPriceMicros != nil && !validPrice(*input.OutputPriceMicros) {
+		return Record{}, ErrInvalidInput
+	}
+	return s.store.Update(ctx, id, input)
+}
+
+func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
+	if id == uuid.Nil || (status != StatusActive && status != StatusDisabled) {
+		return Record{}, ErrInvalidInput
+	}
+	return s.store.SetStatus(ctx, id, status)
+}
+
+func (s *Service) Resolve(ctx context.Context, publicName string) (Resolved, error) {
+	record, baseURL, encrypted, err := s.store.Resolve(ctx, strings.TrimSpace(publicName))
+	if err != nil {
+		return Resolved{}, err
+	}
+	apiKey, err := s.cipher.Decrypt(encrypted)
+	if err != nil {
+		return Resolved{}, err
+	}
+	return Resolved{Record: record, BaseURL: baseURL, APIKey: apiKey}, nil
+}
+
+func (s *Service) ListActive(ctx context.Context) ([]Record, error) {
+	return s.store.ListActive(ctx)
+}
+
+func validText(value string, max int) bool {
+	return value != "" && utf8.RuneCountInString(value) <= max
+}
+func validPrice(value int64) bool          { return value >= 0 && value <= 1_000_000_000_000 }
+func validPrices(input, output int64) bool { return validPrice(input) && validPrice(output) }
