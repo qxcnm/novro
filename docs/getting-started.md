@@ -104,7 +104,8 @@ NOVRO_OIDC_DISPLAY_NAME=企业账号
 NOVRO_OIDC_AUTO_REGISTER=true
 ```
 
-Issuer 必须支持 OIDC Discovery。Client Secret 只放在服务端部署环境，不使用
+Issuer 必须支持 OIDC Discovery，且 Issuer、Client ID、Client Secret 必须同时配置；
+缺少任意一项时 OIDC 不会启动。Client Secret 只放在服务端部署环境，不使用
 `NEXT_PUBLIC_*`。设置 `NOVRO_OIDC_AUTO_REGISTER=false` 后，只有已绑定的外部身份
 可以登录。
 

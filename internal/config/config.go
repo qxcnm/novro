@@ -232,8 +232,11 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	}
 	oidcIssuer := strings.TrimRight(getString("NOVRO_OIDC_ISSUER", ""), "/")
 	oidcClientID := getString("NOVRO_OIDC_CLIENT_ID", "")
-	if (oidcIssuer == "") != (oidcClientID == "") {
-		return Config{}, errors.New("NOVRO_OIDC_ISSUER and NOVRO_OIDC_CLIENT_ID must be configured together")
+	oidcClientSecret := getString("NOVRO_OIDC_CLIENT_SECRET", "")
+	if oidcIssuer == "" || oidcClientID == "" || oidcClientSecret == "" {
+		if oidcIssuer != "" || oidcClientID != "" || oidcClientSecret != "" {
+			return Config{}, errors.New("NOVRO_OIDC_ISSUER, NOVRO_OIDC_CLIENT_ID, and NOVRO_OIDC_CLIENT_SECRET must be configured together")
+		}
 	}
 	if oidcIssuer != "" {
 		issuerURL, parseErr := url.Parse(oidcIssuer)
@@ -286,7 +289,7 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 			OIDC: OIDCConfig{
 				Issuer:       oidcIssuer,
 				ClientID:     oidcClientID,
-				ClientSecret: getString("NOVRO_OIDC_CLIENT_SECRET", ""),
+				ClientSecret: oidcClientSecret,
 				DisplayName:  getString("NOVRO_OIDC_DISPLAY_NAME", "企业账号"),
 				AutoRegister: oidcAutoRegister,
 			},

@@ -67,10 +67,27 @@ func TestLoadValidatesOIDCAndSetupConfiguration(t *testing.T) {
 	}
 
 	values = testEnv()
+	values["NOVRO_OIDC_ISSUER"] = "https://id.example.com"
+	values["NOVRO_OIDC_CLIENT_ID"] = "novro"
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "CLIENT_SECRET") {
+		t.Fatalf("expected missing OIDC client secret error, got %v", err)
+	}
+
+	values = testEnv()
 	values["NOVRO_OIDC_ISSUER"] = "http://id.example.com"
 	values["NOVRO_OIDC_CLIENT_ID"] = "novro"
+	values["NOVRO_OIDC_CLIENT_SECRET"] = "client-secret"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "https") {
 		t.Fatalf("expected insecure OIDC issuer error, got %v", err)
+	}
+
+	values = testEnv()
+	values["NOVRO_OIDC_ISSUER"] = "https://id.example.com"
+	values["NOVRO_OIDC_CLIENT_ID"] = "novro"
+	values["NOVRO_OIDC_CLIENT_SECRET"] = "client-secret"
+	cfg, err := loadMap(values)
+	if err != nil || !cfg.Auth.OIDC.Enabled() || cfg.Auth.OIDC.ClientSecret != "client-secret" {
+		t.Fatalf("valid OIDC configuration rejected: cfg=%+v err=%v", cfg.Auth.OIDC, err)
 	}
 
 	values = testEnv()
