@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Boxes, LayoutDashboard, LogOut, Menu, Route, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, Boxes, ChartNoAxesCombined, KeyRound, LayoutDashboard, LogOut, Menu, Route, ScrollText, ShieldCheck, UserRound, Users, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
@@ -16,7 +16,10 @@ export type CurrentUser = { id: string; username: string; display_name: string; 
 const CurrentUserContext = createContext<CurrentUser | null>(null);
 
 const routeDetails: Record<string, { title: string; description: string }> = {
-  "/console": { title: "账户", description: "余额与 API Key" },
+  "/console": { title: "概览", description: "账户健康与近期活动" },
+  "/console/dashboard": { title: "数据看板", description: "调用趋势、模型分布与成本" },
+  "/console/logs": { title: "使用日志", description: "按 API Key 追踪每次调用" },
+  "/console/profile": { title: "个人资料", description: "账号信息与偏好" },
   "/console/docs": { title: "API 文档", description: "接入地址、协议与调用示例" },
   "/console/api-keys": { title: "我的 API Keys", description: "创建和撤销你的访问密钥" },
   "/console/billing": { title: "余额与用量", description: "账户资金流水和最近模型调用" },
@@ -44,8 +47,15 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
   const pathname = usePathname();
   const sections = [
     { label: "工作区", items: [
-      { href: "/console", label: "账户", icon: LayoutDashboard },
-      { href: "/console/docs", label: "API 文档", icon: BookOpen },
+      ...(user.role === "admin" ? [{ href: "/console", label: "概览", icon: LayoutDashboard }] : []),
+      { href: "/console/dashboard", label: "数据看板", icon: ChartNoAxesCombined },
+      { href: "/console/logs", label: "使用日志", icon: ScrollText },
+      { href: "/console/api-keys", label: "API 密钥", icon: KeyRound },
+      ...(user.role === "admin" ? [{ href: "/console/docs", label: "API 文档", icon: BookOpen }] : []),
+    ] },
+    { label: "个人", items: [
+      { href: "/console/profile", label: "个人资料", icon: UserRound },
+      ...(user.role === "admin" ? [{ href: "/console/billing", label: "余额与流水", icon: WalletCards }] : []),
     ] },
     { label: "管理", items: user.role === "admin" ? [
       { href: "/admin/users", label: "用户管理", icon: Users },
@@ -103,7 +113,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   useEffect(() => {
-    if (user && pathname.startsWith("/admin") && user.role !== "admin") router.replace("/console");
+    if (!user || user.role === "admin") return;
+    const memberRoutes = ["/console/dashboard", "/console/logs", "/console/api-keys", "/console/profile"];
+    if (!memberRoutes.includes(pathname)) router.replace("/console/dashboard");
   }, [pathname, router, user]);
 
   async function logout() {
@@ -149,7 +161,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <Button aria-label="退出登录" onClick={logout} size="icon" title="退出登录" variant="ghost"><LogOut /></Button>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="w-full p-4 sm:p-6 lg:p-8">{children}</main>
         </div>
       </div>
     </CurrentUserContext.Provider>

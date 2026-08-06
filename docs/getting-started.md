@@ -146,3 +146,22 @@ pnpm --dir apps/web dev
 为调用上游，管理员先在 `/admin/providers` 保存 HTTPS 提供商，再在 `/admin/models`
 创建对外模型名、上游模型名和人民币 / 百万 tokens 单价。用户创建自己的 Novro API Key
 后，使用 `/v1` 前缀请求；网关会在调用前预占余额，成功后按上游 usage 结算。
+
+## 8. 配置 Kimi（Moonshot）
+
+Kimi 使用 OpenAI 兼容协议。管理员在 `/admin/providers` 新增提供商时可以使用以下配置，
+API Key 只会加密保存在服务端，不会返回给浏览器：
+
+```text
+代码：moonshot
+显示名称：Kimi / Moonshot
+协议：OpenAI 兼容
+基础地址：https://api.moonshot.cn/v1
+API Key：从 Moonshot 控制台创建的密钥
+```
+
+然后在 `/admin/models` 为需要开放的模型创建路由。`上游模型名` 必须填写 Moonshot
+账户实际可用的模型 ID（例如 `kimi-k2.6` 或账户中显示的其他 Kimi 模型），对外模型名
+可以使用团队约定的稳定名称。输入和输出单价按人民币 / 百万 tokens 填写；Novro 会按
+上游返回的 `usage` 结算，没有 usage 的响应会标记为估算。Kimi 的模型可用性、上下文
+长度和价格会变化，以 Moonshot 控制台与官方文档为准。

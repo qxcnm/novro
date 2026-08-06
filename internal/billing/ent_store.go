@@ -33,7 +33,7 @@ func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, limit int) 
 }
 
 func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) ([]Usage, error) {
-	entities, err := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID)).WithModelRoute().Order(ent.Desc(entapiusage.FieldCreatedAt)).Limit(limit).All(ctx)
+	entities, err := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID)).WithModelRoute().WithAPIKey().Order(ent.Desc(entapiusage.FieldCreatedAt)).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list API usage: %w", err)
 	}
@@ -44,7 +44,12 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) (
 		if model != nil {
 			modelName = model.PublicName
 		}
-		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens, OutputTokens: entity.OutputTokens, CostMicros: entity.CostMicros, Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
+		apiKey, _ := entity.Edges.APIKeyOrErr()
+		apiKeyName := ""
+		if apiKey != nil {
+			apiKeyName = apiKey.Name
+		}
+		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens, OutputTokens: entity.OutputTokens, CostMicros: entity.CostMicros, Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
 	}
 	return items, nil
 }

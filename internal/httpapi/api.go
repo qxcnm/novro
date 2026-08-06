@@ -151,6 +151,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/auth/me", h.me)
+	mux.HandleFunc("PATCH /api/account/profile", h.updateProfile)
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
@@ -370,6 +371,27 @@ func (h *apiHandler) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": record})
+}
+
+func (h *apiHandler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var request struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "资料格式无效")
+		return
+	}
+	displayName := strings.TrimSpace(request.DisplayName)
+	updated, err := h.users.Update(r.Context(), record.ID, user.UpdateInput{DisplayName: &displayName})
+	if err != nil {
+		h.writeUserError(w, "update profile", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
 func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {

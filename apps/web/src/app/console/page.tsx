@@ -1,7 +1,8 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { Check, Clipboard, KeyRound, Plus, RefreshCw, ShieldX, UserRound } from "lucide-react";
+import { Activity, Check, ChartNoAxesCombined, Clipboard, KeyRound, Plus, RefreshCw, ScrollText, ShieldX, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useCurrentUser } from "@/components/console-shell";
@@ -136,13 +137,16 @@ export default function ConsolePage() {
 
   return (
     <div className="space-y-5">
+      <section className="grid gap-3 md:grid-cols-3">
+        {[{ href: "/console/dashboard", label: "数据看板", note: "看趋势、模型和成本", icon: ChartNoAxesCombined }, { href: "/console/logs", label: "使用日志", note: "按 Key 检查每次调用", icon: ScrollText }, { href: "/console/profile", label: "个人资料", note: "维护你的显示名称", icon: UserRound }].map((item) => <Link className="group rounded-lg border bg-background p-4 transition-colors hover:border-primary/50" href={item.href} key={item.href}><div className="flex items-center justify-between"><item.icon aria-hidden="true" className="size-5 text-muted-foreground group-hover:text-primary" /><Activity aria-hidden="true" className="size-4 text-muted-foreground" /></div><p className="mt-4 text-sm font-semibold">{item.label}</p><p className="mt-1 text-xs text-muted-foreground">{item.note}</p></Link>)}
+      </section>
       <section className="overflow-hidden rounded-lg border bg-background">
-        <div className="flex min-h-32 items-center justify-between gap-6 bg-emerald-950 px-5 py-6 text-white sm:px-7">
+        <div className="flex min-h-32 items-center justify-between gap-6 border-b px-5 py-6 sm:px-7">
           <div className="flex min-w-0 items-center gap-4">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-emerald-50"><UserRound aria-hidden="true" className="size-6" /></span>
-            <div className="min-w-0"><p className="truncate text-xl font-semibold">{displayName}</p><p className="mt-1 truncate text-sm text-emerald-100/75">@{user.username}</p></div>
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-foreground"><UserRound aria-hidden="true" className="size-6" /></span>
+            <div className="min-w-0"><p className="truncate text-xl font-semibold">{displayName}</p><p className="mt-1 truncate text-sm text-muted-foreground">@{user.username}</p></div>
           </div>
-          <Badge className="border-white/20 bg-white/10 text-white hover:bg-white/10" variant="outline">{user.role === "admin" ? "管理员" : "成员"}</Badge>
+          <Badge variant="outline">{user.role === "admin" ? "管理员" : "成员"}</Badge>
         </div>
         <div className="grid sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.45fr)_auto] sm:items-stretch">
           <div className="px-5 py-5 sm:px-7">

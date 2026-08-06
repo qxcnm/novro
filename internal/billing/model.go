@@ -47,6 +47,8 @@ type Summary struct {
 type Usage struct {
 	ID                uuid.UUID `json:"id"`
 	RequestID         uuid.UUID `json:"request_id"`
+	APIKeyID          uuid.UUID `json:"api_key_id"`
+	APIKeyName        string    `json:"api_key_name"`
 	ModelName         string    `json:"model"`
 	Endpoint          string    `json:"endpoint"`
 	InputTokens       int       `json:"input_tokens"`

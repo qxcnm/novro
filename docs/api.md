@@ -14,6 +14,7 @@
 | `GET` | `/api/auth/oidc/callback` | 公开 | 验证 OIDC 回调并建立 Novro 会话 |
 | `POST` | `/api/auth/logout` | 登录可选 | 撤销当前会话并清除 Cookie |
 | `GET` | `/api/auth/me` | 登录 | 返回当前用户 |
+| `PATCH` | `/api/account/profile` | 登录 | 修改当前用户显示名称 |
 | `GET` | `/api/admin/users` | 管理员 | 分页、搜索和状态筛选 |
 | `POST` | `/api/admin/users` | 管理员 | 创建管理员或成员 |
 | `PATCH` | `/api/admin/users/{id}` | 管理员 | 修改显示名称或角色 |
@@ -152,3 +153,10 @@ POST /v1/messages
 错误响应统一返回 JSON，并保留 OpenAI 风格的 `error` 对象。错误中不得泄露供应商密钥、
 内部 URL 或数据库信息。错误响应包含顶层 `request_id`，上游非 2xx 会统一转换为
 `502 upstream_error`。
+
+## 8. Kimi / Moonshot 配置约定
+
+Kimi 作为 OpenAI 兼容提供商接入，推荐基础地址为 `https://api.moonshot.cn/v1`。在
+管理员控制台保存提供商凭据后，再创建模型路由，将对外模型名映射到账户实际可用的
+Kimi 模型 ID。凭据始终只在服务端使用；调用日志会记录模型、API Key 名称、Tokens、
+费用和是否为估算值，不记录请求体、Authorization 头或上游密钥。

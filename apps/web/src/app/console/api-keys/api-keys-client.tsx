@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Check, Clipboard, KeyRound, Plus, RefreshCw, ShieldX } from "lucide-react";
+import { Check, Clipboard, KeyRound, Plus, RefreshCw, ScrollText, ShieldX } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -93,7 +93,7 @@ export default function APIKeysClient() {
         <Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>名称</TableHead><TableHead>前缀</TableHead><TableHead>状态</TableHead><TableHead>最近使用</TableHead><TableHead>创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>
           {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={6}>加载中...</TableCell></TableRow> : null}
           {!loading && keys.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={6}>还没有 API Key</TableCell></TableRow> : null}
-          {!loading ? keys.map((key) => <TableRow key={key.id}><TableCell className="font-medium">{key.name}</TableCell><TableCell className="font-mono text-xs">{key.key_prefix}••••</TableCell><TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell><TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell><TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell><TableCell><div className="flex justify-end">{key.status === "active" ? <Button aria-label={`撤销 ${key.name}`} onClick={() => setRevokeKey(key)} size="icon-sm" title="撤销 API Key" variant="ghost"><ShieldX /></Button> : null}</div></TableCell></TableRow>) : null}
+          {!loading ? keys.map((key) => <TableRow key={key.id}><TableCell className="font-medium">{key.name}</TableCell><TableCell className="font-mono text-xs">{key.key_prefix}••••</TableCell><TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell><TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell><TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button aria-label={`查看 ${key.name} 使用日志`} onClick={() => router.push(`/console/logs?key_id=${key.id}`)} size="icon-sm" title="查看使用日志" variant="ghost"><ScrollText /></Button>{key.status === "active" ? <Button aria-label={`撤销 ${key.name}`} onClick={() => setRevokeKey(key)} size="icon-sm" title="撤销 API Key" variant="ghost"><ShieldX /></Button> : null}</div></TableCell></TableRow>) : null}
         </TableBody></Table></div></CardContent></Card>
 
         <Dialog onOpenChange={(open) => { setCreateOpen(open); setError(""); if (!open) { setCreated(null); setCopied(false); setName(""); } }} open={createOpen}>
