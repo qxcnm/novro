@@ -288,12 +288,16 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	w.WriteHeader(response.StatusCode)
 	flusher, _ := w.(http.Flusher)
 	usage := tokenUsage{}
+	completed := false
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 64<<10), 4<<20)
 	for scanner.Scan() {
 		line := append(append([]byte(nil), scanner.Bytes()...), '\n')
 		if bytes.HasPrefix(scanner.Bytes(), []byte("data:")) {
 			data := bytes.TrimSpace(bytes.TrimPrefix(scanner.Bytes(), []byte("data:")))
+			if streamCompleted(endpoint, data) {
+				completed = true
+			}
 			if !bytes.Equal(data, []byte("[DONE]")) {
 				usage.merge(parseUsage(data))
 			}
@@ -307,6 +311,8 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	}
 	if usage.Input == 0 && usage.Output == 0 {
 		usage = tokenUsage{Input: inputEstimate, Output: outputMaximum, Estimated: true}
+	} else if !completed {
+		usage.Estimated = true
 	}
 	cost := priceForTokens(usage.Input, route.InputPriceMicros) + priceForTokens(usage.Output, route.OutputPriceMicros)
 	if cost > reserved {
@@ -315,6 +321,26 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	}
 	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, cost, usage, startedAt); err != nil {
 		h.logger.Error("finalize streamed gateway usage", "request_id", requestID, "error", err)
+	}
+}
+
+func streamCompleted(endpoint string, data []byte) bool {
+	if bytes.Equal(data, []byte("[DONE]")) {
+		return true
+	}
+	var event struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(data, &event) != nil {
+		return false
+	}
+	switch endpoint {
+	case "responses":
+		return event.Type == "response.completed"
+	case "messages":
+		return event.Type == "message_stop"
+	default:
+		return false
 	}
 }
 

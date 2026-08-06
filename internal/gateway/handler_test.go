@@ -238,7 +238,9 @@ func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 			stream: "event: message_start\n" +
 				"data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg-stream-1\",\"usage\":{\"input_tokens\":7,\"output_tokens\":1}}}\n\n" +
 				"event: message_delta\n" +
-				"data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":9}}\n\n",
+				"data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":9}}\n\n" +
+				"event: message_stop\n" +
+				"data: {\"type\":\"message_stop\"}\n\n",
 		},
 	}
 
@@ -259,6 +261,24 @@ func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 				t.Fatalf("unexpected streamed usage %+v", biller.usage)
 			}
 		})
+	}
+}
+
+func TestInterruptedStreamingUsageIsMarkedEstimated(t *testing.T) {
+	biller := &fakeBilling{}
+	stream := "data: {\"id\":\"stream-partial\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 2 || !biller.usage.Estimated {
+		t.Fatalf("interrupted stream usage was not marked estimated: %+v", biller.usage)
 	}
 }
 
