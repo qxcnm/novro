@@ -39,6 +39,8 @@ NOVRO_ALLOWED_ORIGINS=https://novro.example.com
 
 反向代理必须透传浏览器的 `Origin` 请求头。Go 服务会对 `/api/*` 的非安全方法校验
 该值是否完整匹配 `NOVRO_ALLOWED_ORIGINS`；不要用代理重写、删除或替换这个请求头。
+每项来源必须是无路径、查询、片段或用户信息的 HTTPS Origin。生产环境的
+`NOVRO_HTTP_ADDR` 也必须使用 loopback 主机，避免绕过反向代理直接访问 Go 服务。
 `/v1/*` 的 API Key 请求不依赖浏览器 `Origin`，可由非浏览器客户端直接调用。
 
 Next.js 进程只需要服务端变量：

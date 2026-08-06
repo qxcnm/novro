@@ -137,8 +137,12 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 		return Config{}, errors.New("NOVRO_ENVIRONMENT must be development, test, or production")
 	}
 	httpAddr := getString("NOVRO_HTTP_ADDR", defaultHTTPAddr)
-	if _, _, err := net.SplitHostPort(httpAddr); err != nil {
+	httpHost, _, err := net.SplitHostPort(httpAddr)
+	if err != nil {
 		return Config{}, fmt.Errorf("NOVRO_HTTP_ADDR must be a host:port address: %w", err)
+	}
+	if environment == "production" && !isLoopbackHost(httpHost) {
+		return Config{}, errors.New("production requires NOVRO_HTTP_ADDR to use a loopback host")
 	}
 
 	driver := strings.ToLower(getString("NOVRO_DATABASE_DRIVER", defaultDatabaseDriver))
@@ -252,9 +256,19 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	origins := make([]string, 0)
 	for _, origin := range strings.Split(getString("NOVRO_ALLOWED_ORIGINS", "http://localhost:3000"), ",") {
 		origin = strings.TrimRight(strings.TrimSpace(origin), "/")
-		if origin != "" {
-			origins = append(origins, origin)
+		if origin == "" {
+			continue
 		}
+		parsedOrigin, parseErr := url.Parse(origin)
+		if parseErr != nil || parsedOrigin.Host == "" || parsedOrigin.User != nil ||
+			(parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") ||
+			parsedOrigin.Path != "" || parsedOrigin.RawPath != "" || parsedOrigin.RawQuery != "" || parsedOrigin.Fragment != "" {
+			return Config{}, errors.New("NOVRO_ALLOWED_ORIGINS must contain only absolute http or https origins without paths, credentials, queries, or fragments")
+		}
+		if environment == "production" && parsedOrigin.Scheme != "https" {
+			return Config{}, errors.New("production requires HTTPS NOVRO_ALLOWED_ORIGINS")
+		}
+		origins = append(origins, origin)
 	}
 	if len(origins) == 0 {
 		return Config{}, errors.New("NOVRO_ALLOWED_ORIGINS must contain at least one origin")
@@ -297,6 +311,14 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 		Provider:      ProviderConfig{EncryptionSecret: providerEncryptionSecret},
 		AllowedOrigin: origins,
 	}, nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (c DatabaseConfig) DSN() string {

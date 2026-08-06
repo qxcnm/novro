@@ -106,6 +106,9 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 
 	values = testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
+	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
+	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
 	values["NOVRO_DATABASE_TLS"] = "false"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "production") {
 		t.Fatalf("expected production transport error, got %v", err)
@@ -113,6 +116,9 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 
 	values = testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
+	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
+	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
 	delete(values, "NOVRO_PROVIDER_ENCRYPTION_SECRET")
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "PROVIDER_ENCRYPTION_SECRET") {
 		t.Fatalf("expected missing provider encryption secret error, got %v", err)
@@ -131,6 +137,48 @@ func TestLoadRejectsInvalidPoolAndAddress(t *testing.T) {
 	values["NOVRO_DATABASE_MAX_IDLE_CONNS"] = "20"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "MAX_IDLE") {
 		t.Fatalf("expected pool error, got %v", err)
+	}
+}
+
+func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
+	production := func() map[string]string {
+		values := testEnv()
+		values["NOVRO_ENVIRONMENT"] = "production"
+		values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
+		values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
+		values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+		values["NOVRO_SESSION_COOKIE_SECURE"] = "true"
+		return values
+	}
+
+	values := production()
+	values["NOVRO_HTTP_ADDR"] = "0.0.0.0:8080"
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("expected public production listener error, got %v", err)
+	}
+
+	values = production()
+	values["NOVRO_ALLOWED_ORIGINS"] = "http://novro.example.com"
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "HTTPS") {
+		t.Fatalf("expected insecure production origin error, got %v", err)
+	}
+
+	for _, origin := range []string{
+		"https://user@novro.example.com",
+		"https://novro.example.com/console",
+		"https://novro.example.com?source=test",
+		"ftp://novro.example.com",
+	} {
+		values = testEnv()
+		values["NOVRO_ALLOWED_ORIGINS"] = origin
+		if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "NOVRO_ALLOWED_ORIGINS") {
+			t.Fatalf("origin %q was not rejected: %v", origin, err)
+		}
+	}
+
+	values = production()
+	if _, err := loadMap(values); err != nil {
+		t.Fatalf("valid production network configuration rejected: %v", err)
 	}
 }
 
