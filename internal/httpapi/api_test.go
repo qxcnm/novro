@@ -183,7 +183,7 @@ func testAPI(authService *fakeAPIAuth, users *fakeAPIUsers) http.Handler {
 }
 
 func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fakeAPIKeys) http.Handler {
-	return New(Dependencies{
+	inner := New(Dependencies{
 		Auth:                authService,
 		Users:               users,
 		APIKeys:             apiKeys,
@@ -193,6 +193,12 @@ func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fak
 		CookieSecure:        true,
 		AllowedOrigins:      []string{"http://localhost:3000"},
 		RegistrationEnabled: true,
+	})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && r.Header.Get("Origin") == "" {
+			r.Header.Set("Origin", "http://localhost:3000")
+		}
+		inner.ServeHTTP(w, r)
 	})
 }
 
@@ -219,6 +225,7 @@ func TestRegistrationHonorsConfigurationAndSetupState(t *testing.T) {
 			AllowedOrigins: []string{"http://localhost:3000"}, RegistrationEnabled: false,
 		})
 		request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","password":"long-test-password"}`))
+		request.Header.Set("Origin", "http://localhost:3000")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "registration_disabled") {
@@ -397,6 +404,37 @@ func TestUnsafeRequestRejectsUnknownOrigin(t *testing.T) {
 	}
 }
 
+func TestUnsafeAPIRequestRequiresAllowedOrigin(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
+	response := httptest.NewRecorder()
+	New(Dependencies{
+		Auth: &fakeAPIAuth{}, Users: &fakeAPIUsers{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CookieName: "novro_session", AllowedOrigins: []string{"http://localhost:3000"},
+	}).ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "invalid_origin") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestGatewayRequestDoesNotUseBrowserOriginValidation(t *testing.T) {
+	called := false
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{}, Users: &fakeAPIUsers{},
+		Gateway: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if !called || response.Code != http.StatusNoContent {
+		t.Fatalf("gateway called=%v status=%d body=%s", called, response.Code, response.Body.String())
+	}
+}
+
 func TestAdminRoutesRequireAdmin(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}}
 	id := uuid.New().String()
@@ -458,6 +496,7 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","api_key":"upstream-secret"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || strings.Contains(response.Body.String(), "upstream-secret") {
@@ -466,6 +505,7 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 
 	id := uuid.New()
 	request = httptest.NewRequest(http.MethodPatch, "/api/admin/providers/"+id.String(), strings.NewReader(`{"display_name":"DeepSeek API"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || providers.updateInput.DisplayName == nil || *providers.updateInput.DisplayName != "DeepSeek API" {
@@ -476,8 +516,9 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 func TestProviderValidationErrorIsStable(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providers := &fakeProviders{err: provider.ErrCodeTaken}
-	handler := New(Dependencies{Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: providers, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	handler := New(Dependencies{Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: providers, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"}})
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "provider_code_taken") {

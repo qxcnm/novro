@@ -37,6 +37,10 @@ NOVRO_PUBLIC_URL=https://novro.example.com
 NOVRO_ALLOWED_ORIGINS=https://novro.example.com
 ```
 
+反向代理必须透传浏览器的 `Origin` 请求头。Go 服务会对 `/api/*` 的非安全方法校验
+该值是否完整匹配 `NOVRO_ALLOWED_ORIGINS`；不要用代理重写、删除或替换这个请求头。
+`/v1/*` 的 API Key 请求不依赖浏览器 `Origin`，可由非浏览器客户端直接调用。
+
 Next.js 进程只需要服务端变量：
 
 ```env

@@ -944,13 +944,11 @@ func (h *apiHandler) internalError(w http.ResponseWriter, operation string, err 
 
 func (h *apiHandler) validateOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			origin := strings.TrimRight(r.Header.Get("Origin"), "/")
-			if origin != "" {
-				if _, ok := h.allowedOrigins[origin]; !ok {
-					writeError(w, http.StatusForbidden, "invalid_origin", "请求来源无效")
-					return
-				}
+			if _, ok := h.allowedOrigins[origin]; !ok {
+				writeError(w, http.StatusForbidden, "invalid_origin", "请求来源无效")
+				return
 			}
 		}
 		next.ServeHTTP(w, r)

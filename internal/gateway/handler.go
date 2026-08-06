@@ -465,7 +465,14 @@ func newOutboundClient() *http.Client {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 60 * time.Second,
 	}
-	return &http.Client{Transport: transport}
+	return &http.Client{
+		Transport: transport,
+		// Provider endpoints are administrator-controlled, but their responses
+		// must never redirect credentials to another host.
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func unsafeUpstreamIP(ip net.IP) bool {

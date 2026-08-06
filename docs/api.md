@@ -37,8 +37,11 @@
 | `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改提供商、上游名称和单价 |
 | `PATCH` | `/api/admin/model-routes/{id}/status` | 管理员 | 启用或停用模型路由 |
 
-控制台写请求校验 `Origin`。错误使用 `error.code` 与安全的中文提示，不返回 SQL、
-连接字符串、密码哈希或会话令牌。
+控制台 `/api/*` 的写请求（除 `GET`、`HEAD` 和 `OPTIONS` 外）必须携带
+`Origin`，并且必须匹配 `NOVRO_ALLOWED_ORIGINS` 中配置的完整来源；缺失或不匹配时
+返回 `403 invalid_origin`。反向代理必须保留浏览器的 `Origin` 请求头。模型兼容
+`/v1/*` 使用 API Key 的机器请求不受这条浏览器来源规则影响。错误使用 `error.code`
+与安全的中文提示，不返回 SQL、连接字符串、密码哈希或会话令牌。
 
 每个 HTTP 请求都会返回 `X-Novro-Request-ID`。错误 JSON 还会返回顶层
 `request_id`，控制台 API、网关鉴权失败和网关上游错误都使用同一 ID，便于结合结构化
@@ -54,7 +57,8 @@ ID Token 和 Client Secret 不发送给浏览器。
 `/v1` 模型兼容 API 已实现基础非流式和 SSE 流式转发。上游请求会使用管理员配置的
 提供商凭据，浏览器和 API 客户端永远不会收到上游密钥。面向 API 使用者的完整示例由
 前端 `/docs` 提供；模型目录的官方牌价不是当前 Novro 结算价，实际结算单价以模型路由
-配置为准。
+配置为准。上游返回重定向时网关不会自动跟随到新地址，而是将响应转换为安全的
+`502 upstream_error` 并释放本次预占余额，避免把提供商凭据带到未预期的主机。
 
 ## 1. 基础信息
 

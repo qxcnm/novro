@@ -341,6 +341,17 @@ func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {
 	}
 }
 
+func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
+	client := newOutboundClient()
+	if client.CheckRedirect == nil {
+		t.Fatal("default outbound client must reject redirects")
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://provider.example/redirect", nil)
+	if err := client.CheckRedirect(request, nil); !errors.Is(err, http.ErrUseLastResponse) {
+		t.Fatalf("redirect error=%v, want http.ErrUseLastResponse", err)
+	}
+}
+
 func TestUpstreamFailureRefundsReservation(t *testing.T) {
 	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("timeout") })}
