@@ -92,6 +92,20 @@ func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, a
 	if err != nil {
 		return fmt.Errorf("lock wallet for usage: %w", err)
 	}
+	existing, err := tx.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(walletEntity.ID),
+		entwalletentry.ReferenceIDEQ(referenceID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageReservation),
+	).Only(ctx)
+	if err == nil {
+		if existing.AmountMicros == -amount {
+			return nil
+		}
+		return ErrRequestConflict
+	}
+	if !ent.IsNotFound(err) {
+		return fmt.Errorf("read existing usage reservation: %w", err)
+	}
 	if walletEntity.BalanceMicros < amount {
 		return ErrInsufficientBalance
 	}
@@ -120,6 +134,20 @@ func (s *EntStore) Refund(ctx context.Context, userID, referenceID uuid.UUID, am
 	}
 	if err != nil {
 		return fmt.Errorf("lock wallet for refund: %w", err)
+	}
+	existing, err := tx.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(walletEntity.ID),
+		entwalletentry.ReferenceIDEQ(referenceID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageRefund),
+	).Only(ctx)
+	if err == nil {
+		if existing.AmountMicros == amount {
+			return nil
+		}
+		return ErrRequestConflict
+	}
+	if !ent.IsNotFound(err) {
+		return fmt.Errorf("read existing usage refund: %w", err)
 	}
 	if walletEntity.BalanceMicros > math.MaxInt64-amount {
 		return ErrInvalidInput
@@ -150,15 +178,41 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 	if err != nil {
 		return fmt.Errorf("lock wallet for usage finalization: %w", err)
 	}
+	existingUsage, err := tx.APIUsage.Query().Where(entapiusage.RequestIDEQ(input.RequestID)).Only(ctx)
+	if err == nil {
+		if sameUsage(existingUsage, input) {
+			return nil
+		}
+		return ErrRequestConflict
+	}
+	if !ent.IsNotFound(err) {
+		return fmt.Errorf("read existing API usage: %w", err)
+	}
 	refund := input.ReservedMicros - input.CostMicros
-	next := walletEntity.BalanceMicros + refund
-	if refund > 0 {
-		if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
-			return fmt.Errorf("release unused usage balance: %w", err)
+	existingRefund, refundErr := tx.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(walletEntity.ID),
+		entwalletentry.ReferenceIDEQ(input.RequestID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageRefund),
+	).Only(ctx)
+	if refundErr == nil {
+		if refund == 0 || existingRefund.AmountMicros != refund {
+			return ErrRequestConflict
 		}
-		if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(input.RequestID).SetEntryType(entwalletentry.EntryTypeUsageRefund).SetAmountMicros(refund).SetBalanceAfterMicros(next).SetDescription("释放未使用的调用预占").Save(ctx); err != nil {
-			return fmt.Errorf("record unused usage balance: %w", err)
+	} else if ent.IsNotFound(refundErr) {
+		if refund > 0 {
+			if walletEntity.BalanceMicros > math.MaxInt64-refund {
+				return ErrInvalidInput
+			}
+			next := walletEntity.BalanceMicros + refund
+			if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
+				return fmt.Errorf("release unused usage balance: %w", err)
+			}
+			if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(input.RequestID).SetEntryType(entwalletentry.EntryTypeUsageRefund).SetAmountMicros(refund).SetBalanceAfterMicros(next).SetDescription("释放未使用的调用预占").Save(ctx); err != nil {
+				return fmt.Errorf("record unused usage balance: %w", err)
+			}
 		}
+	} else {
+		return fmt.Errorf("read existing usage finalization refund: %w", refundErr)
 	}
 	if _, err := tx.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetInputTokens(input.InputTokens).SetOutputTokens(input.OutputTokens).SetCostMicros(input.CostMicros).SetReservedMicros(input.ReservedMicros).SetEstimated(input.Estimated).SetUpstreamRequestID(input.UpstreamRequestID).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt).Save(ctx); err != nil {
 		return fmt.Errorf("record API usage: %w", err)
@@ -167,6 +221,14 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 		return fmt.Errorf("commit usage finalization: %w", err)
 	}
 	return nil
+}
+
+func sameUsage(existing *ent.APIUsage, input UsageInput) bool {
+	return existing != nil && existing.UserID == input.UserID && existing.APIKeyID == input.APIKeyID &&
+		existing.ModelRouteID == input.ModelRouteID && string(existing.Endpoint) == input.Endpoint &&
+		existing.InputTokens == input.InputTokens && existing.OutputTokens == input.OutputTokens &&
+		existing.CostMicros == input.CostMicros && existing.ReservedMicros == input.ReservedMicros &&
+		existing.Estimated == input.Estimated && existing.UpstreamRequestID == input.UpstreamRequestID
 }
 
 func walletFromEnt(entity *ent.Wallet) Wallet {

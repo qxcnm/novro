@@ -333,6 +333,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{WalletEntriesColumns[1]},
 			},
+			{
+				Name:    "walletentry_wallet_id_reference_id_entry_type",
+				Unique:  true,
+				Columns: []*schema.Column{WalletEntriesColumns[8], WalletEntriesColumns[1], WalletEntriesColumns[2]},
+			},
 		},
 	}
 	// Tables holds all the tables in the schema.

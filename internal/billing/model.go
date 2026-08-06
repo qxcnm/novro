@@ -11,6 +11,7 @@ var (
 	ErrInvalidInput        = errors.New("invalid billing input")
 	ErrWalletNotFound      = errors.New("wallet not found")
 	ErrInsufficientBalance = errors.New("insufficient balance")
+	ErrRequestConflict     = errors.New("billing request conflicts with an existing operation")
 )
 
 type EntryType string

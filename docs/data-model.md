@@ -73,7 +73,8 @@ Wallet
 `0001_users_and_sessions.sql` 创建用户和会话；
 `0002_registration_oidc_and_setup.sql` 将本地密码改为可空，并创建外部身份与安装标记；
 `0003_api_keys.sql` 创建用户 API Key；`0004_providers.sql` 创建加密提供商配置；
-`0005_wallets_model_routes_and_usage.sql` 创建钱包、流水、模型路由和调用用量。
+`0005_wallets_model_routes_and_usage.sql` 创建钱包、流水、模型路由和调用用量；
+`0006_idempotent_wallet_entries.sql` 为调用预占和退款增加幂等唯一约束。
 迁移由显式命令运行，不在服务启动时自动执行。
 
 ## 7. wallets
@@ -105,7 +106,9 @@ Wallet
 余额能力保留流水表，方便审计、人工调整和调用结算。
 
 调用开始时先写入负的 `usage_reservation`，成功后写入释放差额的 `usage_refund`；两者的
-净变化就是最终调用费用。钱包行使用 `SELECT ... FOR UPDATE` 语义锁定。
+净变化就是最终调用费用。钱包行使用 `SELECT ... FOR UPDATE` 语义锁定。同一钱包的
+`reference_id + entry_type` 唯一，使余额预占和退款可以安全重试；相同金额的重复请求
+视为已完成，不同金额的重复请求视为冲突。
 
 ## 9. api_keys
 
