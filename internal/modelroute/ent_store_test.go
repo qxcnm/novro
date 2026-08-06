@@ -1,0 +1,128 @@
+package modelroute
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	"github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent"
+	"github.com/novro-gateway/novro/ent/migrate"
+	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
+	entprovider "github.com/novro-gateway/novro/ent/provider"
+)
+
+func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
+	client := openModelRouteIntegrationClient(t)
+	ctx := context.Background()
+	activeProvider, err := client.Provider.Create().
+		SetCode("active-provider").SetDisplayName("Active Provider").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://active.example.com").
+		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	if err != nil {
+		t.Fatalf("create active provider: %v", err)
+	}
+	disabledProvider, err := client.Provider.Create().
+		SetCode("disabled-provider").SetDisplayName("Disabled Provider").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://disabled.example.com").
+		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").
+		SetStatus(entprovider.StatusDisabled).Save(ctx)
+	if err != nil {
+		t.Fatalf("create disabled provider: %v", err)
+	}
+	if _, err := client.ModelRoute.Create().SetProviderID(activeProvider.ID).
+		SetPublicName("alpha-chat").SetDisplayName("Alpha Chat").SetUpstreamName("alpha-upstream").
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); err != nil {
+		t.Fatalf("create active matching route: %v", err)
+	}
+	if _, err := client.ModelRoute.Create().SetProviderID(activeProvider.ID).
+		SetPublicName("beta-chat").SetDisplayName("Beta Chat").SetUpstreamName("beta-upstream").
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetStatus(entmodelroute.StatusDisabled).Save(ctx); err != nil {
+		t.Fatalf("create disabled matching route: %v", err)
+	}
+	if _, err := client.ModelRoute.Create().SetProviderID(disabledProvider.ID).
+		SetPublicName("gamma-chat").SetDisplayName("Gamma Chat").SetUpstreamName("gamma-upstream").
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); err != nil {
+		t.Fatalf("create route with disabled provider: %v", err)
+	}
+
+	store := NewEntStore(client)
+	items, err := store.List(ctx, ListFilter{Search: "beta", Status: StatusDisabled})
+	if err != nil {
+		t.Fatalf("list filtered model routes: %v", err)
+	}
+	if len(items) != 1 || items[0].PublicName != "beta-chat" || items[0].Status != StatusDisabled {
+		t.Fatalf("unexpected filtered routes: %+v", items)
+	}
+	items, err = store.List(ctx, ListFilter{Search: "disabled-provider", Status: StatusActive})
+	if err != nil {
+		t.Fatalf("list provider-filtered model routes: %v", err)
+	}
+	if len(items) != 1 || items[0].PublicName != "gamma-chat" {
+		t.Fatalf("unexpected provider-filtered routes: %+v", items)
+	}
+}
+
+func openModelRouteIntegrationClient(t *testing.T) *ent.Client {
+	t.Helper()
+	dsn := strings.TrimSpace(os.Getenv("NOVRO_TEST_MYSQL_DSN"))
+	if dsn == "" {
+		t.Skip("set NOVRO_TEST_MYSQL_DSN to run the MySQL model-route integration test")
+	}
+	serverConfig, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatalf("parse NOVRO_TEST_MYSQL_DSN: %v", err)
+	}
+	serverConfig.DBName = ""
+	serverConfig.MultiStatements = true
+	serverConfig.ParseTime = true
+	serverConfig.Loc = time.UTC
+	connector, err := mysql.NewConnector(serverConfig)
+	if err != nil {
+		t.Fatalf("create MySQL integration connector: %v", err)
+	}
+	adminDB := sql.OpenDB(connector)
+	adminDB.SetMaxOpenConns(2)
+	t.Cleanup(func() { _ = adminDB.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := adminDB.PingContext(ctx); err != nil {
+		t.Fatalf("connect to isolated MySQL integration server: %v", err)
+	}
+	databaseName := "novro_test_" + strings.ReplaceAll(uuid.New().String(), "-", "")
+	if _, err := adminDB.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci", databaseName)); err != nil {
+		t.Fatalf("create isolated MySQL integration database: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		_, _ = adminDB.ExecContext(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", databaseName))
+	})
+	databaseConfig := *serverConfig
+	databaseConfig.DBName = databaseName
+	databaseConnector, err := mysql.NewConnector(&databaseConfig)
+	if err != nil {
+		t.Fatalf("create isolated database connector: %v", err)
+	}
+	database := sql.OpenDB(databaseConnector)
+	database.SetMaxOpenConns(10)
+	database.SetMaxIdleConns(10)
+	t.Cleanup(func() { _ = database.Close() })
+	if err := database.PingContext(ctx); err != nil {
+		t.Fatalf("connect to isolated integration database: %v", err)
+	}
+	if err := migrate.Apply(ctx, database); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+	driver := entsql.OpenDB(dialect.MySQL, database)
+	client := ent.NewClient(ent.Driver(driver))
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}

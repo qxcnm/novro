@@ -37,10 +37,10 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	query := s.client.ModelRoute.Query().WithProvider()
 	if filter.Search != "" {
-		query.Where(entmodelroute.Or(entmodelroute.PublicNameContainsFold(filter.Search), entmodelroute.DisplayNameContainsFold(filter.Search), entmodelroute.UpstreamNameContainsFold(filter.Search), entmodelroute.HasProviderWith(entprovider.Or(entprovider.CodeContainsFold(filter.Search), entprovider.DisplayNameContainsFold(filter.Search)))))
+		query = query.Where(entmodelroute.Or(entmodelroute.PublicNameContainsFold(filter.Search), entmodelroute.DisplayNameContainsFold(filter.Search), entmodelroute.UpstreamNameContainsFold(filter.Search), entmodelroute.HasProviderWith(entprovider.Or(entprovider.CodeContainsFold(filter.Search), entprovider.DisplayNameContainsFold(filter.Search)))))
 	}
 	if filter.Status != "" {
-		query.Where(entmodelroute.StatusEQ(entmodelroute.Status(filter.Status)))
+		query = query.Where(entmodelroute.StatusEQ(entmodelroute.Status(filter.Status)))
 	}
 	entities, err := query.Order(ent.Asc(entmodelroute.FieldPublicName)).All(ctx)
 	if err != nil {
