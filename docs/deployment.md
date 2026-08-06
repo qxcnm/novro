@@ -85,7 +85,9 @@ pnpm --dir apps/web build
 ```
 
 迁移在 `ent/migrate/migrations` 中按文件名排序执行，由数据库锁防止多个实例并发迁移，
-并记录到 `novro_schema_migrations`。正常服务启动不会自动修改数据库结构。
+并把版本和 SQL 的 SHA-256 记录到 `novro_schema_migrations`。从旧版本首次升级时会为
+已有版本建立当前校验和基线；之后历史 SQL 被修改，或发布包缺失数据库中已应用的迁移
+时，迁移命令会拒绝继续。正常服务启动不会自动修改数据库结构。
 
 启动两个受进程管理器监督的进程：
 
