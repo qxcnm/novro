@@ -289,12 +289,31 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	flusher, _ := w.(http.Flusher)
 	usage := tokenUsage{}
 	completed := false
-	scanner := bufio.NewScanner(response.Body)
-	scanner.Buffer(make([]byte, 64<<10), 4<<20)
-	for scanner.Scan() {
-		line := append(append([]byte(nil), scanner.Bytes()...), '\n')
-		if bytes.HasPrefix(scanner.Bytes(), []byte("data:")) {
-			data := bytes.TrimSpace(bytes.TrimPrefix(scanner.Bytes(), []byte("data:")))
+	reader := bufio.NewReaderSize(response.Body, 64<<10)
+	line := make([]byte, 0, 64<<10)
+	lineTooLarge := false
+	var relayErr error
+	for {
+		fragment, isPrefix, readErr := reader.ReadLine()
+		if len(fragment) == 0 && readErr != nil && len(line) == 0 && !lineTooLarge {
+			if readErr != io.EOF {
+				relayErr = readErr
+			}
+			break
+		}
+		if !lineTooLarge {
+			if len(line)+len(fragment) <= maxUpstreamBodyBytes {
+				line = append(line, fragment...)
+			} else {
+				if bytes.HasPrefix(line, []byte("data:")) {
+					usage.Estimated = true
+				}
+				line = nil
+				lineTooLarge = true
+			}
+		}
+		if !isPrefix && !lineTooLarge && bytes.HasPrefix(line, []byte("data:")) {
+			data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
 			if streamCompleted(endpoint, data) {
 				completed = true
 			}
@@ -302,12 +321,36 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 				usage.merge(parseUsage(data))
 			}
 		}
-		if _, err := w.Write(line); err != nil {
-			break
+		if len(fragment) > 0 {
+			written, writeErr := w.Write(fragment)
+			if writeErr == nil && written != len(fragment) {
+				writeErr = io.ErrShortWrite
+			}
+			if writeErr != nil {
+				relayErr = writeErr
+				break
+			}
+		}
+		if !isPrefix {
+			if _, writeErr := w.Write([]byte{'\n'}); writeErr != nil {
+				relayErr = writeErr
+				break
+			}
+			line = line[:0]
+			lineTooLarge = false
 		}
 		if flusher != nil {
 			flusher.Flush()
 		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				relayErr = readErr
+			}
+			break
+		}
+	}
+	if relayErr != nil {
+		h.logger.Warn("relay gateway stream", "request_id", requestID, "provider", route.Provider.Code, "error", relayErr)
 	}
 	if usage.Input == 0 && usage.Output == 0 {
 		usage = tokenUsage{Input: inputEstimate, Output: outputMaximum, Estimated: true}

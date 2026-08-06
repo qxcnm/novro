@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -61,6 +63,19 @@ func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) erro
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
+
+type terminalErrorReader struct {
+	reader *strings.Reader
+	err    error
+}
+
+func (r *terminalErrorReader) Read(target []byte) (int, error) {
+	if r.reader.Len() > 0 {
+		read, _ := r.reader.Read(target)
+		return read, nil
+	}
+	return 0, r.err
+}
 
 func gatewayActor() apikey.Actor {
 	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New()}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
@@ -214,6 +229,25 @@ func TestStreamingUsageIsCaptured(t *testing.T) {
 	}
 }
 
+func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
+	biller := &fakeBilling{}
+	padding := strings.Repeat("x", (4<<20)+1024)
+	stream := "data: {\"id\":\"stream-large\",\"padding\":\"" + padding + "\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != stream {
+		t.Fatalf("large SSE line was not relayed completely: status=%d bytes=%d want=%d", response.Code, response.Body.Len(), len(stream))
+	}
+	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 9 || biller.usage.Estimated {
+		t.Fatalf("unexpected large streamed usage %+v", biller.usage)
+	}
+}
+
 func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -279,6 +313,30 @@ func TestInterruptedStreamingUsageIsMarkedEstimated(t *testing.T) {
 	}
 	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 2 || !biller.usage.Estimated {
 		t.Fatalf("interrupted stream usage was not marked estimated: %+v", biller.usage)
+	}
+}
+
+func TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage(t *testing.T) {
+	biller := &fakeBilling{}
+	stream := "data: {\"id\":\"stream-complete\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
+	readFailure := errors.New("upstream read failed")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(&terminalErrorReader{reader: strings.NewReader(stream), err: readFailure})}, nil
+	})}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client, Logger: logger})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != stream {
+		t.Fatalf("stream changed after terminal read error: status=%d bytes=%d want=%d", response.Code, response.Body.Len(), len(stream))
+	}
+	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 9 || biller.usage.Estimated {
+		t.Fatalf("unexpected completed usage after terminal read error %+v", biller.usage)
+	}
+	if !strings.Contains(logs.String(), "relay gateway stream") || !strings.Contains(logs.String(), readFailure.Error()) {
+		t.Fatalf("terminal stream error was not logged: %s", logs.String())
 	}
 }
 
