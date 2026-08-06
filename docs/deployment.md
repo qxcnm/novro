@@ -51,6 +51,8 @@ Next.js 进程只需要服务端变量：
 NOVRO_SERVER_URL=http://127.0.0.1:8080
 ```
 
+该值必须是无凭据、路径、查询或片段的 `http/https` Origin；生产构建只接受
+`localhost`、127/8 或 `::1` 回环地址，并应在构建和启动 Next.js 时设置同一个值。
 不要把它改成 `NEXT_PUBLIC_*`。`NOVRO_SESSION_SECRET` 和
 `NOVRO_PROVIDER_ENCRYPTION_SECRET` 必须独立生成；后者丢失后无法解密已保存的提供商
 凭据。生产配置会拒绝明文数据库连接、HTTP 公共地址或非 Secure 的会话 Cookie。
