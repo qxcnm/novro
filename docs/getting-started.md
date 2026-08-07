@@ -45,7 +45,7 @@ NOVRO_DATABASE_TLS=true
 
 当前 MySQL 客户端保持 TLS 加密但不验证证书链，与现有 DBeaver 连接方式一致；
 `NOVRO_DATABASE_TLS=false` 只允许用于明确受控的本地开发环境。
-首次使用管理员账号创建数据库，然后切换到应用账号验证连接并显式执行迁移：
+首次使用管理员账号创建数据库，然后切换到应用账号验证连接。可以在启动前显式执行迁移：
 
 ```powershell
 go run ./cmd/novro init-db
@@ -53,10 +53,12 @@ go run ./cmd/novro check-db
 go run ./cmd/novro migrate
 ```
 
-`init-db` 只创建配置中的数据库，不创建表；正常服务启动不会调用该命令。
+`init-db` 只创建配置中的数据库，不创建表。`migrate` 适合在部署或排障时提前执行；
+正常服务启动也会使用同一迁移器自动核对迁移记录并补齐未执行文件。
 
-迁移位于 `ent/migrate/migrations`，需要与 Ent Schema 一起审查。服务正常启动时
-不会自动改变数据库结构。
+迁移位于 `ent/migrate/migrations`，需要与 Ent Schema 一起审查。启动过程会按文件名
+顺序执行迁移，由数据库锁避免并发执行，并核对已执行文件的 SHA-256；迁移失败时服务
+不会开始监听端口。
 
 ## 4. 初始化管理员
 
@@ -75,18 +77,21 @@ go run ./cmd/novro
 
 ```powershell
 $env:NOVRO_BOOTSTRAP_USERNAME='admin'
+$env:NOVRO_BOOTSTRAP_EMAIL='admin@example.com'
 $env:NOVRO_BOOTSTRAP_DISPLAY_NAME='Administrator'
 $env:NOVRO_BOOTSTRAP_PASSWORD='<LOCAL_SECRET>'
 go run ./cmd/novro bootstrap-admin
 Remove-Item Env:NOVRO_BOOTSTRAP_PASSWORD
 ```
 
-密码必须为 12 到 72 字节。命令不接受明文密码参数，也不会打印密码。
+用户名、邮箱和密码都是必填项，密码必须为 12 到 72 字节。命令不接受明文密码参数，
+也不会打印密码。
 
 ## 5. 注册与 OIDC
 
 `NOVRO_REGISTRATION_ENABLED=true` 允许公开注册普通成员，不能注册管理员。首次
-管理员初始化完成前，注册和 OIDC 自动注册都会被拒绝。
+管理员初始化完成前，注册和 OIDC 自动注册都会被拒绝。本地注册需要用户名、邮箱和密码；
+登录时可填写用户名或邮箱。
 
 配置第三方 OIDC 时，在身份平台登记回调地址：
 
@@ -130,21 +135,31 @@ pnpm --dir apps/web dev
 
 ## 7. 当前功能
 
-- 用户登录、退出和当前用户查询
+- 用户名或邮箱登录、退出和当前用户查询
 - 管理员用户列表、搜索、筛选、分页、创建、资料与角色编辑、启用、停用和密码重置
 - 最后一个启用管理员不能被停用或降级
 - 重置密码会撤销该用户全部有效会话
 - 密码使用 bcrypt，浏览器会话使用随机令牌，数据库只保存 HMAC-SHA256 哈希
 - 控制台支持桌面侧边导航、移动端导航抽屉，以及系统、浅色和深色主题
 - 用户 API Key 创建、一次性展示和撤销；管理员 Key 审计与撤销
-- HTTPS 提供商配置、凭据加密、模型路由和输入/输出单价维护
-- 用户余额、余额流水、用量记录、原子余额调整和 `/v1` 模型网关
+- HTTPS 提供商配置、凭据加密、模型同步、模型目录和分维度单价维护
+- 用户余额、余额流水、易支付在线充值、用量记录、原子余额调整和 `/v1` 模型网关
+- 独立的 `/admin/payments` 易支付配置页；支持动态支付方式、充值金额、赠送档位、回调地址和全站充值记录
 
-启动服务前必须先执行包含 `0003` 到 `0006` 的显式迁移。没有启用的提供商或模型
+服务启动会自动核对并补齐包含 `0003` 到 `0014` 的迁移。`0009` 会按审计日期的官方
+人民币价格初始化当前 DeepSeek、GLM 和 Kimi 热门模型目录。没有启用的提供商或模型
 路由时，`/v1/models` 会返回空列表，模型调用不会访问任何上游。
 
-为调用上游，管理员先在 `/admin/providers` 保存 HTTPS 提供商，再在 `/admin/models`
-创建对外模型名、上游模型名和人民币 / 百万 tokens 单价。用户创建自己的 Novro API Key
+在线充值默认关闭。可在 `/admin/payments` 填写易支付配置并启用；API 地址可以是网关根地址或完整
+`submit.php` 地址。首次部署也可以通过 `NOVRO_EPAY_API_URL`、`NOVRO_EPAY_MERCHANT_ID` 和
+`NOVRO_EPAY_MERCHANT_KEY` 提供一次性引导默认值，服务会加密写入数据库，之后以管理页面为准。
+`NOVRO_EPAY_CHANNELS` 仅用于首次引导默认渠道，页面保存后由数据库配置接管。
+支付网关必须能访问 `${NOVRO_PUBLIC_URL}/api/payments/epay/notify`，该地址只接受通过
+商户密钥验签且订单号、渠道、金额完全匹配的成功通知。
+
+为调用上游，管理员先在 `/admin/providers` 保存 HTTPS 提供商。系统会尝试同步上游模型；
+管理员也可以从 `/admin/upstream-models` 模型目录手动多选，并在同一页面的“关联模型路由配置”
+Tab 维护对外模型名。模型目录维护人民币 / 百万 tokens 的各维度单价。用户创建自己的 Novro API Key
 后，使用 `/v1` 前缀请求；网关会在调用前预占余额，成功后按上游 usage 结算。
 
 ## 8. 配置 Kimi（Moonshot）
@@ -160,8 +175,8 @@ API Key 只会加密保存在服务端，不会返回给浏览器：
 API Key：从 Moonshot 控制台创建的密钥
 ```
 
-然后在 `/admin/models` 为需要开放的模型创建路由。`上游模型名` 必须填写 Moonshot
-账户实际可用的模型 ID（例如 `kimi-k2.6` 或账户中显示的其他 Kimi 模型），对外模型名
-可以使用团队约定的稳定名称。输入和输出单价按人民币 / 百万 tokens 填写；Novro 会按
+新增成功后，从同步结果或模型目录多选需要开放的模型并建立关联路由。模型 ID 必须是 Moonshot
+账户实际可用的值（例如 `kimi-k2.6` 或账户中显示的其他 Kimi 模型），对外模型名
+可以使用团队约定的稳定名称。各维度单价按人民币 / 百万 tokens 填写；Novro 会按
 上游返回的 `usage` 结算，没有 usage 的响应会标记为估算。Kimi 的模型可用性、上下文
 长度和价格会变化，以 Moonshot 控制台与官方文档为准。

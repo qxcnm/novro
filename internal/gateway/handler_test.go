@@ -19,6 +19,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -98,15 +99,18 @@ func (r *terminalErrorReader) Read(target []byte) (int, error) {
 }
 
 func gatewayActor() apikey.Actor {
-	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New()}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
+	groupID := uuid.New()
+	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New()}, User: user.Record{ID: uuid.New(), Status: user.StatusActive, BillingGroupID: &groupID, BillingGroup: &user.BillingGroupSummary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}}
 }
 
 func openAIRoute() modelroute.Resolved {
-	return modelroute.Resolved{Record: modelroute.Record{ID: uuid.New(), PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Protocol: provider.ProtocolOpenAI}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
+	routeID, upstreamID := uuid.New(), uuid.New()
+	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
 }
 
 func anthropicRoute() modelroute.Resolved {
-	return modelroute.Resolved{Record: modelroute.Record{ID: uuid.New(), PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocol: provider.ProtocolAnthropic}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
+	routeID, upstreamID := uuid.New(), uuid.New()
+	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocol: provider.ProtocolAnthropic}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "kimi-k3-upstream", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
 }
 
 func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
@@ -506,5 +510,46 @@ func TestUpstreamFailureRefundsReservation(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadGateway || biller.refundCalls != 2 || biller.refunded != biller.reserved {
 		t.Fatalf("status=%d refund_calls=%d reserved=%d refunded=%d", response.Code, biller.refundCalls, biller.reserved, biller.refunded)
+	}
+}
+
+func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
+	tests := []struct {
+		name, body string
+		want       tokenUsage
+	}{
+		{name: "glm cached details", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_tokens_details":{"cached_tokens":1200}}}`, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
+		{name: "deepseek hit and miss", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_cache_hit_tokens":1200,"prompt_cache_miss_tokens":800}}`, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
+		{name: "kimi top level cached", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":10}}`, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
+		{name: "openai cache read field is prompt subset", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cache_read_input_tokens":10}}`, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
+		{name: "anthropic cache read is additional input", body: `{"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":10}}`, want: tokenUsage{Input: 110, UncachedInput: 100, CacheRead: 10, Output: 20}},
+		{name: "anthropic cache creation", body: `{"usage":{"input_tokens":800,"output_tokens":500,"cache_read_input_tokens":1200,"cache_creation_input_tokens":300,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":100}}}`, want: tokenUsage{Input: 2300, UncachedInput: 800, CacheRead: 1200, CacheWrite: 200, CacheWrite1h: 100, Output: 500}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseUsage([]byte(tt.body))
+			if got.Input != tt.want.Input || got.UncachedInput != tt.want.UncachedInput || got.CacheRead != tt.want.CacheRead || got.CacheWrite != tt.want.CacheWrite || got.CacheWrite1h != tt.want.CacheWrite1h || got.Output != tt.want.Output {
+				t.Fatalf("got=%+v want=%+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUsageFallbackOnlyEstimatesMissingDimensionsAtHighestRate(t *testing.T) {
+	rates := billing.RateCard{InputMicros: 1, CacheReadMicros: 2, CacheWriteMicros: 3, CacheWrite1hMicros: 4, OutputMicros: 5}
+
+	usage := applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10,"completion_tokens":0}}`)), 100, 20, rates)
+	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 0 || usage.Estimated {
+		t.Fatalf("reported zero output must remain exact: %+v", usage)
+	}
+
+	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"completion_tokens":7}}`)), 100, 20, rates)
+	if usage.Input != 100 || usage.CacheWrite1h != 100 || usage.Output != 7 || !usage.Estimated {
+		t.Fatalf("missing input was not conservatively estimated: %+v", usage)
+	}
+
+	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10}}`)), 100, 20, rates)
+	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 20 || !usage.Estimated {
+		t.Fatalf("missing output was not conservatively estimated: %+v", usage)
 	}
 }

@@ -14,9 +14,13 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/systemsetting"
+	"github.com/novro-gateway/novro/ent/topuporder"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -84,9 +88,13 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			apikey.Table:        apikey.ValidColumn,
 			apiusage.Table:      apiusage.ValidColumn,
+			billinggroup.Table:  billinggroup.ValidColumn,
 			modelroute.Table:    modelroute.ValidColumn,
+			paymentconfig.Table: paymentconfig.ValidColumn,
 			provider.Table:      provider.ValidColumn,
 			systemsetting.Table: systemsetting.ValidColumn,
+			topuporder.Table:    topuporder.ValidColumn,
+			upstreammodel.Table: upstreammodel.ValidColumn,
 			user.Table:          user.ValidColumn,
 			useridentity.Table:  useridentity.ValidColumn,
 			usersession.Table:   usersession.ValidColumn,

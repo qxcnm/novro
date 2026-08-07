@@ -16,8 +16,12 @@ const (
 	Label = "user"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
+	FieldBillingGroupID = "billing_group_id"
 	// FieldUsername holds the string denoting the username field in the database.
 	FieldUsername = "username"
+	// FieldEmail holds the string denoting the email field in the database.
+	FieldEmail = "email"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
@@ -42,8 +46,12 @@ const (
 	EdgeWallet = "wallet"
 	// EdgeWalletEntries holds the string denoting the wallet_entries edge name in mutations.
 	EdgeWalletEntries = "wallet_entries"
+	// EdgeTopUpOrders holds the string denoting the top_up_orders edge name in mutations.
+	EdgeTopUpOrders = "top_up_orders"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
+	EdgeBillingGroup = "billing_group"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// SessionsTable is the table that holds the sessions relation/edge.
@@ -81,6 +89,13 @@ const (
 	WalletEntriesInverseTable = "wallet_entries"
 	// WalletEntriesColumn is the table column denoting the wallet_entries relation/edge.
 	WalletEntriesColumn = "actor_user_id"
+	// TopUpOrdersTable is the table that holds the top_up_orders relation/edge.
+	TopUpOrdersTable = "top_up_orders"
+	// TopUpOrdersInverseTable is the table name for the TopUpOrder entity.
+	// It exists in this package in order to avoid circular dependency with the "topuporder" package.
+	TopUpOrdersInverseTable = "top_up_orders"
+	// TopUpOrdersColumn is the table column denoting the top_up_orders relation/edge.
+	TopUpOrdersColumn = "user_id"
 	// APIUsagesTable is the table that holds the api_usages relation/edge.
 	APIUsagesTable = "api_usages"
 	// APIUsagesInverseTable is the table name for the APIUsage entity.
@@ -88,12 +103,21 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "user_id"
+	// BillingGroupTable is the table that holds the billing_group relation/edge.
+	BillingGroupTable = "users"
+	// BillingGroupInverseTable is the table name for the BillingGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
+	BillingGroupInverseTable = "billing_groups"
+	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
+	BillingGroupColumn = "billing_group_id"
 )
 
 // Columns holds all SQL columns for user fields.
 var Columns = []string{
 	FieldID,
+	FieldBillingGroupID,
 	FieldUsername,
+	FieldEmail,
 	FieldDisplayName,
 	FieldPasswordHash,
 	FieldRole,
@@ -116,6 +140,8 @@ func ValidColumn(column string) bool {
 var (
 	// UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	UsernameValidator func(string) error
+	// EmailValidator is a validator for the "email" field. It is called by the builders before save.
+	EmailValidator func(string) error
 	// DefaultDisplayName holds the default value on creation for the "display_name" field.
 	DefaultDisplayName string
 	// DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
@@ -190,9 +216,19 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
+// ByBillingGroupID orders the results by the billing_group_id field.
+func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
+}
+
 // ByUsername orders the results by the username field.
 func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUsername, opts...).ToFunc()
+}
+
+// ByEmail orders the results by the email field.
+func ByEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmail, opts...).ToFunc()
 }
 
 // ByDisplayName orders the results by the display_name field.
@@ -293,6 +329,20 @@ func ByWalletEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByTopUpOrdersCount orders the results by top_up_orders count.
+func ByTopUpOrdersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTopUpOrdersStep(), opts...)
+	}
+}
+
+// ByTopUpOrders orders the results by top_up_orders terms.
+func ByTopUpOrders(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTopUpOrdersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByAPIUsagesCount orders the results by api_usages count.
 func ByAPIUsagesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -304,6 +354,13 @@ func ByAPIUsagesCount(opts ...sql.OrderTermOption) OrderOption {
 func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newAPIUsagesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByBillingGroupField orders the results by billing_group field.
+func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
 	}
 }
 func newSessionsStep() *sqlgraph.Step {
@@ -341,10 +398,24 @@ func newWalletEntriesStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, WalletEntriesTable, WalletEntriesColumn),
 	)
 }
+func newTopUpOrdersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TopUpOrdersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TopUpOrdersTable, TopUpOrdersColumn),
+	)
+}
 func newAPIUsagesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newBillingGroupStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BillingGroupInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
 	)
 }

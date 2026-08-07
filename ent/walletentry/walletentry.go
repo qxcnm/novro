@@ -78,8 +78,6 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// BalanceAfterMicrosValidator is a validator for the "balance_after_micros" field. It is called by the builders before save.
-	BalanceAfterMicrosValidator func(int64) error
 	// DefaultDescription holds the default value on creation for the "description" field.
 	DefaultDescription string
 	// DescriptionValidator is a validator for the "description" field. It is called by the builders before save.
@@ -96,8 +94,10 @@ type EntryType string
 // EntryType values.
 const (
 	EntryTypeManualAdjustment EntryType = "manual_adjustment"
+	EntryTypeTopUp            EntryType = "top_up"
 	EntryTypeUsageReservation EntryType = "usage_reservation"
 	EntryTypeUsageRefund      EntryType = "usage_refund"
+	EntryTypeUsageSettlement  EntryType = "usage_settlement"
 )
 
 func (et EntryType) String() string {
@@ -107,7 +107,7 @@ func (et EntryType) String() string {
 // EntryTypeValidator is a validator for the "entry_type" field enum values. It is called by the builders before save.
 func EntryTypeValidator(et EntryType) error {
 	switch et {
-	case EntryTypeManualAdjustment, EntryTypeUsageReservation, EntryTypeUsageRefund:
+	case EntryTypeManualAdjustment, EntryTypeTopUp, EntryTypeUsageReservation, EntryTypeUsageRefund, EntryTypeUsageSettlement:
 		return nil
 	default:
 		return fmt.Errorf("walletentry: invalid enum value for entry_type field: %q", et)

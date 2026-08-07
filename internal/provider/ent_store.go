@@ -3,9 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
 )
 
@@ -37,7 +39,7 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 }
 
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
-	query := s.client.Provider.Query()
+	query := s.client.Provider.Query().Where(entprovider.DeletedAtIsNil())
 	if filter.Search != "" {
 		query = query.Where(entprovider.Or(
 			entprovider.CodeContainsFold(filter.Search),
@@ -60,7 +62,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 }
 
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
-	update := s.client.Provider.UpdateOneID(id)
+	update := s.client.Provider.UpdateOneID(id).Where(entprovider.DeletedAtIsNil())
 	if params.DisplayName != nil {
 		update.SetDisplayName(*params.DisplayName)
 	}
@@ -87,7 +89,7 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 }
 
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
-	updated, err := s.client.Provider.UpdateOneID(id).SetStatus(entprovider.Status(status)).Save(ctx)
+	updated, err := s.client.Provider.UpdateOneID(id).Where(entprovider.DeletedAtIsNil()).SetStatus(entprovider.Status(status)).Save(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	}
@@ -95,6 +97,33 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 		return Record{}, fmt.Errorf("update provider status: %w", err)
 	}
 	return fromEnt(updated), nil
+}
+
+func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin provider delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	entity, err := tx.Provider.Query().Where(entprovider.IDEQ(id), entprovider.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("read provider before delete: %w", err)
+	}
+	now := time.Now().UTC()
+	if _, err := tx.ModelRoute.Update().Where(entmodelroute.ProviderIDEQ(id), entmodelroute.DeletedAtIsNil()).
+		SetStatus(entmodelroute.StatusDisabled).SetDeletedAt(now).Save(ctx); err != nil {
+		return fmt.Errorf("soft delete provider model routes: %w", err)
+	}
+	if _, err := entity.Update().SetStatus(entprovider.StatusDisabled).SetDeletedAt(now).Save(ctx); err != nil {
+		return fmt.Errorf("soft delete provider: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit provider delete: %w", err)
+	}
+	return nil
 }
 
 func fromEnt(entity *ent.Provider) Record {

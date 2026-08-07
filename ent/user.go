@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/wallet"
 )
@@ -19,8 +20,12 @@ type User struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
+	// BillingGroupID holds the value of the "billing_group_id" field.
+	BillingGroupID *uuid.UUID `json:"billing_group_id,omitempty"`
 	// Username holds the value of the "username" field.
 	Username string `json:"username,omitempty"`
+	// Email holds the value of the "email" field.
+	Email *string `json:"email,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
 	DisplayName string `json:"display_name,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
@@ -53,11 +58,15 @@ type UserEdges struct {
 	Wallet *Wallet `json:"wallet,omitempty"`
 	// WalletEntries holds the value of the wallet_entries edge.
 	WalletEntries []*WalletEntry `json:"wallet_entries,omitempty"`
+	// TopUpOrders holds the value of the top_up_orders edge.
+	TopUpOrders []*TopUpOrder `json:"top_up_orders,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// BillingGroup holds the value of the billing_group edge.
+	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [6]bool
+	loadedTypes [8]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -107,13 +116,33 @@ func (e UserEdges) WalletEntriesOrErr() ([]*WalletEntry, error) {
 	return nil, &NotLoadedError{edge: "wallet_entries"}
 }
 
+// TopUpOrdersOrErr returns the TopUpOrders value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) TopUpOrdersOrErr() ([]*TopUpOrder, error) {
+	if e.loadedTypes[5] {
+		return e.TopUpOrders, nil
+	}
+	return nil, &NotLoadedError{edge: "top_up_orders"}
+}
+
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) APIUsagesOrErr() ([]*APIUsage, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[6] {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
+}
+
+// BillingGroupOrErr returns the BillingGroup value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e UserEdges) BillingGroupOrErr() (*BillingGroup, error) {
+	if e.BillingGroup != nil {
+		return e.BillingGroup, nil
+	} else if e.loadedTypes[7] {
+		return nil, &NotFoundError{label: billinggroup.Label}
+	}
+	return nil, &NotLoadedError{edge: "billing_group"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -121,7 +150,9 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldUsername, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
+		case user.FieldBillingGroupID:
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
+		case user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
 		case user.FieldLastLoginAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -148,11 +179,25 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				_m.ID = *value
 			}
+		case user.FieldBillingGroupID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
+			} else if value.Valid {
+				_m.BillingGroupID = new(uuid.UUID)
+				*_m.BillingGroupID = *value.S.(*uuid.UUID)
+			}
 		case user.FieldUsername:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field username", values[i])
 			} else if value.Valid {
 				_m.Username = value.String
+			}
+		case user.FieldEmail:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email", values[i])
+			} else if value.Valid {
+				_m.Email = new(string)
+				*_m.Email = value.String
 			}
 		case user.FieldDisplayName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -236,9 +281,19 @@ func (_m *User) QueryWalletEntries() *WalletEntryQuery {
 	return NewUserClient(_m.config).QueryWalletEntries(_m)
 }
 
+// QueryTopUpOrders queries the "top_up_orders" edge of the User entity.
+func (_m *User) QueryTopUpOrders() *TopUpOrderQuery {
+	return NewUserClient(_m.config).QueryTopUpOrders(_m)
+}
+
 // QueryAPIUsages queries the "api_usages" edge of the User entity.
 func (_m *User) QueryAPIUsages() *APIUsageQuery {
 	return NewUserClient(_m.config).QueryAPIUsages(_m)
+}
+
+// QueryBillingGroup queries the "billing_group" edge of the User entity.
+func (_m *User) QueryBillingGroup() *BillingGroupQuery {
+	return NewUserClient(_m.config).QueryBillingGroup(_m)
 }
 
 // Update returns a builder for updating this User.
@@ -264,8 +319,18 @@ func (_m *User) String() string {
 	var builder strings.Builder
 	builder.WriteString("User(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	if v := _m.BillingGroupID; v != nil {
+		builder.WriteString("billing_group_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("username=")
 	builder.WriteString(_m.Username)
+	builder.WriteString(", ")
+	if v := _m.Email; v != nil {
+		builder.WriteString("email=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("display_name=")
 	builder.WriteString(_m.DisplayName)

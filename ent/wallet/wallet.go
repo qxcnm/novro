@@ -67,8 +67,6 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultBalanceMicros holds the default value on creation for the "balance_micros" field.
 	DefaultBalanceMicros int64
-	// BalanceMicrosValidator is a validator for the "balance_micros" field. It is called by the builders before save.
-	BalanceMicrosValidator func(int64) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.

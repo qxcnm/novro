@@ -1,5 +1,5 @@
-import ModelRoutesClient from "./model-routes-client";
+import { redirect } from "next/navigation";
 
 export default function AdminModelsPage() {
-  return <ModelRoutesClient />;
+  redirect("/admin/providers");
 }

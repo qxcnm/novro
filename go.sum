@@ -29,6 +29,12 @@ github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz
 github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
 github.com/go-openapi/inflect v0.19.0 h1:9jCH9scKIbHeV9m12SmPilScz6krDxKRasNNSNPXu/4=
 github.com/go-openapi/inflect v0.19.0/go.mod h1:lHpZVlpIQqLyKwJ4N+YSc9hchQy/i12fJykb83CRBH4=
+github.com/go-pay/gopay v1.5.122 h1:kuOz2qBQXGF+o4v6IOGfdFB05fquhEa32dVW98gk/bI=
+github.com/go-pay/gopay v1.5.122/go.mod h1:RzP9+1bPzIMAXGRL5RvYsZjib7wV2fhA3JxT5sjoi2w=
+github.com/go-pay/util v0.0.4 h1:TuwSU9o3Qd7m9v1PbzFuIA/8uO9FJnA6P7neG/NwPyk=
+github.com/go-pay/util v0.0.4/go.mod h1:Tsdhs8Ib9J9b4+NKNO1PHh5hWHhlg98PthsX0ckq6PM=
+github.com/go-pay/xlog v0.0.3 h1:avyMhCL/JgBHreoGx/am/kHxfs1udDOAeVqbmzP/Yes=
+github.com/go-pay/xlog v0.0.3/go.mod h1:mH47xbobrdsSHWsmFtSF5agWbMHFP+tK0ZbVCk5OAEw=
 github.com/go-sql-driver/mysql v1.10.0 h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=
 github.com/go-sql-driver/mysql v1.10.0/go.mod h1:M+cqaI7+xxXGG9swrdeUIoPG3Y3KCkF0pZej+SK+nWk=
 github.com/go-test/deep v1.0.3 h1:ZrJSEWsXzPOxaZnFteGEfooLba+ju3FYIbOrS+rQd68=

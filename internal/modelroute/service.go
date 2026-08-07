@@ -17,6 +17,7 @@ type Store interface {
 	List(context.Context, ListFilter) ([]Record, error)
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
+	Delete(context.Context, uuid.UUID) error
 	Resolve(context.Context, string) (Record, string, string, error)
 	ListActive(context.Context) ([]Record, error)
 }
@@ -34,7 +35,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	input.PublicName = strings.TrimSpace(input.PublicName)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.UpstreamName = strings.TrimSpace(input.UpstreamName)
-	if input.ProviderID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) || !validText(input.UpstreamName, 256) || !validPrices(input.InputPriceMicros, input.OutputPriceMicros) {
+	if input.UpstreamModelID == uuid.Nil || input.ProviderID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Create(ctx, input)
@@ -49,10 +50,13 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.ProviderID == nil && input.DisplayName == nil && input.UpstreamName == nil && input.InputPriceMicros == nil && input.OutputPriceMicros == nil) {
+	if id == uuid.Nil || (input.UpstreamModelID == nil && input.ProviderID == nil && input.DisplayName == nil && input.UpstreamName == nil && input.InputPriceMicros == nil && input.OutputPriceMicros == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	if input.ProviderID != nil && *input.ProviderID == uuid.Nil {
+		return Record{}, ErrInvalidInput
+	}
+	if input.UpstreamModelID != nil && *input.UpstreamModelID == uuid.Nil {
 		return Record{}, ErrInvalidInput
 	}
 	if input.DisplayName != nil {
@@ -83,6 +87,13 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (R
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.SetStatus(ctx, id, status)
+}
+
+func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return ErrInvalidInput
+	}
+	return s.store.Delete(ctx, id)
 }
 
 func (s *Service) Resolve(ctx context.Context, publicName string) (Resolved, error) {

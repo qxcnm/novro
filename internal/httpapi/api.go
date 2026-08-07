@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,9 +20,13 @@ import (
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/modelroute"
+	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/providersync"
 	"github.com/novro-gateway/novro/internal/requestid"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -58,6 +63,7 @@ type ProviderService interface {
 	List(context.Context, provider.ListFilter) ([]provider.Record, error)
 	Update(context.Context, uuid.UUID, provider.UpdateInput) (provider.Record, error)
 	SetStatus(context.Context, uuid.UUID, provider.Status) (provider.Record, error)
+	Delete(context.Context, uuid.UUID) error
 }
 
 type BillingService interface {
@@ -66,11 +72,43 @@ type BillingService interface {
 	Adjust(context.Context, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
 }
 
+type PaymentService interface {
+	Config(context.Context) (payment.PublicConfig, error)
+	AdminConfig(context.Context) (payment.AdminConfig, error)
+	UpdateConfig(context.Context, payment.ConfigInput) (payment.AdminConfig, error)
+	Create(context.Context, uuid.UUID, int64, string) (payment.CreateResult, error)
+	List(context.Context, uuid.UUID) ([]payment.Order, error)
+	ListAll(context.Context, payment.AdminListFilter) (payment.AdminPage, error)
+	HandleNotification(context.Context, url.Values) error
+}
+
 type ModelRouteService interface {
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
 	Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error)
 	SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error)
+	Delete(context.Context, uuid.UUID) error
+}
+
+type UpstreamModelService interface {
+	Create(context.Context, upstreammodel.CreateInput) (upstreammodel.Record, error)
+	List(context.Context, upstreammodel.ListFilter) ([]upstreammodel.Record, error)
+	Update(context.Context, uuid.UUID, upstreammodel.UpdateInput) (upstreammodel.Record, error)
+	SetStatus(context.Context, uuid.UUID, upstreammodel.Status) (upstreammodel.Record, error)
+	Delete(context.Context, uuid.UUID) error
+}
+
+type ProviderModelService interface {
+	Sync(context.Context, uuid.UUID) ([]providersync.CatalogModel, error)
+	Link(context.Context, uuid.UUID, []uuid.UUID) (providersync.LinkResult, error)
+}
+
+type BillingGroupService interface {
+	Create(context.Context, billinggroup.CreateInput) (billinggroup.Record, error)
+	List(context.Context, billinggroup.ListFilter) ([]billinggroup.Record, error)
+	Update(context.Context, uuid.UUID, billinggroup.UpdateInput) (billinggroup.Record, error)
+	SetStatus(context.Context, uuid.UUID, billinggroup.Status) (billinggroup.Record, error)
+	Delete(context.Context, uuid.UUID) error
 }
 
 type OIDCService interface {
@@ -85,7 +123,11 @@ type Dependencies struct {
 	APIKeys             APIKeyService
 	Providers           ProviderService
 	Billing             BillingService
+	Payments            PaymentService
 	ModelRoutes         ModelRouteService
+	UpstreamModels      UpstreamModelService
+	ProviderModels      ProviderModelService
+	BillingGroups       BillingGroupService
 	Gateway             http.Handler
 	Logger              *slog.Logger
 	CookieName          string
@@ -103,7 +145,11 @@ type apiHandler struct {
 	apiKeys             APIKeyService
 	providers           ProviderService
 	billing             BillingService
+	payments            PaymentService
 	modelRoutes         ModelRouteService
+	upstreamModels      UpstreamModelService
+	providerModels      ProviderModelService
+	billingGroups       BillingGroupService
 	logger              *slog.Logger
 	cookieName          string
 	cookieSecure        bool
@@ -125,7 +171,11 @@ func New(deps Dependencies) http.Handler {
 		apiKeys:             deps.APIKeys,
 		providers:           deps.Providers,
 		billing:             deps.Billing,
+		payments:            deps.Payments,
 		modelRoutes:         deps.ModelRoutes,
+		upstreamModels:      deps.UpstreamModels,
+		providerModels:      deps.ProviderModels,
+		billingGroups:       deps.BillingGroups,
 		logger:              logger,
 		cookieName:          deps.CookieName,
 		cookieSecure:        deps.CookieSecure,
@@ -157,6 +207,14 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
 	mux.HandleFunc("GET /api/account/balance", h.myBalance)
 	mux.HandleFunc("GET /api/account/usage", h.myUsage)
+	mux.HandleFunc("GET /api/account/top-ups/config", h.topUpConfig)
+	mux.HandleFunc("GET /api/account/top-ups", h.listMyTopUps)
+	mux.HandleFunc("POST /api/account/top-ups", h.createMyTopUp)
+	mux.HandleFunc("GET /api/payments/epay/notify", h.epayNotification)
+	mux.HandleFunc("POST /api/payments/epay/notify", h.epayNotification)
+	mux.HandleFunc("GET /api/admin/payments", h.getPaymentConfig)
+	mux.HandleFunc("PUT /api/admin/payments", h.updatePaymentConfig)
+	mux.HandleFunc("GET /api/admin/top-ups", h.listAllTopUps)
 	mux.HandleFunc("GET /api/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/admin/users", h.createUser)
 	mux.HandleFunc("PATCH /api/admin/users/{id}", h.updateUser)
@@ -169,10 +227,24 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/admin/providers", h.listProviders)
 	mux.HandleFunc("POST /api/admin/providers", h.createProvider)
 	mux.HandleFunc("PATCH /api/admin/providers/{id}", h.updateProvider)
+	mux.HandleFunc("DELETE /api/admin/providers/{id}", h.deleteProvider)
 	mux.HandleFunc("PATCH /api/admin/providers/{id}/status", h.setProviderStatus)
+	mux.HandleFunc("POST /api/admin/providers/{id}/models/sync", h.syncProviderModels)
+	mux.HandleFunc("POST /api/admin/providers/{id}/models", h.linkProviderModels)
+	mux.HandleFunc("GET /api/admin/upstream-models", h.listUpstreamModels)
+	mux.HandleFunc("POST /api/admin/upstream-models", h.createUpstreamModel)
+	mux.HandleFunc("PATCH /api/admin/upstream-models/{id}", h.updateUpstreamModel)
+	mux.HandleFunc("DELETE /api/admin/upstream-models/{id}", h.deleteUpstreamModel)
+	mux.HandleFunc("PATCH /api/admin/upstream-models/{id}/status", h.setUpstreamModelStatus)
+	mux.HandleFunc("GET /api/admin/billing-groups", h.listBillingGroups)
+	mux.HandleFunc("POST /api/admin/billing-groups", h.createBillingGroup)
+	mux.HandleFunc("PATCH /api/admin/billing-groups/{id}", h.updateBillingGroup)
+	mux.HandleFunc("DELETE /api/admin/billing-groups/{id}", h.deleteBillingGroup)
+	mux.HandleFunc("PATCH /api/admin/billing-groups/{id}/status", h.setBillingGroupStatus)
 	mux.HandleFunc("GET /api/admin/model-routes", h.listModelRoutes)
 	mux.HandleFunc("POST /api/admin/model-routes", h.createModelRoute)
 	mux.HandleFunc("PATCH /api/admin/model-routes/{id}", h.updateModelRoute)
+	mux.HandleFunc("DELETE /api/admin/model-routes/{id}", h.deleteModelRoute)
 	mux.HandleFunc("PATCH /api/admin/model-routes/{id}/status", h.setModelRouteStatus)
 	if deps.Gateway != nil {
 		mux.Handle("/v1/", deps.Gateway)
@@ -212,6 +284,7 @@ func (h *apiHandler) setup(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		SetupToken  string `json:"setup_token"`
 		Username    string `json:"username"`
+		Email       string `json:"email"`
 		DisplayName string `json:"display_name"`
 		Password    string `json:"password"`
 	}
@@ -226,7 +299,7 @@ func (h *apiHandler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, err := h.users.InitializeAdmin(r.Context(), user.RegisterInput{
-		Username: request.Username, DisplayName: request.DisplayName, Password: request.Password,
+		Username: request.Username, Email: request.Email, DisplayName: request.DisplayName, Password: request.Password,
 	})
 	if err != nil {
 		h.writeUserError(w, "initialize administrator", err)
@@ -339,13 +412,13 @@ func (h *apiHandler) login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil || request.Username == "" || request.Password == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "用户名和密码不能为空")
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户名或邮箱与密码不能为空")
 		return
 	}
 	result, err := h.auth.Login(r.Context(), request.Username, request.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
-			writeError(w, http.StatusUnauthorized, "invalid_credentials", "用户名或密码错误")
+			writeError(w, http.StatusUnauthorized, "invalid_credentials", "用户名、邮箱或密码错误")
 			return
 		}
 		h.internalError(w, "login failed", err)
@@ -678,6 +751,245 @@ func (h *apiHandler) setProviderStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"provider": updated})
 }
 
+func (h *apiHandler) deleteProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商 ID 无效")
+		return
+	}
+	if err := h.providers.Delete(r.Context(), id); err != nil {
+		h.writeProviderError(w, "delete provider", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) syncProviderModels(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商 ID 无效")
+		return
+	}
+	models, err := h.providerModels.Sync(r.Context(), id)
+	if err != nil {
+		h.writeProviderModelError(w, "sync provider models", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+func (h *apiHandler) linkProviderModels(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "提供商 ID 无效")
+		return
+	}
+	var request struct {
+		ModelIDs []uuid.UUID `json:"model_ids"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "关联模型信息格式无效")
+		return
+	}
+	result, err := h.providerModels.Link(r.Context(), id, request.ModelIDs)
+	if err != nil {
+		h.writeProviderModelError(w, "link provider models", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *apiHandler) listUpstreamModels(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	records, err := h.upstreamModels.List(r.Context(), upstreammodel.ListFilter{Search: r.URL.Query().Get("search"), Status: upstreammodel.Status(r.URL.Query().Get("status"))})
+	if err != nil {
+		h.writeUpstreamModelError(w, "list upstream models", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upstream_models": records})
+}
+
+func (h *apiHandler) createUpstreamModel(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var input upstreammodel.CreateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型信息格式无效")
+		return
+	}
+	created, err := h.upstreamModels.Create(r.Context(), input)
+	if err != nil {
+		h.writeUpstreamModelError(w, "create upstream model", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"upstream_model": created})
+}
+
+func (h *apiHandler) updateUpstreamModel(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型 ID 无效")
+		return
+	}
+	var input upstreammodel.UpdateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型信息格式无效")
+		return
+	}
+	updated, err := h.upstreamModels.Update(r.Context(), id, input)
+	if err != nil {
+		h.writeUpstreamModelError(w, "update upstream model", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upstream_model": updated})
+}
+
+func (h *apiHandler) setUpstreamModelStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型 ID 无效")
+		return
+	}
+	var request struct {
+		Status upstreammodel.Status `json:"status"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型状态格式无效")
+		return
+	}
+	updated, err := h.upstreamModels.SetStatus(r.Context(), id, request.Status)
+	if err != nil {
+		h.writeUpstreamModelError(w, "set upstream model status", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upstream_model": updated})
+}
+
+func (h *apiHandler) deleteUpstreamModel(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型 ID 无效")
+		return
+	}
+	if err := h.upstreamModels.Delete(r.Context(), id); err != nil {
+		h.writeUpstreamModelError(w, "delete upstream model", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) listBillingGroups(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Search: r.URL.Query().Get("search"), Status: billinggroup.Status(r.URL.Query().Get("status"))})
+	if err != nil {
+		h.writeBillingGroupError(w, "list billing groups", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"billing_groups": records})
+}
+
+func (h *apiHandler) createBillingGroup(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var input billinggroup.CreateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组信息格式无效")
+		return
+	}
+	created, err := h.billingGroups.Create(r.Context(), input)
+	if err != nil {
+		h.writeBillingGroupError(w, "create billing group", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"billing_group": created})
+}
+
+func (h *apiHandler) updateBillingGroup(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组 ID 无效")
+		return
+	}
+	var input billinggroup.UpdateInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组信息格式无效")
+		return
+	}
+	updated, err := h.billingGroups.Update(r.Context(), id, input)
+	if err != nil {
+		h.writeBillingGroupError(w, "update billing group", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"billing_group": updated})
+}
+
+func (h *apiHandler) setBillingGroupStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组 ID 无效")
+		return
+	}
+	var request struct {
+		Status billinggroup.Status `json:"status"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组状态格式无效")
+		return
+	}
+	updated, err := h.billingGroups.SetStatus(r.Context(), id, request.Status)
+	if err != nil {
+		h.writeBillingGroupError(w, "set billing group status", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"billing_group": updated})
+}
+
+func (h *apiHandler) deleteBillingGroup(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组 ID 无效")
+		return
+	}
+	if err := h.billingGroups.Delete(r.Context(), id); err != nil {
+		h.writeBillingGroupError(w, "delete billing group", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -702,6 +1014,191 @@ func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"usage": usage})
+}
+
+func (h *apiHandler) topUpConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireUser(w, r); !ok {
+		return
+	}
+	if h.payments == nil {
+		writeJSON(w, http.StatusOK, payment.PublicConfig{
+			Channels: []string{}, Methods: []payment.PaymentMethod{},
+			MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros,
+			PresetAmountMicros: []int64{10_000_000, 50_000_000, 100_000_000, 500_000_000}, BonusTiers: []payment.BonusTier{},
+		})
+		return
+	}
+	config, err := h.payments.Config(r.Context())
+	if err != nil {
+		h.internalError(w, "read payment configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, config)
+}
+
+func (h *apiHandler) getPaymentConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.payments == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"payment_config": payment.AdminConfig{
+				Provider: payment.ProviderEPay, Channels: []string{}, Methods: []payment.PaymentMethod{},
+				MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros,
+				PresetAmountMicros: []int64{10_000_000, 50_000_000, 100_000_000, 500_000_000}, BonusTiers: []payment.BonusTier{},
+			},
+		})
+		return
+	}
+	config, err := h.payments.AdminConfig(r.Context())
+	if err != nil {
+		h.writePaymentConfigError(w, "read payment configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"payment_config": config})
+}
+
+func (h *apiHandler) updatePaymentConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.payments == nil {
+		writeError(w, http.StatusServiceUnavailable, "payments_unavailable", "支付服务暂不可用")
+		return
+	}
+	var request struct {
+		Enabled            bool                    `json:"enabled"`
+		APIURL             string                  `json:"api_url"`
+		MerchantID         string                  `json:"merchant_id"`
+		MerchantKey        *string                 `json:"merchant_key"`
+		SiteName           string                  `json:"site_name"`
+		Channels           []string                `json:"channels"`
+		Methods            []payment.PaymentMethod `json:"methods"`
+		MinMicros          int64                   `json:"min_micros"`
+		MaxMicros          int64                   `json:"max_micros"`
+		PresetAmountMicros []int64                 `json:"preset_amounts_micros"`
+		BonusTiers         []payment.BonusTier     `json:"bonus_tiers"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "支付配置格式无效")
+		return
+	}
+	config, err := h.payments.UpdateConfig(r.Context(), payment.ConfigInput{
+		Enabled: request.Enabled, APIURL: request.APIURL, MerchantID: request.MerchantID,
+		MerchantKey: request.MerchantKey, SiteName: request.SiteName, Channels: request.Channels,
+		Methods: request.Methods, MinMicros: request.MinMicros, MaxMicros: request.MaxMicros,
+		PresetAmountMicros: request.PresetAmountMicros, BonusTiers: request.BonusTiers,
+	})
+	if err != nil {
+		h.writePaymentConfigError(w, "update payment configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"payment_config": config})
+}
+
+func (h *apiHandler) listAllTopUps(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.payments == nil {
+		writeJSON(w, http.StatusOK, payment.AdminPage{Orders: []payment.AdminOrder{}, Limit: 50})
+		return
+	}
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 50)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	page, err := h.payments.ListAll(r.Context(), payment.AdminListFilter{
+		Search: r.URL.Query().Get("search"), Status: payment.Status(r.URL.Query().Get("status")),
+		Channel: r.URL.Query().Get("channel"), Offset: offset, Limit: limit,
+	})
+	if errors.Is(err, payment.ErrInvalidInput) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "充值记录筛选参数无效")
+		return
+	}
+	if err != nil {
+		h.internalError(w, "list all top-up orders", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *apiHandler) listMyTopUps(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if h.payments == nil {
+		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值暂未开放")
+		return
+	}
+	orders, err := h.payments.List(r.Context(), record.ID)
+	if err != nil {
+		h.writePaymentError(w, "list top-up orders", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"orders": orders})
+}
+
+func (h *apiHandler) createMyTopUp(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if h.payments == nil {
+		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值暂未开放")
+		return
+	}
+	var request struct {
+		AmountMicros int64  `json:"amount_micros"`
+		Channel      string `json:"channel"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "请求内容无效")
+		return
+	}
+	result, err := h.payments.Create(r.Context(), record.ID, request.AmountMicros, request.Channel)
+	if err != nil {
+		h.writePaymentError(w, "create top-up order", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
+}
+
+func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if h.payments == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("fail"))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("fail"))
+		return
+	}
+	if err := h.payments.HandleNotification(r.Context(), r.Form); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, payment.ErrDisabled) {
+			status = http.StatusServiceUnavailable
+		} else if !errors.Is(err, payment.ErrInvalidNotice) && !errors.Is(err, payment.ErrOrderNotFound) && !errors.Is(err, payment.ErrOrderConflict) {
+			status = http.StatusInternalServerError
+			h.logger.Error("complete EPay notification", "request_id", requestid.ResponseID(w), "error", err)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("fail"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("success"))
 }
 
 func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
@@ -822,6 +1319,22 @@ func (h *apiHandler) setModelRouteStatus(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"model_route": updated})
 }
 
+func (h *apiHandler) deleteModelRoute(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "模型路由 ID 无效")
+		return
+	}
+	if err := h.modelRoutes.Delete(r.Context(), id); err != nil {
+		h.writeModelRouteError(w, "delete model route", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *apiHandler) requireUser(w http.ResponseWriter, r *http.Request) (user.Record, bool) {
 	record, err := h.auth.Authenticate(r.Context(), h.sessionToken(r))
 	if err != nil {
@@ -898,6 +1411,8 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 		writeError(w, http.StatusNotFound, "not_found", "用户不存在")
 	case errors.Is(err, user.ErrUsernameTaken):
 		writeError(w, http.StatusConflict, "username_taken", "用户名已存在")
+	case errors.Is(err, user.ErrEmailTaken):
+		writeError(w, http.StatusConflict, "email_taken", "邮箱已被使用")
 	case errors.Is(err, user.ErrLastActiveAdmin):
 		writeError(w, http.StatusConflict, "last_active_admin", "不能停用或降级最后一个启用的管理员")
 	case errors.Is(err, user.ErrAlreadyInitialized):
@@ -933,6 +1448,21 @@ func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string,
 	}
 }
 
+func (h *apiHandler) writeProviderModelError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, providersync.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "关联模型信息无效")
+	case errors.Is(err, providersync.ErrProviderNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "提供商不存在")
+	case errors.Is(err, providersync.ErrModelsUnavailable):
+		writeError(w, http.StatusUnprocessableEntity, "models_unavailable", "上游没有返回可用的模型列表")
+	case errors.Is(err, providersync.ErrDiscoveryFailed):
+		writeError(w, http.StatusBadGateway, "model_sync_failed", "无法从该提供商同步模型，请从模型目录手动选择")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
 func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, billing.ErrInvalidInput):
@@ -944,6 +1474,25 @@ func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, 
 	default:
 		h.internalError(w, operation, err)
 	}
+}
+
+func (h *apiHandler) writePaymentError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, payment.ErrDisabled):
+		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值暂未开放")
+	case errors.Is(err, payment.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_top_up", "充值金额或支付方式无效")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writePaymentConfigError(w http.ResponseWriter, operation string, err error) {
+	if errors.Is(err, payment.ErrInvalidInput) {
+		writeError(w, http.StatusBadRequest, "invalid_payment_config", "支付配置无效，请检查地址、商户信息和支付渠道")
+		return
+	}
+	h.internalError(w, operation, err)
 }
 
 func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation string, err error) {
@@ -959,6 +1508,38 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 	}
 }
 
+func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, upstreammodel.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "上游模型信息无效")
+	case errors.Is(err, upstreammodel.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "上游模型不存在")
+	case errors.Is(err, upstreammodel.ErrNameTaken):
+		writeError(w, http.StatusConflict, "upstream_model_taken", "该提供商已存在同名上游模型")
+	case errors.Is(err, upstreammodel.ErrPricingRequired):
+		writeError(w, http.StatusConflict, "model_pricing_required", "请先完成模型定价，再启用模型")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeBillingGroupError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, billinggroup.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", "计费分组信息无效")
+	case errors.Is(err, billinggroup.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "计费分组不存在")
+	case errors.Is(err, billinggroup.ErrCodeTaken):
+		writeError(w, http.StatusConflict, "billing_group_code_taken", "计费分组标识已存在")
+	case errors.Is(err, billinggroup.ErrProtected):
+		writeError(w, http.StatusConflict, "default_billing_group", "默认计费分组不能停用或删除")
+	case errors.Is(err, billinggroup.ErrInUse):
+		writeError(w, http.StatusConflict, "billing_group_in_use", "计费分组仍分配给用户，请先迁移用户")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
 func (h *apiHandler) internalError(w http.ResponseWriter, operation string, err error) {
 	h.logger.Error(operation, "request_id", requestid.ResponseID(w), "error", err)
 	writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
@@ -966,7 +1547,7 @@ func (h *apiHandler) internalError(w http.ResponseWriter, operation string, err 
 
 func (h *apiHandler) validateOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/payments/epay/notify" && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			origin := strings.TrimRight(r.Header.Get("Origin"), "/")
 			if _, ok := h.allowedOrigins[origin]; !ok {
 				writeError(w, http.StatusForbidden, "invalid_origin", "请求来源无效")

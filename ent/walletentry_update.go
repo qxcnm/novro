@@ -223,11 +223,6 @@ func (_u *WalletEntryUpdate) check() error {
 			return &ValidationError{Name: "entry_type", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.entry_type": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.BalanceAfterMicros(); ok {
-		if err := walletentry.BalanceAfterMicrosValidator(v); err != nil {
-			return &ValidationError{Name: "balance_after_micros", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.balance_after_micros": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.Description(); ok {
 		if err := walletentry.DescriptionValidator(v); err != nil {
 			return &ValidationError{Name: "description", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.description": %w`, err)}
@@ -554,11 +549,6 @@ func (_u *WalletEntryUpdateOne) check() error {
 	if v, ok := _u.mutation.EntryType(); ok {
 		if err := walletentry.EntryTypeValidator(v); err != nil {
 			return &ValidationError{Name: "entry_type", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.entry_type": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.BalanceAfterMicros(); ok {
-		if err := walletentry.BalanceAfterMicrosValidator(v); err != nil {
-			return &ValidationError{Name: "balance_after_micros", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.balance_after_micros": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Description(); ok {

@@ -12,7 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -27,14 +29,42 @@ type APIUsage struct {
 	APIKeyID uuid.UUID `json:"api_key_id,omitempty"`
 	// ModelRouteID holds the value of the "model_route_id" field.
 	ModelRouteID uuid.UUID `json:"model_route_id,omitempty"`
+	// UpstreamModelID holds the value of the "upstream_model_id" field.
+	UpstreamModelID *uuid.UUID `json:"upstream_model_id,omitempty"`
+	// BillingGroupID holds the value of the "billing_group_id" field.
+	BillingGroupID *uuid.UUID `json:"billing_group_id,omitempty"`
 	// RequestID holds the value of the "request_id" field.
 	RequestID uuid.UUID `json:"request_id,omitempty"`
 	// Endpoint holds the value of the "endpoint" field.
 	Endpoint apiusage.Endpoint `json:"endpoint,omitempty"`
 	// InputTokens holds the value of the "input_tokens" field.
 	InputTokens int `json:"input_tokens,omitempty"`
+	// UncachedInputTokens holds the value of the "uncached_input_tokens" field.
+	UncachedInputTokens int `json:"uncached_input_tokens,omitempty"`
+	// CacheReadInputTokens holds the value of the "cache_read_input_tokens" field.
+	CacheReadInputTokens int `json:"cache_read_input_tokens,omitempty"`
+	// CacheWriteInputTokens holds the value of the "cache_write_input_tokens" field.
+	CacheWriteInputTokens int `json:"cache_write_input_tokens,omitempty"`
+	// CacheWrite1hInputTokens holds the value of the "cache_write_1h_input_tokens" field.
+	CacheWrite1hInputTokens int `json:"cache_write_1h_input_tokens,omitempty"`
 	// OutputTokens holds the value of the "output_tokens" field.
 	OutputTokens int `json:"output_tokens,omitempty"`
+	// InputPriceMicros holds the value of the "input_price_micros" field.
+	InputPriceMicros int64 `json:"input_price_micros,omitempty"`
+	// OutputPriceMicros holds the value of the "output_price_micros" field.
+	OutputPriceMicros int64 `json:"output_price_micros,omitempty"`
+	// CacheReadPriceMicros holds the value of the "cache_read_price_micros" field.
+	CacheReadPriceMicros int64 `json:"cache_read_price_micros,omitempty"`
+	// CacheWritePriceMicros holds the value of the "cache_write_price_micros" field.
+	CacheWritePriceMicros int64 `json:"cache_write_price_micros,omitempty"`
+	// CacheWrite1hPriceMicros holds the value of the "cache_write_1h_price_micros" field.
+	CacheWrite1hPriceMicros int64 `json:"cache_write_1h_price_micros,omitempty"`
+	// RequestPriceMicros holds the value of the "request_price_micros" field.
+	RequestPriceMicros int64 `json:"request_price_micros,omitempty"`
+	// BaseCostMicros holds the value of the "base_cost_micros" field.
+	BaseCostMicros int64 `json:"base_cost_micros,omitempty"`
+	// MultiplierBps holds the value of the "multiplier_bps" field.
+	MultiplierBps int64 `json:"multiplier_bps,omitempty"`
 	// CostMicros holds the value of the "cost_micros" field.
 	CostMicros int64 `json:"cost_micros,omitempty"`
 	// ReservedMicros holds the value of the "reserved_micros" field.
@@ -43,6 +73,16 @@ type APIUsage struct {
 	Estimated bool `json:"estimated,omitempty"`
 	// UpstreamRequestID holds the value of the "upstream_request_id" field.
 	UpstreamRequestID string `json:"upstream_request_id,omitempty"`
+	// ModelName holds the value of the "model_name" field.
+	ModelName string `json:"model_name,omitempty"`
+	// UpstreamModelName holds the value of the "upstream_model_name" field.
+	UpstreamModelName string `json:"upstream_model_name,omitempty"`
+	// BillingGroupCode holds the value of the "billing_group_code" field.
+	BillingGroupCode string `json:"billing_group_code,omitempty"`
+	// BillingGroupName holds the value of the "billing_group_name" field.
+	BillingGroupName string `json:"billing_group_name,omitempty"`
+	// CalculationVersion holds the value of the "calculation_version" field.
+	CalculationVersion string `json:"calculation_version,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// FinishedAt holds the value of the "finished_at" field.
@@ -61,9 +101,13 @@ type APIUsageEdges struct {
 	APIKey *APIKey `json:"api_key,omitempty"`
 	// ModelRoute holds the value of the model_route edge.
 	ModelRoute *ModelRoute `json:"model_route,omitempty"`
+	// UpstreamModel holds the value of the upstream_model edge.
+	UpstreamModel *UpstreamModel `json:"upstream_model,omitempty"`
+	// BillingGroup holds the value of the billing_group edge.
+	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [5]bool
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -99,16 +143,40 @@ func (e APIUsageEdges) ModelRouteOrErr() (*ModelRoute, error) {
 	return nil, &NotLoadedError{edge: "model_route"}
 }
 
+// UpstreamModelOrErr returns the UpstreamModel value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e APIUsageEdges) UpstreamModelOrErr() (*UpstreamModel, error) {
+	if e.UpstreamModel != nil {
+		return e.UpstreamModel, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: upstreammodel.Label}
+	}
+	return nil, &NotLoadedError{edge: "upstream_model"}
+}
+
+// BillingGroupOrErr returns the BillingGroup value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e APIUsageEdges) BillingGroupOrErr() (*BillingGroup, error) {
+	if e.BillingGroup != nil {
+		return e.BillingGroup, nil
+	} else if e.loadedTypes[4] {
+		return nil, &NotFoundError{label: billinggroup.Label}
+	}
+	return nil, &NotLoadedError{edge: "billing_group"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*APIUsage) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case apiusage.FieldUpstreamModelID, apiusage.FieldBillingGroupID:
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case apiusage.FieldEstimated:
 			values[i] = new(sql.NullBool)
-		case apiusage.FieldInputTokens, apiusage.FieldOutputTokens, apiusage.FieldCostMicros, apiusage.FieldReservedMicros:
+		case apiusage.FieldInputTokens, apiusage.FieldUncachedInputTokens, apiusage.FieldCacheReadInputTokens, apiusage.FieldCacheWriteInputTokens, apiusage.FieldCacheWrite1hInputTokens, apiusage.FieldOutputTokens, apiusage.FieldInputPriceMicros, apiusage.FieldOutputPriceMicros, apiusage.FieldCacheReadPriceMicros, apiusage.FieldCacheWritePriceMicros, apiusage.FieldCacheWrite1hPriceMicros, apiusage.FieldRequestPriceMicros, apiusage.FieldBaseCostMicros, apiusage.FieldMultiplierBps, apiusage.FieldCostMicros, apiusage.FieldReservedMicros:
 			values[i] = new(sql.NullInt64)
-		case apiusage.FieldEndpoint, apiusage.FieldUpstreamRequestID:
+		case apiusage.FieldEndpoint, apiusage.FieldUpstreamRequestID, apiusage.FieldModelName, apiusage.FieldUpstreamModelName, apiusage.FieldBillingGroupCode, apiusage.FieldBillingGroupName, apiusage.FieldCalculationVersion:
 			values[i] = new(sql.NullString)
 		case apiusage.FieldCreatedAt, apiusage.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -153,6 +221,20 @@ func (_m *APIUsage) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				_m.ModelRouteID = *value
 			}
+		case apiusage.FieldUpstreamModelID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_model_id", values[i])
+			} else if value.Valid {
+				_m.UpstreamModelID = new(uuid.UUID)
+				*_m.UpstreamModelID = *value.S.(*uuid.UUID)
+			}
+		case apiusage.FieldBillingGroupID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
+			} else if value.Valid {
+				_m.BillingGroupID = new(uuid.UUID)
+				*_m.BillingGroupID = *value.S.(*uuid.UUID)
+			}
 		case apiusage.FieldRequestID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field request_id", values[i])
@@ -171,11 +253,83 @@ func (_m *APIUsage) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.InputTokens = int(value.Int64)
 			}
+		case apiusage.FieldUncachedInputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field uncached_input_tokens", values[i])
+			} else if value.Valid {
+				_m.UncachedInputTokens = int(value.Int64)
+			}
+		case apiusage.FieldCacheReadInputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_read_input_tokens", values[i])
+			} else if value.Valid {
+				_m.CacheReadInputTokens = int(value.Int64)
+			}
+		case apiusage.FieldCacheWriteInputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_write_input_tokens", values[i])
+			} else if value.Valid {
+				_m.CacheWriteInputTokens = int(value.Int64)
+			}
+		case apiusage.FieldCacheWrite1hInputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_write_1h_input_tokens", values[i])
+			} else if value.Valid {
+				_m.CacheWrite1hInputTokens = int(value.Int64)
+			}
 		case apiusage.FieldOutputTokens:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field output_tokens", values[i])
 			} else if value.Valid {
 				_m.OutputTokens = int(value.Int64)
+			}
+		case apiusage.FieldInputPriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field input_price_micros", values[i])
+			} else if value.Valid {
+				_m.InputPriceMicros = value.Int64
+			}
+		case apiusage.FieldOutputPriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field output_price_micros", values[i])
+			} else if value.Valid {
+				_m.OutputPriceMicros = value.Int64
+			}
+		case apiusage.FieldCacheReadPriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_read_price_micros", values[i])
+			} else if value.Valid {
+				_m.CacheReadPriceMicros = value.Int64
+			}
+		case apiusage.FieldCacheWritePriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_write_price_micros", values[i])
+			} else if value.Valid {
+				_m.CacheWritePriceMicros = value.Int64
+			}
+		case apiusage.FieldCacheWrite1hPriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_write_1h_price_micros", values[i])
+			} else if value.Valid {
+				_m.CacheWrite1hPriceMicros = value.Int64
+			}
+		case apiusage.FieldRequestPriceMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field request_price_micros", values[i])
+			} else if value.Valid {
+				_m.RequestPriceMicros = value.Int64
+			}
+		case apiusage.FieldBaseCostMicros:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field base_cost_micros", values[i])
+			} else if value.Valid {
+				_m.BaseCostMicros = value.Int64
+			}
+		case apiusage.FieldMultiplierBps:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field multiplier_bps", values[i])
+			} else if value.Valid {
+				_m.MultiplierBps = value.Int64
 			}
 		case apiusage.FieldCostMicros:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -200,6 +354,36 @@ func (_m *APIUsage) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field upstream_request_id", values[i])
 			} else if value.Valid {
 				_m.UpstreamRequestID = value.String
+			}
+		case apiusage.FieldModelName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field model_name", values[i])
+			} else if value.Valid {
+				_m.ModelName = value.String
+			}
+		case apiusage.FieldUpstreamModelName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_model_name", values[i])
+			} else if value.Valid {
+				_m.UpstreamModelName = value.String
+			}
+		case apiusage.FieldBillingGroupCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_code", values[i])
+			} else if value.Valid {
+				_m.BillingGroupCode = value.String
+			}
+		case apiusage.FieldBillingGroupName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_name", values[i])
+			} else if value.Valid {
+				_m.BillingGroupName = value.String
+			}
+		case apiusage.FieldCalculationVersion:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field calculation_version", values[i])
+			} else if value.Valid {
+				_m.CalculationVersion = value.String
 			}
 		case apiusage.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -241,6 +425,16 @@ func (_m *APIUsage) QueryModelRoute() *ModelRouteQuery {
 	return NewAPIUsageClient(_m.config).QueryModelRoute(_m)
 }
 
+// QueryUpstreamModel queries the "upstream_model" edge of the APIUsage entity.
+func (_m *APIUsage) QueryUpstreamModel() *UpstreamModelQuery {
+	return NewAPIUsageClient(_m.config).QueryUpstreamModel(_m)
+}
+
+// QueryBillingGroup queries the "billing_group" edge of the APIUsage entity.
+func (_m *APIUsage) QueryBillingGroup() *BillingGroupQuery {
+	return NewAPIUsageClient(_m.config).QueryBillingGroup(_m)
+}
+
 // Update returns a builder for updating this APIUsage.
 // Note that you need to call APIUsage.Unwrap() before calling this method if this APIUsage
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -273,6 +467,16 @@ func (_m *APIUsage) String() string {
 	builder.WriteString("model_route_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ModelRouteID))
 	builder.WriteString(", ")
+	if v := _m.UpstreamModelID; v != nil {
+		builder.WriteString("upstream_model_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.BillingGroupID; v != nil {
+		builder.WriteString("billing_group_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("request_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RequestID))
 	builder.WriteString(", ")
@@ -282,8 +486,44 @@ func (_m *APIUsage) String() string {
 	builder.WriteString("input_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.InputTokens))
 	builder.WriteString(", ")
+	builder.WriteString("uncached_input_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UncachedInputTokens))
+	builder.WriteString(", ")
+	builder.WriteString("cache_read_input_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheReadInputTokens))
+	builder.WriteString(", ")
+	builder.WriteString("cache_write_input_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheWriteInputTokens))
+	builder.WriteString(", ")
+	builder.WriteString("cache_write_1h_input_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheWrite1hInputTokens))
+	builder.WriteString(", ")
 	builder.WriteString("output_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.OutputTokens))
+	builder.WriteString(", ")
+	builder.WriteString("input_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.InputPriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("output_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutputPriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("cache_read_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheReadPriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("cache_write_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheWritePriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("cache_write_1h_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CacheWrite1hPriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("request_price_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RequestPriceMicros))
+	builder.WriteString(", ")
+	builder.WriteString("base_cost_micros=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BaseCostMicros))
+	builder.WriteString(", ")
+	builder.WriteString("multiplier_bps=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MultiplierBps))
 	builder.WriteString(", ")
 	builder.WriteString("cost_micros=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CostMicros))
@@ -296,6 +536,21 @@ func (_m *APIUsage) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("upstream_request_id=")
 	builder.WriteString(_m.UpstreamRequestID)
+	builder.WriteString(", ")
+	builder.WriteString("model_name=")
+	builder.WriteString(_m.ModelName)
+	builder.WriteString(", ")
+	builder.WriteString("upstream_model_name=")
+	builder.WriteString(_m.UpstreamModelName)
+	builder.WriteString(", ")
+	builder.WriteString("billing_group_code=")
+	builder.WriteString(_m.BillingGroupCode)
+	builder.WriteString(", ")
+	builder.WriteString("billing_group_name=")
+	builder.WriteString(_m.BillingGroupName)
+	builder.WriteString(", ")
+	builder.WriteString("calculation_version=")
+	builder.WriteString(_m.CalculationVersion)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

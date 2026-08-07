@@ -12,14 +12,26 @@ type APIKey func(*sql.Selector)
 // APIUsage is the predicate function for apiusage builders.
 type APIUsage func(*sql.Selector)
 
+// BillingGroup is the predicate function for billinggroup builders.
+type BillingGroup func(*sql.Selector)
+
 // ModelRoute is the predicate function for modelroute builders.
 type ModelRoute func(*sql.Selector)
+
+// PaymentConfig is the predicate function for paymentconfig builders.
+type PaymentConfig func(*sql.Selector)
 
 // Provider is the predicate function for provider builders.
 type Provider func(*sql.Selector)
 
 // SystemSetting is the predicate function for systemsetting builders.
 type SystemSetting func(*sql.Selector)
+
+// TopUpOrder is the predicate function for topuporder builders.
+type TopUpOrder func(*sql.Selector)
+
+// UpstreamModel is the predicate function for upstreammodel builders.
+type UpstreamModel func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

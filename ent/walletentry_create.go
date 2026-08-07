@@ -204,11 +204,6 @@ func (_c *WalletEntryCreate) check() error {
 	if _, ok := _c.mutation.BalanceAfterMicros(); !ok {
 		return &ValidationError{Name: "balance_after_micros", err: errors.New(`ent: missing required field "WalletEntry.balance_after_micros"`)}
 	}
-	if v, ok := _c.mutation.BalanceAfterMicros(); ok {
-		if err := walletentry.BalanceAfterMicrosValidator(v); err != nil {
-			return &ValidationError{Name: "balance_after_micros", err: fmt.Errorf(`ent: validator failed for field "WalletEntry.balance_after_micros": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.Description(); !ok {
 		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "WalletEntry.description"`)}
 	}

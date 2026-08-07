@@ -20,9 +20,9 @@ func (WalletEntry) Fields() []ent.Field {
 		field.UUID("wallet_id", uuid.UUID{}),
 		field.UUID("actor_user_id", uuid.UUID{}).Optional().Nillable(),
 		field.UUID("reference_id", uuid.UUID{}),
-		field.Enum("entry_type").Values("manual_adjustment", "usage_reservation", "usage_refund"),
+		field.Enum("entry_type").Values("manual_adjustment", "top_up", "usage_reservation", "usage_refund", "usage_settlement"),
 		field.Int64("amount_micros"),
-		field.Int64("balance_after_micros").NonNegative(),
+		field.Int64("balance_after_micros"),
 		field.String("description").MaxLen(255).Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}

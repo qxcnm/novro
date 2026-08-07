@@ -18,9 +18,13 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
+	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/systemsetting"
+	"github.com/novro-gateway/novro/ent/topuporder"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -37,12 +41,20 @@ type Client struct {
 	APIKey *APIKeyClient
 	// APIUsage is the client for interacting with the APIUsage builders.
 	APIUsage *APIUsageClient
+	// BillingGroup is the client for interacting with the BillingGroup builders.
+	BillingGroup *BillingGroupClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
+	// PaymentConfig is the client for interacting with the PaymentConfig builders.
+	PaymentConfig *PaymentConfigClient
 	// Provider is the client for interacting with the Provider builders.
 	Provider *ProviderClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
+	// TopUpOrder is the client for interacting with the TopUpOrder builders.
+	TopUpOrder *TopUpOrderClient
+	// UpstreamModel is the client for interacting with the UpstreamModel builders.
+	UpstreamModel *UpstreamModelClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserIdentity is the client for interacting with the UserIdentity builders.
@@ -66,9 +78,13 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIUsage = NewAPIUsageClient(c.config)
+	c.BillingGroup = NewBillingGroupClient(c.config)
 	c.ModelRoute = NewModelRouteClient(c.config)
+	c.PaymentConfig = NewPaymentConfigClient(c.config)
 	c.Provider = NewProviderClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
+	c.TopUpOrder = NewTopUpOrderClient(c.config)
+	c.UpstreamModel = NewUpstreamModelClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserIdentity = NewUserIdentityClient(c.config)
 	c.UserSession = NewUserSessionClient(c.config)
@@ -168,9 +184,13 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:        cfg,
 		APIKey:        NewAPIKeyClient(cfg),
 		APIUsage:      NewAPIUsageClient(cfg),
+		BillingGroup:  NewBillingGroupClient(cfg),
 		ModelRoute:    NewModelRouteClient(cfg),
+		PaymentConfig: NewPaymentConfigClient(cfg),
 		Provider:      NewProviderClient(cfg),
 		SystemSetting: NewSystemSettingClient(cfg),
+		TopUpOrder:    NewTopUpOrderClient(cfg),
+		UpstreamModel: NewUpstreamModelClient(cfg),
 		User:          NewUserClient(cfg),
 		UserIdentity:  NewUserIdentityClient(cfg),
 		UserSession:   NewUserSessionClient(cfg),
@@ -197,9 +217,13 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:        cfg,
 		APIKey:        NewAPIKeyClient(cfg),
 		APIUsage:      NewAPIUsageClient(cfg),
+		BillingGroup:  NewBillingGroupClient(cfg),
 		ModelRoute:    NewModelRouteClient(cfg),
+		PaymentConfig: NewPaymentConfigClient(cfg),
 		Provider:      NewProviderClient(cfg),
 		SystemSetting: NewSystemSettingClient(cfg),
+		TopUpOrder:    NewTopUpOrderClient(cfg),
+		UpstreamModel: NewUpstreamModelClient(cfg),
 		User:          NewUserClient(cfg),
 		UserIdentity:  NewUserIdentityClient(cfg),
 		UserSession:   NewUserSessionClient(cfg),
@@ -234,8 +258,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIUsage, c.ModelRoute, c.Provider, c.SystemSetting, c.User,
-		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.ModelRoute, c.PaymentConfig, c.Provider,
+		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
+		c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Use(hooks...)
 	}
@@ -245,8 +270,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIUsage, c.ModelRoute, c.Provider, c.SystemSetting, c.User,
-		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.ModelRoute, c.PaymentConfig, c.Provider,
+		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
+		c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -259,12 +285,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIKey.mutate(ctx, m)
 	case *APIUsageMutation:
 		return c.APIUsage.mutate(ctx, m)
+	case *BillingGroupMutation:
+		return c.BillingGroup.mutate(ctx, m)
 	case *ModelRouteMutation:
 		return c.ModelRoute.mutate(ctx, m)
+	case *PaymentConfigMutation:
+		return c.PaymentConfig.mutate(ctx, m)
 	case *ProviderMutation:
 		return c.Provider.mutate(ctx, m)
 	case *SystemSettingMutation:
 		return c.SystemSetting.mutate(ctx, m)
+	case *TopUpOrderMutation:
+		return c.TopUpOrder.mutate(ctx, m)
+	case *UpstreamModelMutation:
+		return c.UpstreamModel.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	case *UserIdentityMutation:
@@ -601,6 +635,38 @@ func (c *APIUsageClient) QueryModelRoute(_m *APIUsage) *ModelRouteQuery {
 	return query
 }
 
+// QueryUpstreamModel queries the upstream_model edge of a APIUsage.
+func (c *APIUsageClient) QueryUpstreamModel(_m *APIUsage) *UpstreamModelQuery {
+	query := (&UpstreamModelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apiusage.Table, apiusage.FieldID, id),
+			sqlgraph.To(upstreammodel.Table, upstreammodel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apiusage.UpstreamModelTable, apiusage.UpstreamModelColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryBillingGroup queries the billing_group edge of a APIUsage.
+func (c *APIUsageClient) QueryBillingGroup(_m *APIUsage) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apiusage.Table, apiusage.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apiusage.BillingGroupTable, apiusage.BillingGroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *APIUsageClient) Hooks() []Hook {
 	return c.hooks.APIUsage
@@ -623,6 +689,171 @@ func (c *APIUsageClient) mutate(ctx context.Context, m *APIUsageMutation) (Value
 		return (&APIUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown APIUsage mutation op: %q", m.Op())
+	}
+}
+
+// BillingGroupClient is a client for the BillingGroup schema.
+type BillingGroupClient struct {
+	config
+}
+
+// NewBillingGroupClient returns a client for the BillingGroup from the given config.
+func NewBillingGroupClient(c config) *BillingGroupClient {
+	return &BillingGroupClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `billinggroup.Hooks(f(g(h())))`.
+func (c *BillingGroupClient) Use(hooks ...Hook) {
+	c.hooks.BillingGroup = append(c.hooks.BillingGroup, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `billinggroup.Intercept(f(g(h())))`.
+func (c *BillingGroupClient) Intercept(interceptors ...Interceptor) {
+	c.inters.BillingGroup = append(c.inters.BillingGroup, interceptors...)
+}
+
+// Create returns a builder for creating a BillingGroup entity.
+func (c *BillingGroupClient) Create() *BillingGroupCreate {
+	mutation := newBillingGroupMutation(c.config, OpCreate)
+	return &BillingGroupCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of BillingGroup entities.
+func (c *BillingGroupClient) CreateBulk(builders ...*BillingGroupCreate) *BillingGroupCreateBulk {
+	return &BillingGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *BillingGroupClient) MapCreateBulk(slice any, setFunc func(*BillingGroupCreate, int)) *BillingGroupCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &BillingGroupCreateBulk{err: fmt.Errorf("calling to BillingGroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*BillingGroupCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &BillingGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for BillingGroup.
+func (c *BillingGroupClient) Update() *BillingGroupUpdate {
+	mutation := newBillingGroupMutation(c.config, OpUpdate)
+	return &BillingGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *BillingGroupClient) UpdateOne(_m *BillingGroup) *BillingGroupUpdateOne {
+	mutation := newBillingGroupMutation(c.config, OpUpdateOne, withBillingGroup(_m))
+	return &BillingGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *BillingGroupClient) UpdateOneID(id uuid.UUID) *BillingGroupUpdateOne {
+	mutation := newBillingGroupMutation(c.config, OpUpdateOne, withBillingGroupID(id))
+	return &BillingGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for BillingGroup.
+func (c *BillingGroupClient) Delete() *BillingGroupDelete {
+	mutation := newBillingGroupMutation(c.config, OpDelete)
+	return &BillingGroupDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *BillingGroupClient) DeleteOne(_m *BillingGroup) *BillingGroupDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *BillingGroupClient) DeleteOneID(id uuid.UUID) *BillingGroupDeleteOne {
+	builder := c.Delete().Where(billinggroup.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &BillingGroupDeleteOne{builder}
+}
+
+// Query returns a query builder for BillingGroup.
+func (c *BillingGroupClient) Query() *BillingGroupQuery {
+	return &BillingGroupQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeBillingGroup},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a BillingGroup entity by its id.
+func (c *BillingGroupClient) Get(ctx context.Context, id uuid.UUID) (*BillingGroup, error) {
+	return c.Query().Where(billinggroup.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *BillingGroupClient) GetX(ctx context.Context, id uuid.UUID) *BillingGroup {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUsers queries the users edge of a BillingGroup.
+func (c *BillingGroupClient) QueryUsers(_m *BillingGroup) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.UsersTable, billinggroup.UsersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIUsages queries the api_usages edge of a BillingGroup.
+func (c *BillingGroupClient) QueryAPIUsages(_m *BillingGroup) *APIUsageQuery {
+	query := (&APIUsageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.APIUsagesTable, billinggroup.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *BillingGroupClient) Hooks() []Hook {
+	return c.hooks.BillingGroup
+}
+
+// Interceptors returns the client interceptors.
+func (c *BillingGroupClient) Interceptors() []Interceptor {
+	return c.inters.BillingGroup
+}
+
+func (c *BillingGroupClient) mutate(ctx context.Context, m *BillingGroupMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&BillingGroupCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&BillingGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&BillingGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&BillingGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown BillingGroup mutation op: %q", m.Op())
 	}
 }
 
@@ -750,6 +981,22 @@ func (c *ModelRouteClient) QueryProvider(_m *ModelRoute) *ProviderQuery {
 	return query
 }
 
+// QueryUpstreamModel queries the upstream_model edge of a ModelRoute.
+func (c *ModelRouteClient) QueryUpstreamModel(_m *ModelRoute) *UpstreamModelQuery {
+	query := (&UpstreamModelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelroute.Table, modelroute.FieldID, id),
+			sqlgraph.To(upstreammodel.Table, upstreammodel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, modelroute.UpstreamModelTable, modelroute.UpstreamModelColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryAPIUsages queries the api_usages edge of a ModelRoute.
 func (c *ModelRouteClient) QueryAPIUsages(_m *ModelRoute) *APIUsageQuery {
 	query := (&APIUsageClient{config: c.config}).Query()
@@ -788,6 +1035,139 @@ func (c *ModelRouteClient) mutate(ctx context.Context, m *ModelRouteMutation) (V
 		return (&ModelRouteDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown ModelRoute mutation op: %q", m.Op())
+	}
+}
+
+// PaymentConfigClient is a client for the PaymentConfig schema.
+type PaymentConfigClient struct {
+	config
+}
+
+// NewPaymentConfigClient returns a client for the PaymentConfig from the given config.
+func NewPaymentConfigClient(c config) *PaymentConfigClient {
+	return &PaymentConfigClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `paymentconfig.Hooks(f(g(h())))`.
+func (c *PaymentConfigClient) Use(hooks ...Hook) {
+	c.hooks.PaymentConfig = append(c.hooks.PaymentConfig, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `paymentconfig.Intercept(f(g(h())))`.
+func (c *PaymentConfigClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PaymentConfig = append(c.inters.PaymentConfig, interceptors...)
+}
+
+// Create returns a builder for creating a PaymentConfig entity.
+func (c *PaymentConfigClient) Create() *PaymentConfigCreate {
+	mutation := newPaymentConfigMutation(c.config, OpCreate)
+	return &PaymentConfigCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PaymentConfig entities.
+func (c *PaymentConfigClient) CreateBulk(builders ...*PaymentConfigCreate) *PaymentConfigCreateBulk {
+	return &PaymentConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PaymentConfigClient) MapCreateBulk(slice any, setFunc func(*PaymentConfigCreate, int)) *PaymentConfigCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PaymentConfigCreateBulk{err: fmt.Errorf("calling to PaymentConfigClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PaymentConfigCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PaymentConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PaymentConfig.
+func (c *PaymentConfigClient) Update() *PaymentConfigUpdate {
+	mutation := newPaymentConfigMutation(c.config, OpUpdate)
+	return &PaymentConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PaymentConfigClient) UpdateOne(_m *PaymentConfig) *PaymentConfigUpdateOne {
+	mutation := newPaymentConfigMutation(c.config, OpUpdateOne, withPaymentConfig(_m))
+	return &PaymentConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PaymentConfigClient) UpdateOneID(id string) *PaymentConfigUpdateOne {
+	mutation := newPaymentConfigMutation(c.config, OpUpdateOne, withPaymentConfigID(id))
+	return &PaymentConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PaymentConfig.
+func (c *PaymentConfigClient) Delete() *PaymentConfigDelete {
+	mutation := newPaymentConfigMutation(c.config, OpDelete)
+	return &PaymentConfigDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PaymentConfigClient) DeleteOne(_m *PaymentConfig) *PaymentConfigDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PaymentConfigClient) DeleteOneID(id string) *PaymentConfigDeleteOne {
+	builder := c.Delete().Where(paymentconfig.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PaymentConfigDeleteOne{builder}
+}
+
+// Query returns a query builder for PaymentConfig.
+func (c *PaymentConfigClient) Query() *PaymentConfigQuery {
+	return &PaymentConfigQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePaymentConfig},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PaymentConfig entity by its id.
+func (c *PaymentConfigClient) Get(ctx context.Context, id string) (*PaymentConfig, error) {
+	return c.Query().Where(paymentconfig.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PaymentConfigClient) GetX(ctx context.Context, id string) *PaymentConfig {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PaymentConfigClient) Hooks() []Hook {
+	return c.hooks.PaymentConfig
+}
+
+// Interceptors returns the client interceptors.
+func (c *PaymentConfigClient) Interceptors() []Interceptor {
+	return c.inters.PaymentConfig
+}
+
+func (c *PaymentConfigClient) mutate(ctx context.Context, m *PaymentConfigMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PaymentConfigCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PaymentConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PaymentConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PaymentConfigDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PaymentConfig mutation op: %q", m.Op())
 	}
 }
 
@@ -1073,6 +1453,320 @@ func (c *SystemSettingClient) mutate(ctx context.Context, m *SystemSettingMutati
 	}
 }
 
+// TopUpOrderClient is a client for the TopUpOrder schema.
+type TopUpOrderClient struct {
+	config
+}
+
+// NewTopUpOrderClient returns a client for the TopUpOrder from the given config.
+func NewTopUpOrderClient(c config) *TopUpOrderClient {
+	return &TopUpOrderClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `topuporder.Hooks(f(g(h())))`.
+func (c *TopUpOrderClient) Use(hooks ...Hook) {
+	c.hooks.TopUpOrder = append(c.hooks.TopUpOrder, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `topuporder.Intercept(f(g(h())))`.
+func (c *TopUpOrderClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TopUpOrder = append(c.inters.TopUpOrder, interceptors...)
+}
+
+// Create returns a builder for creating a TopUpOrder entity.
+func (c *TopUpOrderClient) Create() *TopUpOrderCreate {
+	mutation := newTopUpOrderMutation(c.config, OpCreate)
+	return &TopUpOrderCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of TopUpOrder entities.
+func (c *TopUpOrderClient) CreateBulk(builders ...*TopUpOrderCreate) *TopUpOrderCreateBulk {
+	return &TopUpOrderCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *TopUpOrderClient) MapCreateBulk(slice any, setFunc func(*TopUpOrderCreate, int)) *TopUpOrderCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &TopUpOrderCreateBulk{err: fmt.Errorf("calling to TopUpOrderClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*TopUpOrderCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &TopUpOrderCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for TopUpOrder.
+func (c *TopUpOrderClient) Update() *TopUpOrderUpdate {
+	mutation := newTopUpOrderMutation(c.config, OpUpdate)
+	return &TopUpOrderUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *TopUpOrderClient) UpdateOne(_m *TopUpOrder) *TopUpOrderUpdateOne {
+	mutation := newTopUpOrderMutation(c.config, OpUpdateOne, withTopUpOrder(_m))
+	return &TopUpOrderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *TopUpOrderClient) UpdateOneID(id uuid.UUID) *TopUpOrderUpdateOne {
+	mutation := newTopUpOrderMutation(c.config, OpUpdateOne, withTopUpOrderID(id))
+	return &TopUpOrderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for TopUpOrder.
+func (c *TopUpOrderClient) Delete() *TopUpOrderDelete {
+	mutation := newTopUpOrderMutation(c.config, OpDelete)
+	return &TopUpOrderDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *TopUpOrderClient) DeleteOne(_m *TopUpOrder) *TopUpOrderDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *TopUpOrderClient) DeleteOneID(id uuid.UUID) *TopUpOrderDeleteOne {
+	builder := c.Delete().Where(topuporder.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &TopUpOrderDeleteOne{builder}
+}
+
+// Query returns a query builder for TopUpOrder.
+func (c *TopUpOrderClient) Query() *TopUpOrderQuery {
+	return &TopUpOrderQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeTopUpOrder},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a TopUpOrder entity by its id.
+func (c *TopUpOrderClient) Get(ctx context.Context, id uuid.UUID) (*TopUpOrder, error) {
+	return c.Query().Where(topuporder.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *TopUpOrderClient) GetX(ctx context.Context, id uuid.UUID) *TopUpOrder {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a TopUpOrder.
+func (c *TopUpOrderClient) QueryUser(_m *TopUpOrder) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(topuporder.Table, topuporder.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, topuporder.UserTable, topuporder.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *TopUpOrderClient) Hooks() []Hook {
+	return c.hooks.TopUpOrder
+}
+
+// Interceptors returns the client interceptors.
+func (c *TopUpOrderClient) Interceptors() []Interceptor {
+	return c.inters.TopUpOrder
+}
+
+func (c *TopUpOrderClient) mutate(ctx context.Context, m *TopUpOrderMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&TopUpOrderCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&TopUpOrderUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&TopUpOrderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&TopUpOrderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown TopUpOrder mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamModelClient is a client for the UpstreamModel schema.
+type UpstreamModelClient struct {
+	config
+}
+
+// NewUpstreamModelClient returns a client for the UpstreamModel from the given config.
+func NewUpstreamModelClient(c config) *UpstreamModelClient {
+	return &UpstreamModelClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreammodel.Hooks(f(g(h())))`.
+func (c *UpstreamModelClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamModel = append(c.hooks.UpstreamModel, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreammodel.Intercept(f(g(h())))`.
+func (c *UpstreamModelClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamModel = append(c.inters.UpstreamModel, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamModel entity.
+func (c *UpstreamModelClient) Create() *UpstreamModelCreate {
+	mutation := newUpstreamModelMutation(c.config, OpCreate)
+	return &UpstreamModelCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamModel entities.
+func (c *UpstreamModelClient) CreateBulk(builders ...*UpstreamModelCreate) *UpstreamModelCreateBulk {
+	return &UpstreamModelCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamModelClient) MapCreateBulk(slice any, setFunc func(*UpstreamModelCreate, int)) *UpstreamModelCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamModelCreateBulk{err: fmt.Errorf("calling to UpstreamModelClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamModelCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamModelCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamModel.
+func (c *UpstreamModelClient) Update() *UpstreamModelUpdate {
+	mutation := newUpstreamModelMutation(c.config, OpUpdate)
+	return &UpstreamModelUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamModelClient) UpdateOne(_m *UpstreamModel) *UpstreamModelUpdateOne {
+	mutation := newUpstreamModelMutation(c.config, OpUpdateOne, withUpstreamModel(_m))
+	return &UpstreamModelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamModelClient) UpdateOneID(id uuid.UUID) *UpstreamModelUpdateOne {
+	mutation := newUpstreamModelMutation(c.config, OpUpdateOne, withUpstreamModelID(id))
+	return &UpstreamModelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamModel.
+func (c *UpstreamModelClient) Delete() *UpstreamModelDelete {
+	mutation := newUpstreamModelMutation(c.config, OpDelete)
+	return &UpstreamModelDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamModelClient) DeleteOne(_m *UpstreamModel) *UpstreamModelDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamModelClient) DeleteOneID(id uuid.UUID) *UpstreamModelDeleteOne {
+	builder := c.Delete().Where(upstreammodel.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamModelDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamModel.
+func (c *UpstreamModelClient) Query() *UpstreamModelQuery {
+	return &UpstreamModelQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamModel},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamModel entity by its id.
+func (c *UpstreamModelClient) Get(ctx context.Context, id uuid.UUID) (*UpstreamModel, error) {
+	return c.Query().Where(upstreammodel.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamModelClient) GetX(ctx context.Context, id uuid.UUID) *UpstreamModel {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryModelRoutes queries the model_routes edge of a UpstreamModel.
+func (c *UpstreamModelClient) QueryModelRoutes(_m *UpstreamModel) *ModelRouteQuery {
+	query := (&ModelRouteClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, id),
+			sqlgraph.To(modelroute.Table, modelroute.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.ModelRoutesTable, upstreammodel.ModelRoutesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIUsages queries the api_usages edge of a UpstreamModel.
+func (c *UpstreamModelClient) QueryAPIUsages(_m *UpstreamModel) *APIUsageQuery {
+	query := (&APIUsageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, id),
+			sqlgraph.To(apiusage.Table, apiusage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.APIUsagesTable, upstreammodel.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamModelClient) Hooks() []Hook {
+	return c.hooks.UpstreamModel
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamModelClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamModel
+}
+
+func (c *UpstreamModelClient) mutate(ctx context.Context, m *UpstreamModelMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamModelCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamModelUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamModelUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamModelDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamModel mutation op: %q", m.Op())
+	}
+}
+
 // UserClient is a client for the User schema.
 type UserClient struct {
 	config
@@ -1261,6 +1955,22 @@ func (c *UserClient) QueryWalletEntries(_m *User) *WalletEntryQuery {
 	return query
 }
 
+// QueryTopUpOrders queries the top_up_orders edge of a User.
+func (c *UserClient) QueryTopUpOrders(_m *User) *TopUpOrderQuery {
+	query := (&TopUpOrderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(topuporder.Table, topuporder.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TopUpOrdersTable, user.TopUpOrdersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryAPIUsages queries the api_usages edge of a User.
 func (c *UserClient) QueryAPIUsages(_m *User) *APIUsageQuery {
 	query := (&APIUsageClient{config: c.config}).Query()
@@ -1270,6 +1980,22 @@ func (c *UserClient) QueryAPIUsages(_m *User) *APIUsageQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryBillingGroup queries the billing_group edge of a User.
+func (c *UserClient) QueryBillingGroup(_m *User) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, user.BillingGroupTable, user.BillingGroupColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1933,11 +2659,13 @@ func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIUsage, ModelRoute, Provider, SystemSetting, User, UserIdentity,
-		UserSession, Wallet, WalletEntry []ent.Hook
+		APIKey, APIUsage, BillingGroup, ModelRoute, PaymentConfig, Provider,
+		SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity, UserSession,
+		Wallet, WalletEntry []ent.Hook
 	}
 	inters struct {
-		APIKey, APIUsage, ModelRoute, Provider, SystemSetting, User, UserIdentity,
-		UserSession, Wallet, WalletEntry []ent.Interceptor
+		APIKey, APIUsage, BillingGroup, ModelRoute, PaymentConfig, Provider,
+		SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity, UserSession,
+		Wallet, WalletEntry []ent.Interceptor
 	}
 )

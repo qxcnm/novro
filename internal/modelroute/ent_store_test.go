@@ -70,6 +70,42 @@ func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 	}
 }
 
+func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
+	client := openModelRouteIntegrationClient(t)
+	ctx := context.Background()
+	configured, err := client.Provider.Create().
+		SetCode("soft-delete-provider").SetDisplayName("Soft Delete Provider").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://soft-delete.example.com").
+		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	if err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	route, err := client.ModelRoute.Create().SetProviderID(configured.ID).
+		SetPublicName("soft-delete-chat").SetDisplayName("Soft Delete Chat").SetUpstreamName("soft-delete-upstream").
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx)
+	if err != nil {
+		t.Fatalf("create route: %v", err)
+	}
+	store := NewEntStore(client)
+	if err := store.Delete(ctx, route.ID); err != nil {
+		t.Fatalf("soft delete route: %v", err)
+	}
+	preserved, err := client.ModelRoute.Get(ctx, route.ID)
+	if err != nil {
+		t.Fatalf("read preserved route: %v", err)
+	}
+	if preserved.DeletedAt == nil || preserved.Status != entmodelroute.StatusDisabled {
+		t.Fatalf("route was not soft deleted: %+v", preserved)
+	}
+	listed, err := store.List(ctx, ListFilter{Search: "soft-delete-chat"})
+	if err != nil {
+		t.Fatalf("list routes: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("soft-deleted route remained visible: %+v", listed)
+	}
+}
+
 func openModelRouteIntegrationClient(t *testing.T) *ent.Client {
 	t.Helper()
 	dsn := strings.TrimSpace(os.Getenv("NOVRO_TEST_MYSQL_DSN"))

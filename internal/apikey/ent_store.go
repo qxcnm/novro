@@ -19,7 +19,7 @@ type EntStore struct {
 func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.Time) (Actor, error) {
 	entity, err := s.client.APIKey.Query().
 		Where(entapikey.KeyHashEQ(hash), entapikey.StatusEQ(entapikey.StatusActive), entapikey.HasUserWith(entuser.StatusEQ(entuser.StatusActive))).
-		WithUser().Only(ctx)
+		WithUser(func(query *ent.UserQuery) { query.WithBillingGroup() }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Actor{}, ErrUnauthenticated
 	}
@@ -33,7 +33,11 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 	if _, err := s.client.APIKey.UpdateOneID(entity.ID).SetLastUsedAt(now).Save(ctx); err != nil {
 		return Actor{}, fmt.Errorf("update API key last use: %w", err)
 	}
-	return Actor{APIKey: fromEnt(entity), User: user.Record{ID: owner.ID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}}, nil
+	userRecord := user.Record{ID: owner.ID, BillingGroupID: owner.BillingGroupID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}
+	if group, groupErr := owner.Edges.BillingGroupOrErr(); groupErr == nil {
+		userRecord.BillingGroup = &user.BillingGroupSummary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
+	return Actor{APIKey: fromEnt(entity), User: userRecord}, nil
 }
 
 func NewEntStore(client *ent.Client) *EntStore {

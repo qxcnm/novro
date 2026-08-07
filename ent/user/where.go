@@ -56,9 +56,19 @@ func IDLTE(id uuid.UUID) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldID, id))
 }
 
+// BillingGroupID applies equality check predicate on the "billing_group_id" field. It's identical to BillingGroupIDEQ.
+func BillingGroupID(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
 // Username applies equality check predicate on the "username" field. It's identical to UsernameEQ.
 func Username(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUsername, v))
+}
+
+// Email applies equality check predicate on the "email" field. It's identical to EmailEQ.
+func Email(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmail, v))
 }
 
 // DisplayName applies equality check predicate on the "display_name" field. It's identical to DisplayNameEQ.
@@ -84,6 +94,36 @@ func CreatedAt(v time.Time) predicate.User {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// BillingGroupIDEQ applies the EQ predicate on the "billing_group_id" field.
+func BillingGroupIDEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDNEQ applies the NEQ predicate on the "billing_group_id" field.
+func BillingGroupIDNEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDIn applies the In predicate on the "billing_group_id" field.
+func BillingGroupIDIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldIn(FieldBillingGroupID, vs...))
+}
+
+// BillingGroupIDNotIn applies the NotIn predicate on the "billing_group_id" field.
+func BillingGroupIDNotIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldBillingGroupID, vs...))
+}
+
+// BillingGroupIDIsNil applies the IsNil predicate on the "billing_group_id" field.
+func BillingGroupIDIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldBillingGroupID))
+}
+
+// BillingGroupIDNotNil applies the NotNil predicate on the "billing_group_id" field.
+func BillingGroupIDNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldBillingGroupID))
 }
 
 // UsernameEQ applies the EQ predicate on the "username" field.
@@ -149,6 +189,81 @@ func UsernameEqualFold(v string) predicate.User {
 // UsernameContainsFold applies the ContainsFold predicate on the "username" field.
 func UsernameContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldUsername, v))
+}
+
+// EmailEQ applies the EQ predicate on the "email" field.
+func EmailEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmail, v))
+}
+
+// EmailNEQ applies the NEQ predicate on the "email" field.
+func EmailNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldEmail, v))
+}
+
+// EmailIn applies the In predicate on the "email" field.
+func EmailIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldEmail, vs...))
+}
+
+// EmailNotIn applies the NotIn predicate on the "email" field.
+func EmailNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldEmail, vs...))
+}
+
+// EmailGT applies the GT predicate on the "email" field.
+func EmailGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldEmail, v))
+}
+
+// EmailGTE applies the GTE predicate on the "email" field.
+func EmailGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldEmail, v))
+}
+
+// EmailLT applies the LT predicate on the "email" field.
+func EmailLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldEmail, v))
+}
+
+// EmailLTE applies the LTE predicate on the "email" field.
+func EmailLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldEmail, v))
+}
+
+// EmailContains applies the Contains predicate on the "email" field.
+func EmailContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldEmail, v))
+}
+
+// EmailHasPrefix applies the HasPrefix predicate on the "email" field.
+func EmailHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldEmail, v))
+}
+
+// EmailHasSuffix applies the HasSuffix predicate on the "email" field.
+func EmailHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldEmail, v))
+}
+
+// EmailIsNil applies the IsNil predicate on the "email" field.
+func EmailIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldEmail))
+}
+
+// EmailNotNil applies the NotNil predicate on the "email" field.
+func EmailNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldEmail))
+}
+
+// EmailEqualFold applies the EqualFold predicate on the "email" field.
+func EmailEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldEmail, v))
+}
+
+// EmailContainsFold applies the ContainsFold predicate on the "email" field.
+func EmailContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldEmail, v))
 }
 
 // DisplayNameEQ applies the EQ predicate on the "display_name" field.
@@ -576,6 +691,29 @@ func HasWalletEntriesWith(preds ...predicate.WalletEntry) predicate.User {
 	})
 }
 
+// HasTopUpOrders applies the HasEdge predicate on the "top_up_orders" edge.
+func HasTopUpOrders() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TopUpOrdersTable, TopUpOrdersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTopUpOrdersWith applies the HasEdge predicate on the "top_up_orders" edge with a given conditions (other predicates).
+func HasTopUpOrdersWith(preds ...predicate.TopUpOrder) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newTopUpOrdersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasAPIUsages applies the HasEdge predicate on the "api_usages" edge.
 func HasAPIUsages() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
@@ -591,6 +729,29 @@ func HasAPIUsages() predicate.User {
 func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newAPIUsagesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasBillingGroup applies the HasEdge predicate on the "billing_group" edge.
+func HasBillingGroup() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasBillingGroupWith applies the HasEdge predicate on the "billing_group" edge with a given conditions (other predicates).
+func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newBillingGroupStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

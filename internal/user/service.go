@@ -9,7 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
+var (
+	usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
+	emailPattern    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+)
 
 type Store interface {
 	Create(context.Context, CreateParams) (Record, error)
@@ -26,15 +29,18 @@ type PasswordHasher interface {
 }
 
 type CreateParams struct {
-	Username     string
-	DisplayName  string
-	PasswordHash string
-	Role         Role
+	Username       string
+	Email          string
+	DisplayName    string
+	PasswordHash   string
+	Role           Role
+	BillingGroupID *uuid.UUID
 }
 
 type UpdateParams struct {
-	DisplayName *string
-	Role        *Role
+	DisplayName    *string
+	Role           *Role
+	BillingGroupID *uuid.UUID
 }
 
 type Service struct {
@@ -52,13 +58,13 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (Record, error) {
 	return s.create(ctx, CreateInput{
-		Username: input.Username, DisplayName: input.DisplayName, Password: input.Password, Role: RoleMember,
+		Username: input.Username, Email: input.Email, DisplayName: input.DisplayName, Password: input.Password, Role: RoleMember,
 	}, s.store.Create)
 }
 
 func (s *Service) InitializeAdmin(ctx context.Context, input RegisterInput) (Record, error) {
 	return s.create(ctx, CreateInput{
-		Username: input.Username, DisplayName: input.DisplayName, Password: input.Password, Role: RoleAdmin,
+		Username: input.Username, Email: input.Email, DisplayName: input.DisplayName, Password: input.Password, Role: RoleAdmin,
 	}, s.store.CreateInitialAdmin)
 }
 
@@ -72,8 +78,9 @@ func (s *Service) SetupRequired(ctx context.Context) (bool, error) {
 
 func (s *Service) create(ctx context.Context, input CreateInput, save func(context.Context, CreateParams) (Record, error)) (Record, error) {
 	username := strings.ToLower(strings.TrimSpace(input.Username))
+	email, emailOK := NormalizeEmail(input.Email)
 	displayName := strings.TrimSpace(input.DisplayName)
-	if !usernamePattern.MatchString(username) || len([]rune(displayName)) > 128 {
+	if !usernamePattern.MatchString(username) || !emailOK || len([]rune(displayName)) > 128 {
 		return Record{}, ErrInvalidInput
 	}
 	role := input.Role
@@ -88,11 +95,18 @@ func (s *Service) create(ctx context.Context, input CreateInput, save func(conte
 		return Record{}, fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
 	}
 	return save(ctx, CreateParams{
-		Username:     username,
-		DisplayName:  displayName,
-		PasswordHash: passwordHash,
-		Role:         role,
+		Username:       username,
+		Email:          email,
+		DisplayName:    displayName,
+		PasswordHash:   passwordHash,
+		Role:           role,
+		BillingGroupID: input.BillingGroupID,
 	})
+}
+
+func NormalizeEmail(value string) (string, bool) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return value, value != "" && len(value) <= 320 && emailPattern.MatchString(value)
 }
 
 func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
@@ -113,10 +127,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil && input.BillingGroupID == nil) {
 		return Record{}, ErrInvalidInput
 	}
-	params := UpdateParams{Role: input.Role}
+	params := UpdateParams{Role: input.Role, BillingGroupID: input.BillingGroupID}
 	if input.DisplayName != nil {
 		displayName := strings.TrimSpace(*input.DisplayName)
 		if len([]rune(displayName)) > 128 {
@@ -125,6 +139,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 		params.DisplayName = &displayName
 	}
 	if input.Role != nil && *input.Role != RoleAdmin && *input.Role != RoleMember {
+		return Record{}, ErrInvalidInput
+	}
+	if input.BillingGroupID != nil && *input.BillingGroupID == uuid.Nil {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Update(ctx, id, params)

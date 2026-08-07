@@ -14,6 +14,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
 // ModelRouteCreate is the builder for creating a ModelRoute entity.
@@ -26,6 +27,20 @@ type ModelRouteCreate struct {
 // SetProviderID sets the "provider_id" field.
 func (_c *ModelRouteCreate) SetProviderID(v uuid.UUID) *ModelRouteCreate {
 	_c.mutation.SetProviderID(v)
+	return _c
+}
+
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (_c *ModelRouteCreate) SetUpstreamModelID(v uuid.UUID) *ModelRouteCreate {
+	_c.mutation.SetUpstreamModelID(v)
+	return _c
+}
+
+// SetNillableUpstreamModelID sets the "upstream_model_id" field if the given value is not nil.
+func (_c *ModelRouteCreate) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRouteCreate {
+	if v != nil {
+		_c.SetUpstreamModelID(*v)
+	}
 	return _c
 }
 
@@ -101,6 +116,20 @@ func (_c *ModelRouteCreate) SetNillableUpdatedAt(v *time.Time) *ModelRouteCreate
 	return _c
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (_c *ModelRouteCreate) SetDeletedAt(v time.Time) *ModelRouteCreate {
+	_c.mutation.SetDeletedAt(v)
+	return _c
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_c *ModelRouteCreate) SetNillableDeletedAt(v *time.Time) *ModelRouteCreate {
+	if v != nil {
+		_c.SetDeletedAt(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *ModelRouteCreate) SetID(v uuid.UUID) *ModelRouteCreate {
 	_c.mutation.SetID(v)
@@ -118,6 +147,11 @@ func (_c *ModelRouteCreate) SetNillableID(v *uuid.UUID) *ModelRouteCreate {
 // SetProvider sets the "provider" edge to the Provider entity.
 func (_c *ModelRouteCreate) SetProvider(v *Provider) *ModelRouteCreate {
 	return _c.SetProviderID(v.ID)
+}
+
+// SetUpstreamModel sets the "upstream_model" edge to the UpstreamModel entity.
+func (_c *ModelRouteCreate) SetUpstreamModel(v *UpstreamModel) *ModelRouteCreate {
+	return _c.SetUpstreamModelID(v.ID)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -317,6 +351,10 @@ func (_c *ModelRouteCreate) createSpec() (*ModelRoute, *sqlgraph.CreateSpec) {
 		_spec.SetField(modelroute.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
+	if value, ok := _c.mutation.DeletedAt(); ok {
+		_spec.SetField(modelroute.FieldDeletedAt, field.TypeTime, value)
+		_node.DeletedAt = &value
+	}
 	if nodes := _c.mutation.ProviderIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -332,6 +370,23 @@ func (_c *ModelRouteCreate) createSpec() (*ModelRoute, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ProviderID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.UpstreamModelIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.UpstreamModelTable,
+			Columns: []string{modelroute.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.UpstreamModelID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.APIUsagesIDs(); len(nodes) > 0 {

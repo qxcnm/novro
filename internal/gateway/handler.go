@@ -21,14 +21,14 @@ import (
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/requestid"
+	"github.com/novro-gateway/novro/internal/upstreamhttp"
 )
 
 const (
-	maxGatewayBodyBytes          = 10 << 20
-	maxUpstreamBodyBytes         = 32 << 20
-	defaultMaxOutputTokens       = 4096
-	maxOutputTokens              = 1_000_000
-	priceUnitTokens        int64 = 1_000_000
+	maxGatewayBodyBytes    = 10 << 20
+	maxUpstreamBodyBytes   = 32 << 20
+	defaultMaxOutputTokens = 4096
+	maxOutputTokens        = 1_000_000
 )
 
 type KeyAuthenticator interface {
@@ -171,6 +171,11 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		writeError(w, http.StatusBadRequest, "unsupported_endpoint", "该模型不支持当前 API 协议")
 		return
 	}
+	if route.UpstreamModel == nil || route.UpstreamModelID == nil || actor.User.BillingGroup == nil || actor.User.BillingGroupID == nil {
+		h.logger.Error("resolve gateway billing context", "request_id", requestid.FromContext(r.Context()), "model", route.PublicName)
+		writeError(w, http.StatusInternalServerError, "billing_configuration_error", "模型计费配置暂时不可用")
+		return
+	}
 	payload["model"] = route.UpstreamName
 	stream, _ := payload["stream"].(bool)
 	maximum, ok := readMaxOutput(payload, endpoint)
@@ -192,7 +197,13 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	inputEstimate := len(upstreamBody) + 256
-	reserved := priceForTokens(inputEstimate, route.InputPriceMicros) + priceForTokens(maximum, route.OutputPriceMicros)
+	rates := rateCardFor(route)
+	reservation, err := billing.EstimateReservation(inputEstimate, maximum, rates, actor.User.BillingGroup.MultiplierBPS)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "billing_configuration_error", "模型计费配置暂时不可用")
+		return
+	}
+	reserved := reservation.CostMicros
 	requestID := requestid.FromContext(r.Context())
 	if requestID == uuid.Nil {
 		requestID = requestid.New()
@@ -266,15 +277,15 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 		return
 	}
 	usage := parseUsage(body)
-	if usage.Input == 0 && usage.Output == 0 {
-		usage = tokenUsage{Input: inputEstimate, Output: min(len(body)+128, outputMaximum), Estimated: true}
+	rates := rateCardFor(route)
+	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.User.BillingGroup.MultiplierBPS)
+	if err != nil {
+		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
+		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
+		return
 	}
-	cost := priceForTokens(usage.Input, route.InputPriceMicros) + priceForTokens(usage.Output, route.OutputPriceMicros)
-	if cost > reserved {
-		cost = reserved
-		usage.Estimated = true
-	}
-	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, cost, usage, startedAt); err != nil {
+	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
 		return
 	}
@@ -356,17 +367,16 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	if relayErr != nil {
 		h.logger.Warn("relay gateway stream", "request_id", requestID, "provider", route.Provider.Code, "error", relayErr)
 	}
-	if usage.Input == 0 && usage.Output == 0 {
-		usage = tokenUsage{Input: inputEstimate, Output: outputMaximum, Estimated: true}
-	} else if !completed {
+	usage = applyUsageFallback(usage, inputEstimate, outputMaximum, rateCardFor(route))
+	if !completed {
 		usage.Estimated = true
 	}
-	cost := priceForTokens(usage.Input, route.InputPriceMicros) + priceForTokens(usage.Output, route.OutputPriceMicros)
-	if cost > reserved {
-		cost = reserved
-		usage.Estimated = true
+	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.User.BillingGroup.MultiplierBPS)
+	if err != nil {
+		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
+		return
 	}
-	_ = h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, cost, usage, startedAt)
+	_ = h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt)
 }
 
 func streamCompleted(endpoint string, data []byte) bool {
@@ -389,10 +399,12 @@ func streamCompleted(endpoint string, data []byte) bool {
 	}
 }
 
-func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved, cost int64, usage tokenUsage, startedAt time.Time) error {
+func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, RequestID: requestID, Endpoint: endpoint, InputTokens: usage.Input, OutputTokens: usage.Output, CostMicros: cost, ReservedMicros: reserved, Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, CreatedAt: startedAt, FinishedAt: h.now()}
+	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID, RequestID: requestID, Endpoint: endpoint,
+		InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 	err, attempts := h.retrySettlement(finalizeCtx, func() error { return h.billing.Finalize(finalizeCtx, input) })
 	if err != nil {
 		h.logger.Error("finalize gateway usage", "request_id", requestID, "attempts", attempts, "error", err)
@@ -444,18 +456,33 @@ func retryableSettlementError(err error) bool {
 }
 
 type tokenUsage struct {
-	Input, Output int
-	Estimated     bool
-	UpstreamID    string
+	Input, UncachedInput, CacheRead, CacheWrite, CacheWrite1h, Output int
+	InputReported, OutputReported                                     bool
+	Estimated                                                         bool
+	UpstreamID                                                        string
 }
 
 func (u *tokenUsage) merge(other tokenUsage) {
 	if other.Input > u.Input {
 		u.Input = other.Input
 	}
+	if other.UncachedInput > u.UncachedInput {
+		u.UncachedInput = other.UncachedInput
+	}
+	if other.CacheRead > u.CacheRead {
+		u.CacheRead = other.CacheRead
+	}
+	if other.CacheWrite > u.CacheWrite {
+		u.CacheWrite = other.CacheWrite
+	}
+	if other.CacheWrite1h > u.CacheWrite1h {
+		u.CacheWrite1h = other.CacheWrite1h
+	}
 	if other.Output > u.Output {
 		u.Output = other.Output
 	}
+	u.InputReported = u.InputReported || other.InputReported
+	u.OutputReported = u.OutputReported || other.OutputReported
 	if other.UpstreamID != "" {
 		u.UpstreamID = other.UpstreamID
 	}
@@ -472,8 +499,7 @@ func parseUsage(body []byte) tokenUsage {
 		if candidate == nil {
 			continue
 		}
-		usage.Input = max(usage.Input, intValue(candidate["prompt_tokens"]), intValue(candidate["input_tokens"]))
-		usage.Output = max(usage.Output, intValue(candidate["completion_tokens"]), intValue(candidate["output_tokens"]))
+		usage.merge(parseUsageCandidate(candidate))
 	}
 	if response := mapValue(root["response"]); response != nil && usage.UpstreamID == "" {
 		usage.UpstreamID = stringValue(response["id"])
@@ -482,6 +508,102 @@ func parseUsage(body []byte) tokenUsage {
 		usage.UpstreamID = stringValue(message["id"])
 	}
 	return usage
+}
+
+func parseUsageCandidate(candidate map[string]any) tokenUsage {
+	promptTokens, hasPromptTokens := intField(candidate, "prompt_tokens")
+	inputTokens, hasInputTokens := intField(candidate, "input_tokens")
+	completionTokens, hasCompletionTokens := intField(candidate, "completion_tokens")
+	outputTokens, hasOutputTokens := intField(candidate, "output_tokens")
+	outputTokens = max(completionTokens, outputTokens)
+	details := mapValue(candidate["prompt_tokens_details"])
+	if details == nil {
+		details = mapValue(candidate["input_tokens_details"])
+	}
+	cacheRead := max(intValue(candidate["prompt_cache_hit_tokens"]), intValue(candidate["cached_tokens"]), intValue(details["cached_tokens"]), intValue(candidate["cache_read_input_tokens"]))
+	cacheMiss := intValue(candidate["prompt_cache_miss_tokens"])
+	cacheWriteTotal := intValue(candidate["cache_creation_input_tokens"])
+	cacheCreation := mapValue(candidate["cache_creation"])
+	cacheWrite1h := max(intValue(candidate["cache_creation_1h_input_tokens"]), intValue(cacheCreation["ephemeral_1h_input_tokens"]))
+	cacheWrite5m := max(intValue(candidate["cache_creation_5m_input_tokens"]), intValue(cacheCreation["ephemeral_5m_input_tokens"]))
+	cacheWrite := cacheWriteTotal
+	if cacheWrite5m+cacheWrite1h > 0 {
+		cacheWrite = max(cacheWrite5m, cacheWriteTotal-cacheWrite1h)
+	}
+
+	// OpenAI-compatible providers use prompt_tokens as a total and expose cached
+	// tokens as a subset. Anthropic uses input_tokens for regular input and reports
+	// cache reads and cache creation as additional, mutually exclusive dimensions.
+	uncached := 0
+	inputTotal := 0
+	if hasPromptTokens {
+		if cacheMiss > 0 {
+			uncached = cacheMiss
+		} else {
+			uncached = max(0, promptTokens-cacheRead)
+		}
+		inputTotal = uncached + cacheRead
+		if inputTotal < promptTokens {
+			uncached += promptTokens - inputTotal
+			inputTotal = promptTokens
+		}
+		if inputTotal > promptTokens {
+			promptTokens = inputTotal
+		}
+		// Cache creation is not part of any currently supported OpenAI-compatible
+		// prompt total. Preserve it if a provider returns the fields explicitly.
+		inputTotal = promptTokens + cacheWrite + cacheWrite1h
+	} else if hasInputTokens {
+		uncached = inputTokens
+		inputTotal = uncached + cacheRead + cacheWrite + cacheWrite1h
+	} else {
+		uncached = cacheMiss
+		inputTotal = uncached + cacheRead + cacheWrite + cacheWrite1h
+	}
+	return tokenUsage{Input: inputTotal, UncachedInput: uncached, CacheRead: cacheRead, CacheWrite: cacheWrite, CacheWrite1h: cacheWrite1h, Output: outputTokens, InputReported: hasPromptTokens || hasInputTokens, OutputReported: hasCompletionTokens || hasOutputTokens}
+}
+
+func (u tokenUsage) breakdown() billing.TokenBreakdown {
+	return billing.TokenBreakdown{UncachedInput: u.UncachedInput, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheWrite1h: u.CacheWrite1h, Output: u.Output}
+}
+
+func applyUsageFallback(usage tokenUsage, input, output int, rates billing.RateCard) tokenUsage {
+	if !usage.InputReported {
+		estimated := estimatedUsage(input, 0, rates)
+		usage.Input = estimated.Input
+		usage.UncachedInput = estimated.UncachedInput
+		usage.CacheRead = estimated.CacheRead
+		usage.CacheWrite = estimated.CacheWrite
+		usage.CacheWrite1h = estimated.CacheWrite1h
+		usage.Estimated = true
+	}
+	if !usage.OutputReported {
+		usage.Output = output
+		usage.Estimated = true
+	}
+	return usage
+}
+
+func estimatedUsage(input, output int, rates billing.RateCard) tokenUsage {
+	usage := tokenUsage{Input: input, UncachedInput: input, Output: output, Estimated: true}
+	highest := rates.InputMicros
+	if rates.CacheReadMicros > highest {
+		highest = rates.CacheReadMicros
+		usage.UncachedInput, usage.CacheRead = 0, input
+	}
+	if rates.CacheWriteMicros > highest {
+		highest = rates.CacheWriteMicros
+		usage.UncachedInput, usage.CacheRead, usage.CacheWrite = 0, 0, input
+	}
+	if rates.CacheWrite1hMicros > highest {
+		usage.UncachedInput, usage.CacheRead, usage.CacheWrite, usage.CacheWrite1h = 0, 0, 0, input
+	}
+	return usage
+}
+
+func rateCardFor(route modelroute.Resolved) billing.RateCard {
+	prices := route.UpstreamModel.Prices
+	return billing.RateCard{InputMicros: prices.InputMicros, OutputMicros: prices.OutputMicros, CacheReadMicros: prices.CacheReadMicros, CacheWriteMicros: prices.CacheWriteMicros, CacheWrite1hMicros: prices.CacheWrite1hMicros, RequestMicros: prices.RequestMicros}
 }
 
 func readMaxOutput(payload map[string]any, endpoint string) (int, bool) {
@@ -535,62 +657,11 @@ func buildUpstreamURL(base string, protocol provider.Protocol, endpoint string) 
 }
 
 func newOutboundClient() *http.Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	transport := &http.Transport{
-		Proxy: nil,
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, fmt.Errorf("parse upstream address: %w", err)
-			}
-			addresses, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
-			if err != nil {
-				return nil, fmt.Errorf("resolve upstream host: %w", err)
-			}
-			for _, ip := range addresses {
-				if unsafeUpstreamIP(ip) {
-					continue
-				}
-				connection, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-				if dialErr == nil {
-					return connection, nil
-				}
-				err = dialErr
-			}
-			if err != nil {
-				return nil, fmt.Errorf("dial upstream host: %w", err)
-			}
-			return nil, fmt.Errorf("upstream host does not resolve to a public address")
-		},
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 60 * time.Second,
-	}
-	return &http.Client{
-		Transport: transport,
-		// Provider endpoints are administrator-controlled, but their responses
-		// must never redirect credentials to another host.
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	return upstreamhttp.NewClient()
 }
 
 func unsafeUpstreamIP(ip net.IP) bool {
-	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
-}
-
-func priceForTokens(tokens int, price int64) int64 {
-	if tokens <= 0 || price <= 0 {
-		return 0
-	}
-	count := int64(tokens)
-	whole := (count / priceUnitTokens) * price
-	remainder := count % priceUnitTokens
-	return whole + (remainder*price+priceUnitTokens-1)/priceUnitTokens
+	return upstreamhttp.UnsafeIP(ip)
 }
 
 func readLimited(reader io.Reader, limit int64) ([]byte, error) {
@@ -616,6 +687,14 @@ func intValue(value any) int {
 		return 0
 	}
 	return int(number)
+}
+
+func intField(values map[string]any, key string) (int, bool) {
+	value, exists := values[key]
+	if !exists {
+		return 0, false
+	}
+	return intValue(value), true
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

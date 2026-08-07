@@ -16,6 +16,7 @@ import (
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
 // ModelRouteUpdate is the builder for updating ModelRoute entities.
@@ -42,6 +43,26 @@ func (_u *ModelRouteUpdate) SetNillableProviderID(v *uuid.UUID) *ModelRouteUpdat
 	if v != nil {
 		_u.SetProviderID(*v)
 	}
+	return _u
+}
+
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (_u *ModelRouteUpdate) SetUpstreamModelID(v uuid.UUID) *ModelRouteUpdate {
+	_u.mutation.SetUpstreamModelID(v)
+	return _u
+}
+
+// SetNillableUpstreamModelID sets the "upstream_model_id" field if the given value is not nil.
+func (_u *ModelRouteUpdate) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRouteUpdate {
+	if v != nil {
+		_u.SetUpstreamModelID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelID clears the value of the "upstream_model_id" field.
+func (_u *ModelRouteUpdate) ClearUpstreamModelID() *ModelRouteUpdate {
+	_u.mutation.ClearUpstreamModelID()
 	return _u
 }
 
@@ -135,9 +156,34 @@ func (_u *ModelRouteUpdate) SetUpdatedAt(v time.Time) *ModelRouteUpdate {
 	return _u
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *ModelRouteUpdate) SetDeletedAt(v time.Time) *ModelRouteUpdate {
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *ModelRouteUpdate) SetNillableDeletedAt(v *time.Time) *ModelRouteUpdate {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *ModelRouteUpdate) ClearDeletedAt() *ModelRouteUpdate {
+	_u.mutation.ClearDeletedAt()
+	return _u
+}
+
 // SetProvider sets the "provider" edge to the Provider entity.
 func (_u *ModelRouteUpdate) SetProvider(v *Provider) *ModelRouteUpdate {
 	return _u.SetProviderID(v.ID)
+}
+
+// SetUpstreamModel sets the "upstream_model" edge to the UpstreamModel entity.
+func (_u *ModelRouteUpdate) SetUpstreamModel(v *UpstreamModel) *ModelRouteUpdate {
+	return _u.SetUpstreamModelID(v.ID)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -163,6 +209,12 @@ func (_u *ModelRouteUpdate) Mutation() *ModelRouteMutation {
 // ClearProvider clears the "provider" edge to the Provider entity.
 func (_u *ModelRouteUpdate) ClearProvider() *ModelRouteUpdate {
 	_u.mutation.ClearProvider()
+	return _u
+}
+
+// ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
+func (_u *ModelRouteUpdate) ClearUpstreamModel() *ModelRouteUpdate {
+	_u.mutation.ClearUpstreamModel()
 	return _u
 }
 
@@ -292,6 +344,12 @@ func (_u *ModelRouteUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(modelroute.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(modelroute.FieldDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(modelroute.FieldDeletedAt, field.TypeTime)
+	}
 	if _u.mutation.ProviderCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -314,6 +372,35 @@ func (_u *ModelRouteUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UpstreamModelCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.UpstreamModelTable,
+			Columns: []string{modelroute.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UpstreamModelIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.UpstreamModelTable,
+			Columns: []string{modelroute.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -397,6 +484,26 @@ func (_u *ModelRouteUpdateOne) SetNillableProviderID(v *uuid.UUID) *ModelRouteUp
 	if v != nil {
 		_u.SetProviderID(*v)
 	}
+	return _u
+}
+
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (_u *ModelRouteUpdateOne) SetUpstreamModelID(v uuid.UUID) *ModelRouteUpdateOne {
+	_u.mutation.SetUpstreamModelID(v)
+	return _u
+}
+
+// SetNillableUpstreamModelID sets the "upstream_model_id" field if the given value is not nil.
+func (_u *ModelRouteUpdateOne) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRouteUpdateOne {
+	if v != nil {
+		_u.SetUpstreamModelID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelID clears the value of the "upstream_model_id" field.
+func (_u *ModelRouteUpdateOne) ClearUpstreamModelID() *ModelRouteUpdateOne {
+	_u.mutation.ClearUpstreamModelID()
 	return _u
 }
 
@@ -490,9 +597,34 @@ func (_u *ModelRouteUpdateOne) SetUpdatedAt(v time.Time) *ModelRouteUpdateOne {
 	return _u
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *ModelRouteUpdateOne) SetDeletedAt(v time.Time) *ModelRouteUpdateOne {
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *ModelRouteUpdateOne) SetNillableDeletedAt(v *time.Time) *ModelRouteUpdateOne {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *ModelRouteUpdateOne) ClearDeletedAt() *ModelRouteUpdateOne {
+	_u.mutation.ClearDeletedAt()
+	return _u
+}
+
 // SetProvider sets the "provider" edge to the Provider entity.
 func (_u *ModelRouteUpdateOne) SetProvider(v *Provider) *ModelRouteUpdateOne {
 	return _u.SetProviderID(v.ID)
+}
+
+// SetUpstreamModel sets the "upstream_model" edge to the UpstreamModel entity.
+func (_u *ModelRouteUpdateOne) SetUpstreamModel(v *UpstreamModel) *ModelRouteUpdateOne {
+	return _u.SetUpstreamModelID(v.ID)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -518,6 +650,12 @@ func (_u *ModelRouteUpdateOne) Mutation() *ModelRouteMutation {
 // ClearProvider clears the "provider" edge to the Provider entity.
 func (_u *ModelRouteUpdateOne) ClearProvider() *ModelRouteUpdateOne {
 	_u.mutation.ClearProvider()
+	return _u
+}
+
+// ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
+func (_u *ModelRouteUpdateOne) ClearUpstreamModel() *ModelRouteUpdateOne {
+	_u.mutation.ClearUpstreamModel()
 	return _u
 }
 
@@ -677,6 +815,12 @@ func (_u *ModelRouteUpdateOne) sqlSave(ctx context.Context) (_node *ModelRoute, 
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(modelroute.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(modelroute.FieldDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(modelroute.FieldDeletedAt, field.TypeTime)
+	}
 	if _u.mutation.ProviderCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -699,6 +843,35 @@ func (_u *ModelRouteUpdateOne) sqlSave(ctx context.Context) (_node *ModelRoute, 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UpstreamModelCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.UpstreamModelTable,
+			Columns: []string{modelroute.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UpstreamModelIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.UpstreamModelTable,
+			Columns: []string{modelroute.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

@@ -17,6 +17,7 @@ type Store interface {
 	List(context.Context, ListFilter) ([]Record, error)
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
+	Delete(context.Context, uuid.UUID) error
 }
 
 type CreateParams struct {
@@ -106,6 +107,13 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (R
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.SetStatus(ctx, id, status)
+}
+
+func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return ErrInvalidInput
+	}
+	return s.store.Delete(ctx, id)
 }
 
 func validProtocol(protocol Protocol) bool {

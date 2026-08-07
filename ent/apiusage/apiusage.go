@@ -22,14 +22,42 @@ const (
 	FieldAPIKeyID = "api_key_id"
 	// FieldModelRouteID holds the string denoting the model_route_id field in the database.
 	FieldModelRouteID = "model_route_id"
+	// FieldUpstreamModelID holds the string denoting the upstream_model_id field in the database.
+	FieldUpstreamModelID = "upstream_model_id"
+	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
+	FieldBillingGroupID = "billing_group_id"
 	// FieldRequestID holds the string denoting the request_id field in the database.
 	FieldRequestID = "request_id"
 	// FieldEndpoint holds the string denoting the endpoint field in the database.
 	FieldEndpoint = "endpoint"
 	// FieldInputTokens holds the string denoting the input_tokens field in the database.
 	FieldInputTokens = "input_tokens"
+	// FieldUncachedInputTokens holds the string denoting the uncached_input_tokens field in the database.
+	FieldUncachedInputTokens = "uncached_input_tokens"
+	// FieldCacheReadInputTokens holds the string denoting the cache_read_input_tokens field in the database.
+	FieldCacheReadInputTokens = "cache_read_input_tokens"
+	// FieldCacheWriteInputTokens holds the string denoting the cache_write_input_tokens field in the database.
+	FieldCacheWriteInputTokens = "cache_write_input_tokens"
+	// FieldCacheWrite1hInputTokens holds the string denoting the cache_write_1h_input_tokens field in the database.
+	FieldCacheWrite1hInputTokens = "cache_write_1h_input_tokens"
 	// FieldOutputTokens holds the string denoting the output_tokens field in the database.
 	FieldOutputTokens = "output_tokens"
+	// FieldInputPriceMicros holds the string denoting the input_price_micros field in the database.
+	FieldInputPriceMicros = "input_price_micros"
+	// FieldOutputPriceMicros holds the string denoting the output_price_micros field in the database.
+	FieldOutputPriceMicros = "output_price_micros"
+	// FieldCacheReadPriceMicros holds the string denoting the cache_read_price_micros field in the database.
+	FieldCacheReadPriceMicros = "cache_read_price_micros"
+	// FieldCacheWritePriceMicros holds the string denoting the cache_write_price_micros field in the database.
+	FieldCacheWritePriceMicros = "cache_write_price_micros"
+	// FieldCacheWrite1hPriceMicros holds the string denoting the cache_write_1h_price_micros field in the database.
+	FieldCacheWrite1hPriceMicros = "cache_write_1h_price_micros"
+	// FieldRequestPriceMicros holds the string denoting the request_price_micros field in the database.
+	FieldRequestPriceMicros = "request_price_micros"
+	// FieldBaseCostMicros holds the string denoting the base_cost_micros field in the database.
+	FieldBaseCostMicros = "base_cost_micros"
+	// FieldMultiplierBps holds the string denoting the multiplier_bps field in the database.
+	FieldMultiplierBps = "multiplier_bps"
 	// FieldCostMicros holds the string denoting the cost_micros field in the database.
 	FieldCostMicros = "cost_micros"
 	// FieldReservedMicros holds the string denoting the reserved_micros field in the database.
@@ -38,6 +66,16 @@ const (
 	FieldEstimated = "estimated"
 	// FieldUpstreamRequestID holds the string denoting the upstream_request_id field in the database.
 	FieldUpstreamRequestID = "upstream_request_id"
+	// FieldModelName holds the string denoting the model_name field in the database.
+	FieldModelName = "model_name"
+	// FieldUpstreamModelName holds the string denoting the upstream_model_name field in the database.
+	FieldUpstreamModelName = "upstream_model_name"
+	// FieldBillingGroupCode holds the string denoting the billing_group_code field in the database.
+	FieldBillingGroupCode = "billing_group_code"
+	// FieldBillingGroupName holds the string denoting the billing_group_name field in the database.
+	FieldBillingGroupName = "billing_group_name"
+	// FieldCalculationVersion holds the string denoting the calculation_version field in the database.
+	FieldCalculationVersion = "calculation_version"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldFinishedAt holds the string denoting the finished_at field in the database.
@@ -48,6 +86,10 @@ const (
 	EdgeAPIKey = "api_key"
 	// EdgeModelRoute holds the string denoting the model_route edge name in mutations.
 	EdgeModelRoute = "model_route"
+	// EdgeUpstreamModel holds the string denoting the upstream_model edge name in mutations.
+	EdgeUpstreamModel = "upstream_model"
+	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
+	EdgeBillingGroup = "billing_group"
 	// Table holds the table name of the apiusage in the database.
 	Table = "api_usages"
 	// UserTable is the table that holds the user relation/edge.
@@ -71,6 +113,20 @@ const (
 	ModelRouteInverseTable = "model_routes"
 	// ModelRouteColumn is the table column denoting the model_route relation/edge.
 	ModelRouteColumn = "model_route_id"
+	// UpstreamModelTable is the table that holds the upstream_model relation/edge.
+	UpstreamModelTable = "api_usages"
+	// UpstreamModelInverseTable is the table name for the UpstreamModel entity.
+	// It exists in this package in order to avoid circular dependency with the "upstreammodel" package.
+	UpstreamModelInverseTable = "upstream_models"
+	// UpstreamModelColumn is the table column denoting the upstream_model relation/edge.
+	UpstreamModelColumn = "upstream_model_id"
+	// BillingGroupTable is the table that holds the billing_group relation/edge.
+	BillingGroupTable = "api_usages"
+	// BillingGroupInverseTable is the table name for the BillingGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
+	BillingGroupInverseTable = "billing_groups"
+	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
+	BillingGroupColumn = "billing_group_id"
 )
 
 // Columns holds all SQL columns for apiusage fields.
@@ -79,14 +135,33 @@ var Columns = []string{
 	FieldUserID,
 	FieldAPIKeyID,
 	FieldModelRouteID,
+	FieldUpstreamModelID,
+	FieldBillingGroupID,
 	FieldRequestID,
 	FieldEndpoint,
 	FieldInputTokens,
+	FieldUncachedInputTokens,
+	FieldCacheReadInputTokens,
+	FieldCacheWriteInputTokens,
+	FieldCacheWrite1hInputTokens,
 	FieldOutputTokens,
+	FieldInputPriceMicros,
+	FieldOutputPriceMicros,
+	FieldCacheReadPriceMicros,
+	FieldCacheWritePriceMicros,
+	FieldCacheWrite1hPriceMicros,
+	FieldRequestPriceMicros,
+	FieldBaseCostMicros,
+	FieldMultiplierBps,
 	FieldCostMicros,
 	FieldReservedMicros,
 	FieldEstimated,
 	FieldUpstreamRequestID,
+	FieldModelName,
+	FieldUpstreamModelName,
+	FieldBillingGroupCode,
+	FieldBillingGroupName,
+	FieldCalculationVersion,
 	FieldCreatedAt,
 	FieldFinishedAt,
 }
@@ -106,10 +181,58 @@ var (
 	DefaultInputTokens int
 	// InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
 	InputTokensValidator func(int) error
+	// DefaultUncachedInputTokens holds the default value on creation for the "uncached_input_tokens" field.
+	DefaultUncachedInputTokens int
+	// UncachedInputTokensValidator is a validator for the "uncached_input_tokens" field. It is called by the builders before save.
+	UncachedInputTokensValidator func(int) error
+	// DefaultCacheReadInputTokens holds the default value on creation for the "cache_read_input_tokens" field.
+	DefaultCacheReadInputTokens int
+	// CacheReadInputTokensValidator is a validator for the "cache_read_input_tokens" field. It is called by the builders before save.
+	CacheReadInputTokensValidator func(int) error
+	// DefaultCacheWriteInputTokens holds the default value on creation for the "cache_write_input_tokens" field.
+	DefaultCacheWriteInputTokens int
+	// CacheWriteInputTokensValidator is a validator for the "cache_write_input_tokens" field. It is called by the builders before save.
+	CacheWriteInputTokensValidator func(int) error
+	// DefaultCacheWrite1hInputTokens holds the default value on creation for the "cache_write_1h_input_tokens" field.
+	DefaultCacheWrite1hInputTokens int
+	// CacheWrite1hInputTokensValidator is a validator for the "cache_write_1h_input_tokens" field. It is called by the builders before save.
+	CacheWrite1hInputTokensValidator func(int) error
 	// DefaultOutputTokens holds the default value on creation for the "output_tokens" field.
 	DefaultOutputTokens int
 	// OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
 	OutputTokensValidator func(int) error
+	// DefaultInputPriceMicros holds the default value on creation for the "input_price_micros" field.
+	DefaultInputPriceMicros int64
+	// InputPriceMicrosValidator is a validator for the "input_price_micros" field. It is called by the builders before save.
+	InputPriceMicrosValidator func(int64) error
+	// DefaultOutputPriceMicros holds the default value on creation for the "output_price_micros" field.
+	DefaultOutputPriceMicros int64
+	// OutputPriceMicrosValidator is a validator for the "output_price_micros" field. It is called by the builders before save.
+	OutputPriceMicrosValidator func(int64) error
+	// DefaultCacheReadPriceMicros holds the default value on creation for the "cache_read_price_micros" field.
+	DefaultCacheReadPriceMicros int64
+	// CacheReadPriceMicrosValidator is a validator for the "cache_read_price_micros" field. It is called by the builders before save.
+	CacheReadPriceMicrosValidator func(int64) error
+	// DefaultCacheWritePriceMicros holds the default value on creation for the "cache_write_price_micros" field.
+	DefaultCacheWritePriceMicros int64
+	// CacheWritePriceMicrosValidator is a validator for the "cache_write_price_micros" field. It is called by the builders before save.
+	CacheWritePriceMicrosValidator func(int64) error
+	// DefaultCacheWrite1hPriceMicros holds the default value on creation for the "cache_write_1h_price_micros" field.
+	DefaultCacheWrite1hPriceMicros int64
+	// CacheWrite1hPriceMicrosValidator is a validator for the "cache_write_1h_price_micros" field. It is called by the builders before save.
+	CacheWrite1hPriceMicrosValidator func(int64) error
+	// DefaultRequestPriceMicros holds the default value on creation for the "request_price_micros" field.
+	DefaultRequestPriceMicros int64
+	// RequestPriceMicrosValidator is a validator for the "request_price_micros" field. It is called by the builders before save.
+	RequestPriceMicrosValidator func(int64) error
+	// DefaultBaseCostMicros holds the default value on creation for the "base_cost_micros" field.
+	DefaultBaseCostMicros int64
+	// BaseCostMicrosValidator is a validator for the "base_cost_micros" field. It is called by the builders before save.
+	BaseCostMicrosValidator func(int64) error
+	// DefaultMultiplierBps holds the default value on creation for the "multiplier_bps" field.
+	DefaultMultiplierBps int64
+	// MultiplierBpsValidator is a validator for the "multiplier_bps" field. It is called by the builders before save.
+	MultiplierBpsValidator func(int64) error
 	// DefaultCostMicros holds the default value on creation for the "cost_micros" field.
 	DefaultCostMicros int64
 	// CostMicrosValidator is a validator for the "cost_micros" field. It is called by the builders before save.
@@ -124,6 +247,26 @@ var (
 	DefaultUpstreamRequestID string
 	// UpstreamRequestIDValidator is a validator for the "upstream_request_id" field. It is called by the builders before save.
 	UpstreamRequestIDValidator func(string) error
+	// DefaultModelName holds the default value on creation for the "model_name" field.
+	DefaultModelName string
+	// ModelNameValidator is a validator for the "model_name" field. It is called by the builders before save.
+	ModelNameValidator func(string) error
+	// DefaultUpstreamModelName holds the default value on creation for the "upstream_model_name" field.
+	DefaultUpstreamModelName string
+	// UpstreamModelNameValidator is a validator for the "upstream_model_name" field. It is called by the builders before save.
+	UpstreamModelNameValidator func(string) error
+	// DefaultBillingGroupCode holds the default value on creation for the "billing_group_code" field.
+	DefaultBillingGroupCode string
+	// BillingGroupCodeValidator is a validator for the "billing_group_code" field. It is called by the builders before save.
+	BillingGroupCodeValidator func(string) error
+	// DefaultBillingGroupName holds the default value on creation for the "billing_group_name" field.
+	DefaultBillingGroupName string
+	// BillingGroupNameValidator is a validator for the "billing_group_name" field. It is called by the builders before save.
+	BillingGroupNameValidator func(string) error
+	// DefaultCalculationVersion holds the default value on creation for the "calculation_version" field.
+	DefaultCalculationVersion string
+	// CalculationVersionValidator is a validator for the "calculation_version" field. It is called by the builders before save.
+	CalculationVersionValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultFinishedAt holds the default value on creation for the "finished_at" field.
@@ -179,6 +322,16 @@ func ByModelRouteID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldModelRouteID, opts...).ToFunc()
 }
 
+// ByUpstreamModelID orders the results by the upstream_model_id field.
+func ByUpstreamModelID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelID, opts...).ToFunc()
+}
+
+// ByBillingGroupID orders the results by the billing_group_id field.
+func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
+}
+
 // ByRequestID orders the results by the request_id field.
 func ByRequestID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRequestID, opts...).ToFunc()
@@ -194,9 +347,69 @@ func ByInputTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInputTokens, opts...).ToFunc()
 }
 
+// ByUncachedInputTokens orders the results by the uncached_input_tokens field.
+func ByUncachedInputTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUncachedInputTokens, opts...).ToFunc()
+}
+
+// ByCacheReadInputTokens orders the results by the cache_read_input_tokens field.
+func ByCacheReadInputTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheReadInputTokens, opts...).ToFunc()
+}
+
+// ByCacheWriteInputTokens orders the results by the cache_write_input_tokens field.
+func ByCacheWriteInputTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheWriteInputTokens, opts...).ToFunc()
+}
+
+// ByCacheWrite1hInputTokens orders the results by the cache_write_1h_input_tokens field.
+func ByCacheWrite1hInputTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheWrite1hInputTokens, opts...).ToFunc()
+}
+
 // ByOutputTokens orders the results by the output_tokens field.
 func ByOutputTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOutputTokens, opts...).ToFunc()
+}
+
+// ByInputPriceMicros orders the results by the input_price_micros field.
+func ByInputPriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputPriceMicros, opts...).ToFunc()
+}
+
+// ByOutputPriceMicros orders the results by the output_price_micros field.
+func ByOutputPriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutputPriceMicros, opts...).ToFunc()
+}
+
+// ByCacheReadPriceMicros orders the results by the cache_read_price_micros field.
+func ByCacheReadPriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheReadPriceMicros, opts...).ToFunc()
+}
+
+// ByCacheWritePriceMicros orders the results by the cache_write_price_micros field.
+func ByCacheWritePriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheWritePriceMicros, opts...).ToFunc()
+}
+
+// ByCacheWrite1hPriceMicros orders the results by the cache_write_1h_price_micros field.
+func ByCacheWrite1hPriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheWrite1hPriceMicros, opts...).ToFunc()
+}
+
+// ByRequestPriceMicros orders the results by the request_price_micros field.
+func ByRequestPriceMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestPriceMicros, opts...).ToFunc()
+}
+
+// ByBaseCostMicros orders the results by the base_cost_micros field.
+func ByBaseCostMicros(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBaseCostMicros, opts...).ToFunc()
+}
+
+// ByMultiplierBps orders the results by the multiplier_bps field.
+func ByMultiplierBps(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMultiplierBps, opts...).ToFunc()
 }
 
 // ByCostMicros orders the results by the cost_micros field.
@@ -217,6 +430,31 @@ func ByEstimated(opts ...sql.OrderTermOption) OrderOption {
 // ByUpstreamRequestID orders the results by the upstream_request_id field.
 func ByUpstreamRequestID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpstreamRequestID, opts...).ToFunc()
+}
+
+// ByModelName orders the results by the model_name field.
+func ByModelName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldModelName, opts...).ToFunc()
+}
+
+// ByUpstreamModelName orders the results by the upstream_model_name field.
+func ByUpstreamModelName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelName, opts...).ToFunc()
+}
+
+// ByBillingGroupCode orders the results by the billing_group_code field.
+func ByBillingGroupCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupCode, opts...).ToFunc()
+}
+
+// ByBillingGroupName orders the results by the billing_group_name field.
+func ByBillingGroupName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupName, opts...).ToFunc()
+}
+
+// ByCalculationVersion orders the results by the calculation_version field.
+func ByCalculationVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCalculationVersion, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.
@@ -249,6 +487,20 @@ func ByModelRouteField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newModelRouteStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByUpstreamModelField orders the results by upstream_model field.
+func ByUpstreamModelField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUpstreamModelStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByBillingGroupField orders the results by billing_group field.
+func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
+	}
+}
 func newUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -268,5 +520,19 @@ func newModelRouteStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ModelRouteInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ModelRouteTable, ModelRouteColumn),
+	)
+}
+func newUpstreamModelStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UpstreamModelInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, UpstreamModelTable, UpstreamModelColumn),
+	)
+}
+func newBillingGroupStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BillingGroupInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
 	)
 }

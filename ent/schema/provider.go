@@ -15,7 +15,9 @@ type Provider struct {
 }
 
 func (Provider) Edges() []ent.Edge {
-	return []ent.Edge{edge.To("model_routes", ModelRoute.Type)}
+	return []ent.Edge{
+		edge.To("model_routes", ModelRoute.Type),
+	}
 }
 
 func (Provider) Fields() []ent.Field {
@@ -30,9 +32,10 @@ func (Provider) Fields() []ent.Field {
 		field.Enum("status").Values("active", "disabled").Default("active"),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
+		field.Time("deleted_at").Optional().Nillable(),
 	}
 }
 
 func (Provider) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("status", "created_at")}
+	return []ent.Index{index.Fields("status", "created_at"), index.Fields("deleted_at")}
 }

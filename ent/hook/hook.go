@@ -33,6 +33,18 @@ func (f APIUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIUsageMutation", m)
 }
 
+// The BillingGroupFunc type is an adapter to allow the use of ordinary
+// function as BillingGroup mutator.
+type BillingGroupFunc func(context.Context, *ent.BillingGroupMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BillingGroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BillingGroupMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BillingGroupMutation", m)
+}
+
 // The ModelRouteFunc type is an adapter to allow the use of ordinary
 // function as ModelRoute mutator.
 type ModelRouteFunc func(context.Context, *ent.ModelRouteMutation) (ent.Value, error)
@@ -43,6 +55,18 @@ func (f ModelRouteFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ModelRouteMutation", m)
+}
+
+// The PaymentConfigFunc type is an adapter to allow the use of ordinary
+// function as PaymentConfig mutator.
+type PaymentConfigFunc func(context.Context, *ent.PaymentConfigMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PaymentConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PaymentConfigMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PaymentConfigMutation", m)
 }
 
 // The ProviderFunc type is an adapter to allow the use of ordinary
@@ -67,6 +91,30 @@ func (f SystemSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SystemSettingMutation", m)
+}
+
+// The TopUpOrderFunc type is an adapter to allow the use of ordinary
+// function as TopUpOrder mutator.
+type TopUpOrderFunc func(context.Context, *ent.TopUpOrderMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TopUpOrderFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TopUpOrderMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TopUpOrderMutation", m)
+}
+
+// The UpstreamModelFunc type is an adapter to allow the use of ordinary
+// function as UpstreamModel mutator.
+type UpstreamModelFunc func(context.Context, *ent.UpstreamModelMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamModelFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamModelMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamModelMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

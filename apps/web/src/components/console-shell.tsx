@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Boxes, ChartNoAxesCombined, KeyRound, LayoutDashboard, LogOut, Menu, Route, ScrollText, ShieldCheck, UserRound, Users, WalletCards } from "lucide-react";
+import { BookOpen, Boxes, ChartNoAxesCombined, CreditCard, KeyRound, LayoutDashboard, LogOut, Menu, Network, RefreshCw, ScrollText, ShieldCheck, UserRound, Users, UsersRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
@@ -9,9 +9,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { checkCurrentSession, type CurrentUser } from "@/lib/auth-session";
 import { cn } from "@/lib/utils";
 
-export type CurrentUser = { id: string; username: string; display_name: string; role: "admin" | "member" };
+export type { CurrentUser } from "@/lib/auth-session";
 
 const CurrentUserContext = createContext<CurrentUser | null>(null);
 
@@ -25,8 +26,10 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/console/billing": { title: "余额与用量", description: "账户资金流水和最近模型调用" },
   "/admin/users": { title: "用户管理", description: "账号、角色与访问状态" },
   "/admin/api-keys": { title: "API Key 审计", description: "跨用户检索和撤销访问密钥" },
-  "/admin/providers": { title: "提供商管理", description: "上游协议、端点和访问凭据" },
-  "/admin/models": { title: "模型路由", description: "对外模型名、上游目标和按量价格" },
+  "/admin/providers": { title: "提供商与路由", description: "提供商配置、模型同步与关联路由" },
+  "/admin/upstream-models": { title: "模型目录", description: "模型标识与各计费维度的基础价格" },
+  "/admin/billing-groups": { title: "计费分组", description: "用户分组与结算倍率" },
+  "/admin/payments": { title: "支付配置", description: "易支付商户信息与充值渠道" },
 };
 
 export function isConsoleRoute(pathname: string) {
@@ -60,8 +63,10 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
     { label: "管理", items: user.role === "admin" ? [
       { href: "/admin/users", label: "用户管理", icon: Users },
       { href: "/admin/api-keys", label: "Key 审计", icon: ShieldCheck },
-      { href: "/admin/providers", label: "提供商", icon: Boxes },
-      { href: "/admin/models", label: "模型路由", icon: Route },
+      { href: "/admin/providers", label: "提供商与路由", icon: Boxes },
+      { href: "/admin/upstream-models", label: "模型目录", icon: Network },
+      { href: "/admin/billing-groups", label: "计费分组", icon: UsersRound },
+      { href: "/admin/payments", label: "支付配置", icon: CreditCard },
     ] : [] },
   ];
 
@@ -97,20 +102,26 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.status === 401) { router.replace("/login"); return null; }
-        if (!response.ok) throw new Error();
-        return response.json() as Promise<{ user: CurrentUser }>;
-      })
-      .then((body) => { if (active && body) setUser(body.user); })
-      .catch(() => { if (active) router.replace("/login"); });
+    void checkCurrentSession().then((result) => {
+      if (!active) return;
+      if (result.status === "unauthenticated") {
+        router.replace("/login");
+        return;
+      }
+      if (result.status === "unavailable") {
+        setSessionUnavailable(true);
+        return;
+      }
+      setUser(result.user);
+    });
     return () => { active = false; };
-  }, [router]);
+  }, [router, sessionAttempt]);
 
   useEffect(() => {
     if (!user || user.role === "admin") return;
@@ -119,8 +130,19 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   }, [pathname, router, user]);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     router.replace("/login");
+    router.refresh();
+  }
+
+  function retrySessionCheck() {
+    setSessionUnavailable(false);
+    setUser(null);
+    setSessionAttempt((value) => value + 1);
+  }
+
+  if (sessionUnavailable) {
+    return <main className="flex min-h-screen items-center justify-center bg-muted/30 px-6"><div className="text-center"><p className="text-sm font-medium">登录状态检查失败</p><p className="mt-1 text-sm text-muted-foreground">服务暂时不可用，请稍后重试。</p><Button className="mt-4" onClick={retrySessionCheck} variant="outline"><RefreshCw />重新检查</Button></div></main>;
   }
 
   if (!user) {
@@ -137,7 +159,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <ConsoleNavigation user={user} />
           <div className="mt-auto border-t p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0"><p className="truncate text-sm font-medium">{user.display_name || user.username}</p><p className="truncate text-xs text-muted-foreground">@{user.username}</p></div>
+			<div className="min-w-0"><p className="truncate text-sm font-medium">{user.display_name || user.username}</p><p className="truncate text-xs text-muted-foreground">@{user.username}{user.billing_group ? ` · ${user.billing_group.display_name}` : ""}</p></div>
               <Badge variant="secondary">{user.role === "admin" ? "管理员" : "成员"}</Badge>
             </div>
           </div>

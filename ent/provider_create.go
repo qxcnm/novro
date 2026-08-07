@@ -100,6 +100,20 @@ func (_c *ProviderCreate) SetNillableUpdatedAt(v *time.Time) *ProviderCreate {
 	return _c
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (_c *ProviderCreate) SetDeletedAt(v time.Time) *ProviderCreate {
+	_c.mutation.SetDeletedAt(v)
+	return _c
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_c *ProviderCreate) SetNillableDeletedAt(v *time.Time) *ProviderCreate {
+	if v != nil {
+		_c.SetDeletedAt(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *ProviderCreate) SetID(v uuid.UUID) *ProviderCreate {
 	_c.mutation.SetID(v)
@@ -316,6 +330,10 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(provider.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.DeletedAt(); ok {
+		_spec.SetField(provider.FieldDeletedAt, field.TypeTime, value)
+		_node.DeletedAt = &value
 	}
 	if nodes := _c.mutation.ModelRoutesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

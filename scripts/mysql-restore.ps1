@@ -175,6 +175,9 @@ $tablesIntroducedByMigration = @{
     "0004_providers" = @("providers")
     "0005_wallets_model_routes_and_usage" = @("api_usages", "model_routes", "wallet_entries", "wallets")
     "0006_idempotent_wallet_entries" = @()
+    "0007_upstream_models_billing_groups_and_precise_usage" = @("billing_groups", "upstream_models")
+    "0008_model_catalog_and_provider_routes" = @()
+    "0009_seed_popular_model_catalog" = @()
 }
 foreach ($migration in $expectedMigrations) {
     if (-not $tablesIntroducedByMigration.ContainsKey($migration.Version)) {

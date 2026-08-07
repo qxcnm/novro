@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -27,9 +29,37 @@ type UserCreate struct {
 	hooks    []Hook
 }
 
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_c *UserCreate) SetBillingGroupID(v uuid.UUID) *UserCreate {
+	_c.mutation.SetBillingGroupID(v)
+	return _c
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableBillingGroupID(v *uuid.UUID) *UserCreate {
+	if v != nil {
+		_c.SetBillingGroupID(*v)
+	}
+	return _c
+}
+
 // SetUsername sets the "username" field.
 func (_c *UserCreate) SetUsername(v string) *UserCreate {
 	_c.mutation.SetUsername(v)
+	return _c
+}
+
+// SetEmail sets the "email" field.
+func (_c *UserCreate) SetEmail(v string) *UserCreate {
+	_c.mutation.SetEmail(v)
+	return _c
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_c *UserCreate) SetNillableEmail(v *string) *UserCreate {
+	if v != nil {
+		_c.SetEmail(*v)
+	}
 	return _c
 }
 
@@ -224,6 +254,21 @@ func (_c *UserCreate) AddWalletEntries(v ...*WalletEntry) *UserCreate {
 	return _c.AddWalletEntryIDs(ids...)
 }
 
+// AddTopUpOrderIDs adds the "top_up_orders" edge to the TopUpOrder entity by IDs.
+func (_c *UserCreate) AddTopUpOrderIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddTopUpOrderIDs(ids...)
+	return _c
+}
+
+// AddTopUpOrders adds the "top_up_orders" edges to the TopUpOrder entity.
+func (_c *UserCreate) AddTopUpOrders(v ...*TopUpOrder) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTopUpOrderIDs(ids...)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_c *UserCreate) AddAPIUsageIDs(ids ...uuid.UUID) *UserCreate {
 	_c.mutation.AddAPIUsageIDs(ids...)
@@ -237,6 +282,11 @@ func (_c *UserCreate) AddAPIUsages(v ...*APIUsage) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddAPIUsageIDs(ids...)
+}
+
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_c *UserCreate) SetBillingGroup(v *BillingGroup) *UserCreate {
+	return _c.SetBillingGroupID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -310,6 +360,11 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.Email(); ok {
+		if err := user.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.DisplayName(); !ok {
 		return &ValidationError{Name: "display_name", err: errors.New(`ent: missing required field "User.display_name"`)}
 	}
@@ -378,6 +433,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 		_node.Username = value
+	}
+	if value, ok := _c.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+		_node.Email = &value
 	}
 	if value, ok := _c.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -487,6 +546,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
+	if nodes := _c.mutation.TopUpOrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
 	if nodes := _c.mutation.APIUsagesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -501,6 +576,23 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.BillingGroupTable,
+			Columns: []string{user.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.BillingGroupID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

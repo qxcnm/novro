@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { checkCurrentSession } from "@/lib/auth-session";
 
 type ErrorResponse = { error?: { message?: string } };
 type AuthOptions = {
@@ -31,7 +32,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [options, setOptions] = useState<AuthOptions | null>(null);
   const [error, setError] = useState("");
@@ -39,7 +40,12 @@ function LoginForm() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/auth/options", { cache: "no-store" })
+    void checkCurrentSession().then((result) => {
+      if (!active || result.status !== "authenticated") return;
+      router.replace("/console");
+      router.refresh();
+    });
+    void fetch("/api/auth/options", { cache: "no-store", credentials: "same-origin" })
       .then(async (response) => {
         if (!response.ok) throw new Error("无法读取登录配置");
         return response.json() as Promise<AuthOptions>;
@@ -63,13 +69,22 @@ function LoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        credentials: "same-origin",
+        body: JSON.stringify({ username: identifier, password }),
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as ErrorResponse;
         throw new Error(body.error?.message ?? "登录失败，请稍后重试");
       }
+      const session = await checkCurrentSession();
+      if (session.status === "unauthenticated") {
+        throw new Error("登录成功，但浏览器未能保存登录状态，请检查 Cookie 设置后重试");
+      }
+      if (session.status === "unavailable") {
+        throw new Error("登录成功，但暂时无法确认登录状态，请稍后重试");
+      }
       router.replace("/console");
+      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败，请稍后重试");
     } finally {
@@ -96,7 +111,7 @@ function LoginForm() {
               </>
             ) : null}
             <form className="space-y-5" onSubmit={submit}>
-              <div className="space-y-2"><Label htmlFor="username">用户名</Label><Input autoComplete="username" id="username" onChange={(event) => setUsername(event.target.value)} placeholder="输入用户名" required value={username} /></div>
+              <div className="space-y-2"><Label htmlFor="identifier">用户名或邮箱</Label><Input autoComplete="username" id="identifier" onChange={(event) => setIdentifier(event.target.value)} placeholder="输入用户名或邮箱" required value={identifier} /></div>
               <div className="space-y-2"><Label htmlFor="password">密码</Label><Input autoComplete="current-password" id="password" onChange={(event) => setPassword(event.target.value)} placeholder="输入密码" required type="password" value={password} /></div>
               {displayedError ? <p className="text-sm text-destructive" role="alert">{displayedError}</p> : null}
               <Button className="w-full" disabled={submitting} type="submit">{submitting ? "登录中..." : "登录"}<ArrowRight aria-hidden="true" /></Button>

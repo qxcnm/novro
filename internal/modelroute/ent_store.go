@@ -3,12 +3,15 @@ package modelroute
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
+	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 )
 
 type EntStore struct{ client *ent.Client }
@@ -16,15 +19,25 @@ type EntStore struct{ client *ent.Client }
 func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
 
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
-	if _, err := s.client.Provider.Get(ctx, input.ProviderID); ent.IsNotFound(err) {
+	upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(input.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
+	if ent.IsNotFound(err) {
 		return Record{}, ErrInvalidInput
 	} else if err != nil {
-		return Record{}, fmt.Errorf("read model provider: %w", err)
+		return Record{}, fmt.Errorf("read upstream model: %w", err)
+	}
+	if _, err := s.client.Provider.Query().Where(entprovider.IDEQ(input.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+		return Record{}, ErrInvalidInput
+	} else if err != nil {
+		return Record{}, fmt.Errorf("read provider: %w", err)
+	}
+	status := entmodelroute.StatusActive
+	if upstream.Status != entupstreammodel.StatusActive || !upstream.PricingConfigured {
+		status = entmodelroute.StatusDisabled
 	}
 	created, err := s.client.ModelRoute.Create().
-		SetProviderID(input.ProviderID).SetPublicName(input.PublicName).SetDisplayName(input.DisplayName).
-		SetUpstreamName(input.UpstreamName).SetInputPriceMicros(input.InputPriceMicros).
-		SetOutputPriceMicros(input.OutputPriceMicros).SetStatus(entmodelroute.StatusActive).Save(ctx)
+		SetProviderID(input.ProviderID).SetUpstreamModelID(upstream.ID).SetPublicName(input.PublicName).SetDisplayName(input.DisplayName).
+		SetUpstreamName(upstream.UpstreamName).SetInputPriceMicros(upstream.InputPriceMicros).
+		SetOutputPriceMicros(upstream.OutputPriceMicros).SetStatus(status).Save(ctx)
 	if ent.IsConstraintError(err) {
 		return Record{}, ErrNameTaken
 	}
@@ -35,7 +48,11 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 }
 
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
-	query := s.client.ModelRoute.Query().WithProvider()
+	query := s.client.ModelRoute.Query().Where(
+		entmodelroute.DeletedAtIsNil(),
+		entmodelroute.HasProviderWith(entprovider.DeletedAtIsNil()),
+		entmodelroute.Or(entmodelroute.UpstreamModelIDIsNil(), entmodelroute.HasUpstreamModelWith(entupstreammodel.DeletedAtIsNil())),
+	).WithProvider().WithUpstreamModel()
 	if filter.Search != "" {
 		query = query.Where(entmodelroute.Or(entmodelroute.PublicNameContainsFold(filter.Search), entmodelroute.DisplayNameContainsFold(filter.Search), entmodelroute.UpstreamNameContainsFold(filter.Search), entmodelroute.HasProviderWith(entprovider.Or(entprovider.CodeContainsFold(filter.Search), entprovider.DisplayNameContainsFold(filter.Search)))))
 	}
@@ -50,14 +67,33 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 }
 
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
+	disableForUpstream := false
+	if params.UpstreamModelID != nil {
+		upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(*params.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
+		if ent.IsNotFound(err) {
+			return Record{}, ErrInvalidInput
+		}
+		if err != nil {
+			return Record{}, fmt.Errorf("read upstream model: %w", err)
+		}
+		params.UpstreamName = &upstream.UpstreamName
+		params.InputPriceMicros = &upstream.InputPriceMicros
+		params.OutputPriceMicros = &upstream.OutputPriceMicros
+		if upstream.Status != entupstreammodel.StatusActive || !upstream.PricingConfigured {
+			disableForUpstream = true
+		}
+	}
 	if params.ProviderID != nil {
-		if _, err := s.client.Provider.Get(ctx, *params.ProviderID); ent.IsNotFound(err) {
+		if _, err := s.client.Provider.Query().Where(entprovider.IDEQ(*params.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
 			return Record{}, ErrInvalidInput
 		} else if err != nil {
 			return Record{}, fmt.Errorf("read model provider: %w", err)
 		}
 	}
-	update := s.client.ModelRoute.UpdateOneID(id)
+	update := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil())
+	if params.UpstreamModelID != nil {
+		update.SetUpstreamModelID(*params.UpstreamModelID)
+	}
 	if params.ProviderID != nil {
 		update.SetProviderID(*params.ProviderID)
 	}
@@ -73,6 +109,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	if params.OutputPriceMicros != nil {
 		update.SetOutputPriceMicros(*params.OutputPriceMicros)
 	}
+	if disableForUpstream {
+		update.SetStatus(entmodelroute.StatusDisabled)
+	}
 	if _, err := update.Save(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	} else if err != nil {
@@ -82,7 +121,7 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 }
 
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
-	if _, err := s.client.ModelRoute.UpdateOneID(id).SetStatus(entmodelroute.Status(status)).Save(ctx); ent.IsNotFound(err) {
+	if _, err := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil()).SetStatus(entmodelroute.Status(status)).Save(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	} else if err != nil {
 		return Record{}, fmt.Errorf("update model route status: %w", err)
@@ -90,8 +129,20 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 	return s.get(ctx, id)
 }
 
+func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil()).
+		SetStatus(entmodelroute.StatusDisabled).SetDeletedAt(time.Now().UTC()).Save(ctx)
+	if ent.IsNotFound(err) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("soft delete model route: %w", err)
+	}
+	return nil
+}
+
 func (s *EntStore) Resolve(ctx context.Context, publicName string) (Record, string, string, error) {
-	entity, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive))).WithProvider().Only(ctx)
+	entity, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, "", "", ErrNotFound
 	}
@@ -106,7 +157,7 @@ func (s *EntStore) Resolve(ctx context.Context, publicName string) (Record, stri
 }
 
 func (s *EntStore) ListActive(ctx context.Context) ([]Record, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive))).WithProvider().Order(ent.Asc(entmodelroute.FieldPublicName)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active model routes: %w", err)
 	}
@@ -114,7 +165,12 @@ func (s *EntStore) ListActive(ctx context.Context) ([]Record, error) {
 }
 
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
-	entity, err := s.client.ModelRoute.Query().Where(entmodelroute.IDEQ(id)).WithProvider().Only(ctx)
+	entity, err := s.client.ModelRoute.Query().Where(
+		entmodelroute.IDEQ(id),
+		entmodelroute.DeletedAtIsNil(),
+		entmodelroute.HasProviderWith(entprovider.DeletedAtIsNil()),
+		entmodelroute.Or(entmodelroute.UpstreamModelIDIsNil(), entmodelroute.HasUpstreamModelWith(entupstreammodel.DeletedAtIsNil())),
+	).WithProvider().WithUpstreamModel().Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	}
@@ -138,5 +194,14 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	if p != nil {
 		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Protocol: provider.Protocol(p.Protocol), Status: provider.Status(p.Status)}
 	}
-	return Record{ID: entity.ID, ProviderID: entity.ProviderID, PublicName: entity.PublicName, DisplayName: entity.DisplayName, UpstreamName: entity.UpstreamName, InputPriceMicros: entity.InputPriceMicros, OutputPriceMicros: entity.OutputPriceMicros, Status: Status(entity.Status), Provider: summary, CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+	var upstreamRecord *upstreammodel.Record
+	upstreamName, inputPrice, outputPrice := entity.UpstreamName, entity.InputPriceMicros, entity.OutputPriceMicros
+	if upstream, err := entity.Edges.UpstreamModelOrErr(); err == nil {
+		record := upstreammodel.Record{ID: upstream.ID, ProviderName: upstream.ProviderName, UpstreamName: upstream.UpstreamName, DisplayName: upstream.DisplayName,
+			Prices:            upstreammodel.Prices{InputMicros: upstream.InputPriceMicros, OutputMicros: upstream.OutputPriceMicros, CacheReadMicros: upstream.CacheReadPriceMicros, CacheWriteMicros: upstream.CacheWritePriceMicros, CacheWrite1hMicros: upstream.CacheWrite1hPriceMicros, RequestMicros: upstream.RequestPriceMicros},
+			PricingConfigured: upstream.PricingConfigured, Status: upstreammodel.Status(upstream.Status), CreatedAt: upstream.CreatedAt, UpdatedAt: upstream.UpdatedAt}
+		upstreamRecord = &record
+		upstreamName, inputPrice, outputPrice = upstream.UpstreamName, upstream.InputPriceMicros, upstream.OutputPriceMicros
+	}
+	return Record{ID: entity.ID, ProviderID: entity.ProviderID, UpstreamModelID: entity.UpstreamModelID, PublicName: entity.PublicName, DisplayName: entity.DisplayName, UpstreamName: upstreamName, InputPriceMicros: inputPrice, OutputPriceMicros: outputPrice, Status: Status(entity.Status), Provider: summary, UpstreamModel: upstreamRecord, CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 }

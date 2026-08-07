@@ -61,6 +61,11 @@ func ProviderID(v uuid.UUID) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldProviderID, v))
 }
 
+// UpstreamModelID applies equality check predicate on the "upstream_model_id" field. It's identical to UpstreamModelIDEQ.
+func UpstreamModelID(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldUpstreamModelID, v))
+}
+
 // PublicName applies equality check predicate on the "public_name" field. It's identical to PublicNameEQ.
 func PublicName(v string) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldPublicName, v))
@@ -96,6 +101,11 @@ func UpdatedAt(v time.Time) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// DeletedAt applies equality check predicate on the "deleted_at" field. It's identical to DeletedAtEQ.
+func DeletedAt(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldDeletedAt, v))
+}
+
 // ProviderIDEQ applies the EQ predicate on the "provider_id" field.
 func ProviderIDEQ(v uuid.UUID) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldProviderID, v))
@@ -114,6 +124,36 @@ func ProviderIDIn(vs ...uuid.UUID) predicate.ModelRoute {
 // ProviderIDNotIn applies the NotIn predicate on the "provider_id" field.
 func ProviderIDNotIn(vs ...uuid.UUID) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldNotIn(FieldProviderID, vs...))
+}
+
+// UpstreamModelIDEQ applies the EQ predicate on the "upstream_model_id" field.
+func UpstreamModelIDEQ(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldUpstreamModelID, v))
+}
+
+// UpstreamModelIDNEQ applies the NEQ predicate on the "upstream_model_id" field.
+func UpstreamModelIDNEQ(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNEQ(FieldUpstreamModelID, v))
+}
+
+// UpstreamModelIDIn applies the In predicate on the "upstream_model_id" field.
+func UpstreamModelIDIn(vs ...uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldIn(FieldUpstreamModelID, vs...))
+}
+
+// UpstreamModelIDNotIn applies the NotIn predicate on the "upstream_model_id" field.
+func UpstreamModelIDNotIn(vs ...uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNotIn(FieldUpstreamModelID, vs...))
+}
+
+// UpstreamModelIDIsNil applies the IsNil predicate on the "upstream_model_id" field.
+func UpstreamModelIDIsNil() predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldIsNull(FieldUpstreamModelID))
+}
+
+// UpstreamModelIDNotNil applies the NotNil predicate on the "upstream_model_id" field.
+func UpstreamModelIDNotNil() predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNotNull(FieldUpstreamModelID))
 }
 
 // PublicNameEQ applies the EQ predicate on the "public_name" field.
@@ -491,6 +531,56 @@ func UpdatedAtLTE(v time.Time) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
+// DeletedAtEQ applies the EQ predicate on the "deleted_at" field.
+func DeletedAtEQ(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldDeletedAt, v))
+}
+
+// DeletedAtNEQ applies the NEQ predicate on the "deleted_at" field.
+func DeletedAtNEQ(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNEQ(FieldDeletedAt, v))
+}
+
+// DeletedAtIn applies the In predicate on the "deleted_at" field.
+func DeletedAtIn(vs ...time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldIn(FieldDeletedAt, vs...))
+}
+
+// DeletedAtNotIn applies the NotIn predicate on the "deleted_at" field.
+func DeletedAtNotIn(vs ...time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNotIn(FieldDeletedAt, vs...))
+}
+
+// DeletedAtGT applies the GT predicate on the "deleted_at" field.
+func DeletedAtGT(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldGT(FieldDeletedAt, v))
+}
+
+// DeletedAtGTE applies the GTE predicate on the "deleted_at" field.
+func DeletedAtGTE(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldGTE(FieldDeletedAt, v))
+}
+
+// DeletedAtLT applies the LT predicate on the "deleted_at" field.
+func DeletedAtLT(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldLT(FieldDeletedAt, v))
+}
+
+// DeletedAtLTE applies the LTE predicate on the "deleted_at" field.
+func DeletedAtLTE(v time.Time) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldLTE(FieldDeletedAt, v))
+}
+
+// DeletedAtIsNil applies the IsNil predicate on the "deleted_at" field.
+func DeletedAtIsNil() predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldIsNull(FieldDeletedAt))
+}
+
+// DeletedAtNotNil applies the NotNil predicate on the "deleted_at" field.
+func DeletedAtNotNil() predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNotNull(FieldDeletedAt))
+}
+
 // HasProvider applies the HasEdge predicate on the "provider" edge.
 func HasProvider() predicate.ModelRoute {
 	return predicate.ModelRoute(func(s *sql.Selector) {
@@ -506,6 +596,29 @@ func HasProvider() predicate.ModelRoute {
 func HasProviderWith(preds ...predicate.Provider) predicate.ModelRoute {
 	return predicate.ModelRoute(func(s *sql.Selector) {
 		step := newProviderStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUpstreamModel applies the HasEdge predicate on the "upstream_model" edge.
+func HasUpstreamModel() predicate.ModelRoute {
+	return predicate.ModelRoute(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, UpstreamModelTable, UpstreamModelColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUpstreamModelWith applies the HasEdge predicate on the "upstream_model" edge with a given conditions (other predicates).
+func HasUpstreamModelWith(preds ...predicate.UpstreamModel) predicate.ModelRoute {
+	return predicate.ModelRoute(func(s *sql.Selector) {
+		step := newUpstreamModelStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

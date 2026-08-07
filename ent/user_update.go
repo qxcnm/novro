@@ -14,7 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
+	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -35,6 +37,26 @@ func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	return _u
 }
 
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *UserUpdate) SetBillingGroupID(v uuid.UUID) *UserUpdate {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableBillingGroupID(v *uuid.UUID) *UserUpdate {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
+	return _u
+}
+
+// ClearBillingGroupID clears the value of the "billing_group_id" field.
+func (_u *UserUpdate) ClearBillingGroupID() *UserUpdate {
+	_u.mutation.ClearBillingGroupID()
+	return _u
+}
+
 // SetUsername sets the "username" field.
 func (_u *UserUpdate) SetUsername(v string) *UserUpdate {
 	_u.mutation.SetUsername(v)
@@ -46,6 +68,26 @@ func (_u *UserUpdate) SetNillableUsername(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetUsername(*v)
 	}
+	return _u
+}
+
+// SetEmail sets the "email" field.
+func (_u *UserUpdate) SetEmail(v string) *UserUpdate {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdate) ClearEmail() *UserUpdate {
+	_u.mutation.ClearEmail()
 	return _u
 }
 
@@ -216,6 +258,21 @@ func (_u *UserUpdate) AddWalletEntries(v ...*WalletEntry) *UserUpdate {
 	return _u.AddWalletEntryIDs(ids...)
 }
 
+// AddTopUpOrderIDs adds the "top_up_orders" edge to the TopUpOrder entity by IDs.
+func (_u *UserUpdate) AddTopUpOrderIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddTopUpOrderIDs(ids...)
+	return _u
+}
+
+// AddTopUpOrders adds the "top_up_orders" edges to the TopUpOrder entity.
+func (_u *UserUpdate) AddTopUpOrders(v ...*TopUpOrder) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTopUpOrderIDs(ids...)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *UserUpdate) AddAPIUsageIDs(ids ...uuid.UUID) *UserUpdate {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -229,6 +286,11 @@ func (_u *UserUpdate) AddAPIUsages(v ...*APIUsage) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddAPIUsageIDs(ids...)
+}
+
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *UserUpdate) SetBillingGroup(v *BillingGroup) *UserUpdate {
+	return _u.SetBillingGroupID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -326,6 +388,27 @@ func (_u *UserUpdate) RemoveWalletEntries(v ...*WalletEntry) *UserUpdate {
 	return _u.RemoveWalletEntryIDs(ids...)
 }
 
+// ClearTopUpOrders clears all "top_up_orders" edges to the TopUpOrder entity.
+func (_u *UserUpdate) ClearTopUpOrders() *UserUpdate {
+	_u.mutation.ClearTopUpOrders()
+	return _u
+}
+
+// RemoveTopUpOrderIDs removes the "top_up_orders" edge to TopUpOrder entities by IDs.
+func (_u *UserUpdate) RemoveTopUpOrderIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveTopUpOrderIDs(ids...)
+	return _u
+}
+
+// RemoveTopUpOrders removes "top_up_orders" edges to TopUpOrder entities.
+func (_u *UserUpdate) RemoveTopUpOrders(v ...*TopUpOrder) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTopUpOrderIDs(ids...)
+}
+
 // ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
 func (_u *UserUpdate) ClearAPIUsages() *UserUpdate {
 	_u.mutation.ClearAPIUsages()
@@ -345,6 +428,12 @@ func (_u *UserUpdate) RemoveAPIUsages(v ...*APIUsage) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *UserUpdate) ClearBillingGroup() *UserUpdate {
+	_u.mutation.ClearBillingGroup()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -390,6 +479,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Email(); ok {
+		if err := user.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.DisplayName(); ok {
 		if err := user.DisplayNameValidator(v); err != nil {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "User.display_name": %w`, err)}
@@ -422,6 +516,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -656,6 +756,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.TopUpOrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTopUpOrdersIDs(); len(nodes) > 0 && !_u.mutation.TopUpOrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TopUpOrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.APIUsagesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -701,6 +846,35 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.BillingGroupTable,
+			Columns: []string{user.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.BillingGroupTable,
+			Columns: []string{user.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -721,6 +895,26 @@ type UserUpdateOne struct {
 	mutation *UserMutation
 }
 
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *UserUpdateOne) SetBillingGroupID(v uuid.UUID) *UserUpdateOne {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *UserUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
+	return _u
+}
+
+// ClearBillingGroupID clears the value of the "billing_group_id" field.
+func (_u *UserUpdateOne) ClearBillingGroupID() *UserUpdateOne {
+	_u.mutation.ClearBillingGroupID()
+	return _u
+}
+
 // SetUsername sets the "username" field.
 func (_u *UserUpdateOne) SetUsername(v string) *UserUpdateOne {
 	_u.mutation.SetUsername(v)
@@ -732,6 +926,26 @@ func (_u *UserUpdateOne) SetNillableUsername(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetUsername(*v)
 	}
+	return _u
+}
+
+// SetEmail sets the "email" field.
+func (_u *UserUpdateOne) SetEmail(v string) *UserUpdateOne {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdateOne) ClearEmail() *UserUpdateOne {
+	_u.mutation.ClearEmail()
 	return _u
 }
 
@@ -902,6 +1116,21 @@ func (_u *UserUpdateOne) AddWalletEntries(v ...*WalletEntry) *UserUpdateOne {
 	return _u.AddWalletEntryIDs(ids...)
 }
 
+// AddTopUpOrderIDs adds the "top_up_orders" edge to the TopUpOrder entity by IDs.
+func (_u *UserUpdateOne) AddTopUpOrderIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddTopUpOrderIDs(ids...)
+	return _u
+}
+
+// AddTopUpOrders adds the "top_up_orders" edges to the TopUpOrder entity.
+func (_u *UserUpdateOne) AddTopUpOrders(v ...*TopUpOrder) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTopUpOrderIDs(ids...)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *UserUpdateOne) AddAPIUsageIDs(ids ...uuid.UUID) *UserUpdateOne {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -915,6 +1144,11 @@ func (_u *UserUpdateOne) AddAPIUsages(v ...*APIUsage) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddAPIUsageIDs(ids...)
+}
+
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *UserUpdateOne) SetBillingGroup(v *BillingGroup) *UserUpdateOne {
+	return _u.SetBillingGroupID(v.ID)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -1012,6 +1246,27 @@ func (_u *UserUpdateOne) RemoveWalletEntries(v ...*WalletEntry) *UserUpdateOne {
 	return _u.RemoveWalletEntryIDs(ids...)
 }
 
+// ClearTopUpOrders clears all "top_up_orders" edges to the TopUpOrder entity.
+func (_u *UserUpdateOne) ClearTopUpOrders() *UserUpdateOne {
+	_u.mutation.ClearTopUpOrders()
+	return _u
+}
+
+// RemoveTopUpOrderIDs removes the "top_up_orders" edge to TopUpOrder entities by IDs.
+func (_u *UserUpdateOne) RemoveTopUpOrderIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveTopUpOrderIDs(ids...)
+	return _u
+}
+
+// RemoveTopUpOrders removes "top_up_orders" edges to TopUpOrder entities.
+func (_u *UserUpdateOne) RemoveTopUpOrders(v ...*TopUpOrder) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTopUpOrderIDs(ids...)
+}
+
 // ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
 func (_u *UserUpdateOne) ClearAPIUsages() *UserUpdateOne {
 	_u.mutation.ClearAPIUsages()
@@ -1031,6 +1286,12 @@ func (_u *UserUpdateOne) RemoveAPIUsages(v ...*APIUsage) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *UserUpdateOne) ClearBillingGroup() *UserUpdateOne {
+	_u.mutation.ClearBillingGroup()
+	return _u
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1089,6 +1350,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Email(); ok {
+		if err := user.EmailValidator(v); err != nil {
+			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.DisplayName(); ok {
 		if err := user.DisplayNameValidator(v); err != nil {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "User.display_name": %w`, err)}
@@ -1138,6 +1404,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -1372,6 +1644,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.TopUpOrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTopUpOrdersIDs(); len(nodes) > 0 && !_u.mutation.TopUpOrdersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TopUpOrdersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TopUpOrdersTable,
+			Columns: []string{user.TopUpOrdersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(topuporder.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.APIUsagesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1410,6 +1727,35 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.BillingGroupTable,
+			Columns: []string{user.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.BillingGroupTable,
+			Columns: []string{user.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

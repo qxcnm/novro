@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
 // ModelRoute is the model entity for the ModelRoute schema.
@@ -21,6 +22,8 @@ type ModelRoute struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// ProviderID holds the value of the "provider_id" field.
 	ProviderID uuid.UUID `json:"provider_id,omitempty"`
+	// UpstreamModelID holds the value of the "upstream_model_id" field.
+	UpstreamModelID *uuid.UUID `json:"upstream_model_id,omitempty"`
 	// PublicName holds the value of the "public_name" field.
 	PublicName string `json:"public_name,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
@@ -37,6 +40,8 @@ type ModelRoute struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// DeletedAt holds the value of the "deleted_at" field.
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ModelRouteQuery when eager-loading is set.
 	Edges        ModelRouteEdges `json:"edges"`
@@ -47,11 +52,13 @@ type ModelRoute struct {
 type ModelRouteEdges struct {
 	// Provider holds the value of the provider edge.
 	Provider *Provider `json:"provider,omitempty"`
+	// UpstreamModel holds the value of the upstream_model edge.
+	UpstreamModel *UpstreamModel `json:"upstream_model,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // ProviderOrErr returns the Provider value or an error if the edge
@@ -65,10 +72,21 @@ func (e ModelRouteEdges) ProviderOrErr() (*Provider, error) {
 	return nil, &NotLoadedError{edge: "provider"}
 }
 
+// UpstreamModelOrErr returns the UpstreamModel value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e ModelRouteEdges) UpstreamModelOrErr() (*UpstreamModel, error) {
+	if e.UpstreamModel != nil {
+		return e.UpstreamModel, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: upstreammodel.Label}
+	}
+	return nil, &NotLoadedError{edge: "upstream_model"}
+}
+
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
 // was not loaded in eager-loading.
 func (e ModelRouteEdges) APIUsagesOrErr() ([]*APIUsage, error) {
-	if e.loadedTypes[1] {
+	if e.loadedTypes[2] {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
@@ -79,11 +97,13 @@ func (*ModelRoute) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case modelroute.FieldUpstreamModelID:
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case modelroute.FieldInputPriceMicros, modelroute.FieldOutputPriceMicros:
 			values[i] = new(sql.NullInt64)
 		case modelroute.FieldPublicName, modelroute.FieldDisplayName, modelroute.FieldUpstreamName, modelroute.FieldStatus:
 			values[i] = new(sql.NullString)
-		case modelroute.FieldCreatedAt, modelroute.FieldUpdatedAt:
+		case modelroute.FieldCreatedAt, modelroute.FieldUpdatedAt, modelroute.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
 		case modelroute.FieldID, modelroute.FieldProviderID:
 			values[i] = new(uuid.UUID)
@@ -113,6 +133,13 @@ func (_m *ModelRoute) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field provider_id", values[i])
 			} else if value != nil {
 				_m.ProviderID = *value
+			}
+		case modelroute.FieldUpstreamModelID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_model_id", values[i])
+			} else if value.Valid {
+				_m.UpstreamModelID = new(uuid.UUID)
+				*_m.UpstreamModelID = *value.S.(*uuid.UUID)
 			}
 		case modelroute.FieldPublicName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -162,6 +189,13 @@ func (_m *ModelRoute) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
+		case modelroute.FieldDeletedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field deleted_at", values[i])
+			} else if value.Valid {
+				_m.DeletedAt = new(time.Time)
+				*_m.DeletedAt = value.Time
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -178,6 +212,11 @@ func (_m *ModelRoute) Value(name string) (ent.Value, error) {
 // QueryProvider queries the "provider" edge of the ModelRoute entity.
 func (_m *ModelRoute) QueryProvider() *ProviderQuery {
 	return NewModelRouteClient(_m.config).QueryProvider(_m)
+}
+
+// QueryUpstreamModel queries the "upstream_model" edge of the ModelRoute entity.
+func (_m *ModelRoute) QueryUpstreamModel() *UpstreamModelQuery {
+	return NewModelRouteClient(_m.config).QueryUpstreamModel(_m)
 }
 
 // QueryAPIUsages queries the "api_usages" edge of the ModelRoute entity.
@@ -211,6 +250,11 @@ func (_m *ModelRoute) String() string {
 	builder.WriteString("provider_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProviderID))
 	builder.WriteString(", ")
+	if v := _m.UpstreamModelID; v != nil {
+		builder.WriteString("upstream_model_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("public_name=")
 	builder.WriteString(_m.PublicName)
 	builder.WriteString(", ")
@@ -234,6 +278,11 @@ func (_m *ModelRoute) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.DeletedAt; v != nil {
+		builder.WriteString("deleted_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

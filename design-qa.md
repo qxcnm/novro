@@ -143,3 +143,82 @@ the catalog identifiable without presenting approximated logos as official asset
 - P3: Add active-section highlighting to the docs table of contents as the guide grows.
 
 final result: passed
+
+## Payment configuration QA - 2026-08-07
+
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-638f6648-5524-4168-a55f-f6d6d44aa149.png`.
+- Implementation: `http://localhost:3000/admin/payments` and the user-facing
+  `http://localhost:3000/console/billing` flow.
+- Implementation screenshots: `tmp/payment-design-qa-desktop-2048.png`,
+  `tmp/payment-design-qa-mobile-rules.png`, `tmp/payment-design-qa-mobile-epay.png`,
+  `tmp/payment-design-qa-mobile-records.png`,
+  `tmp/payment-design-qa-mobile-tier-dialog.png`, and
+  `tmp/payment-design-qa-mobile-method-dialog.png`.
+- Viewports: 2048 x 1154 for the source-aligned desktop comparison and 390 x 844
+  for mobile interaction checks.
+- States: empty/unconfigured gateway, recharge rules, Epay credentials and callback
+  addresses, dynamic payment methods, administrator top-up records, and add-method/
+  add-bonus dialogs. No QA data was saved.
+
+### Full-view comparison evidence
+
+The reference and Novro desktop capture were inspected together at 2048 x 1154. The
+implementation preserves the reference's operational density and configuration hierarchy:
+global amount rules, editable preset amounts, dynamic payment methods, per-method minimums,
+and tiered recharge incentives are all directly available. Novro intentionally keeps its
+existing console sidebar, monochrome shadcn/ui tokens, compact cards, and three task tabs
+instead of copying the reference product's navigation shell or JSON-editing affordances.
+
+Splitting the workflow into `充值规则`, `易支付`, and `充值记录` keeps the primary page
+scannable while adding capabilities absent from the reference capture: a safe secret field,
+copyable asynchronous callback and completion-return addresses, gateway status metrics, and
+an administrator-wide top-up ledger with search, status/method filters, and pagination.
+
+### Focused region comparison evidence
+
+- Payment methods: the add dialog exposes display name, Epay `type` identifier, Lucide icon,
+  per-method minimum amount, and enabled state. Alipay and WeChat templates prefill common
+  values while arbitrary methods remain supported.
+- Recharge rules: minimum/maximum values, removable preset amounts, and highest-applicable
+  bonus tiers match the reference's flexible configuration goal. The bonus is credited to
+  the wallet without changing the signed payment amount.
+- Callback addresses: asynchronous notification and payment-return addresses are visible as
+  read-only fields with separate accessible copy buttons.
+- Records: administrators can scan payment and credited amounts separately and filter by
+  order/gateway reference/user, state, and payment method.
+- Mobile: all three tabs, the sticky page actions, rule cards, callback fields, filters, and
+  both dialogs fit at 390 x 844. The page itself does not overflow horizontally; the record
+  table uses a local 358px scroller for its 406px table.
+- Accessibility: tabs, inputs, switches, selects, copy actions, refresh actions, dialogs, and
+  pagination expose accessible names. Dialogs close without persisting draft values.
+
+### Interaction and browser evidence
+
+- The Alipay template opened with `支付宝`, `alipay`, the phone icon, a ¥1 minimum, and
+  enabled state; it was closed without saving.
+- The bonus-tier dialog exposed separate threshold and percentage fields and was closed
+  without saving.
+- Recharge records displayed search, status/method filters, pagination, payment amount,
+  credited amount, and an empty state against the current database.
+- The user billing page correctly disabled recharge while the gateway has no enabled payment
+  methods, preventing an unusable order flow.
+- Browser logs contained development HMR messages only; no warning or error was recorded.
+- The temporary mobile viewport override was reset after testing.
+
+### Comparison history
+
+1. The initial payment page exposed fixed gateway choices and did not provide the requested
+   reference-level method and amount flexibility.
+2. Configuration was normalized into dynamic payment methods, preset amounts, and bonus tiers.
+3. Callback/return addresses and an administrator-wide recharge ledger were added after the
+   missing operational surfaces were identified.
+4. Desktop and mobile browser checks found no P0, P1, or P2 visual or interaction defect, so
+   no follow-up UI patch was required.
+
+### Findings
+
+No actionable P0, P1, or P2 issue remains in the checked payment configuration and recharge
+record flows. The development-only Next.js indicator appears in local screenshots but is not
+part of the production build.
+
+final result: passed

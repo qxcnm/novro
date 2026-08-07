@@ -18,8 +18,10 @@ type EntryType string
 
 const (
 	EntryManualAdjustment EntryType = "manual_adjustment"
+	EntryTopUp            EntryType = "top_up"
 	EntryUsageReservation EntryType = "usage_reservation"
 	EntryUsageRefund      EntryType = "usage_refund"
+	EntryUsageSettlement  EntryType = "usage_settlement"
 )
 
 type Wallet struct {
@@ -45,33 +47,56 @@ type Summary struct {
 }
 
 type Usage struct {
-	ID                uuid.UUID `json:"id"`
-	RequestID         uuid.UUID `json:"request_id"`
-	APIKeyID          uuid.UUID `json:"api_key_id"`
-	APIKeyName        string    `json:"api_key_name"`
-	ModelName         string    `json:"model"`
-	Endpoint          string    `json:"endpoint"`
-	InputTokens       int       `json:"input_tokens"`
-	OutputTokens      int       `json:"output_tokens"`
-	CostMicros        int64     `json:"cost_micros"`
-	Estimated         bool      `json:"estimated"`
-	UpstreamRequestID string    `json:"upstream_request_id,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
-	FinishedAt        time.Time `json:"finished_at"`
+	ID                      uuid.UUID `json:"id"`
+	RequestID               uuid.UUID `json:"request_id"`
+	APIKeyID                uuid.UUID `json:"api_key_id"`
+	APIKeyName              string    `json:"api_key_name"`
+	ModelName               string    `json:"model"`
+	Endpoint                string    `json:"endpoint"`
+	InputTokens             int       `json:"input_tokens"`
+	UncachedInputTokens     int       `json:"uncached_input_tokens"`
+	CacheReadInputTokens    int       `json:"cache_read_input_tokens"`
+	CacheWriteInputTokens   int       `json:"cache_write_input_tokens"`
+	CacheWrite1hInputTokens int       `json:"cache_write_1h_input_tokens"`
+	OutputTokens            int       `json:"output_tokens"`
+	Rates                   RateCard  `json:"rates"`
+	BaseCostMicros          int64     `json:"base_cost_micros"`
+	MultiplierBPS           int64     `json:"multiplier_bps"`
+	CostMicros              int64     `json:"cost_micros"`
+	ReservedMicros          int64     `json:"reserved_micros"`
+	BillingGroupCode        string    `json:"billing_group_code"`
+	BillingGroupName        string    `json:"billing_group_name"`
+	UpstreamModelName       string    `json:"upstream_model_name"`
+	CalculationVersion      string    `json:"calculation_version"`
+	Estimated               bool      `json:"estimated"`
+	UpstreamRequestID       string    `json:"upstream_request_id,omitempty"`
+	CreatedAt               time.Time `json:"created_at"`
+	FinishedAt              time.Time `json:"finished_at"`
 }
 
 type UsageInput struct {
-	UserID            uuid.UUID
-	APIKeyID          uuid.UUID
-	ModelRouteID      uuid.UUID
-	RequestID         uuid.UUID
-	Endpoint          string
-	InputTokens       int
-	OutputTokens      int
-	CostMicros        int64
-	ReservedMicros    int64
-	Estimated         bool
-	UpstreamRequestID string
-	CreatedAt         time.Time
-	FinishedAt        time.Time
+	UserID             uuid.UUID
+	APIKeyID           uuid.UUID
+	ModelRouteID       uuid.UUID
+	UpstreamModelID    *uuid.UUID
+	BillingGroupID     *uuid.UUID
+	RequestID          uuid.UUID
+	Endpoint           string
+	InputTokens        int
+	Tokens             TokenBreakdown
+	OutputTokens       int
+	Rates              RateCard
+	BaseCostMicros     int64
+	MultiplierBPS      int64
+	CostMicros         int64
+	ReservedMicros     int64
+	Estimated          bool
+	UpstreamRequestID  string
+	ModelName          string
+	UpstreamModelName  string
+	BillingGroupCode   string
+	BillingGroupName   string
+	CalculationVersion string
+	CreatedAt          time.Time
+	FinishedAt         time.Time
 }

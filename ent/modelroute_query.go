@@ -18,18 +18,20 @@ import (
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
 // ModelRouteQuery is the builder for querying ModelRoute entities.
 type ModelRouteQuery struct {
 	config
-	ctx           *QueryContext
-	order         []modelroute.OrderOption
-	inters        []Interceptor
-	predicates    []predicate.ModelRoute
-	withProvider  *ProviderQuery
-	withAPIUsages *APIUsageQuery
-	modifiers     []func(*sql.Selector)
+	ctx               *QueryContext
+	order             []modelroute.OrderOption
+	inters            []Interceptor
+	predicates        []predicate.ModelRoute
+	withProvider      *ProviderQuery
+	withUpstreamModel *UpstreamModelQuery
+	withAPIUsages     *APIUsageQuery
+	modifiers         []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -81,6 +83,28 @@ func (_q *ModelRouteQuery) QueryProvider() *ProviderQuery {
 			sqlgraph.From(modelroute.Table, modelroute.FieldID, selector),
 			sqlgraph.To(provider.Table, provider.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, modelroute.ProviderTable, modelroute.ProviderColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryUpstreamModel chains the current query on the "upstream_model" edge.
+func (_q *ModelRouteQuery) QueryUpstreamModel() *UpstreamModelQuery {
+	query := (&UpstreamModelClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelroute.Table, modelroute.FieldID, selector),
+			sqlgraph.To(upstreammodel.Table, upstreammodel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, modelroute.UpstreamModelTable, modelroute.UpstreamModelColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -297,13 +321,14 @@ func (_q *ModelRouteQuery) Clone() *ModelRouteQuery {
 		return nil
 	}
 	return &ModelRouteQuery{
-		config:        _q.config,
-		ctx:           _q.ctx.Clone(),
-		order:         append([]modelroute.OrderOption{}, _q.order...),
-		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.ModelRoute{}, _q.predicates...),
-		withProvider:  _q.withProvider.Clone(),
-		withAPIUsages: _q.withAPIUsages.Clone(),
+		config:            _q.config,
+		ctx:               _q.ctx.Clone(),
+		order:             append([]modelroute.OrderOption{}, _q.order...),
+		inters:            append([]Interceptor{}, _q.inters...),
+		predicates:        append([]predicate.ModelRoute{}, _q.predicates...),
+		withProvider:      _q.withProvider.Clone(),
+		withUpstreamModel: _q.withUpstreamModel.Clone(),
+		withAPIUsages:     _q.withAPIUsages.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -318,6 +343,17 @@ func (_q *ModelRouteQuery) WithProvider(opts ...func(*ProviderQuery)) *ModelRout
 		opt(query)
 	}
 	_q.withProvider = query
+	return _q
+}
+
+// WithUpstreamModel tells the query-builder to eager-load the nodes that are connected to
+// the "upstream_model" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ModelRouteQuery) WithUpstreamModel(opts ...func(*UpstreamModelQuery)) *ModelRouteQuery {
+	query := (&UpstreamModelClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUpstreamModel = query
 	return _q
 }
 
@@ -410,8 +446,9 @@ func (_q *ModelRouteQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*M
 	var (
 		nodes       = []*ModelRoute{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withProvider != nil,
+			_q.withUpstreamModel != nil,
 			_q.withAPIUsages != nil,
 		}
 	)
@@ -439,6 +476,12 @@ func (_q *ModelRouteQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*M
 	if query := _q.withProvider; query != nil {
 		if err := _q.loadProvider(ctx, query, nodes, nil,
 			func(n *ModelRoute, e *Provider) { n.Edges.Provider = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withUpstreamModel; query != nil {
+		if err := _q.loadUpstreamModel(ctx, query, nodes, nil,
+			func(n *ModelRoute, e *UpstreamModel) { n.Edges.UpstreamModel = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -474,6 +517,38 @@ func (_q *ModelRouteQuery) loadProvider(ctx context.Context, query *ProviderQuer
 		nodes, ok := nodeids[n.ID]
 		if !ok {
 			return fmt.Errorf(`unexpected foreign-key "provider_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *ModelRouteQuery) loadUpstreamModel(ctx context.Context, query *UpstreamModelQuery, nodes []*ModelRoute, init func(*ModelRoute), assign func(*ModelRoute, *UpstreamModel)) error {
+	ids := make([]uuid.UUID, 0, len(nodes))
+	nodeids := make(map[uuid.UUID][]*ModelRoute)
+	for i := range nodes {
+		if nodes[i].UpstreamModelID == nil {
+			continue
+		}
+		fk := *nodes[i].UpstreamModelID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(upstreammodel.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "upstream_model_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -542,6 +617,9 @@ func (_q *ModelRouteQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withProvider != nil {
 			_spec.Node.AddColumnOnce(modelroute.FieldProviderID)
+		}
+		if _q.withUpstreamModel != nil {
+			_spec.Node.AddColumnOnce(modelroute.FieldUpstreamModelID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

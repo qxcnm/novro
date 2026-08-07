@@ -71,6 +71,7 @@ func TestCreateNormalizesUserAndHashesPassword(t *testing.T) {
 	service := NewService(store, fakeHasher{})
 	created, err := service.Create(context.Background(), CreateInput{
 		Username:    "  Alice.Admin ",
+		Email:       " Alice.Admin@Example.COM ",
 		DisplayName: " Alice ",
 		Password:    "test-password",
 		Role:        RoleAdmin,
@@ -78,7 +79,7 @@ func TestCreateNormalizesUserAndHashesPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if created.Username != "alice.admin" || store.createParams.PasswordHash != "hashed:test-password" {
+	if created.Username != "alice.admin" || store.createParams.Email != "alice.admin@example.com" || store.createParams.PasswordHash != "hashed:test-password" {
 		t.Fatalf("unexpected create params: %+v", store.createParams)
 	}
 }
@@ -87,7 +88,7 @@ func TestRegisterCannotCreateAdministrator(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
 	created, err := service.Register(context.Background(), RegisterInput{
-		Username: "member.one", DisplayName: "Member", Password: "test-password",
+		Username: "member.one", Email: "member@example.com", DisplayName: "Member", Password: "test-password",
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -101,7 +102,7 @@ func TestInitializeAdminUsesDedicatedStoreOperation(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
 	created, err := service.InitializeAdmin(context.Background(), RegisterInput{
-		Username: "owner.admin", Password: "test-password",
+		Username: "owner.admin", Email: "owner@example.com", Password: "test-password",
 	})
 	if err != nil {
 		t.Fatalf("initialize: %v", err)
@@ -174,11 +175,22 @@ func TestPasswordValidationMapsToInvalidInput(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeHasher{})
 	if _, err := service.Create(context.Background(), CreateInput{
 		Username: "valid.user",
+		Email:    "valid@example.com",
 		Password: "invalid",
 	}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected invalid create input, got %v", err)
 	}
 	if err := service.ResetPassword(context.Background(), uuid.New(), "invalid"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected invalid reset input, got %v", err)
+	}
+}
+
+func TestCreateRejectsMissingOrInvalidEmail(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeHasher{})
+	for _, email := range []string{"", "not-an-email", "user@example"} {
+		_, err := service.Create(context.Background(), CreateInput{Username: "valid.user", Email: email, Password: "test-password"})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("email=%q err=%v", email, err)
+		}
 	}
 }

@@ -8,10 +8,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
+import { useListSelection } from "@/lib/use-list-selection";
 
 type APIKeyRecord = { id: string; name: string; key_prefix: string; status: "active" | "revoked"; last_used_at: string | null; created_at: string; revoked_at: string | null };
 type CreateResult = { api_key: APIKeyRecord; key: string };
@@ -39,6 +43,8 @@ export default function APIKeysClient() {
   const [created, setCreated] = useState<CreateResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [revokeKey, setRevokeKey] = useState<APIKeyRecord | null>(null);
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false);
+  const selection = useListSelection(keys.filter((key) => key.status === "active").map((key) => key.id));
 
   const loadKeys = useCallback(async () => {
     setLoading(true);
@@ -80,6 +86,16 @@ export default function APIKeysClient() {
     setMessage("API Key 已撤销"); setRevokeKey(null); await loadKeys();
   }
 
+  async function revokeSelected() {
+    setBusy(true);
+    const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/account/api-keys/${id}`, { method: "DELETE" }));
+    setBusy(false);
+    setBulkRevokeOpen(false);
+    setMessage(bulkResultMessage("撤销", result));
+    await loadKeys();
+    selection.replaceSelection(result.failed.map((failure) => failure.id));
+  }
+
   const activeCount = keys.filter((key) => key.status === "active").length;
 
   return (
@@ -90,10 +106,11 @@ export default function APIKeysClient() {
           <div className="flex gap-2"><Button aria-label="刷新 API Key" disabled={loading} onClick={() => void loadKeys()} size="icon" title="刷新 API Key" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button><Button onClick={() => setCreateOpen(true)}><Plus />创建 API Key</Button></div>
         </section>
         {message ? <div className="rounded-md border bg-background px-4 py-3 text-sm" role="status">{message}</div> : null}
-        <Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>名称</TableHead><TableHead>前缀</TableHead><TableHead>状态</TableHead><TableHead>最近使用</TableHead><TableHead>创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>
-          {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={6}>加载中...</TableCell></TableRow> : null}
-          {!loading && keys.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={6}>还没有 API Key</TableCell></TableRow> : null}
-          {!loading ? keys.map((key) => <TableRow key={key.id}><TableCell className="font-medium">{key.name}</TableCell><TableCell className="font-mono text-xs">{key.key_prefix}••••</TableCell><TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell><TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell><TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button aria-label={`查看 ${key.name} 使用日志`} onClick={() => router.push(`/console/logs?key_id=${key.id}`)} size="icon-sm" title="查看使用日志" variant="ghost"><ScrollText /></Button>{key.status === "active" ? <Button aria-label={`撤销 ${key.name}`} onClick={() => setRevokeKey(key)} size="icon-sm" title="撤销 API Key" variant="ghost"><ShieldX /></Button> : null}</div></TableCell></TableRow>) : null}
+        <ListBulkActions onClear={selection.clearSelection} selectedCount={selection.selectedIds.length}><Button disabled={busy} onClick={() => setBulkRevokeOpen(true)} size="sm" type="button" variant="destructive"><ShieldX />批量撤销</Button></ListBulkActions>
+        <Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有可撤销 API Key" checked={selection.checkboxState} disabled={loading || activeCount === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>名称</TableHead><TableHead>前缀</TableHead><TableHead>状态</TableHead><TableHead>最近使用</TableHead><TableHead>创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>
+          {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}
+          {!loading && keys.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>还没有 API Key</TableCell></TableRow> : null}
+          {!loading ? keys.map((key) => <TableRow key={key.id}><TableCell><Checkbox aria-label={`选择 ${key.name}`} checked={selection.isSelected(key.id)} disabled={key.status !== "active"} onCheckedChange={(checked) => selection.toggleOne(key.id, checked === true)} /></TableCell><TableCell className="font-medium">{key.name}</TableCell><TableCell className="font-mono text-xs">{key.key_prefix}••••</TableCell><TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell><TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell><TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button aria-label={`查看 ${key.name} 使用日志`} onClick={() => router.push(`/console/logs?key_id=${key.id}`)} size="icon-sm" title="查看使用日志" variant="ghost"><ScrollText /></Button>{key.status === "active" ? <Button aria-label={`撤销 ${key.name}`} onClick={() => setRevokeKey(key)} size="icon-sm" title="撤销 API Key" variant="ghost"><ShieldX /></Button> : null}</div></TableCell></TableRow>) : null}
         </TableBody></Table></div></CardContent></Card>
 
         <Dialog onOpenChange={(open) => { setCreateOpen(open); setError(""); if (!open) { setCreated(null); setCopied(false); setName(""); } }} open={createOpen}>
@@ -101,6 +118,7 @@ export default function APIKeysClient() {
         </Dialog>
 
         <AlertDialog onOpenChange={(open) => { if (!open) setRevokeKey(null); }} open={revokeKey !== null}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>撤销 API Key</AlertDialogTitle><AlertDialogDescription>撤销 {revokeKey?.name} 后无法恢复，使用该 Key 的客户端将失去访问权限。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void revoke(); }}>确认撤销</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+        <BulkActionDialog busy={busy} confirmLabel="确认批量撤销" description={`将撤销选中的 ${selection.selectedIds.length} 个 API Key，撤销后无法恢复，使用这些 Key 的客户端将立即失去访问权限。`} destructive onConfirm={revokeSelected} onOpenChange={setBulkRevokeOpen} open={bulkRevokeOpen} title="批量撤销 API Key" />
       </div>
     </>
   );

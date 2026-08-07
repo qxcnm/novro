@@ -1,23 +1,30 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, CircleDollarSign, Eye, KeyRound, Pencil, Plus, RefreshCw, Search, UserRound, UserRoundCheck, UserRoundX, WalletCards } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleDollarSign, Eye, KeyRound, Pencil, Plus, Power, PowerOff, RefreshCw, Search, UserRound, UserRoundCheck, UserRoundX, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
+import { useListSelection } from "@/lib/use-list-selection";
 
 type UserRecord = {
-  id: string;
+	id: string;
+  billing_group_id: string | null;
+  billing_group?: { id: string; code: string; display_name: string; multiplier_bps: number };
   username: string;
+  email: string;
   display_name: string;
   role: "admin" | "member";
   status: "active" | "disabled";
@@ -27,7 +34,8 @@ type UserRecord = {
 };
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
-type WalletEntry = { id: string; entry_type: "manual_adjustment" | "usage_reservation" | "usage_refund"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
+type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
+type WalletEntry = { id: string; entry_type: "manual_adjustment" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string }; entries: WalletEntry[] };
 type ErrorResponse = { error?: { message?: string } };
 
@@ -56,7 +64,8 @@ function yuanToMicros(value: string) {
 
 export default function UsersClient() {
   const router = useRouter();
-  const [users, setUsers] = useState<UserRecord[]>([]);
+	const [users, setUsers] = useState<UserRecord[]>([]);
+	const [billingGroups, setBillingGroups] = useState<BillingGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -76,21 +85,24 @@ export default function UsersClient() {
   const [balanceError, setBalanceError] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
-  const [form, setForm] = useState({ username: "", display_name: "", password: "", role: "member" as "admin" | "member" });
-  const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member" });
+	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member", billing_group_id: "" });
+	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member", billing_group_id: "" });
   const [resetPassword, setResetPassword] = useState("");
+  const [bulkStatus, setBulkStatus] = useState<"active" | "disabled" | null>(null);
+  const selection = useListSelection(users.map((user) => user.id));
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
     if (search) query.set("search", search);
     if (status !== "all") query.set("status", status);
-    const response = await fetch(`/api/admin/users?${query}`, { cache: "no-store" });
+	const [response, groupsResponse] = await Promise.all([fetch(`/api/admin/users?${query}`, { cache: "no-store" }), fetch("/api/admin/billing-groups", { cache: "no-store" })]);
     if (response.status === 401) { router.replace("/login"); return; }
     if (response.status === 403) { router.replace("/console"); return; }
     if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
-    const page = (await response.json()) as UserPage;
-    setUsers(page.users);
+	const page = (await response.json()) as UserPage;
+	setUsers(page.users);
+	if (groupsResponse.ok) setBillingGroups(((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups);
     setTotal(page.total);
     setLoading(false);
   }, [offset, router, search, status]);
@@ -108,7 +120,7 @@ export default function UsersClient() {
 
   function openDetails(record: UserRecord) {
     setDetailUser(record);
-    setEditForm({ display_name: record.display_name, role: record.role });
+	setEditForm({ display_name: record.display_name, role: record.role, billing_group_id: record.billing_group_id ?? "" });
   }
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
@@ -117,7 +129,7 @@ export default function UsersClient() {
     const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     setBusy(false);
     if (!response.ok) { setFormError(await readError(response)); return; }
-    setForm({ username: "", display_name: "", password: "", role: "member" });
+	setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: billingGroups.find((group) => group.is_default)?.id ?? "" });
     setCreateOpen(false); setOffset(0); setMessage("用户已创建");
     await loadUsers();
   }
@@ -143,6 +155,22 @@ export default function UsersClient() {
     if (!response.ok) { setMessage(await readError(response)); setStatusUser(null); return; }
     setStatusUser(null); setMessage(nextStatus === "active" ? "用户已启用" : "用户已停用");
     await loadUsers();
+  }
+
+  async function applyBulkStatus() {
+    if (!bulkStatus) return;
+    setBusy(true);
+    setMessage("");
+    const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/users/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: bulkStatus }),
+    }));
+    setBusy(false);
+    setBulkStatus(null);
+    setMessage(bulkResultMessage(bulkStatus === "active" ? "启用用户" : "停用用户", result));
+    await loadUsers();
+    selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
   async function submitReset(event: FormEvent<HTMLFormElement>) {
@@ -192,7 +220,7 @@ export default function UsersClient() {
 
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <form className="flex min-w-0 flex-1 gap-2" onSubmit={submitSearch}>
-            <div className="relative max-w-md flex-1"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="搜索用户" className="pl-8" onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜索用户名或显示名称" value={searchDraft} /></div>
+            <div className="relative max-w-md flex-1"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="搜索用户" className="pl-8" onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜索用户名、邮箱或显示名称" value={searchDraft} /></div>
             <Button type="submit" variant="outline">搜索</Button>
           </form>
           <div className="flex flex-wrap items-center gap-2">
@@ -201,24 +229,31 @@ export default function UsersClient() {
               <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
             </Select>
             <Button aria-label="刷新用户列表" disabled={loading} onClick={() => void loadUsers()} size="icon" title="刷新用户列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
-            <Button onClick={() => setCreateOpen(true)}><Plus />创建用户</Button>
+			<Button onClick={() => { setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: billingGroups.find((group) => group.is_default)?.id ?? "" }); setCreateOpen(true); }}><Plus />创建用户</Button>
           </div>
         </div>
 
         {message ? <div className="rounded-md border bg-background px-4 py-3 text-sm" role="status">{message}</div> : null}
 
+        <ListBulkActions onClear={selection.clearSelection} selectedCount={selection.selectedIds.length}>
+          <Button disabled={busy} onClick={() => setBulkStatus("active")} size="sm" type="button" variant="outline"><Power />批量启用</Button>
+          <Button disabled={busy} onClick={() => setBulkStatus("disabled")} size="sm" type="button" variant="destructive"><PowerOff />批量停用</Button>
+        </ListBulkActions>
+
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
+				<TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有用户" checked={selection.checkboxState} disabled={loading || users.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>计费分组</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={6}>加载中...</TableCell></TableRow> : null}
-                  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={6}>没有符合条件的用户</TableCell></TableRow> : null}
+				  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
+				  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>没有符合条件的用户</TableCell></TableRow> : null}
                   {!loading ? users.map((record) => (
                     <TableRow key={record.id}>
-                      <TableCell><button className="text-left outline-none focus-visible:underline" onClick={() => openDetails(record)} type="button"><span className="block font-medium">{record.display_name || record.username}</span><span className="block text-xs text-muted-foreground">@{record.username}</span></button></TableCell>
-                      <TableCell><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge></TableCell>
+					  <TableCell><Checkbox aria-label={`选择用户 ${record.username}`} checked={selection.isSelected(record.id)} onCheckedChange={(checked) => selection.toggleOne(record.id, checked === true)} /></TableCell>
+                      <TableCell><button className="max-w-64 text-left outline-none focus-visible:underline" onClick={() => openDetails(record)} type="button"><span className="block font-medium">{record.display_name || record.username}</span><span className="block text-xs text-muted-foreground">@{record.username}</span><span className="block truncate text-xs text-muted-foreground">{record.email || "未设置邮箱"}</span></button></TableCell>
+					  <TableCell><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge></TableCell>
+					  <TableCell><p>{record.billing_group?.display_name ?? "未分组"}</p><p className="text-xs text-muted-foreground">{((record.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
                       <TableCell><Badge variant={record.status === "active" ? "outline" : "destructive"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.last_login_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.created_at)}</TableCell>
@@ -240,14 +275,16 @@ export default function UsersClient() {
           </CardContent>
         </Card>
 
-        <Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", display_name: "", password: "", role: "member" }); }} open={createOpen}>
+		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: "" }); }} open={createOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>创建用户</DialogTitle><DialogDescription>创建后用户立即启用。初始密码必须为 12 到 72 字节。</DialogDescription></DialogHeader>
             <form className="space-y-4" id="create-user-form" onSubmit={createUser}>
               <div className="space-y-2"><Label htmlFor="new-username">用户名</Label><Input autoComplete="off" id="new-username" onChange={(event) => setForm({ ...form, username: event.target.value })} pattern="[a-z0-9][a-z0-9._-]{2,63}" placeholder="例如 alice.chen" required value={form.username} /></div>
+              <div className="space-y-2"><Label htmlFor="new-email">邮箱</Label><Input autoComplete="email" id="new-email" maxLength={320} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="例如 alice@example.com" required type="email" value={form.email} /></div>
               <div className="space-y-2"><Label htmlFor="new-display-name">显示名称</Label><Input id="new-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 Alice Chen" value={form.display_name} /></div>
               <div className="space-y-2"><Label htmlFor="new-password">初始密码</Label><Input autoComplete="new-password" id="new-password" minLength={12} onChange={(event) => setForm({ ...form, password: event.target.value })} required type="password" value={form.password} /></div>
-              <div className="space-y-2"><Label htmlFor="new-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setForm({ ...form, role })} value={form.role}><SelectTrigger id="new-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select></div>
+			  <div className="space-y-2"><Label htmlFor="new-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setForm({ ...form, role })} value={form.role}><SelectTrigger id="new-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select></div>
+			  <div className="space-y-2"><Label htmlFor="new-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger id="new-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active").map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
               {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
             </form>
             <DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-user-form" type="submit"><UserRound />{busy ? "正在创建..." : "创建用户"}</Button></DialogFooter>
@@ -256,11 +293,13 @@ export default function UsersClient() {
 
         <Sheet onOpenChange={(open) => { setFormError(""); if (!open) setDetailUser(null); }} open={detailUser !== null}>
           <SheetContent className="w-full overflow-y-auto sm:max-w-md" side="right">
-            {detailUser ? <><SheetHeader className="border-b px-6 py-5"><SheetTitle>{detailUser.display_name || detailUser.username}</SheetTitle><SheetDescription>@{detailUser.username}</SheetDescription></SheetHeader>
+            {detailUser ? <><SheetHeader className="border-b px-6 py-5"><SheetTitle>{detailUser.display_name || detailUser.username}</SheetTitle><SheetDescription>@{detailUser.username}{detailUser.email ? ` · ${detailUser.email}` : " · 未设置邮箱"}</SheetDescription></SheetHeader>
               <form className="space-y-6 px-6" id="edit-user-form" onSubmit={updateUser}>
                 <div className="grid grid-cols-2 gap-4 border-b pb-5 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={detailUser.status === "active" ? "outline" : "destructive"}>{detailUser.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">最近登录</p><p className="mt-2 leading-5">{formatDate(detailUser.last_login_at)}</p></div><div><p className="text-xs text-muted-foreground">创建时间</p><p className="mt-2 leading-5">{formatDate(detailUser.created_at)}</p></div><div><p className="text-xs text-muted-foreground">最近更新</p><p className="mt-2 leading-5">{formatDate(detailUser.updated_at)}</p></div></div>
                 <div className="space-y-2"><Label htmlFor="edit-display-name">显示名称</Label><Input id="edit-display-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} value={editForm.display_name} /></div>
-                <div className="space-y-2"><Label htmlFor="edit-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setEditForm({ ...editForm, role })} value={editForm.role}><SelectTrigger id="edit-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select><p className="text-xs leading-5 text-muted-foreground">最后一个启用的管理员不能降级为普通成员。</p></div>
+                <div className="space-y-2"><Label htmlFor="edit-email">邮箱</Label><Input disabled id="edit-email" value={detailUser.email || "未设置邮箱"} /></div>
+				<div className="space-y-2"><Label htmlFor="edit-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setEditForm({ ...editForm, role })} value={editForm.role}><SelectTrigger id="edit-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select><p className="text-xs leading-5 text-muted-foreground">最后一个启用的管理员不能降级为普通成员。</p></div>
+				<div className="space-y-2"><Label htmlFor="edit-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setEditForm({ ...editForm, billing_group_id })} value={editForm.billing_group_id}><SelectTrigger id="edit-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active" || group.id === editForm.billing_group_id).map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
                 {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
               </form>
               <SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-user-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button><Button onClick={() => { setDetailUser(null); setResetUser(detailUser); }} type="button" variant="outline"><KeyRound />重置密码</Button></SheetFooter></> : null}
@@ -295,6 +334,7 @@ export default function UsersClient() {
         <AlertDialog onOpenChange={(open) => { if (!open) setStatusUser(null); }} open={statusUser !== null}>
           <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{statusUser?.status === "active" ? "停用用户" : "启用用户"}</AlertDialogTitle><AlertDialogDescription>{statusUser?.status === "active" ? `停用 ${statusUser.username} 后，该账号将无法继续登录。` : `启用 ${statusUser?.username ?? "该用户"} 后，该账号可以重新登录。`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void toggleStatus(); }} variant={statusUser?.status === "active" ? "destructive" : "default"}>{statusUser?.status === "active" ? "确认停用" : "确认启用"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
         </AlertDialog>
+        <BulkActionDialog busy={busy} confirmLabel={bulkStatus === "active" ? "确认批量启用" : "确认批量停用"} description={bulkStatus === "active" ? `将启用选中的 ${selection.selectedIds.length} 个用户，停用状态的账号将可以重新登录。` : `将停用选中的 ${selection.selectedIds.length} 个用户，账号将无法继续登录；最后一个启用的管理员仍会受到保护。`} destructive={bulkStatus === "disabled"} onConfirm={applyBulkStatus} onOpenChange={(open) => { if (!open) setBulkStatus(null); }} open={bulkStatus !== null} title={bulkStatus === "active" ? "批量启用用户" : "批量停用用户"} />
       </div>
     </>
   );

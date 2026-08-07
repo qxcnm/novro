@@ -13,6 +13,7 @@ type fakeStore struct {
 	createParams CreateParams
 	updateParams UpdateParams
 	status       Status
+	deletedID    uuid.UUID
 	err          error
 }
 
@@ -28,6 +29,10 @@ func (f *fakeStore) Update(_ context.Context, id uuid.UUID, params UpdateParams)
 func (f *fakeStore) SetStatus(_ context.Context, id uuid.UUID, status Status) (Record, error) {
 	f.status = status
 	return Record{ID: id, Status: status}, f.err
+}
+func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
+	f.deletedID = id
+	return f.err
 }
 
 func testService(t *testing.T, store *fakeStore) *Service {
@@ -103,5 +108,17 @@ func TestCipherRoundTripAndRejectsWrongKey(t *testing.T) {
 	other, _ := NewCipher("different-secret-012345678901234567")
 	if _, err := other.Decrypt(encrypted); err == nil {
 		t.Fatal("wrong key decrypted provider credential")
+	}
+}
+
+func TestDeleteValidatesIDAndDelegates(t *testing.T) {
+	store := &fakeStore{}
+	service := testService(t, store)
+	if err := service.Delete(context.Background(), uuid.Nil); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected invalid ID, got %v", err)
+	}
+	id := uuid.New()
+	if err := service.Delete(context.Background(), id); err != nil || store.deletedID != id {
+		t.Fatalf("delete id=%s stored=%s err=%v", id, store.deletedID, err)
 	}
 }

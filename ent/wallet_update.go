@@ -162,11 +162,6 @@ func (_u *WalletUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *WalletUpdate) check() error {
-	if v, ok := _u.mutation.BalanceMicros(); ok {
-		if err := wallet.BalanceMicrosValidator(v); err != nil {
-			return &ValidationError{Name: "balance_micros", err: fmt.Errorf(`ent: validator failed for field "Wallet.balance_micros": %w`, err)}
-		}
-	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Wallet.user"`)
 	}
@@ -432,11 +427,6 @@ func (_u *WalletUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *WalletUpdateOne) check() error {
-	if v, ok := _u.mutation.BalanceMicros(); ok {
-		if err := wallet.BalanceMicrosValidator(v); err != nil {
-			return &ValidationError{Name: "balance_micros", err: fmt.Errorf(`ent: validator failed for field "Wallet.balance_micros": %w`, err)}
-		}
-	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Wallet.user"`)
 	}

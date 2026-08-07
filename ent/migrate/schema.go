@@ -52,15 +52,34 @@ var (
 		{Name: "request_id", Type: field.TypeUUID, Unique: true},
 		{Name: "endpoint", Type: field.TypeEnum, Enums: []string{"chat_completions", "responses", "messages"}},
 		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "uncached_input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "cache_read_input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "cache_write_input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "cache_write_1h_input_tokens", Type: field.TypeInt, Default: 0},
 		{Name: "output_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "input_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "output_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_read_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_write_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_write_1h_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "request_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "base_cost_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "multiplier_bps", Type: field.TypeInt64, Default: 10000},
 		{Name: "cost_micros", Type: field.TypeInt64, Default: 0},
 		{Name: "reserved_micros", Type: field.TypeInt64, Default: 0},
 		{Name: "estimated", Type: field.TypeBool, Default: false},
 		{Name: "upstream_request_id", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "model_name", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "upstream_model_name", Type: field.TypeString, Size: 256, Default: ""},
+		{Name: "billing_group_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "billing_group_name", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "calculation_version", Type: field.TypeString, Size: 32, Default: "v1"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "finished_at", Type: field.TypeTime},
 		{Name: "api_key_id", Type: field.TypeUUID},
+		{Name: "billing_group_id", Type: field.TypeUUID, Nullable: true},
 		{Name: "model_route_id", Type: field.TypeUUID},
+		{Name: "upstream_model_id", Type: field.TypeUUID, Nullable: true},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
 	// APIUsagesTable holds the schema information for the "api_usages" table.
@@ -71,19 +90,31 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "api_usages_api_keys_api_usages",
-				Columns:    []*schema.Column{APIUsagesColumns[11]},
+				Columns:    []*schema.Column{APIUsagesColumns[28]},
 				RefColumns: []*schema.Column{APIKeysColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
+				Symbol:     "api_usages_billing_groups_api_usages",
+				Columns:    []*schema.Column{APIUsagesColumns[29]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
 				Symbol:     "api_usages_model_routes_api_usages",
-				Columns:    []*schema.Column{APIUsagesColumns[12]},
+				Columns:    []*schema.Column{APIUsagesColumns[30]},
 				RefColumns: []*schema.Column{ModelRoutesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
+				Symbol:     "api_usages_upstream_models_api_usages",
+				Columns:    []*schema.Column{APIUsagesColumns[31]},
+				RefColumns: []*schema.Column{UpstreamModelsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
 				Symbol:     "api_usages_users_api_usages",
-				Columns:    []*schema.Column{APIUsagesColumns[13]},
+				Columns:    []*schema.Column{APIUsagesColumns[32]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -92,17 +123,62 @@ var (
 			{
 				Name:    "apiusage_user_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIUsagesColumns[13], APIUsagesColumns[9]},
+				Columns: []*schema.Column{APIUsagesColumns[32], APIUsagesColumns[26]},
 			},
 			{
 				Name:    "apiusage_api_key_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIUsagesColumns[11], APIUsagesColumns[9]},
+				Columns: []*schema.Column{APIUsagesColumns[28], APIUsagesColumns[26]},
 			},
 			{
 				Name:    "apiusage_model_route_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIUsagesColumns[12], APIUsagesColumns[9]},
+				Columns: []*schema.Column{APIUsagesColumns[30], APIUsagesColumns[26]},
+			},
+			{
+				Name:    "apiusage_upstream_model_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[31], APIUsagesColumns[26]},
+			},
+			{
+				Name:    "apiusage_billing_group_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[29], APIUsagesColumns[26]},
+			},
+		},
+	}
+	// BillingGroupsColumns holds the columns for the "billing_groups" table.
+	BillingGroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "code", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "display_name", Type: field.TypeString, Size: 128},
+		{Name: "multiplier_bps", Type: field.TypeInt64, Default: 10000},
+		{Name: "is_default", Type: field.TypeBool, Default: false},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+	}
+	// BillingGroupsTable holds the schema information for the "billing_groups" table.
+	BillingGroupsTable = &schema.Table{
+		Name:       "billing_groups",
+		Columns:    BillingGroupsColumns,
+		PrimaryKey: []*schema.Column{BillingGroupsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "billinggroup_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{BillingGroupsColumns[5], BillingGroupsColumns[6]},
+			},
+			{
+				Name:    "billinggroup_is_default",
+				Unique:  false,
+				Columns: []*schema.Column{BillingGroupsColumns[4]},
+			},
+			{
+				Name:    "billinggroup_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{BillingGroupsColumns[8]},
 			},
 		},
 	}
@@ -117,7 +193,9 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
 		{Name: "provider_id", Type: field.TypeUUID},
+		{Name: "upstream_model_id", Type: field.TypeUUID, Nullable: true},
 	}
 	// ModelRoutesTable holds the schema information for the "model_routes" table.
 	ModelRoutesTable = &schema.Table{
@@ -127,23 +205,62 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "model_routes_providers_model_routes",
-				Columns:    []*schema.Column{ModelRoutesColumns[9]},
+				Columns:    []*schema.Column{ModelRoutesColumns[10]},
 				RefColumns: []*schema.Column{ProvidersColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "model_routes_upstream_models_model_routes",
+				Columns:    []*schema.Column{ModelRoutesColumns[11]},
+				RefColumns: []*schema.Column{UpstreamModelsColumns[0]},
+				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "modelroute_provider_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{ModelRoutesColumns[9], ModelRoutesColumns[6]},
+				Columns: []*schema.Column{ModelRoutesColumns[10], ModelRoutesColumns[6]},
+			},
+			{
+				Name:    "modelroute_upstream_model_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{ModelRoutesColumns[11], ModelRoutesColumns[6]},
 			},
 			{
 				Name:    "modelroute_status_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{ModelRoutesColumns[6], ModelRoutesColumns[7]},
 			},
+			{
+				Name:    "modelroute_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{ModelRoutesColumns[9]},
+			},
 		},
+	}
+	// PaymentConfigsColumns holds the columns for the "payment_configs" table.
+	PaymentConfigsColumns = []*schema.Column{
+		{Name: "provider", Type: field.TypeString, Size: 32},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "api_url", Type: field.TypeString, Size: 512, Default: ""},
+		{Name: "merchant_id", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "encrypted_merchant_key", Type: field.TypeString, Size: 2048, Default: ""},
+		{Name: "site_name", Type: field.TypeString, Size: 64, Default: "Novro"},
+		{Name: "channels", Type: field.TypeString, Size: 512, Default: ""},
+		{Name: "methods_json", Type: field.TypeString, Size: 2147483647, Default: "[]"},
+		{Name: "min_top_up_micros", Type: field.TypeInt64, Default: 1000000},
+		{Name: "max_top_up_micros", Type: field.TypeInt64, Default: 50000000000},
+		{Name: "preset_amounts_json", Type: field.TypeString, Size: 2147483647, Default: "[10000000,50000000,100000000,500000000]"},
+		{Name: "bonus_tiers_json", Type: field.TypeString, Size: 2147483647, Default: "[]"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PaymentConfigsTable holds the schema information for the "payment_configs" table.
+	PaymentConfigsTable = &schema.Table{
+		Name:       "payment_configs",
+		Columns:    PaymentConfigsColumns,
+		PrimaryKey: []*schema.Column{PaymentConfigsColumns[0]},
 	}
 	// ProvidersColumns holds the columns for the "providers" table.
 	ProvidersColumns = []*schema.Column{
@@ -157,6 +274,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
 	}
 	// ProvidersTable holds the schema information for the "providers" table.
 	ProvidersTable = &schema.Table{
@@ -168,6 +286,11 @@ var (
 				Name:    "provider_status_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{ProvidersColumns[7], ProvidersColumns[8]},
+			},
+			{
+				Name:    "provider_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{ProvidersColumns[10]},
 			},
 		},
 	}
@@ -184,10 +307,98 @@ var (
 		Columns:    SystemSettingsColumns,
 		PrimaryKey: []*schema.Column{SystemSettingsColumns[0]},
 	}
+	// TopUpOrdersColumns holds the columns for the "top_up_orders" table.
+	TopUpOrdersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "out_trade_no", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "provider", Type: field.TypeEnum, Enums: []string{"epay"}, Default: "epay"},
+		{Name: "channel", Type: field.TypeString, Size: 32},
+		{Name: "amount_micros", Type: field.TypeInt64},
+		{Name: "credited_micros", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "paid"}, Default: "pending"},
+		{Name: "provider_trade_no", Type: field.TypeString, Unique: true, Nullable: true, Size: 128},
+		{Name: "paid_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// TopUpOrdersTable holds the schema information for the "top_up_orders" table.
+	TopUpOrdersTable = &schema.Table{
+		Name:       "top_up_orders",
+		Columns:    TopUpOrdersColumns,
+		PrimaryKey: []*schema.Column{TopUpOrdersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "top_up_orders_users_top_up_orders",
+				Columns:    []*schema.Column{TopUpOrdersColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "topuporder_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{TopUpOrdersColumns[11], TopUpOrdersColumns[9]},
+			},
+			{
+				Name:    "topuporder_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{TopUpOrdersColumns[6], TopUpOrdersColumns[9]},
+			},
+		},
+	}
+	// UpstreamModelsColumns holds the columns for the "upstream_models" table.
+	UpstreamModelsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "provider_name", Type: field.TypeString, Size: 128},
+		{Name: "upstream_name", Type: field.TypeString, Size: 256},
+		{Name: "display_name", Type: field.TypeString, Size: 128},
+		{Name: "input_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "output_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_read_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_write_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_write_1h_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "request_price_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "pricing_configured", Type: field.TypeBool, Default: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+	}
+	// UpstreamModelsTable holds the schema information for the "upstream_models" table.
+	UpstreamModelsTable = &schema.Table{
+		Name:       "upstream_models",
+		Columns:    UpstreamModelsColumns,
+		PrimaryKey: []*schema.Column{UpstreamModelsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreammodel_provider_name_upstream_name",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamModelsColumns[1], UpstreamModelsColumns[2]},
+			},
+			{
+				Name:    "upstreammodel_provider_name_status",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamModelsColumns[1], UpstreamModelsColumns[11]},
+			},
+			{
+				Name:    "upstreammodel_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamModelsColumns[11], UpstreamModelsColumns[12]},
+			},
+			{
+				Name:    "upstreammodel_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamModelsColumns[14]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "username", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "email", Type: field.TypeString, Unique: true, Nullable: true, Size: 320},
 		{Name: "display_name", Type: field.TypeString, Size: 128, Default: ""},
 		{Name: "password_hash", Type: field.TypeString, Nullable: true},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "member"}, Default: "member"},
@@ -195,17 +406,26 @@ var (
 		{Name: "last_login_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "billing_group_id", Type: field.TypeUUID, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
 		Name:       "users",
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "users_billing_groups_users",
+				Columns:    []*schema.Column{UsersColumns[10]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "user_role_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[4], UsersColumns[5]},
+				Columns: []*schema.Column{UsersColumns[5], UsersColumns[6]},
 			},
 		},
 	}
@@ -295,7 +515,7 @@ var (
 	WalletEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "reference_id", Type: field.TypeUUID},
-		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "usage_reservation", "usage_refund"}},
+		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "top_up", "usage_reservation", "usage_refund", "usage_settlement"}},
 		{Name: "amount_micros", Type: field.TypeInt64},
 		{Name: "balance_after_micros", Type: field.TypeInt64},
 		{Name: "description", Type: field.TypeString, Size: 255, Default: ""},
@@ -344,9 +564,13 @@ var (
 	Tables = []*schema.Table{
 		APIKeysTable,
 		APIUsagesTable,
+		BillingGroupsTable,
 		ModelRoutesTable,
+		PaymentConfigsTable,
 		ProvidersTable,
 		SystemSettingsTable,
+		TopUpOrdersTable,
+		UpstreamModelsTable,
 		UsersTable,
 		UserIdentitiesTable,
 		UserSessionsTable,
@@ -358,9 +582,14 @@ var (
 func init() {
 	APIKeysTable.ForeignKeys[0].RefTable = UsersTable
 	APIUsagesTable.ForeignKeys[0].RefTable = APIKeysTable
-	APIUsagesTable.ForeignKeys[1].RefTable = ModelRoutesTable
-	APIUsagesTable.ForeignKeys[2].RefTable = UsersTable
+	APIUsagesTable.ForeignKeys[1].RefTable = BillingGroupsTable
+	APIUsagesTable.ForeignKeys[2].RefTable = ModelRoutesTable
+	APIUsagesTable.ForeignKeys[3].RefTable = UpstreamModelsTable
+	APIUsagesTable.ForeignKeys[4].RefTable = UsersTable
 	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
+	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
+	TopUpOrdersTable.ForeignKeys[0].RefTable = UsersTable
+	UsersTable.ForeignKeys[0].RefTable = BillingGroupsTable
 	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	UserSessionsTable.ForeignKeys[0].RefTable = UsersTable
 	WalletsTable.ForeignKeys[0].RefTable = UsersTable

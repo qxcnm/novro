@@ -17,9 +17,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
 	entapiusage "github.com/novro-gateway/novro/ent/apiusage"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/migrate"
 	entuser "github.com/novro-gateway/novro/ent/user"
 	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
+	"github.com/novro-gateway/novro/internal/payment"
 )
 
 const mysqlIntegrationDSNEnv = "NOVRO_TEST_MYSQL_DSN"
@@ -136,7 +138,11 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create integration provider: %v", err)
 	}
-	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetPublicName("integration-model").SetDisplayName("Integration Model").SetUpstreamName("upstream-model").SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx)
+	upstream, err := client.UpstreamModel.Create().SetProviderName("Integration Provider").SetUpstreamName("upstream-model").SetDisplayName("Upstream Model").SetRequestPriceMicros(300_000).Save(ctx)
+	if err != nil {
+		t.Fatalf("create integration upstream model: %v", err)
+	}
+	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetPublicName("integration-model").SetDisplayName("Integration Model").SetUpstreamName("upstream-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
 	if err != nil {
 		t.Fatalf("create integration model route: %v", err)
 	}
@@ -162,7 +168,11 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 		t.Fatalf("conflicting refund err=%v", err)
 	}
 
-	usage := UsageInput{UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, RequestID: requestID, Endpoint: "chat_completions", InputTokens: 10, OutputTokens: 20, CostMicros: 300_000, ReservedMicros: 400_000, CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC()}
+	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
+	if err != nil {
+		t.Fatalf("read default billing group: %v", err)
+	}
+	usage := UsageInput{UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, UpstreamModelID: &upstream.ID, BillingGroupID: &group.ID, RequestID: requestID, Endpoint: "chat_completions", InputTokens: 10, Tokens: TokenBreakdown{UncachedInput: 10, Output: 20}, OutputTokens: 20, Rates: RateCard{RequestMicros: 300_000}, BaseCostMicros: 300_000, MultiplierBPS: 10_000, CostMicros: 300_000, ReservedMicros: 400_000, ModelName: "integration-model", UpstreamModelName: "upstream-model", BillingGroupCode: group.Code, BillingGroupName: group.DisplayName, CalculationVersion: CalculationVersion, CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC()}
 	if err := service.Finalize(ctx, usage); err != nil {
 		t.Fatalf("finalize usage: %v", err)
 	}
@@ -171,6 +181,7 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 	conflictingUsage := usage
 	conflictingUsage.OutputTokens++
+	conflictingUsage.Tokens.Output++
 	if err := service.Finalize(ctx, conflictingUsage); !errors.Is(err, ErrRequestConflict) {
 		t.Fatalf("conflicting finalization err=%v", err)
 	}
@@ -199,6 +210,8 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 	fullyChargedUsage := usage
 	fullyChargedUsage.RequestID = fullyRefundedRequestID
+	fullyChargedUsage.Rates.RequestMicros = 50_000
+	fullyChargedUsage.BaseCostMicros = 50_000
 	fullyChargedUsage.CostMicros = 50_000
 	fullyChargedUsage.ReservedMicros = 50_000
 	if err := service.Finalize(ctx, fullyChargedUsage); !errors.Is(err, ErrRequestConflict) {
@@ -210,6 +223,72 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 	if usageCount != 0 {
 		t.Fatalf("usage after incompatible refund=%d want=0", usageCount)
+	}
+}
+
+func TestMySQLConcurrentTopUpNotificationsCreditOnce(t *testing.T) {
+	client := openMySQLIntegrationClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	createdUser, err := client.User.Create().
+		SetUsername("top-up-" + strings.ReplaceAll(uuid.New().String(), "-", "")).
+		SetDisplayName("Top-up Test").SetRole(entuser.RoleMember).SetStatus(entuser.StatusActive).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create top-up integration user: %v", err)
+	}
+	wallet, err := client.Wallet.Create().SetUserID(createdUser.ID).Save(ctx)
+	if err != nil {
+		t.Fatalf("create top-up integration wallet: %v", err)
+	}
+	store := payment.NewEntStore(client)
+	orderID := uuid.New()
+	created, err := store.Create(ctx, payment.CreateParams{
+		ID: orderID, UserID: createdUser.ID, OutTradeNo: "NVR" + strings.ReplaceAll(orderID.String(), "-", ""),
+		Channel: "alipay", AmountMicros: 10_000_000,
+	})
+	if err != nil {
+		t.Fatalf("create top-up integration order: %v", err)
+	}
+	completion := payment.CompleteParams{
+		OutTradeNo: created.OutTradeNo, ProviderTradeNo: "EPAY-CONCURRENT-1", Channel: "alipay",
+		AmountMicros: created.AmountMicros, PaidAt: time.Now().UTC(),
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-start
+			_, completeErr := store.Complete(context.Background(), completion)
+			results <- completeErr
+		}()
+	}
+	close(start)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("complete concurrent top-up notification: %v", err)
+		}
+	}
+
+	updatedWallet, err := client.Wallet.Get(ctx, wallet.ID)
+	if err != nil {
+		t.Fatalf("read top-up wallet: %v", err)
+	}
+	if updatedWallet.BalanceMicros != created.AmountMicros {
+		t.Fatalf("top-up balance=%d want=%d", updatedWallet.BalanceMicros, created.AmountMicros)
+	}
+	entries, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(wallet.ID),
+		entwalletentry.ReferenceIDEQ(created.ID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeTopUp),
+	).All(ctx)
+	if err != nil {
+		t.Fatalf("list top-up ledger entries: %v", err)
+	}
+	if len(entries) != 1 || entries[0].AmountMicros != created.AmountMicros {
+		t.Fatalf("top-up ledger=%+v", entries)
 	}
 }
 

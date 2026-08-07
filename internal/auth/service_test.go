@@ -20,9 +20,11 @@ type fakeAuthStore struct {
 	oidcUser     user.Record
 	oidcIdentity OIDCUser
 	autoRegister bool
+	identifier   string
 }
 
-func (f *fakeAuthStore) FindUserByUsername(context.Context, string) (LoginUser, error) {
+func (f *fakeAuthStore) FindUserByUsername(_ context.Context, identifier string) (LoginUser, error) {
+	f.identifier = identifier
 	return f.loginUser, f.findErr
 }
 
@@ -79,6 +81,21 @@ func TestLoginCreatesHashedSession(t *testing.T) {
 	}
 	if store.sessionHash == "" || store.sessionHash == result.Token || result.ExpiresAt.Sub(service.now()) != time.Hour {
 		t.Fatalf("unexpected login result: %+v hash=%q", result, store.sessionHash)
+	}
+}
+
+func TestLoginNormalizesUsernameOrEmailIdentifier(t *testing.T) {
+	hash := "hash:correct-password"
+	store := &fakeAuthStore{loginUser: LoginUser{
+		User:         user.Record{ID: uuid.New(), Username: "alice", Email: "alice@example.com", Status: user.StatusActive},
+		PasswordHash: &hash,
+	}}
+	service := newTestService(t, store)
+	if _, err := service.Login(context.Background(), " Alice@Example.COM ", "correct-password"); err != nil {
+		t.Fatalf("login by email: %v", err)
+	}
+	if store.identifier != "alice@example.com" {
+		t.Fatalf("identifier was not normalized: %q", store.identifier)
 	}
 }
 

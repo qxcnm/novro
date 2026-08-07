@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,12 +18,16 @@ import (
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/auth/password"
 	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/config"
 	"github.com/novro-gateway/novro/internal/database"
 	"github.com/novro-gateway/novro/internal/gateway"
 	"github.com/novro-gateway/novro/internal/httpapi"
 	"github.com/novro-gateway/novro/internal/modelroute"
+	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/providersync"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -58,7 +64,7 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "migrate":
-			if err := migrate.Apply(ctx, application.DB); err != nil {
+			if err := applyPendingMigrations(ctx, application.DB, migrate.Apply); err != nil {
 				logger.Error("database migration failed", "error", err)
 				os.Exit(1)
 			}
@@ -68,6 +74,14 @@ func main() {
 			logger.Info("database connection is ready")
 			return
 		}
+	}
+	if len(os.Args) == 1 {
+		logger.Info("checking database migrations")
+		if err := applyPendingMigrations(ctx, application.DB, migrate.Apply); err != nil {
+			logger.Error("automatic database migration failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("database migrations are ready")
 	}
 
 	passwordHasher := password.Hasher{}
@@ -81,16 +95,30 @@ func main() {
 	providerService := provider.NewService(provider.NewEntStore(application.Ent), providerCipher)
 	billingService := billing.NewService(billing.NewEntStore(application.Ent))
 	modelRouteService := modelroute.NewService(modelroute.NewEntStore(application.Ent), providerCipher)
+	upstreamModelService := upstreammodel.NewService(upstreammodel.NewEntStore(application.Ent))
+	providerModelService := providersync.NewService(application.Ent, providerCipher, nil)
+	billingGroupService := billinggroup.NewService(billinggroup.NewEntStore(application.Ent))
+	paymentService := payment.NewService(
+		payment.NewEntStore(application.Ent), payment.NewConfigEntStore(application.Ent), providerCipher,
+		payment.EPayConfig{
+			APIURL: cfg.Payment.EPay.APIURL, MerchantID: cfg.Payment.EPay.MerchantID, MerchantKey: cfg.Payment.EPay.MerchantKey,
+			SiteName: cfg.Payment.EPay.SiteName, Channels: cfg.Payment.EPay.Channels,
+			NotifyURL: cfg.Auth.PublicURL + "/api/payments/epay/notify",
+			ReturnURL: cfg.Auth.PublicURL + "/console/billing?payment=returned",
+		},
+	)
 	if len(os.Args) > 1 && os.Args[1] == "bootstrap-admin" {
 		username := os.Getenv("NOVRO_BOOTSTRAP_USERNAME")
+		email := os.Getenv("NOVRO_BOOTSTRAP_EMAIL")
 		displayName := os.Getenv("NOVRO_BOOTSTRAP_DISPLAY_NAME")
 		plainTextPassword := os.Getenv("NOVRO_BOOTSTRAP_PASSWORD")
-		if username == "" || plainTextPassword == "" {
-			logger.Error("bootstrap requires NOVRO_BOOTSTRAP_USERNAME and NOVRO_BOOTSTRAP_PASSWORD")
+		if username == "" || email == "" || plainTextPassword == "" {
+			logger.Error("bootstrap requires NOVRO_BOOTSTRAP_USERNAME, NOVRO_BOOTSTRAP_EMAIL, and NOVRO_BOOTSTRAP_PASSWORD")
 			os.Exit(1)
 		}
 		created, err := userService.InitializeAdmin(ctx, user.RegisterInput{
 			Username:    username,
+			Email:       email,
 			DisplayName: displayName,
 			Password:    plainTextPassword,
 		})
@@ -104,6 +132,10 @@ func main() {
 	if len(os.Args) > 1 {
 		logger.Error("unknown command", "command", os.Args[1])
 		os.Exit(2)
+	}
+	if err := paymentService.Bootstrap(ctx); err != nil {
+		logger.Error("payment configuration bootstrap failed", "error", err)
+		os.Exit(1)
 	}
 	authService, err := auth.NewService(
 		auth.NewEntStore(application.Ent),
@@ -131,7 +163,11 @@ func main() {
 			APIKeys:             apiKeyService,
 			Providers:           providerService,
 			Billing:             billingService,
+			Payments:            paymentService,
 			ModelRoutes:         modelRouteService,
+			UpstreamModels:      upstreamModelService,
+			ProviderModels:      providerModelService,
+			BillingGroups:       billingGroupService,
 			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,
@@ -174,4 +210,13 @@ func optionalOIDCService(client *auth.OIDCClient) httpapi.OIDCService {
 		return nil
 	}
 	return client
+}
+
+type migrationApplier func(context.Context, *sql.DB) error
+
+func applyPendingMigrations(ctx context.Context, db *sql.DB, apply migrationApplier) error {
+	if err := apply(ctx, db); err != nil {
+		return fmt.Errorf("apply pending migrations: %w", err)
+	}
+	return nil
 }

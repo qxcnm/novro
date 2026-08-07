@@ -16,12 +16,20 @@ type Tx struct {
 	APIKey *APIKeyClient
 	// APIUsage is the client for interacting with the APIUsage builders.
 	APIUsage *APIUsageClient
+	// BillingGroup is the client for interacting with the BillingGroup builders.
+	BillingGroup *BillingGroupClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
+	// PaymentConfig is the client for interacting with the PaymentConfig builders.
+	PaymentConfig *PaymentConfigClient
 	// Provider is the client for interacting with the Provider builders.
 	Provider *ProviderClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
+	// TopUpOrder is the client for interacting with the TopUpOrder builders.
+	TopUpOrder *TopUpOrderClient
+	// UpstreamModel is the client for interacting with the UpstreamModel builders.
+	UpstreamModel *UpstreamModelClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserIdentity is the client for interacting with the UserIdentity builders.
@@ -165,9 +173,13 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
 	tx.APIUsage = NewAPIUsageClient(tx.config)
+	tx.BillingGroup = NewBillingGroupClient(tx.config)
 	tx.ModelRoute = NewModelRouteClient(tx.config)
+	tx.PaymentConfig = NewPaymentConfigClient(tx.config)
 	tx.Provider = NewProviderClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
+	tx.TopUpOrder = NewTopUpOrderClient(tx.config)
+	tx.UpstreamModel = NewUpstreamModelClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserIdentity = NewUserIdentityClient(tx.config)
 	tx.UserSession = NewUserSessionClient(tx.config)

@@ -1,120 +1,291 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Eye, Pencil, Plus, Power, PowerOff, RefreshCw, Route, Search } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Power, PowerOff, RefreshCw, Route, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
+import { useListSelection } from "@/lib/use-list-selection";
 
-type Provider = { id: string; code: string; display_name: string; protocol: "openai" | "anthropic"; status: "active" | "disabled" };
-type ModelRouteRecord = { id: string; provider_id: string; public_name: string; display_name: string; upstream_name: string; input_price_micros: number; output_price_micros: number; status: "active" | "disabled"; provider: Provider; created_at: string; updated_at: string };
-type RouteForm = { provider_id: string; public_name: string; display_name: string; upstream_name: string; input_price: string; output_price: string };
-type ErrorResponse = { error?: { message?: string } };
+type Prices = {
+  input_price_micros: number;
+  output_price_micros: number;
+  cache_read_price_micros: number;
+  cache_write_price_micros: number;
+  cache_write_1h_price_micros: number;
+  request_price_micros: number;
+};
 
-const INITIAL_FORM: RouteForm = { provider_id: "", public_name: "", display_name: "", upstream_name: "", input_price: "", output_price: "" };
+type Provider = {
+  id: string;
+  code: string;
+  display_name: string;
+  status: "active" | "disabled";
+};
 
-async function readError(response: Response) { const body = (await response.json().catch(() => ({}))) as ErrorResponse; return body.error?.message ?? "操作失败，请稍后重试"; }
-function formatDate(value: string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-function formatPrice(micros: number) { return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 6 }).format(micros / 1_000_000); }
-function toMicros(value: string) { const match = value.trim().match(/^(\d{1,9})(?:\.(\d{1,6}))?$/); if (!match) return null; return Number(match[1]) * 1_000_000 + Number((match[2] ?? "").padEnd(6, "0")); }
-function protocolLabel(value: Provider["protocol"]) { return value === "openai" ? "OpenAI 兼容" : "Anthropic"; }
+type CatalogModel = {
+  id: string;
+  provider_name: string;
+  upstream_name: string;
+  display_name: string;
+  pricing_configured: boolean;
+  status: "active" | "disabled";
+  prices: Prices;
+};
 
-export default function ModelRoutesClient() {
+type ModelRoute = {
+  id: string;
+  provider_id: string;
+  upstream_model_id: string | null;
+  public_name: string;
+  display_name: string;
+  status: "active" | "disabled";
+  provider: Provider;
+  upstream_model?: CatalogModel;
+};
+
+type RouteForm = {
+  provider_id: string;
+  upstream_model_id: string;
+  public_name: string;
+  display_name: string;
+};
+
+const EMPTY_FORM: RouteForm = { provider_id: "", upstream_model_id: "", public_name: "", display_name: "" };
+
+function money(micros: number) {
+  return `¥${(micros / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 })}`;
+}
+
+async function errorMessage(response: Response) {
+  const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
+  return body.error?.message ?? "操作失败，请稍后重试";
+}
+
+export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: number }) {
   const router = useRouter();
-  const [routes, setRoutes] = useState<ModelRouteRecord[]>([]);
+  const [routes, setRoutes] = useState<ModelRoute[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [catalog, setCatalog] = useState<CatalogModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [formError, setFormError] = useState("");
-  const [searchDraft, setSearchDraft] = useState("");
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"all" | "active" | "disabled">("all");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [detailRoute, setDetailRoute] = useState<ModelRouteRecord | null>(null);
-  const [statusRoute, setStatusRoute] = useState<ModelRouteRecord | null>(null);
-  const [form, setForm] = useState<RouteForm>(INITIAL_FORM);
-  const [editForm, setEditForm] = useState<RouteForm>(INITIAL_FORM);
+  const [query, setQuery] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<ModelRoute | null>(null);
+  const [statusRoute, setStatusRoute] = useState<ModelRoute | null>(null);
+  const [deletingRoute, setDeletingRoute] = useState<ModelRoute | null>(null);
+  const [form, setForm] = useState<RouteForm>(EMPTY_FORM);
+  const [bulkStatus, setBulkStatus] = useState<"active" | "disabled" | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const query = new URLSearchParams(); if (search) query.set("search", search); if (status !== "all") query.set("status", status);
-    const [routesResponse, providersResponse] = await Promise.all([fetch(`/api/admin/model-routes?${query}`, { cache: "no-store" }), fetch("/api/admin/providers", { cache: "no-store" })]);
-    if (routesResponse.status === 401 || providersResponse.status === 401) { router.replace("/login"); return; }
-    if (routesResponse.status === 403 || providersResponse.status === 403) { router.replace("/console"); return; }
-    if (!routesResponse.ok) { setMessage(await readError(routesResponse)); setLoading(false); return; }
-    if (!providersResponse.ok) { setMessage(await readError(providersResponse)); setLoading(false); return; }
-    setRoutes(((await routesResponse.json()) as { model_routes: ModelRouteRecord[] }).model_routes);
+    const [routesResponse, providersResponse, catalogResponse] = await Promise.all([
+      fetch("/api/admin/model-routes", { cache: "no-store" }),
+      fetch("/api/admin/providers", { cache: "no-store" }),
+      fetch("/api/admin/upstream-models", { cache: "no-store" }),
+    ]);
+    if (routesResponse.status === 401) { router.replace("/login"); return; }
+    if (routesResponse.status === 403) { router.replace("/console"); return; }
+    if (!routesResponse.ok || !providersResponse.ok || !catalogResponse.ok) {
+      setMessage("加载模型路由失败");
+      setLoading(false);
+      return;
+    }
+    setRoutes(((await routesResponse.json()) as { model_routes: ModelRoute[] }).model_routes);
     setProviders(((await providersResponse.json()) as { providers: Provider[] }).providers);
+    setCatalog(((await catalogResponse.json()) as { upstream_models: CatalogModel[] }).upstream_models);
     setLoading(false);
-  }, [router, search, status]);
+  }, [router]);
 
-  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load, refreshKey]);
 
-  function submitSearch(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSearch(searchDraft.trim()); }
-  function openDetails(record: ModelRouteRecord) { setDetailRoute(record); setEditForm({ provider_id: record.provider_id, public_name: record.public_name, display_name: record.display_name, upstream_name: record.upstream_name, input_price: formatPrice(record.input_price_micros), output_price: formatPrice(record.output_price_micros) }); setFormError(""); }
-  function payloadFrom(formValue: RouteForm, includeName: boolean) {
-    const input = toMicros(formValue.input_price); const output = toMicros(formValue.output_price);
-    if (input === null || output === null) return null;
-    return { provider_id: formValue.provider_id, ...(includeName ? { public_name: formValue.public_name } : {}), display_name: formValue.display_name, upstream_name: formValue.upstream_name, input_price_micros: input, output_price_micros: output };
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return needle
+      ? routes.filter((route) => `${route.public_name} ${route.display_name} ${route.provider.display_name} ${route.upstream_model?.upstream_name ?? ""}`.toLowerCase().includes(needle))
+      : routes;
+  }, [query, routes]);
+  const selection = useListSelection(filtered.map((route) => route.id));
+
+  function beginCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setEditorOpen(true);
   }
 
-  async function createRoute(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const payload = payloadFrom(form, true); if (!payload) { setFormError("价格最多保留 6 位小数"); return; }
-    setBusy(true); setFormError(""); setMessage("");
-    const response = await fetch("/api/admin/model-routes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    setBusy(false); if (!response.ok) { setFormError(await readError(response)); return; }
-    setForm(INITIAL_FORM); setCreateOpen(false); setMessage("模型路由已创建"); await load();
+  function beginEdit(route: ModelRoute) {
+    setEditing(route);
+    setForm({
+      provider_id: route.provider_id,
+      upstream_model_id: route.upstream_model_id ?? "",
+      public_name: route.public_name,
+      display_name: route.display_name,
+    });
+    setEditorOpen(true);
   }
 
-  async function updateRoute(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!detailRoute) return; const payload = payloadFrom(editForm, false); if (!payload) { setFormError("价格最多保留 6 位小数"); return; }
-    setBusy(true); setFormError(""); setMessage("");
-    const response = await fetch(`/api/admin/model-routes/${detailRoute.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    setBusy(false); if (!response.ok) { setFormError(await readError(response)); return; }
-    const record = ((await response.json()) as { model_route: ModelRouteRecord }).model_route; openDetails(record); setMessage("模型路由已更新"); await load();
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    const body = editing
+      ? { provider_id: form.provider_id, upstream_model_id: form.upstream_model_id, display_name: form.display_name }
+      : form;
+    const response = await fetch(editing ? `/api/admin/model-routes/${editing.id}` : "/api/admin/model-routes", {
+      method: editing ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setBusy(false);
+    if (!response.ok) { setMessage(await errorMessage(response)); return; }
+    const updated = editing !== null;
+    setEditorOpen(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setMessage(updated ? "模型路由已更新" : "模型路由已创建");
+    await load();
   }
 
   async function toggleStatus() {
-    if (!statusRoute) return; const nextStatus = statusRoute.status === "active" ? "disabled" : "active"; setBusy(true); setMessage("");
-    const response = await fetch(`/api/admin/model-routes/${statusRoute.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: nextStatus }) });
-    setBusy(false); if (!response.ok) { setMessage(await readError(response)); setStatusRoute(null); return; }
-    setStatusRoute(null); setMessage(nextStatus === "active" ? "模型路由已启用" : "模型路由已停用"); await load();
+    if (!statusRoute) return;
+    const next = statusRoute.status === "active" ? "disabled" : "active";
+    setBusy(true);
+    const response = await fetch(`/api/admin/model-routes/${statusRoute.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      setMessage(await errorMessage(response));
+    } else {
+      setMessage(next === "active" ? "模型路由已启用" : "模型路由已停用");
+      await load();
+    }
+    setStatusRoute(null);
   }
 
-  const activeCount = routes.filter((route) => route.status === "active").length;
+  async function applyBulkStatus() {
+    if (!bulkStatus) return;
+    setBusy(true);
+    const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/model-routes/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: bulkStatus }),
+    }));
+    setBusy(false);
+    setBulkStatus(null);
+    setMessage(bulkResultMessage(bulkStatus === "active" ? "启用模型路由" : "停用模型路由", result));
+    await load();
+    selection.replaceSelection(result.failed.map((failure) => failure.id));
+  }
+
+  async function deleteOneRoute() {
+    if (!deletingRoute) return;
+    setBusy(true);
+    const response = await fetch(`/api/admin/model-routes/${deletingRoute.id}`, { method: "DELETE" });
+    setBusy(false);
+    if (!response.ok) setMessage(await errorMessage(response));
+    else {
+      setMessage("模型路由已删除");
+      await load();
+    }
+    setDeletingRoute(null);
+  }
+
+  async function deleteSelected() {
+    setBusy(true);
+    const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/model-routes/${id}`, { method: "DELETE" }));
+    setBusy(false);
+    setBulkDeleteOpen(false);
+    setMessage(bulkResultMessage("删除模型路由", result));
+    await load();
+    selection.replaceSelection(result.failed.map((failure) => failure.id));
+  }
 
   return (
-    <>
-      <div className="space-y-5">
-        <section className="grid border-y bg-background sm:grid-cols-3"><div className="px-4 py-4 sm:border-r"><p className="text-xs text-muted-foreground">匹配路由</p><p className="mt-1 text-xl font-semibold">{routes.length}</p></div><div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">启用路由</p><p className="mt-1 text-xl font-semibold">{activeCount}</p></div><div className="border-t px-4 py-4 sm:border-t-0"><p className="text-xs text-muted-foreground">可选提供商</p><p className="mt-1 text-xl font-semibold">{providers.length}</p></div></section>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><form className="flex min-w-0 flex-1 gap-2" onSubmit={submitSearch}><div className="relative max-w-md flex-1"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="搜索模型路由" className="pl-8" onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜索对外名称、上游名称或提供商" value={searchDraft} /></div><Button type="submit" variant="outline">搜索</Button></form><div className="flex flex-wrap items-center gap-2"><Select onValueChange={(value: "all" | "active" | "disabled") => setStatus(value)} value={status}><SelectTrigger aria-label="按状态筛选" className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent></Select><Button aria-label="刷新模型路由" disabled={loading} onClick={() => void load()} size="icon" title="刷新模型路由" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button><Button disabled={providers.length === 0} onClick={() => setCreateOpen(true)}><Plus />添加模型</Button></div></div>
-        {message ? <div className="rounded-md border bg-background px-4 py-3 text-sm" role="status">{message}</div> : null}
-        <Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead className="min-w-52">对外模型</TableHead><TableHead className="min-w-44">提供商</TableHead><TableHead className="min-w-52">上游模型</TableHead><TableHead>输入价</TableHead><TableHead>输出价</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>
-          {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}{!loading && routes.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>没有匹配的模型路由</TableCell></TableRow> : null}
-          {!loading ? routes.map((record) => <TableRow key={record.id}><TableCell><p className="font-medium">{record.display_name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{record.public_name}</p></TableCell><TableCell><p>{record.provider.display_name}</p><p className="mt-0.5 text-xs text-muted-foreground">{protocolLabel(record.provider.protocol)}</p></TableCell><TableCell className="font-mono text-xs">{record.upstream_name}</TableCell><TableCell>¥{formatPrice(record.input_price_micros)}</TableCell><TableCell>¥{formatPrice(record.output_price_micros)}</TableCell><TableCell><Badge variant={record.status === "active" ? "outline" : "secondary"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell><TableCell><div className="flex justify-end gap-1"><Button aria-label={`查看 ${record.public_name}`} onClick={() => openDetails(record)} size="icon-sm" title="查看与编辑" variant="ghost"><Eye /></Button><Button aria-label={`${record.status === "active" ? "停用" : "启用"} ${record.public_name}`} onClick={() => setStatusRoute(record)} size="icon-sm" title={record.status === "active" ? "停用模型" : "启用模型"} variant="ghost">{record.status === "active" ? <PowerOff /> : <Power />}</Button></div></TableCell></TableRow>) : null}
-        </TableBody></Table></div><div className="border-t px-4 py-3 text-xs text-muted-foreground">价格单位：人民币 / 百万 tokens</div></CardContent></Card>
-
-        <Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm(INITIAL_FORM); }} open={createOpen}><DialogContent><DialogHeader><DialogTitle>添加模型路由</DialogTitle><DialogDescription>对外模型名创建后不可修改，客户端通过该名称选择上游模型。</DialogDescription></DialogHeader><RouteFormFields form={form} idPrefix="new" onChange={setForm} onSubmit={createRoute} providers={providers} showPublicName />{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}<DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="new-route-form" type="submit"><Route />{busy ? "正在创建..." : "创建模型"}</Button></DialogFooter></DialogContent></Dialog>
-
-        <Sheet onOpenChange={(open) => { setFormError(""); if (!open) setDetailRoute(null); }} open={detailRoute !== null}><SheetContent className="w-full overflow-y-auto sm:max-w-lg" side="right">{detailRoute ? <><SheetHeader className="border-b px-6 py-5"><SheetTitle>{detailRoute.display_name}</SheetTitle><SheetDescription>{detailRoute.public_name}</SheetDescription></SheetHeader><div className="grid grid-cols-2 gap-4 border-b px-6 pb-5 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={detailRoute.status === "active" ? "outline" : "secondary"}>{detailRoute.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">最近更新</p><p className="mt-2">{formatDate(detailRoute.updated_at)}</p></div></div><RouteFormFields form={editForm} idPrefix="edit" onChange={setEditForm} onSubmit={updateRoute} providers={providers} />{formError ? <p className="px-6 text-sm text-destructive" role="alert">{formError}</p> : null}<SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-route-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button><Button onClick={() => { setDetailRoute(null); setStatusRoute(detailRoute); }} type="button" variant="outline">{detailRoute.status === "active" ? <PowerOff /> : <Power />}{detailRoute.status === "active" ? "停用模型" : "启用模型"}</Button></SheetFooter></> : null}</SheetContent></Sheet>
-
-        <AlertDialog onOpenChange={(open) => { if (!open) setStatusRoute(null); }} open={statusRoute !== null}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{statusRoute?.status === "active" ? "停用模型路由" : "启用模型路由"}</AlertDialogTitle><AlertDialogDescription>{statusRoute?.status === "active" ? `停用 ${statusRoute.public_name} 后，新请求将无法再选择该模型。` : `启用 ${statusRoute?.public_name ?? "该模型"} 后，新请求可以选择该路由。`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void toggleStatus(); }} variant={statusRoute?.status === "active" ? "destructive" : "default"}>{statusRoute?.status === "active" ? "确认停用" : "确认启用"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative max-w-md flex-1">
+          <Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input aria-label="搜索模型路由" className="pl-8" onChange={(event) => { setQuery(event.target.value); selection.clearSelection(); }} placeholder="搜索对外名称、提供商或目录模型" value={query} />
+        </div>
+        <div className="flex gap-2">
+          <Button aria-label="刷新模型路由" disabled={loading} onClick={() => void load()} size="icon" title="刷新模型路由" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
+          <Button onClick={beginCreate}><Plus />新增关联路由</Button>
+        </div>
       </div>
-    </>
-  );
-}
 
-function RouteFormFields({ form, idPrefix, onChange, onSubmit, providers, showPublicName = false }: { form: RouteForm; idPrefix: string; onChange: (value: RouteForm) => void; onSubmit?: (event: FormEvent<HTMLFormElement>) => void; providers: Provider[]; showPublicName?: boolean }) {
-  const submit = onSubmit ?? (() => undefined);
-  return <form className={idPrefix === "edit" ? "space-y-5 px-6" : "space-y-4"} id={`${idPrefix}-route-form`} onSubmit={submit}>{showPublicName ? <div className="space-y-2"><Label htmlFor={`${idPrefix}-public-name`}>对外模型名</Label><Input id={`${idPrefix}-public-name`} maxLength={128} minLength={2} onChange={(event) => onChange({ ...form, public_name: event.target.value })} pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{1,127}" placeholder="例如 deepseek-chat" required value={form.public_name} /></div> : null}<div className="space-y-2"><Label htmlFor={`${idPrefix}-display-name`}>显示名称</Label><Input id={`${idPrefix}-display-name`} maxLength={128} onChange={(event) => onChange({ ...form, display_name: event.target.value })} required value={form.display_name} /></div><div className="space-y-2"><Label htmlFor={`${idPrefix}-provider`}>提供商</Label><Select onValueChange={(provider_id) => onChange({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id={`${idPrefix}-provider`}><SelectValue placeholder="选择提供商" /></SelectTrigger><SelectContent>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name} · {protocolLabel(provider.protocol)}{provider.status === "disabled" ? "（停用）" : ""}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor={`${idPrefix}-upstream-name`}>上游模型名</Label><Input id={`${idPrefix}-upstream-name`} maxLength={256} onChange={(event) => onChange({ ...form, upstream_name: event.target.value })} placeholder="提供商接受的 model 值" required value={form.upstream_name} /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label htmlFor={`${idPrefix}-input-price`}>输入价</Label><Input id={`${idPrefix}-input-price`} inputMode="decimal" onChange={(event) => onChange({ ...form, input_price: event.target.value })} placeholder="2.00" required value={form.input_price} /></div><div className="space-y-2"><Label htmlFor={`${idPrefix}-output-price`}>输出价</Label><Input id={`${idPrefix}-output-price`} inputMode="decimal" onChange={(event) => onChange({ ...form, output_price: event.target.value })} placeholder="8.00" required value={form.output_price} /></div></div></form>;
+      {message ? <p className="border-y bg-background px-4 py-3 text-sm" role="status">{message}</p> : null}
+
+      <ListBulkActions onClear={selection.clearSelection} selectedCount={selection.selectedIds.length}>
+        <Button disabled={busy} onClick={() => setBulkStatus("active")} size="sm" type="button" variant="outline"><Power />批量启用</Button>
+        <Button disabled={busy} onClick={() => setBulkStatus("disabled")} size="sm" type="button" variant="destructive"><PowerOff />批量停用</Button>
+        <Button disabled={busy} onClick={() => setBulkDeleteOpen(true)} size="sm" type="button" variant="destructive"><Trash2 />批量删除</Button>
+      </ListBulkActions>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有模型路由" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>对外模型</TableHead><TableHead>提供商配置</TableHead><TableHead>目录模型</TableHead><TableHead>输入 / 缓存命中</TableHead><TableHead>缓存创建 / 输出</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
+                {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>还没有关联模型路由</TableCell></TableRow> : null}
+                {filtered.map((route) => (
+                  <TableRow key={route.id}>
+                    <TableCell><Checkbox aria-label={`选择 ${route.display_name}`} checked={selection.isSelected(route.id)} onCheckedChange={(checked) => selection.toggleOne(route.id, checked === true)} /></TableCell>
+                    <TableCell><p className="font-medium">{route.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.public_name}</p></TableCell>
+                    <TableCell><p>{route.provider.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.provider.code}</p></TableCell>
+                    <TableCell><p>{route.upstream_model?.display_name ?? "未关联"}</p><p className="text-xs text-muted-foreground">{route.upstream_model ? `${route.upstream_model.provider_name} · ${route.upstream_model.upstream_name}` : "-"}</p></TableCell>
+                    <TableCell><p>{money(route.upstream_model?.prices.input_price_micros ?? 0)}</p><p className="text-xs text-muted-foreground">命中 {money(route.upstream_model?.prices.cache_read_price_micros ?? 0)}</p></TableCell>
+                    <TableCell><p>{money(route.upstream_model?.prices.cache_write_price_micros ?? 0)}</p><p className="text-xs text-muted-foreground">输出 {money(route.upstream_model?.prices.output_price_micros ?? 0)}</p></TableCell>
+                    <TableCell><Badge variant={route.status === "active" ? "outline" : "secondary"}>{route.status === "active" ? "启用" : "停用"}</Badge></TableCell>
+                    <TableCell><div className="flex justify-end gap-1"><Button aria-label={`编辑 ${route.display_name}`} onClick={() => beginEdit(route)} size="icon-sm" title="编辑" variant="ghost"><Pencil /></Button><Button aria-label={`${route.status === "active" ? "停用" : "启用"} ${route.display_name}`} onClick={() => setStatusRoute(route)} size="icon-sm" title={route.status === "active" ? "停用" : "启用"} variant="ghost">{route.status === "active" ? <PowerOff /> : <Power />}</Button><Button aria-label={`删除 ${route.display_name}`} onClick={() => setDeletingRoute(route)} size="icon-sm" title="删除模型路由" variant="ghost"><Trash2 /></Button></div></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog onOpenChange={(open) => { setEditorOpen(open); if (!open) { setEditing(null); setForm(EMPTY_FORM); } }} open={editorOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "编辑关联模型路由" : "新增关联模型路由"}</DialogTitle><DialogDescription>路由将一个对外模型名称绑定到提供商配置和模型目录记录。</DialogDescription></DialogHeader>
+          <form className="space-y-4" id="model-route-form" onSubmit={submit}>
+            <div className="space-y-2"><Label htmlFor="route-provider">提供商配置</Label><Select onValueChange={(provider_id) => setForm({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id="route-provider"><SelectValue placeholder="选择提供商配置" /></SelectTrigger><SelectContent>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name}{provider.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-catalog-model">目录模型</Label><Select onValueChange={(upstream_model_id) => setForm({ ...form, upstream_model_id })} value={form.upstream_model_id}><SelectTrigger className="w-full" id="route-catalog-model"><SelectValue placeholder="选择目录模型" /></SelectTrigger><SelectContent>{catalog.map((model) => <SelectItem key={model.id} value={model.id}>{model.provider_name} · {model.display_name}{!model.pricing_configured ? "（待定价）" : model.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-public-name">对外模型名称</Label><Input disabled={editing !== null} id="route-public-name" maxLength={128} minLength={2} onChange={(event) => setForm({ ...form, public_name: event.target.value })} pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{1,127}" placeholder="例如 deepseek-chat" required value={form.public_name} /></div>
+            <div className="space-y-2"><Label htmlFor="route-display-name">显示名称</Label><Input id="route-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.display_name} /></div>
+          </form>
+          <DialogFooter><Button onClick={() => setEditorOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="model-route-form" type="submit"><Route />{busy ? "正在保存..." : "保存模型路由"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog onOpenChange={(open) => { if (!open) setStatusRoute(null); }} open={statusRoute !== null}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{statusRoute?.status === "active" ? "停用模型路由" : "启用模型路由"}</AlertDialogTitle><AlertDialogDescription>停用后客户端将无法使用该对外模型名称发起调用。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void toggleStatus(); }}>{statusRoute?.status === "active" ? "确认停用" : "确认启用"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog onOpenChange={(open) => { if (!open) setDeletingRoute(null); }} open={deletingRoute !== null}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除模型路由</AlertDialogTitle><AlertDialogDescription>将删除 {deletingRoute?.display_name ?? "该模型路由"}，客户端不能再使用对应的对外模型名称。历史调用和计费记录会继续保留。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void deleteOneRoute(); }} variant="destructive">确认删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+      <BulkActionDialog busy={busy} confirmLabel={bulkStatus === "active" ? "确认批量启用" : "确认批量停用"} description={`将${bulkStatus === "active" ? "启用" : "停用"}选中的 ${selection.selectedIds.length} 条模型路由。`} destructive={bulkStatus === "disabled"} onConfirm={applyBulkStatus} onOpenChange={(open) => { if (!open) setBulkStatus(null); }} open={bulkStatus !== null} title={bulkStatus === "active" ? "批量启用模型路由" : "批量停用模型路由"} />
+      <BulkActionDialog busy={busy} confirmLabel="确认批量删除" description={`将删除选中的 ${selection.selectedIds.length} 条模型路由。历史调用和计费记录会继续保留，失败项目仍会保持选中。`} destructive onConfirm={deleteSelected} onOpenChange={setBulkDeleteOpen} open={bulkDeleteOpen} title="批量删除模型路由" />
+    </div>
+  );
 }

@@ -33,11 +33,28 @@ type Config struct {
 	Session       SessionConfig
 	Auth          AuthConfig
 	Provider      ProviderConfig
+	Payment       PaymentConfig
 	AllowedOrigin []string
 }
 
 type ProviderConfig struct {
 	EncryptionSecret string
+}
+
+type PaymentConfig struct {
+	EPay EPayConfig
+}
+
+type EPayConfig struct {
+	APIURL      string
+	MerchantID  string
+	MerchantKey string
+	SiteName    string
+	Channels    []string
+}
+
+func (c EPayConfig) Enabled() bool {
+	return c.APIURL != "" && c.MerchantID != "" && c.MerchantKey != ""
 }
 
 type AuthConfig struct {
@@ -253,6 +270,48 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 		return Config{}, errors.New("NOVRO_SETUP_TOKEN must be at least 24 bytes when enabled")
 	}
 
+	epayAPIURL := strings.TrimRight(getString("NOVRO_EPAY_API_URL", ""), "/")
+	epayMerchantID := getString("NOVRO_EPAY_MERCHANT_ID", "")
+	epayMerchantKey := getString("NOVRO_EPAY_MERCHANT_KEY", "")
+	configuredEPayValues := 0
+	for _, value := range []string{epayAPIURL, epayMerchantID, epayMerchantKey} {
+		if value != "" {
+			configuredEPayValues++
+		}
+	}
+	if configuredEPayValues != 0 && configuredEPayValues != 3 {
+		return Config{}, errors.New("NOVRO_EPAY_API_URL, NOVRO_EPAY_MERCHANT_ID, and NOVRO_EPAY_MERCHANT_KEY must be configured together")
+	}
+	if epayAPIURL != "" {
+		parsedEPayURL, parseErr := url.Parse(epayAPIURL)
+		if parseErr != nil || parsedEPayURL.Host == "" || parsedEPayURL.User != nil || (parsedEPayURL.Scheme != "http" && parsedEPayURL.Scheme != "https") || parsedEPayURL.RawQuery != "" || parsedEPayURL.Fragment != "" {
+			return Config{}, errors.New("NOVRO_EPAY_API_URL must be an absolute http or https URL without credentials, query, or fragment")
+		}
+		if environment == "production" && parsedEPayURL.Scheme != "https" {
+			return Config{}, errors.New("production requires an https NOVRO_EPAY_API_URL")
+		}
+	}
+	epayChannels := make([]string, 0, 3)
+	for _, channel := range strings.Split(getString("NOVRO_EPAY_CHANNELS", "alipay,wxpay"), ",") {
+		channel = strings.ToLower(strings.TrimSpace(channel))
+		if channel == "" {
+			continue
+		}
+		if !isPaymentChannel(channel) {
+			return Config{}, errors.New("NOVRO_EPAY_CHANNELS must contain comma-separated lowercase letters, numbers, underscores, or hyphens")
+		}
+		if !containsString(epayChannels, channel) {
+			epayChannels = append(epayChannels, channel)
+		}
+	}
+	if len(epayChannels) == 0 {
+		return Config{}, errors.New("NOVRO_EPAY_CHANNELS must contain at least one channel")
+	}
+	epaySiteName := getString("NOVRO_EPAY_SITE_NAME", "Novro")
+	if len([]rune(epaySiteName)) > 64 {
+		return Config{}, errors.New("NOVRO_EPAY_SITE_NAME must not exceed 64 characters")
+	}
+
 	origins := make([]string, 0)
 	for _, origin := range strings.Split(getString("NOVRO_ALLOWED_ORIGINS", "http://localhost:3000"), ",") {
 		origin = strings.TrimRight(strings.TrimSpace(origin), "/")
@@ -306,9 +365,34 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 				AutoRegister: oidcAutoRegister,
 			},
 		},
-		Provider:      ProviderConfig{EncryptionSecret: providerEncryptionSecret},
+		Provider: ProviderConfig{EncryptionSecret: providerEncryptionSecret},
+		Payment: PaymentConfig{EPay: EPayConfig{
+			APIURL: epayAPIURL, MerchantID: epayMerchantID, MerchantKey: epayMerchantKey,
+			SiteName: epaySiteName, Channels: epayChannels,
+		}},
 		AllowedOrigin: origins,
 	}, nil
+}
+
+func isPaymentChannel(value string) bool {
+	if value == "" || len(value) > 32 {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '_' && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func isLoopbackHost(host string) bool {

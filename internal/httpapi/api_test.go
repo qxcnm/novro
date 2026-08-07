@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -16,17 +18,22 @@ import (
 
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
+	"github.com/novro-gateway/novro/internal/billinggroup"
+	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/providersync"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
 type fakeAPIAuth struct {
-	current user.Record
-	login   auth.LoginResult
-	authErr error
+	current         user.Record
+	login           auth.LoginResult
+	authErr         error
+	loginIdentifier string
 }
 
-func (f *fakeAPIAuth) Login(context.Context, string, string) (auth.LoginResult, error) {
+func (f *fakeAPIAuth) Login(_ context.Context, identifier, _ string) (auth.LoginResult, error) {
+	f.loginIdentifier = identifier
 	return f.login, f.authErr
 }
 
@@ -65,7 +72,64 @@ type fakeProviders struct {
 	createInput provider.CreateInput
 	updateInput provider.UpdateInput
 	status      provider.Status
+	deletedID   uuid.UUID
 	err         error
+}
+
+type fakeProviderModels struct {
+	syncProviderID uuid.UUID
+	linkProviderID uuid.UUID
+	modelIDs       []uuid.UUID
+	syncModels     []providersync.CatalogModel
+	linkResult     providersync.LinkResult
+	err            error
+}
+
+type fakePayments struct {
+	notification url.Values
+	listFilter   payment.AdminListFilter
+	err          error
+}
+
+func (f *fakePayments) Config(context.Context) (payment.PublicConfig, error) {
+	return payment.PublicConfig{Enabled: true, Provider: "epay", Channels: []string{"alipay"}, MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros}, nil
+}
+
+func (f *fakePayments) AdminConfig(context.Context) (payment.AdminConfig, error) {
+	return payment.AdminConfig{Provider: payment.ProviderEPay, Enabled: true, Configured: true, MerchantID: "1000", SiteName: "Novro", Channels: []string{"alipay"}, HasMerchantKey: true}, nil
+}
+
+func (f *fakePayments) UpdateConfig(_ context.Context, _ payment.ConfigInput) (payment.AdminConfig, error) {
+	return f.AdminConfig(context.Background())
+}
+
+func (f *fakePayments) Create(_ context.Context, userID uuid.UUID, amount int64, channel string) (payment.CreateResult, error) {
+	return payment.CreateResult{Order: payment.Order{ID: uuid.New(), UserID: userID, AmountMicros: amount, Channel: channel, Status: payment.StatusPending}}, f.err
+}
+
+func (f *fakePayments) List(context.Context, uuid.UUID) ([]payment.Order, error) {
+	return []payment.Order{}, f.err
+}
+
+func (f *fakePayments) ListAll(_ context.Context, filter payment.AdminListFilter) (payment.AdminPage, error) {
+	f.listFilter = filter
+	return payment.AdminPage{Orders: []payment.AdminOrder{{Order: payment.Order{ID: uuid.New(), OutTradeNo: "NVR1", Status: payment.StatusPaid}, Owner: payment.TopUpOwner{Username: "alice"}}}, Total: 1, Limit: filter.Limit}, f.err
+}
+
+func (f *fakePayments) HandleNotification(_ context.Context, values url.Values) error {
+	f.notification = values
+	return f.err
+}
+
+func (f *fakeProviderModels) Sync(_ context.Context, providerID uuid.UUID) ([]providersync.CatalogModel, error) {
+	f.syncProviderID = providerID
+	return f.syncModels, f.err
+}
+
+func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (providersync.LinkResult, error) {
+	f.linkProviderID = providerID
+	f.modelIDs = modelIDs
+	return f.linkResult, f.err
 }
 
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
@@ -82,6 +146,10 @@ func (f *fakeProviders) Update(_ context.Context, id uuid.UUID, input provider.U
 func (f *fakeProviders) SetStatus(_ context.Context, id uuid.UUID, status provider.Status) (provider.Record, error) {
 	f.status = status
 	return provider.Record{ID: id, Status: status}, f.err
+}
+func (f *fakeProviders) Delete(_ context.Context, id uuid.UUID) error {
+	f.deletedID = id
+	return f.err
 }
 
 func (f *fakeAPIKeys) Create(_ context.Context, userID uuid.UUID, name string) (apikey.CreateResult, error) {
@@ -208,12 +276,30 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 		Token: "nvs_test-token", ExpiresAt: time.Now().Add(time.Hour),
 		User: user.Record{ID: uuid.New(), Username: "member.one", Role: user.RoleMember, Status: user.StatusActive},
 	}}
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","display_name":"Member","password":"long-test-password"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","display_name":"Member","password":"long-test-password"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	testAPI(authService, users).ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || users.registerInput.Username != "member.one" {
+	if response.Code != http.StatusCreated || users.registerInput.Username != "member.one" || users.registerInput.Email != "member@example.com" {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), users.registerInput)
+	}
+}
+
+func TestEPayNotificationBypassesBrowserOriginCheck(t *testing.T) {
+	payments := &fakePayments{}
+	handler := New(Dependencies{
+		Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/payments/epay/notify", strings.NewReader("pid=1000&out_trade_no=NVR1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != "success" {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+	if payments.notification.Get("out_trade_no") != "NVR1" {
+		t.Fatalf("unexpected notification: %#v", payments.notification)
 	}
 }
 
@@ -311,11 +397,11 @@ func TestSetupCreatesAdministratorAndSetsSession(t *testing.T) {
 		CookieName: "novro_session", CookieSecure: true, AllowedOrigins: []string{"http://localhost:3000"},
 		SetupToken: "a-setup-token-that-is-long-enough", RegistrationEnabled: true,
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/setup", strings.NewReader(`{"setup_token":"a-setup-token-that-is-long-enough","username":"admin","display_name":"Administrator","password":"long-test-password"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/setup", strings.NewReader(`{"setup_token":"a-setup-token-that-is-long-enough","username":"admin","email":"admin@example.com","display_name":"Administrator","password":"long-test-password"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || users.registerInput.Username != "admin" {
+	if response.Code != http.StatusCreated || users.registerInput.Username != "admin" || users.registerInput.Email != "admin@example.com" {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), users.registerInput)
 	}
 	cookies := response.Result().Cookies()
@@ -394,6 +480,27 @@ func TestLoginSetsProtectedSessionCookie(t *testing.T) {
 	}
 }
 
+func TestLoginAcceptsEmailIdentifier(t *testing.T) {
+	authService := &fakeAPIAuth{login: auth.LoginResult{
+		Token: "nvs_test-token", ExpiresAt: time.Now().Add(time.Hour),
+		User: user.Record{ID: uuid.New(), Username: "alice", Email: "alice@example.com", Role: user.RoleMember, Status: user.StatusActive},
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"alice@example.com","password":"correct-password"}`))
+	response := httptest.NewRecorder()
+	testAPI(authService, &fakeAPIUsers{}).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || authService.loginIdentifier != "alice@example.com" {
+		t.Fatalf("status=%d body=%s identifier=%q", response.Code, response.Body.String(), authService.loginIdentifier)
+	}
+}
+
+func TestEmailConflictUsesStableSafeError(t *testing.T) {
+	response := httptest.NewRecorder()
+	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeUserError(response, "create user", fmt.Errorf("%w: internal constraint", user.ErrEmailTaken))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "email_taken") || strings.Contains(response.Body.String(), "internal constraint") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestUnsafeRequestRejectsUnknownOrigin(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
 	request.Header.Set("Origin", "https://attacker.example")
@@ -443,6 +550,8 @@ func TestAdminRoutesRequireAdmin(t *testing.T) {
 		httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+id, strings.NewReader(`{"display_name":"Denied"}`)),
 		httptest.NewRequest(http.MethodGet, "/api/admin/api-keys", nil),
 		httptest.NewRequest(http.MethodGet, "/api/admin/providers", nil),
+		httptest.NewRequest(http.MethodGet, "/api/admin/payments", nil),
+		httptest.NewRequest(http.MethodGet, "/api/admin/top-ups", nil),
 	}
 	for _, request := range requests {
 		request.AddCookie(&http.Cookie{Name: "novro_session", Value: "nvs_member-token"})
@@ -451,6 +560,64 @@ func TestAdminRoutesRequireAdmin(t *testing.T) {
 		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "forbidden") {
 			t.Fatalf("%s %s: status=%d body=%s", request.Method, request.URL.Path, response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestAdminListsTopUpsWithFilters(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	payments := &fakePayments{}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, Payments: payments,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/top-ups?search=alice&status=paid&channel=alipay&offset=20&limit=20", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"username":"alice"`) || payments.listFilter.Search != "alice" || payments.listFilter.Status != payment.StatusPaid || payments.listFilter.Channel != "alipay" || payments.listFilter.Offset != 20 || payments.listFilter.Limit != 20 {
+		t.Fatalf("status=%d body=%s filter=%+v", response.Code, response.Body.String(), payments.listFilter)
+	}
+}
+
+func TestAdminPaymentConfigDoesNotReturnMerchantKey(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, Payments: &fakePayments{},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/payments", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"has_merchant_key":true`) || strings.Contains(response.Body.String(), "merchant-secret") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminPaymentConfigWithoutServiceReturnsWrappedEmptyChannels(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/payments", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.AddCookie(&http.Cookie{Name: "novro_session", Value: "nvs_admin-token"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	var body struct {
+		PaymentConfig payment.AdminConfig `json:"payment_config"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || body.PaymentConfig.Provider != payment.ProviderEPay || body.PaymentConfig.Channels == nil || len(body.PaymentConfig.Channels) != 0 {
+		t.Fatalf("status=%d payment_config=%+v body=%s", response.Code, body.PaymentConfig, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), `"channels":null`) {
+		t.Fatalf("empty channels encoded as null: %s", response.Body.String())
 	}
 }
 
@@ -513,6 +680,31 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	}
 }
 
+func TestAdminDeletesProvider(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	providers := &fakeProviders{}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: providers,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	id := uuid.New()
+	request := httptest.NewRequest(http.MethodDelete, "/api/admin/providers/"+id.String(), nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent || providers.deletedID != id {
+		t.Fatalf("status=%d body=%s deleted=%s", response.Code, response.Body.String(), providers.deletedID)
+	}
+}
+
+func TestBillingGroupDeleteConflictUsesSafeMessage(t *testing.T) {
+	response := httptest.NewRecorder()
+	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeBillingGroupError(response, "delete billing group", fmt.Errorf("%w: internal constraint", billinggroup.ErrInUse))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "billing_group_in_use") || strings.Contains(response.Body.String(), "internal constraint") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestProviderValidationErrorIsStable(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providers := &fakeProviders{err: provider.ErrCodeTaken}
@@ -522,6 +714,52 @@ func TestProviderValidationErrorIsStable(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "provider_code_taken") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminSyncsAndLinksProviderModels(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	providerID := uuid.New()
+	modelID := uuid.New()
+	providerModels := &fakeProviderModels{
+		syncModels: []providersync.CatalogModel{{ID: modelID, ProviderName: "DeepSeek", UpstreamName: "deepseek-chat", Added: true}},
+		linkResult: providersync.LinkResult{Created: 1},
+	}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: &fakeProviders{}, ProviderModels: providerModels,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+providerID.String()+"/models/sync", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || providerModels.syncProviderID != providerID || !strings.Contains(response.Body.String(), "deepseek-chat") {
+		t.Fatalf("sync status=%d body=%s provider=%s", response.Code, response.Body.String(), providerModels.syncProviderID)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+providerID.String()+"/models", strings.NewReader(`{"model_ids":["`+modelID.String()+`"]}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || providerModels.linkProviderID != providerID || len(providerModels.modelIDs) != 1 || providerModels.modelIDs[0] != modelID || !strings.Contains(response.Body.String(), `"created":1`) {
+		t.Fatalf("link status=%d body=%s provider=%s models=%v", response.Code, response.Body.String(), providerModels.linkProviderID, providerModels.modelIDs)
+	}
+}
+
+func TestProviderModelSyncFailureUsesSafeError(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	providerModels := &fakeProviderModels{err: fmt.Errorf("%w: secret upstream detail", providersync.ErrDiscoveryFailed)}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: &fakeProviders{}, ProviderModels: providerModels,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+uuid.NewString()+"/models/sync", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), "model_sync_failed") || strings.Contains(response.Body.String(), "secret") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

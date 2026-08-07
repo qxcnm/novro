@@ -18,6 +18,8 @@ const (
 	FieldID = "id"
 	// FieldProviderID holds the string denoting the provider_id field in the database.
 	FieldProviderID = "provider_id"
+	// FieldUpstreamModelID holds the string denoting the upstream_model_id field in the database.
+	FieldUpstreamModelID = "upstream_model_id"
 	// FieldPublicName holds the string denoting the public_name field in the database.
 	FieldPublicName = "public_name"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
@@ -34,8 +36,12 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
+	FieldDeletedAt = "deleted_at"
 	// EdgeProvider holds the string denoting the provider edge name in mutations.
 	EdgeProvider = "provider"
+	// EdgeUpstreamModel holds the string denoting the upstream_model edge name in mutations.
+	EdgeUpstreamModel = "upstream_model"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
 	// Table holds the table name of the modelroute in the database.
@@ -47,6 +53,13 @@ const (
 	ProviderInverseTable = "providers"
 	// ProviderColumn is the table column denoting the provider relation/edge.
 	ProviderColumn = "provider_id"
+	// UpstreamModelTable is the table that holds the upstream_model relation/edge.
+	UpstreamModelTable = "model_routes"
+	// UpstreamModelInverseTable is the table name for the UpstreamModel entity.
+	// It exists in this package in order to avoid circular dependency with the "upstreammodel" package.
+	UpstreamModelInverseTable = "upstream_models"
+	// UpstreamModelColumn is the table column denoting the upstream_model relation/edge.
+	UpstreamModelColumn = "upstream_model_id"
 	// APIUsagesTable is the table that holds the api_usages relation/edge.
 	APIUsagesTable = "api_usages"
 	// APIUsagesInverseTable is the table name for the APIUsage entity.
@@ -60,6 +73,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldProviderID,
+	FieldUpstreamModelID,
 	FieldPublicName,
 	FieldDisplayName,
 	FieldUpstreamName,
@@ -68,6 +82,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldDeletedAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -140,6 +155,11 @@ func ByProviderID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProviderID, opts...).ToFunc()
 }
 
+// ByUpstreamModelID orders the results by the upstream_model_id field.
+func ByUpstreamModelID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelID, opts...).ToFunc()
+}
+
 // ByPublicName orders the results by the public_name field.
 func ByPublicName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPublicName, opts...).ToFunc()
@@ -180,10 +200,22 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
 }
 
+// ByDeletedAt orders the results by the deleted_at field.
+func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
+}
+
 // ByProviderField orders the results by provider field.
 func ByProviderField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newProviderStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByUpstreamModelField orders the results by upstream_model field.
+func ByUpstreamModelField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUpstreamModelStep(), sql.OrderByField(field, opts...))
 	}
 }
 
@@ -205,6 +237,13 @@ func newProviderStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ProviderInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ProviderTable, ProviderColumn),
+	)
+}
+func newUpstreamModelStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UpstreamModelInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, UpstreamModelTable, UpstreamModelColumn),
 	)
 }
 func newAPIUsagesStep() *sqlgraph.Step {

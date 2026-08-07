@@ -1,51 +1,156 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { CreditCard, Landmark, QrCode, RefreshCw, Smartphone, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type WalletEntry = { id: string; reference_id: string; entry_type: "manual_adjustment" | "usage_reservation" | "usage_refund"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
+type WalletEntry = { id: string; reference_id: string; entry_type: "manual_adjustment" | "top_up" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { id: string; user_id: string; balance_micros: number; updated_at: string }; entries: WalletEntry[] };
-type Usage = { id: string; request_id: string; model: string; endpoint: string; input_tokens: number; output_tokens: number; cost_micros: number; estimated: boolean; created_at: string };
+type Usage = { id: string; request_id: string; model: string; endpoint: string; input_tokens: number; uncached_input_tokens: number; cache_read_input_tokens: number; cache_write_input_tokens: number; cache_write_1h_input_tokens: number; output_tokens: number; multiplier_bps: number; billing_group_name: string; cost_micros: number; estimated: boolean; created_at: string };
+type PaymentMethod = { code: string; name: string; icon: string; min_micros: number; enabled: boolean };
+type BonusTier = { threshold_micros: number; bonus_bps: number };
+type TopUpConfig = { enabled: boolean; provider?: string; channels: string[]; methods: PaymentMethod[]; min_micros: number; max_micros: number; preset_amounts_micros: number[]; bonus_tiers: BonusTier[] };
+type TopUpOrder = { id: string; out_trade_no: string; provider: string; channel: string; amount_micros: number; credited_micros: number; status: "pending" | "paid"; provider_trade_no?: string; paid_at?: string; created_at: string };
+type Checkout = { action: string; method: string; fields: Record<string, string> };
 type ErrorResponse = { error?: { message?: string } };
 
 function formatMoney(micros: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000); }
 function formatDate(value: string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "usage_reservation") return "调用预占"; return "预占释放"; }
+function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "top_up") return "在线充值"; if (type === "usage_reservation") return "调用预占"; if (type === "usage_settlement") return "结算补扣"; return "预占释放"; }
+function moneyInput(micros: number) { return String(micros / 1_000_000); }
+function topUpStatus(status: TopUpOrder["status"]) { return status === "paid" ? "已到账" : "待支付"; }
 async function readError(response: Response) { const body = (await response.json().catch(() => ({}))) as ErrorResponse; return body.error?.message ?? "加载失败，请稍后重试"; }
+
+function parseAmountMicros(value: string) {
+  const normalized = value.trim();
+  if (!/^\d{1,8}(\.\d{1,2})?$/.test(normalized)) return null;
+  const [yuan, fraction = ""] = normalized.split(".");
+  const cents = Number(yuan) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) ? cents * 10_000 : null;
+}
+
+function submitCheckout(checkout: Checkout) {
+  const form = document.createElement("form");
+  form.method = checkout.method;
+  form.action = checkout.action;
+  form.style.display = "none";
+  for (const [name, value] of Object.entries(checkout.fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function MethodIcon({ icon }: { icon: string }) {
+  if (icon === "smartphone") return <Smartphone />;
+  if (icon === "qr-code") return <QrCode />;
+  if (icon === "card") return <CreditCard />;
+  if (icon === "landmark") return <Landmark />;
+  return <WalletCards />;
+}
+
+function creditedAmount(amountMicros: number, tiers: BonusTier[]) {
+  const bonusBPS = tiers.reduce((current, tier) => amountMicros >= tier.threshold_micros ? tier.bonus_bps : current, 0);
+  return amountMicros + Math.floor(amountMicros * bonusBPS / 10_000);
+}
 
 export default function BillingClient() {
   const router = useRouter();
   const [summary, setSummary] = useState<BalanceSummary | null>(null);
   const [usage, setUsage] = useState<Usage[]>([]);
+  const [topUpConfig, setTopUpConfig] = useState<TopUpConfig | null>(null);
+  const [orders, setOrders] = useState<TopUpOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [topUpError, setTopUpError] = useState("");
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [amount, setAmount] = useState("100");
+  const [channel, setChannel] = useState("");
 
   const load = useCallback(async () => {
-    setLoading(true); setMessage("");
-    const [balanceResponse, usageResponse] = await Promise.all([fetch("/api/account/balance", { cache: "no-store" }), fetch("/api/account/usage", { cache: "no-store" })]);
-    if (balanceResponse.status === 401 || usageResponse.status === 401) { router.replace("/login"); return; }
-    if (!balanceResponse.ok) { setMessage(await readError(balanceResponse)); setLoading(false); return; }
-    if (!usageResponse.ok) { setMessage(await readError(usageResponse)); setLoading(false); return; }
+    setLoading(true);
+    setMessage("");
+    const responses = await Promise.all([
+      fetch("/api/account/balance", { cache: "no-store" }),
+      fetch("/api/account/usage", { cache: "no-store" }),
+      fetch("/api/account/top-ups/config", { cache: "no-store" }),
+      fetch("/api/account/top-ups", { cache: "no-store" }),
+    ]);
+    if (responses.some((response) => response.status === 401)) { router.replace("/login"); return; }
+    const failed = responses.find((response) => !response.ok);
+    if (failed) { setMessage(await readError(failed)); setLoading(false); return; }
+    const [balanceResponse, usageResponse, configResponse, ordersResponse] = responses;
+    const rawConfig = (await configResponse.json()) as Partial<TopUpConfig>;
+    const methods = Array.isArray(rawConfig.methods) ? rawConfig.methods : [];
+    const config: TopUpConfig = {
+      enabled: rawConfig.enabled === true,
+      provider: rawConfig.provider,
+      channels: Array.isArray(rawConfig.channels) ? rawConfig.channels : [],
+      methods,
+      min_micros: rawConfig.min_micros ?? 1_000_000,
+      max_micros: rawConfig.max_micros ?? 50_000_000_000,
+      preset_amounts_micros: Array.isArray(rawConfig.preset_amounts_micros) ? rawConfig.preset_amounts_micros : [],
+      bonus_tiers: Array.isArray(rawConfig.bonus_tiers) ? rawConfig.bonus_tiers : [],
+    };
     setSummary((await balanceResponse.json()) as BalanceSummary);
     setUsage(((await usageResponse.json()) as { usage: Usage[] }).usage);
+    setTopUpConfig(config);
+    setChannel((current) => config.methods.some((method) => method.code === current) ? current : (config.methods[0]?.code ?? ""));
+    setOrders(((await ordersResponse.json()) as { orders: TopUpOrder[] }).orders);
     setLoading(false);
   }, [router]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
+  async function createTopUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const amountMicros = parseAmountMicros(amount);
+    if (!topUpConfig || amountMicros === null || amountMicros < topUpConfig.min_micros || amountMicros > topUpConfig.max_micros) {
+      setTopUpError(`充值金额需在 ${formatMoney(topUpConfig?.min_micros ?? 1_000_000)} 至 ${formatMoney(topUpConfig?.max_micros ?? 50_000_000_000)} 之间`);
+      return;
+    }
+    const method = topUpConfig.methods.find((item) => item.code === channel);
+    if (!method) { setTopUpError("请选择支付方式"); return; }
+    if (amountMicros < method.min_micros) { setTopUpError(`${method.name}最低充值金额为 ${formatMoney(method.min_micros)}`); return; }
+    setBusy(true);
+    setTopUpError("");
+    const response = await fetch("/api/account/top-ups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount_micros: amountMicros, channel }),
+    });
+    if (response.status === 401) { router.replace("/login"); return; }
+    if (!response.ok) { setTopUpError(await readError(response)); setBusy(false); return; }
+    const result = (await response.json()) as { order: TopUpOrder; checkout: Checkout };
+    setTopUpOpen(false);
+    submitCheckout(result.checkout);
+  }
+
   const totalCost = usage.reduce((sum, item) => sum + item.cost_micros, 0);
   const totalTokens = usage.reduce((sum, item) => sum + item.input_tokens + item.output_tokens, 0);
+  const amountMicros = parseAmountMicros(amount);
+  const previewCredit = topUpConfig && amountMicros !== null ? creditedAmount(amountMicros, topUpConfig.bonus_tiers) : null;
 
   return (
     <>
       <div className="space-y-5">
-        <div className="flex justify-end"><Button aria-label="刷新余额与用量" disabled={loading} onClick={() => void load()} size="icon" title="刷新余额与用量" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button></div>
+        <div className="flex justify-end gap-2">
+          <Button disabled={!topUpConfig?.enabled || loading} onClick={() => { setTopUpError(""); setTopUpOpen(true); }} title={topUpConfig?.enabled ? "余额充值" : "充值暂未开放"}><CreditCard />充值</Button>
+          <Button aria-label="刷新余额与用量" disabled={loading} onClick={() => void load()} size="icon" title="刷新余额与用量" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
+        </div>
         <section className="grid border-y bg-background sm:grid-cols-3">
           <div className="px-4 py-4 sm:border-r"><p className="text-xs text-muted-foreground">可用余额</p><p className="mt-1 text-xl font-semibold">{summary ? formatMoney(summary.wallet.balance_micros) : "--"}</p></div>
           <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">最近调用 Tokens</p><p className="mt-1 text-xl font-semibold">{totalTokens.toLocaleString("zh-CN")}</p></div>
@@ -53,10 +158,16 @@ export default function BillingClient() {
         </section>
         {message ? <div className="rounded-md border bg-background px-4 py-3 text-sm" role="status">{message}</div> : null}
 
-        <section><h2 className="mb-3 text-sm font-semibold">最近调用</h2><Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>模型</TableHead><TableHead>接口</TableHead><TableHead>输入 Tokens</TableHead><TableHead>输出 Tokens</TableHead><TableHead>费用</TableHead><TableHead>时间</TableHead></TableRow></TableHeader><TableBody>
-          {loading ? <TableRow><TableCell className="h-24 text-center" colSpan={6}>加载中...</TableCell></TableRow> : null}
-          {!loading && usage.length === 0 ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={6}>还没有调用记录</TableCell></TableRow> : null}
-          {!loading ? usage.map((item) => <TableRow key={item.id}><TableCell className="font-mono text-xs">{item.model}</TableCell><TableCell>{item.endpoint.replaceAll("_", " ")}</TableCell><TableCell>{item.input_tokens.toLocaleString("zh-CN")}</TableCell><TableCell>{item.output_tokens.toLocaleString("zh-CN")}</TableCell><TableCell><span>{formatMoney(item.cost_micros)}</span>{item.estimated ? <Badge className="ml-2" variant="secondary">估算</Badge> : null}</TableCell><TableCell className="text-muted-foreground">{formatDate(item.created_at)}</TableCell></TableRow>) : null}
+        <section><h2 className="mb-3 text-sm font-semibold">充值订单</h2><Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>订单号</TableHead><TableHead>支付方式</TableHead><TableHead>金额</TableHead><TableHead>状态</TableHead><TableHead>创建时间</TableHead></TableRow></TableHeader><TableBody>
+          {loading ? <TableRow><TableCell className="h-24 text-center" colSpan={5}>加载中...</TableCell></TableRow> : null}
+          {!loading && orders.length === 0 ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={5}>还没有充值订单</TableCell></TableRow> : null}
+          {!loading ? orders.map((order) => <TableRow key={order.id}><TableCell className="font-mono text-xs">{order.out_trade_no}</TableCell><TableCell>{topUpConfig?.methods.find((method) => method.code === order.channel)?.name ?? order.channel}</TableCell><TableCell><p>{formatMoney(order.amount_micros)}</p>{order.credited_micros > order.amount_micros ? <p className="text-xs text-emerald-600 dark:text-emerald-400">到账 {formatMoney(order.credited_micros)}</p> : null}</TableCell><TableCell><Badge variant={order.status === "paid" ? "default" : "secondary"}>{topUpStatus(order.status)}</Badge></TableCell><TableCell className="text-muted-foreground">{formatDate(order.created_at)}</TableCell></TableRow>) : null}
+        </TableBody></Table></div></CardContent></Card></section>
+
+        <section><h2 className="mb-3 text-sm font-semibold">最近调用</h2><Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>模型</TableHead><TableHead>Token 明细</TableHead><TableHead>分组倍率</TableHead><TableHead>费用</TableHead><TableHead>时间</TableHead></TableRow></TableHeader><TableBody>
+          {loading ? <TableRow><TableCell className="h-24 text-center" colSpan={5}>加载中...</TableCell></TableRow> : null}
+          {!loading && usage.length === 0 ? <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={5}>还没有调用记录</TableCell></TableRow> : null}
+          {!loading ? usage.map((item) => <TableRow key={item.id}><TableCell><p className="font-mono text-xs">{item.model}</p><p className="text-xs text-muted-foreground">{item.endpoint.replaceAll("_", " ")}</p></TableCell><TableCell><p>{(item.input_tokens + item.output_tokens).toLocaleString("zh-CN")}</p><p className="text-xs text-muted-foreground">普通 {item.uncached_input_tokens} · 命中 {item.cache_read_input_tokens} · 创建 {item.cache_write_input_tokens + item.cache_write_1h_input_tokens} · 输出 {item.output_tokens}</p></TableCell><TableCell><p>{item.billing_group_name || "默认分组"}</p><p className="font-mono text-xs text-muted-foreground">{(item.multiplier_bps / 10_000).toFixed(4)}×</p></TableCell><TableCell><span>{formatMoney(item.cost_micros)}</span>{item.estimated ? <Badge className="ml-2" variant="secondary">估算</Badge> : null}</TableCell><TableCell className="text-muted-foreground">{formatDate(item.created_at)}</TableCell></TableRow>) : null}
         </TableBody></Table></div></CardContent></Card></section>
 
         <section><h2 className="mb-3 text-sm font-semibold">余额流水</h2><Card className="overflow-hidden"><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>类型</TableHead><TableHead>说明</TableHead><TableHead>变动</TableHead><TableHead>变动后余额</TableHead><TableHead>时间</TableHead></TableRow></TableHeader><TableBody>
@@ -64,6 +175,26 @@ export default function BillingClient() {
           {summary?.entries.map((entry) => <TableRow key={entry.id}><TableCell><Badge variant="secondary">{entryLabel(entry.entry_type)}</Badge></TableCell><TableCell>{entry.description}</TableCell><TableCell className={entry.amount_micros >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}>{entry.amount_micros >= 0 ? "+" : ""}{formatMoney(entry.amount_micros)}</TableCell><TableCell>{formatMoney(entry.balance_after_micros)}</TableCell><TableCell className="text-muted-foreground">{formatDate(entry.created_at)}</TableCell></TableRow>)}
         </TableBody></Table></div></CardContent></Card></section>
       </div>
+
+      <Dialog onOpenChange={(open) => { if (!busy) setTopUpOpen(open); }} open={topUpOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>余额充值</DialogTitle></DialogHeader>
+          <form className="space-y-5" onSubmit={createTopUp}>
+            <div className="space-y-2">
+              <Label htmlFor="top-up-amount">充值金额</Label>
+              <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">¥</span><Input className="pl-7" disabled={busy} id="top-up-amount" inputMode="decimal" onChange={(event) => setAmount(event.target.value)} value={amount} /></div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{topUpConfig?.preset_amounts_micros.map((value) => <Button aria-pressed={amount === moneyInput(value)} disabled={busy} key={value} onClick={() => setAmount(moneyInput(value))} type="button" variant={amount === moneyInput(value) ? "default" : "outline"}>{formatMoney(value)}</Button>)}</div>
+              {previewCredit !== null && previewCredit > amountMicros! ? <p className="text-sm text-emerald-600 dark:text-emerald-400">预计到账 {formatMoney(previewCredit)}，含赠送 {formatMoney(previewCredit - amountMicros!)}</p> : null}
+            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">支付方式</legend>
+              <div className="grid grid-cols-2 gap-2">{topUpConfig?.methods.map((method) => <Button aria-pressed={channel === method.code} className="h-auto min-h-10 justify-start py-2" disabled={busy} key={method.code} onClick={() => setChannel(method.code)} type="button" variant={channel === method.code ? "default" : "outline"}><MethodIcon icon={method.icon} />{method.name}</Button>)}</div>
+            </fieldset>
+            {topUpError ? <div className="rounded-md border px-3 py-2 text-sm" role="alert">{topUpError}</div> : null}
+            <DialogFooter><Button disabled={busy} type="submit"><CreditCard />{busy ? "正在创建订单..." : "前往支付"}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

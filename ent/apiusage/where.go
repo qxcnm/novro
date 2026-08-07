@@ -71,6 +71,16 @@ func ModelRouteID(v uuid.UUID) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldModelRouteID, v))
 }
 
+// UpstreamModelID applies equality check predicate on the "upstream_model_id" field. It's identical to UpstreamModelIDEQ.
+func UpstreamModelID(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUpstreamModelID, v))
+}
+
+// BillingGroupID applies equality check predicate on the "billing_group_id" field. It's identical to BillingGroupIDEQ.
+func BillingGroupID(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
 // RequestID applies equality check predicate on the "request_id" field. It's identical to RequestIDEQ.
 func RequestID(v uuid.UUID) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldRequestID, v))
@@ -81,9 +91,69 @@ func InputTokens(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldInputTokens, v))
 }
 
+// UncachedInputTokens applies equality check predicate on the "uncached_input_tokens" field. It's identical to UncachedInputTokensEQ.
+func UncachedInputTokens(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUncachedInputTokens, v))
+}
+
+// CacheReadInputTokens applies equality check predicate on the "cache_read_input_tokens" field. It's identical to CacheReadInputTokensEQ.
+func CacheReadInputTokens(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheReadInputTokens, v))
+}
+
+// CacheWriteInputTokens applies equality check predicate on the "cache_write_input_tokens" field. It's identical to CacheWriteInputTokensEQ.
+func CacheWriteInputTokens(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWrite1hInputTokens applies equality check predicate on the "cache_write_1h_input_tokens" field. It's identical to CacheWrite1hInputTokensEQ.
+func CacheWrite1hInputTokens(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWrite1hInputTokens, v))
+}
+
 // OutputTokens applies equality check predicate on the "output_tokens" field. It's identical to OutputTokensEQ.
 func OutputTokens(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldOutputTokens, v))
+}
+
+// InputPriceMicros applies equality check predicate on the "input_price_micros" field. It's identical to InputPriceMicrosEQ.
+func InputPriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldInputPriceMicros, v))
+}
+
+// OutputPriceMicros applies equality check predicate on the "output_price_micros" field. It's identical to OutputPriceMicrosEQ.
+func OutputPriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldOutputPriceMicros, v))
+}
+
+// CacheReadPriceMicros applies equality check predicate on the "cache_read_price_micros" field. It's identical to CacheReadPriceMicrosEQ.
+func CacheReadPriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheReadPriceMicros, v))
+}
+
+// CacheWritePriceMicros applies equality check predicate on the "cache_write_price_micros" field. It's identical to CacheWritePriceMicrosEQ.
+func CacheWritePriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWrite1hPriceMicros applies equality check predicate on the "cache_write_1h_price_micros" field. It's identical to CacheWrite1hPriceMicrosEQ.
+func CacheWrite1hPriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWrite1hPriceMicros, v))
+}
+
+// RequestPriceMicros applies equality check predicate on the "request_price_micros" field. It's identical to RequestPriceMicrosEQ.
+func RequestPriceMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldRequestPriceMicros, v))
+}
+
+// BaseCostMicros applies equality check predicate on the "base_cost_micros" field. It's identical to BaseCostMicrosEQ.
+func BaseCostMicros(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBaseCostMicros, v))
+}
+
+// MultiplierBps applies equality check predicate on the "multiplier_bps" field. It's identical to MultiplierBpsEQ.
+func MultiplierBps(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldMultiplierBps, v))
 }
 
 // CostMicros applies equality check predicate on the "cost_micros" field. It's identical to CostMicrosEQ.
@@ -104,6 +174,31 @@ func Estimated(v bool) predicate.APIUsage {
 // UpstreamRequestID applies equality check predicate on the "upstream_request_id" field. It's identical to UpstreamRequestIDEQ.
 func UpstreamRequestID(v string) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldUpstreamRequestID, v))
+}
+
+// ModelName applies equality check predicate on the "model_name" field. It's identical to ModelNameEQ.
+func ModelName(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldModelName, v))
+}
+
+// UpstreamModelName applies equality check predicate on the "upstream_model_name" field. It's identical to UpstreamModelNameEQ.
+func UpstreamModelName(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUpstreamModelName, v))
+}
+
+// BillingGroupCode applies equality check predicate on the "billing_group_code" field. It's identical to BillingGroupCodeEQ.
+func BillingGroupCode(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupCode, v))
+}
+
+// BillingGroupName applies equality check predicate on the "billing_group_name" field. It's identical to BillingGroupNameEQ.
+func BillingGroupName(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupName, v))
+}
+
+// CalculationVersion applies equality check predicate on the "calculation_version" field. It's identical to CalculationVersionEQ.
+func CalculationVersion(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCalculationVersion, v))
 }
 
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
@@ -174,6 +269,66 @@ func ModelRouteIDIn(vs ...uuid.UUID) predicate.APIUsage {
 // ModelRouteIDNotIn applies the NotIn predicate on the "model_route_id" field.
 func ModelRouteIDNotIn(vs ...uuid.UUID) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldNotIn(FieldModelRouteID, vs...))
+}
+
+// UpstreamModelIDEQ applies the EQ predicate on the "upstream_model_id" field.
+func UpstreamModelIDEQ(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUpstreamModelID, v))
+}
+
+// UpstreamModelIDNEQ applies the NEQ predicate on the "upstream_model_id" field.
+func UpstreamModelIDNEQ(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldUpstreamModelID, v))
+}
+
+// UpstreamModelIDIn applies the In predicate on the "upstream_model_id" field.
+func UpstreamModelIDIn(vs ...uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldUpstreamModelID, vs...))
+}
+
+// UpstreamModelIDNotIn applies the NotIn predicate on the "upstream_model_id" field.
+func UpstreamModelIDNotIn(vs ...uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldUpstreamModelID, vs...))
+}
+
+// UpstreamModelIDIsNil applies the IsNil predicate on the "upstream_model_id" field.
+func UpstreamModelIDIsNil() predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIsNull(FieldUpstreamModelID))
+}
+
+// UpstreamModelIDNotNil applies the NotNil predicate on the "upstream_model_id" field.
+func UpstreamModelIDNotNil() predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotNull(FieldUpstreamModelID))
+}
+
+// BillingGroupIDEQ applies the EQ predicate on the "billing_group_id" field.
+func BillingGroupIDEQ(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDNEQ applies the NEQ predicate on the "billing_group_id" field.
+func BillingGroupIDNEQ(v uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDIn applies the In predicate on the "billing_group_id" field.
+func BillingGroupIDIn(vs ...uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldBillingGroupID, vs...))
+}
+
+// BillingGroupIDNotIn applies the NotIn predicate on the "billing_group_id" field.
+func BillingGroupIDNotIn(vs ...uuid.UUID) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldBillingGroupID, vs...))
+}
+
+// BillingGroupIDIsNil applies the IsNil predicate on the "billing_group_id" field.
+func BillingGroupIDIsNil() predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIsNull(FieldBillingGroupID))
+}
+
+// BillingGroupIDNotNil applies the NotNil predicate on the "billing_group_id" field.
+func BillingGroupIDNotNil() predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotNull(FieldBillingGroupID))
 }
 
 // RequestIDEQ applies the EQ predicate on the "request_id" field.
@@ -276,6 +431,166 @@ func InputTokensLTE(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldLTE(FieldInputTokens, v))
 }
 
+// UncachedInputTokensEQ applies the EQ predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUncachedInputTokens, v))
+}
+
+// UncachedInputTokensNEQ applies the NEQ predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensNEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldUncachedInputTokens, v))
+}
+
+// UncachedInputTokensIn applies the In predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldUncachedInputTokens, vs...))
+}
+
+// UncachedInputTokensNotIn applies the NotIn predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensNotIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldUncachedInputTokens, vs...))
+}
+
+// UncachedInputTokensGT applies the GT predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensGT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldUncachedInputTokens, v))
+}
+
+// UncachedInputTokensGTE applies the GTE predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensGTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldUncachedInputTokens, v))
+}
+
+// UncachedInputTokensLT applies the LT predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensLT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldUncachedInputTokens, v))
+}
+
+// UncachedInputTokensLTE applies the LTE predicate on the "uncached_input_tokens" field.
+func UncachedInputTokensLTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldUncachedInputTokens, v))
+}
+
+// CacheReadInputTokensEQ applies the EQ predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheReadInputTokens, v))
+}
+
+// CacheReadInputTokensNEQ applies the NEQ predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensNEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheReadInputTokens, v))
+}
+
+// CacheReadInputTokensIn applies the In predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheReadInputTokens, vs...))
+}
+
+// CacheReadInputTokensNotIn applies the NotIn predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensNotIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheReadInputTokens, vs...))
+}
+
+// CacheReadInputTokensGT applies the GT predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensGT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheReadInputTokens, v))
+}
+
+// CacheReadInputTokensGTE applies the GTE predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensGTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheReadInputTokens, v))
+}
+
+// CacheReadInputTokensLT applies the LT predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensLT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheReadInputTokens, v))
+}
+
+// CacheReadInputTokensLTE applies the LTE predicate on the "cache_read_input_tokens" field.
+func CacheReadInputTokensLTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheReadInputTokens, v))
+}
+
+// CacheWriteInputTokensEQ applies the EQ predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWriteInputTokensNEQ applies the NEQ predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensNEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWriteInputTokensIn applies the In predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheWriteInputTokens, vs...))
+}
+
+// CacheWriteInputTokensNotIn applies the NotIn predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensNotIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheWriteInputTokens, vs...))
+}
+
+// CacheWriteInputTokensGT applies the GT predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensGT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWriteInputTokensGTE applies the GTE predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensGTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWriteInputTokensLT applies the LT predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensLT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWriteInputTokensLTE applies the LTE predicate on the "cache_write_input_tokens" field.
+func CacheWriteInputTokensLTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheWriteInputTokens, v))
+}
+
+// CacheWrite1hInputTokensEQ applies the EQ predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWrite1hInputTokens, v))
+}
+
+// CacheWrite1hInputTokensNEQ applies the NEQ predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensNEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheWrite1hInputTokens, v))
+}
+
+// CacheWrite1hInputTokensIn applies the In predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheWrite1hInputTokens, vs...))
+}
+
+// CacheWrite1hInputTokensNotIn applies the NotIn predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensNotIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheWrite1hInputTokens, vs...))
+}
+
+// CacheWrite1hInputTokensGT applies the GT predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensGT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheWrite1hInputTokens, v))
+}
+
+// CacheWrite1hInputTokensGTE applies the GTE predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensGTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheWrite1hInputTokens, v))
+}
+
+// CacheWrite1hInputTokensLT applies the LT predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensLT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheWrite1hInputTokens, v))
+}
+
+// CacheWrite1hInputTokensLTE applies the LTE predicate on the "cache_write_1h_input_tokens" field.
+func CacheWrite1hInputTokensLTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheWrite1hInputTokens, v))
+}
+
 // OutputTokensEQ applies the EQ predicate on the "output_tokens" field.
 func OutputTokensEQ(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldOutputTokens, v))
@@ -314,6 +629,326 @@ func OutputTokensLT(v int) predicate.APIUsage {
 // OutputTokensLTE applies the LTE predicate on the "output_tokens" field.
 func OutputTokensLTE(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldLTE(FieldOutputTokens, v))
+}
+
+// InputPriceMicrosEQ applies the EQ predicate on the "input_price_micros" field.
+func InputPriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldInputPriceMicros, v))
+}
+
+// InputPriceMicrosNEQ applies the NEQ predicate on the "input_price_micros" field.
+func InputPriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldInputPriceMicros, v))
+}
+
+// InputPriceMicrosIn applies the In predicate on the "input_price_micros" field.
+func InputPriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldInputPriceMicros, vs...))
+}
+
+// InputPriceMicrosNotIn applies the NotIn predicate on the "input_price_micros" field.
+func InputPriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldInputPriceMicros, vs...))
+}
+
+// InputPriceMicrosGT applies the GT predicate on the "input_price_micros" field.
+func InputPriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldInputPriceMicros, v))
+}
+
+// InputPriceMicrosGTE applies the GTE predicate on the "input_price_micros" field.
+func InputPriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldInputPriceMicros, v))
+}
+
+// InputPriceMicrosLT applies the LT predicate on the "input_price_micros" field.
+func InputPriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldInputPriceMicros, v))
+}
+
+// InputPriceMicrosLTE applies the LTE predicate on the "input_price_micros" field.
+func InputPriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldInputPriceMicros, v))
+}
+
+// OutputPriceMicrosEQ applies the EQ predicate on the "output_price_micros" field.
+func OutputPriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldOutputPriceMicros, v))
+}
+
+// OutputPriceMicrosNEQ applies the NEQ predicate on the "output_price_micros" field.
+func OutputPriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldOutputPriceMicros, v))
+}
+
+// OutputPriceMicrosIn applies the In predicate on the "output_price_micros" field.
+func OutputPriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldOutputPriceMicros, vs...))
+}
+
+// OutputPriceMicrosNotIn applies the NotIn predicate on the "output_price_micros" field.
+func OutputPriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldOutputPriceMicros, vs...))
+}
+
+// OutputPriceMicrosGT applies the GT predicate on the "output_price_micros" field.
+func OutputPriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldOutputPriceMicros, v))
+}
+
+// OutputPriceMicrosGTE applies the GTE predicate on the "output_price_micros" field.
+func OutputPriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldOutputPriceMicros, v))
+}
+
+// OutputPriceMicrosLT applies the LT predicate on the "output_price_micros" field.
+func OutputPriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldOutputPriceMicros, v))
+}
+
+// OutputPriceMicrosLTE applies the LTE predicate on the "output_price_micros" field.
+func OutputPriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldOutputPriceMicros, v))
+}
+
+// CacheReadPriceMicrosEQ applies the EQ predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheReadPriceMicros, v))
+}
+
+// CacheReadPriceMicrosNEQ applies the NEQ predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheReadPriceMicros, v))
+}
+
+// CacheReadPriceMicrosIn applies the In predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheReadPriceMicros, vs...))
+}
+
+// CacheReadPriceMicrosNotIn applies the NotIn predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheReadPriceMicros, vs...))
+}
+
+// CacheReadPriceMicrosGT applies the GT predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheReadPriceMicros, v))
+}
+
+// CacheReadPriceMicrosGTE applies the GTE predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheReadPriceMicros, v))
+}
+
+// CacheReadPriceMicrosLT applies the LT predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheReadPriceMicros, v))
+}
+
+// CacheReadPriceMicrosLTE applies the LTE predicate on the "cache_read_price_micros" field.
+func CacheReadPriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheReadPriceMicros, v))
+}
+
+// CacheWritePriceMicrosEQ applies the EQ predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWritePriceMicrosNEQ applies the NEQ predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWritePriceMicrosIn applies the In predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheWritePriceMicros, vs...))
+}
+
+// CacheWritePriceMicrosNotIn applies the NotIn predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheWritePriceMicros, vs...))
+}
+
+// CacheWritePriceMicrosGT applies the GT predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWritePriceMicrosGTE applies the GTE predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWritePriceMicrosLT applies the LT predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWritePriceMicrosLTE applies the LTE predicate on the "cache_write_price_micros" field.
+func CacheWritePriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheWritePriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosEQ applies the EQ predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCacheWrite1hPriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosNEQ applies the NEQ predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCacheWrite1hPriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosIn applies the In predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCacheWrite1hPriceMicros, vs...))
+}
+
+// CacheWrite1hPriceMicrosNotIn applies the NotIn predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCacheWrite1hPriceMicros, vs...))
+}
+
+// CacheWrite1hPriceMicrosGT applies the GT predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCacheWrite1hPriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosGTE applies the GTE predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCacheWrite1hPriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosLT applies the LT predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCacheWrite1hPriceMicros, v))
+}
+
+// CacheWrite1hPriceMicrosLTE applies the LTE predicate on the "cache_write_1h_price_micros" field.
+func CacheWrite1hPriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCacheWrite1hPriceMicros, v))
+}
+
+// RequestPriceMicrosEQ applies the EQ predicate on the "request_price_micros" field.
+func RequestPriceMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldRequestPriceMicros, v))
+}
+
+// RequestPriceMicrosNEQ applies the NEQ predicate on the "request_price_micros" field.
+func RequestPriceMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldRequestPriceMicros, v))
+}
+
+// RequestPriceMicrosIn applies the In predicate on the "request_price_micros" field.
+func RequestPriceMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldRequestPriceMicros, vs...))
+}
+
+// RequestPriceMicrosNotIn applies the NotIn predicate on the "request_price_micros" field.
+func RequestPriceMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldRequestPriceMicros, vs...))
+}
+
+// RequestPriceMicrosGT applies the GT predicate on the "request_price_micros" field.
+func RequestPriceMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldRequestPriceMicros, v))
+}
+
+// RequestPriceMicrosGTE applies the GTE predicate on the "request_price_micros" field.
+func RequestPriceMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldRequestPriceMicros, v))
+}
+
+// RequestPriceMicrosLT applies the LT predicate on the "request_price_micros" field.
+func RequestPriceMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldRequestPriceMicros, v))
+}
+
+// RequestPriceMicrosLTE applies the LTE predicate on the "request_price_micros" field.
+func RequestPriceMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldRequestPriceMicros, v))
+}
+
+// BaseCostMicrosEQ applies the EQ predicate on the "base_cost_micros" field.
+func BaseCostMicrosEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBaseCostMicros, v))
+}
+
+// BaseCostMicrosNEQ applies the NEQ predicate on the "base_cost_micros" field.
+func BaseCostMicrosNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldBaseCostMicros, v))
+}
+
+// BaseCostMicrosIn applies the In predicate on the "base_cost_micros" field.
+func BaseCostMicrosIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldBaseCostMicros, vs...))
+}
+
+// BaseCostMicrosNotIn applies the NotIn predicate on the "base_cost_micros" field.
+func BaseCostMicrosNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldBaseCostMicros, vs...))
+}
+
+// BaseCostMicrosGT applies the GT predicate on the "base_cost_micros" field.
+func BaseCostMicrosGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldBaseCostMicros, v))
+}
+
+// BaseCostMicrosGTE applies the GTE predicate on the "base_cost_micros" field.
+func BaseCostMicrosGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldBaseCostMicros, v))
+}
+
+// BaseCostMicrosLT applies the LT predicate on the "base_cost_micros" field.
+func BaseCostMicrosLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldBaseCostMicros, v))
+}
+
+// BaseCostMicrosLTE applies the LTE predicate on the "base_cost_micros" field.
+func BaseCostMicrosLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldBaseCostMicros, v))
+}
+
+// MultiplierBpsEQ applies the EQ predicate on the "multiplier_bps" field.
+func MultiplierBpsEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldMultiplierBps, v))
+}
+
+// MultiplierBpsNEQ applies the NEQ predicate on the "multiplier_bps" field.
+func MultiplierBpsNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldMultiplierBps, v))
+}
+
+// MultiplierBpsIn applies the In predicate on the "multiplier_bps" field.
+func MultiplierBpsIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldMultiplierBps, vs...))
+}
+
+// MultiplierBpsNotIn applies the NotIn predicate on the "multiplier_bps" field.
+func MultiplierBpsNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldMultiplierBps, vs...))
+}
+
+// MultiplierBpsGT applies the GT predicate on the "multiplier_bps" field.
+func MultiplierBpsGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldMultiplierBps, v))
+}
+
+// MultiplierBpsGTE applies the GTE predicate on the "multiplier_bps" field.
+func MultiplierBpsGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldMultiplierBps, v))
+}
+
+// MultiplierBpsLT applies the LT predicate on the "multiplier_bps" field.
+func MultiplierBpsLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldMultiplierBps, v))
+}
+
+// MultiplierBpsLTE applies the LTE predicate on the "multiplier_bps" field.
+func MultiplierBpsLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldMultiplierBps, v))
 }
 
 // CostMicrosEQ applies the EQ predicate on the "cost_micros" field.
@@ -471,6 +1106,331 @@ func UpstreamRequestIDContainsFold(v string) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldContainsFold(FieldUpstreamRequestID, v))
 }
 
+// ModelNameEQ applies the EQ predicate on the "model_name" field.
+func ModelNameEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldModelName, v))
+}
+
+// ModelNameNEQ applies the NEQ predicate on the "model_name" field.
+func ModelNameNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldModelName, v))
+}
+
+// ModelNameIn applies the In predicate on the "model_name" field.
+func ModelNameIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldModelName, vs...))
+}
+
+// ModelNameNotIn applies the NotIn predicate on the "model_name" field.
+func ModelNameNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldModelName, vs...))
+}
+
+// ModelNameGT applies the GT predicate on the "model_name" field.
+func ModelNameGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldModelName, v))
+}
+
+// ModelNameGTE applies the GTE predicate on the "model_name" field.
+func ModelNameGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldModelName, v))
+}
+
+// ModelNameLT applies the LT predicate on the "model_name" field.
+func ModelNameLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldModelName, v))
+}
+
+// ModelNameLTE applies the LTE predicate on the "model_name" field.
+func ModelNameLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldModelName, v))
+}
+
+// ModelNameContains applies the Contains predicate on the "model_name" field.
+func ModelNameContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldModelName, v))
+}
+
+// ModelNameHasPrefix applies the HasPrefix predicate on the "model_name" field.
+func ModelNameHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldModelName, v))
+}
+
+// ModelNameHasSuffix applies the HasSuffix predicate on the "model_name" field.
+func ModelNameHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldModelName, v))
+}
+
+// ModelNameEqualFold applies the EqualFold predicate on the "model_name" field.
+func ModelNameEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldModelName, v))
+}
+
+// ModelNameContainsFold applies the ContainsFold predicate on the "model_name" field.
+func ModelNameContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldModelName, v))
+}
+
+// UpstreamModelNameEQ applies the EQ predicate on the "upstream_model_name" field.
+func UpstreamModelNameEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameNEQ applies the NEQ predicate on the "upstream_model_name" field.
+func UpstreamModelNameNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameIn applies the In predicate on the "upstream_model_name" field.
+func UpstreamModelNameIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldUpstreamModelName, vs...))
+}
+
+// UpstreamModelNameNotIn applies the NotIn predicate on the "upstream_model_name" field.
+func UpstreamModelNameNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldUpstreamModelName, vs...))
+}
+
+// UpstreamModelNameGT applies the GT predicate on the "upstream_model_name" field.
+func UpstreamModelNameGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameGTE applies the GTE predicate on the "upstream_model_name" field.
+func UpstreamModelNameGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameLT applies the LT predicate on the "upstream_model_name" field.
+func UpstreamModelNameLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameLTE applies the LTE predicate on the "upstream_model_name" field.
+func UpstreamModelNameLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameContains applies the Contains predicate on the "upstream_model_name" field.
+func UpstreamModelNameContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameHasPrefix applies the HasPrefix predicate on the "upstream_model_name" field.
+func UpstreamModelNameHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameHasSuffix applies the HasSuffix predicate on the "upstream_model_name" field.
+func UpstreamModelNameHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameEqualFold applies the EqualFold predicate on the "upstream_model_name" field.
+func UpstreamModelNameEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldUpstreamModelName, v))
+}
+
+// UpstreamModelNameContainsFold applies the ContainsFold predicate on the "upstream_model_name" field.
+func UpstreamModelNameContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldUpstreamModelName, v))
+}
+
+// BillingGroupCodeEQ applies the EQ predicate on the "billing_group_code" field.
+func BillingGroupCodeEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeNEQ applies the NEQ predicate on the "billing_group_code" field.
+func BillingGroupCodeNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeIn applies the In predicate on the "billing_group_code" field.
+func BillingGroupCodeIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldBillingGroupCode, vs...))
+}
+
+// BillingGroupCodeNotIn applies the NotIn predicate on the "billing_group_code" field.
+func BillingGroupCodeNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldBillingGroupCode, vs...))
+}
+
+// BillingGroupCodeGT applies the GT predicate on the "billing_group_code" field.
+func BillingGroupCodeGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeGTE applies the GTE predicate on the "billing_group_code" field.
+func BillingGroupCodeGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeLT applies the LT predicate on the "billing_group_code" field.
+func BillingGroupCodeLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeLTE applies the LTE predicate on the "billing_group_code" field.
+func BillingGroupCodeLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeContains applies the Contains predicate on the "billing_group_code" field.
+func BillingGroupCodeContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeHasPrefix applies the HasPrefix predicate on the "billing_group_code" field.
+func BillingGroupCodeHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeHasSuffix applies the HasSuffix predicate on the "billing_group_code" field.
+func BillingGroupCodeHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeEqualFold applies the EqualFold predicate on the "billing_group_code" field.
+func BillingGroupCodeEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldBillingGroupCode, v))
+}
+
+// BillingGroupCodeContainsFold applies the ContainsFold predicate on the "billing_group_code" field.
+func BillingGroupCodeContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldBillingGroupCode, v))
+}
+
+// BillingGroupNameEQ applies the EQ predicate on the "billing_group_name" field.
+func BillingGroupNameEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameNEQ applies the NEQ predicate on the "billing_group_name" field.
+func BillingGroupNameNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameIn applies the In predicate on the "billing_group_name" field.
+func BillingGroupNameIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldBillingGroupName, vs...))
+}
+
+// BillingGroupNameNotIn applies the NotIn predicate on the "billing_group_name" field.
+func BillingGroupNameNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldBillingGroupName, vs...))
+}
+
+// BillingGroupNameGT applies the GT predicate on the "billing_group_name" field.
+func BillingGroupNameGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameGTE applies the GTE predicate on the "billing_group_name" field.
+func BillingGroupNameGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameLT applies the LT predicate on the "billing_group_name" field.
+func BillingGroupNameLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameLTE applies the LTE predicate on the "billing_group_name" field.
+func BillingGroupNameLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameContains applies the Contains predicate on the "billing_group_name" field.
+func BillingGroupNameContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameHasPrefix applies the HasPrefix predicate on the "billing_group_name" field.
+func BillingGroupNameHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameHasSuffix applies the HasSuffix predicate on the "billing_group_name" field.
+func BillingGroupNameHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameEqualFold applies the EqualFold predicate on the "billing_group_name" field.
+func BillingGroupNameEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldBillingGroupName, v))
+}
+
+// BillingGroupNameContainsFold applies the ContainsFold predicate on the "billing_group_name" field.
+func BillingGroupNameContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldBillingGroupName, v))
+}
+
+// CalculationVersionEQ applies the EQ predicate on the "calculation_version" field.
+func CalculationVersionEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldCalculationVersion, v))
+}
+
+// CalculationVersionNEQ applies the NEQ predicate on the "calculation_version" field.
+func CalculationVersionNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldCalculationVersion, v))
+}
+
+// CalculationVersionIn applies the In predicate on the "calculation_version" field.
+func CalculationVersionIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldCalculationVersion, vs...))
+}
+
+// CalculationVersionNotIn applies the NotIn predicate on the "calculation_version" field.
+func CalculationVersionNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldCalculationVersion, vs...))
+}
+
+// CalculationVersionGT applies the GT predicate on the "calculation_version" field.
+func CalculationVersionGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldCalculationVersion, v))
+}
+
+// CalculationVersionGTE applies the GTE predicate on the "calculation_version" field.
+func CalculationVersionGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldCalculationVersion, v))
+}
+
+// CalculationVersionLT applies the LT predicate on the "calculation_version" field.
+func CalculationVersionLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldCalculationVersion, v))
+}
+
+// CalculationVersionLTE applies the LTE predicate on the "calculation_version" field.
+func CalculationVersionLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldCalculationVersion, v))
+}
+
+// CalculationVersionContains applies the Contains predicate on the "calculation_version" field.
+func CalculationVersionContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldCalculationVersion, v))
+}
+
+// CalculationVersionHasPrefix applies the HasPrefix predicate on the "calculation_version" field.
+func CalculationVersionHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldCalculationVersion, v))
+}
+
+// CalculationVersionHasSuffix applies the HasSuffix predicate on the "calculation_version" field.
+func CalculationVersionHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldCalculationVersion, v))
+}
+
+// CalculationVersionEqualFold applies the EqualFold predicate on the "calculation_version" field.
+func CalculationVersionEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldCalculationVersion, v))
+}
+
+// CalculationVersionContainsFold applies the ContainsFold predicate on the "calculation_version" field.
+func CalculationVersionContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldCalculationVersion, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldCreatedAt, v))
@@ -612,6 +1572,52 @@ func HasModelRoute() predicate.APIUsage {
 func HasModelRouteWith(preds ...predicate.ModelRoute) predicate.APIUsage {
 	return predicate.APIUsage(func(s *sql.Selector) {
 		step := newModelRouteStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUpstreamModel applies the HasEdge predicate on the "upstream_model" edge.
+func HasUpstreamModel() predicate.APIUsage {
+	return predicate.APIUsage(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, UpstreamModelTable, UpstreamModelColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUpstreamModelWith applies the HasEdge predicate on the "upstream_model" edge with a given conditions (other predicates).
+func HasUpstreamModelWith(preds ...predicate.UpstreamModel) predicate.APIUsage {
+	return predicate.APIUsage(func(s *sql.Selector) {
+		step := newUpstreamModelStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasBillingGroup applies the HasEdge predicate on the "billing_group" edge.
+func HasBillingGroup() predicate.APIUsage {
+	return predicate.APIUsage(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasBillingGroupWith applies the HasEdge predicate on the "billing_group" edge with a given conditions (other predicates).
+func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.APIUsage {
+	return predicate.APIUsage(func(s *sql.Selector) {
+		step := newBillingGroupStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

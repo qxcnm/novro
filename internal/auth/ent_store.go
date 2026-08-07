@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entuser "github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -27,7 +28,7 @@ func NewEntStore(client *ent.Client) *EntStore {
 }
 
 func (s *EntStore) FindUserByUsername(ctx context.Context, username string) (LoginUser, error) {
-	entity, err := s.client.User.Query().Where(entuser.UsernameEQ(username)).Only(ctx)
+	entity, err := s.client.User.Query().Where(entuser.Or(entuser.UsernameEQ(username), entuser.EmailEQ(username))).WithBillingGroup().Only(ctx)
 	if ent.IsNotFound(err) {
 		return LoginUser{}, user.ErrNotFound
 	}
@@ -42,7 +43,7 @@ var oidcUsernameInvalid = regexp.MustCompile(`[^a-z0-9._-]+`)
 func (s *EntStore) FindOrCreateOIDCUser(ctx context.Context, identity OIDCUser, autoRegister bool) (user.Record, error) {
 	entity, err := s.client.UserIdentity.Query().
 		Where(useridentity.IssuerEQ(identity.Issuer), useridentity.SubjectEQ(identity.Subject)).
-		WithUser().Only(ctx)
+		WithUser(func(query *ent.UserQuery) { query.WithBillingGroup() }).Only(ctx)
 	if err == nil {
 		linked, edgeErr := entity.Edges.UserOrErr()
 		if edgeErr != nil {
@@ -54,6 +55,10 @@ func (s *EntStore) FindOrCreateOIDCUser(ctx context.Context, identity OIDCUser, 
 		return user.Record{}, fmt.Errorf("query OIDC identity: %w", err)
 	}
 	if !autoRegister {
+		return user.Record{}, ErrOIDCNotProvisioned
+	}
+	email, ok := user.NormalizeEmail(identity.Email)
+	if !ok {
 		return user.Record{}, ErrOIDCNotProvisioned
 	}
 
@@ -76,12 +81,21 @@ func (s *EntStore) FindOrCreateOIDCUser(ctx context.Context, identity OIDCUser, 
 		return user.Record{}, fmt.Errorf("begin OIDC registration: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	group, err := tx.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx)
+	if err != nil {
+		return user.Record{}, fmt.Errorf("resolve OIDC billing group: %w", err)
+	}
 	created, err := tx.User.Create().
+		SetBillingGroupID(group.ID).
 		SetUsername(username).
+		SetEmail(email).
 		SetDisplayName(strings.TrimSpace(identity.DisplayName)).
 		SetRole(entuser.RoleMember).
 		SetStatus(entuser.StatusActive).
 		Save(ctx)
+	if ent.IsConstraintError(err) {
+		return user.Record{}, ErrOIDCNotProvisioned
+	}
 	if err != nil {
 		return user.Record{}, fmt.Errorf("create OIDC user: %w", err)
 	}
@@ -89,7 +103,7 @@ func (s *EntStore) FindOrCreateOIDCUser(ctx context.Context, identity OIDCUser, 
 		SetUserID(created.ID).
 		SetIssuer(identity.Issuer).
 		SetSubject(identity.Subject).
-		SetEmail(strings.TrimSpace(identity.Email)).
+		SetEmail(email).
 		Save(ctx); err != nil {
 		if ent.IsConstraintError(err) {
 			return user.Record{}, ErrOIDCNotProvisioned
@@ -157,7 +171,7 @@ func (s *EntStore) FindUserBySession(ctx context.Context, tokenHash string, now 
 			usersession.ExpiresAtGT(now),
 			usersession.HasUserWith(entuser.StatusEQ(entuser.StatusActive)),
 		).
-		WithUser().
+		WithUser(func(query *ent.UserQuery) { query.WithBillingGroup() }).
 		Only(ctx)
 	if ent.IsNotFound(err) {
 		return user.Record{}, user.ErrNotFound
@@ -187,14 +201,22 @@ func (s *EntStore) RevokeSession(ctx context.Context, tokenHash string, now time
 }
 
 func authUserFromEnt(entity *ent.User) user.Record {
-	return user.Record{
-		ID:          entity.ID,
-		Username:    entity.Username,
-		DisplayName: entity.DisplayName,
-		Role:        user.Role(entity.Role),
-		Status:      user.Status(entity.Status),
-		LastLoginAt: entity.LastLoginAt,
-		CreatedAt:   entity.CreatedAt,
-		UpdatedAt:   entity.UpdatedAt,
+	record := user.Record{
+		ID:             entity.ID,
+		BillingGroupID: entity.BillingGroupID,
+		Username:       entity.Username,
+		DisplayName:    entity.DisplayName,
+		Role:           user.Role(entity.Role),
+		Status:         user.Status(entity.Status),
+		LastLoginAt:    entity.LastLoginAt,
+		CreatedAt:      entity.CreatedAt,
+		UpdatedAt:      entity.UpdatedAt,
 	}
+	if entity.Email != nil {
+		record.Email = *entity.Email
+	}
+	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
+		record.BillingGroup = &user.BillingGroupSummary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
+	return record
 }

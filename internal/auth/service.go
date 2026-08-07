@@ -76,9 +76,9 @@ func NewService(store Store, passwords PasswordManager, secret string, ttl time.
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context, username, plainTextPassword string) (LoginResult, error) {
-	username = strings.ToLower(strings.TrimSpace(username))
-	loginUser, err := s.store.FindUserByUsername(ctx, username)
+func (s *Service) Login(ctx context.Context, identifier, plainTextPassword string) (LoginResult, error) {
+	identifier = strings.ToLower(strings.TrimSpace(identifier))
+	loginUser, err := s.store.FindUserByUsername(ctx, identifier)
 	if err != nil {
 		_ = s.passwords.Verify(s.dummyHash, plainTextPassword)
 		if errors.Is(err, user.ErrNotFound) {

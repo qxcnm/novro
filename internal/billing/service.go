@@ -57,7 +57,11 @@ func (s *Service) Refund(ctx context.Context, userID, referenceID uuid.UUID, amo
 }
 
 func (s *Service) Finalize(ctx context.Context, input UsageInput) error {
-	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.RequestID == uuid.Nil || input.InputTokens < 0 || input.OutputTokens < 0 || input.CostMicros < 0 || input.ReservedMicros < input.CostMicros || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros > 1_000_000_000_000_000 || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
+	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
+		return ErrInvalidInput
+	}
+	quote, err := CalculateCost(input.Tokens, input.Rates, input.MultiplierBPS)
+	if err != nil || quote.BaseCostMicros != input.BaseCostMicros || quote.CostMicros != input.CostMicros {
 		return ErrInvalidInput
 	}
 	return s.store.Finalize(ctx, input)

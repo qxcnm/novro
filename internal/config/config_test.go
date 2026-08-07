@@ -97,6 +97,35 @@ func TestLoadValidatesOIDCAndSetupConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadValidatesOptionalEPayConfiguration(t *testing.T) {
+	values := testEnv()
+	values["NOVRO_EPAY_API_URL"] = "https://pay.example.com"
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "NOVRO_EPAY_MERCHANT_ID") {
+		t.Fatalf("expected incomplete EPay error, got %v", err)
+	}
+
+	values["NOVRO_EPAY_MERCHANT_ID"] = "1000"
+	values["NOVRO_EPAY_MERCHANT_KEY"] = "merchant-secret"
+	values["NOVRO_EPAY_CHANNELS"] = "alipay, wxpay,alipay"
+	cfg, err := loadMap(values)
+	if err != nil {
+		t.Fatalf("valid EPay configuration rejected: %v", err)
+	}
+	if !cfg.Payment.EPay.Enabled() || len(cfg.Payment.EPay.Channels) != 2 || cfg.Payment.EPay.Channels[1] != "wxpay" {
+		t.Fatalf("unexpected EPay configuration: %+v", cfg.Payment.EPay)
+	}
+
+	values["NOVRO_ENVIRONMENT"] = "production"
+	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
+	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	values["NOVRO_SESSION_COOKIE_SECURE"] = "true"
+	values["NOVRO_EPAY_API_URL"] = "http://pay.example.com"
+	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "https NOVRO_EPAY_API_URL") {
+		t.Fatalf("expected insecure production EPay error, got %v", err)
+	}
+}
+
 func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 	values := testEnv()
 	delete(values, "NOVRO_SESSION_SECRET")

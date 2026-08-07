@@ -17,7 +17,7 @@ func (Wallet) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
 		field.UUID("user_id", uuid.UUID{}).Unique(),
-		field.Int64("balance_micros").NonNegative().Default(0),
+		field.Int64("balance_micros").Default(0),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

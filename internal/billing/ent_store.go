@@ -49,7 +49,14 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) (
 		if apiKey != nil {
 			apiKeyName = apiKey.Name
 		}
-		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens, OutputTokens: entity.OutputTokens, CostMicros: entity.CostMicros, Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
+		if entity.ModelName != "" {
+			modelName = entity.ModelName
+		}
+		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens,
+			UncachedInputTokens: entity.UncachedInputTokens, CacheReadInputTokens: entity.CacheReadInputTokens, CacheWriteInputTokens: entity.CacheWriteInputTokens, CacheWrite1hInputTokens: entity.CacheWrite1hInputTokens, OutputTokens: entity.OutputTokens,
+			Rates:          RateCard{InputMicros: entity.InputPriceMicros, OutputMicros: entity.OutputPriceMicros, CacheReadMicros: entity.CacheReadPriceMicros, CacheWriteMicros: entity.CacheWritePriceMicros, CacheWrite1hMicros: entity.CacheWrite1hPriceMicros, RequestMicros: entity.RequestPriceMicros},
+			BaseCostMicros: entity.BaseCostMicros, MultiplierBPS: entity.MultiplierBps, CostMicros: entity.CostMicros, ReservedMicros: entity.ReservedMicros, BillingGroupCode: entity.BillingGroupCode, BillingGroupName: entity.BillingGroupName, UpstreamModelName: entity.UpstreamModelName, CalculationVersion: entity.CalculationVersion,
+			Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
 	}
 	return items, nil
 }
@@ -219,7 +226,32 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 	} else {
 		return fmt.Errorf("read existing usage finalization refund: %w", refundErr)
 	}
-	if _, err := tx.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetInputTokens(input.InputTokens).SetOutputTokens(input.OutputTokens).SetCostMicros(input.CostMicros).SetReservedMicros(input.ReservedMicros).SetEstimated(input.Estimated).SetUpstreamRequestID(input.UpstreamRequestID).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt).Save(ctx); err != nil {
+	if refund < 0 {
+		extra := -refund
+		existingSettlement, settlementErr := tx.WalletEntry.Query().Where(entwalletentry.WalletIDEQ(walletEntity.ID), entwalletentry.ReferenceIDEQ(input.RequestID), entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageSettlement)).Only(ctx)
+		if settlementErr == nil {
+			if existingSettlement.AmountMicros != -extra {
+				return ErrRequestConflict
+			}
+		} else if ent.IsNotFound(settlementErr) {
+			next := walletEntity.BalanceMicros - extra
+			if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
+				return fmt.Errorf("settle additional usage balance: %w", err)
+			}
+			if _, err := tx.WalletEntry.Create().SetWalletID(walletEntity.ID).SetReferenceID(input.RequestID).SetEntryType(entwalletentry.EntryTypeUsageSettlement).SetAmountMicros(-extra).SetBalanceAfterMicros(next).SetDescription("补扣实际调用费用").Save(ctx); err != nil {
+				return fmt.Errorf("record additional usage balance: %w", err)
+			}
+		} else {
+			return fmt.Errorf("read existing usage settlement: %w", settlementErr)
+		}
+	}
+	create := tx.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetUpstreamModelID(*input.UpstreamModelID).SetBillingGroupID(*input.BillingGroupID).
+		SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetInputTokens(input.InputTokens).
+		SetUncachedInputTokens(input.Tokens.UncachedInput).SetCacheReadInputTokens(input.Tokens.CacheRead).SetCacheWriteInputTokens(input.Tokens.CacheWrite).SetCacheWrite1hInputTokens(input.Tokens.CacheWrite1h).SetOutputTokens(input.OutputTokens).
+		SetInputPriceMicros(input.Rates.InputMicros).SetOutputPriceMicros(input.Rates.OutputMicros).SetCacheReadPriceMicros(input.Rates.CacheReadMicros).SetCacheWritePriceMicros(input.Rates.CacheWriteMicros).SetCacheWrite1hPriceMicros(input.Rates.CacheWrite1hMicros).SetRequestPriceMicros(input.Rates.RequestMicros).
+		SetBaseCostMicros(input.BaseCostMicros).SetMultiplierBps(input.MultiplierBPS).SetCostMicros(input.CostMicros).SetReservedMicros(input.ReservedMicros).SetEstimated(input.Estimated).
+		SetUpstreamRequestID(input.UpstreamRequestID).SetModelName(input.ModelName).SetUpstreamModelName(input.UpstreamModelName).SetBillingGroupCode(input.BillingGroupCode).SetBillingGroupName(input.BillingGroupName).SetCalculationVersion(input.CalculationVersion).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt)
+	if _, err := create.Save(ctx); err != nil {
 		return fmt.Errorf("record API usage: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -231,8 +263,9 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 func sameUsage(existing *ent.APIUsage, input UsageInput) bool {
 	return existing != nil && existing.UserID == input.UserID && existing.APIKeyID == input.APIKeyID &&
 		existing.ModelRouteID == input.ModelRouteID && string(existing.Endpoint) == input.Endpoint &&
-		existing.InputTokens == input.InputTokens && existing.OutputTokens == input.OutputTokens &&
-		existing.CostMicros == input.CostMicros && existing.ReservedMicros == input.ReservedMicros &&
+		existing.UpstreamModelID != nil && input.UpstreamModelID != nil && *existing.UpstreamModelID == *input.UpstreamModelID && existing.BillingGroupID != nil && input.BillingGroupID != nil && *existing.BillingGroupID == *input.BillingGroupID &&
+		existing.InputTokens == input.InputTokens && existing.UncachedInputTokens == input.Tokens.UncachedInput && existing.CacheReadInputTokens == input.Tokens.CacheRead && existing.CacheWriteInputTokens == input.Tokens.CacheWrite && existing.CacheWrite1hInputTokens == input.Tokens.CacheWrite1h && existing.OutputTokens == input.OutputTokens &&
+		existing.InputPriceMicros == input.Rates.InputMicros && existing.OutputPriceMicros == input.Rates.OutputMicros && existing.CacheReadPriceMicros == input.Rates.CacheReadMicros && existing.CacheWritePriceMicros == input.Rates.CacheWriteMicros && existing.CacheWrite1hPriceMicros == input.Rates.CacheWrite1hMicros && existing.RequestPriceMicros == input.Rates.RequestMicros && existing.BaseCostMicros == input.BaseCostMicros && existing.MultiplierBps == input.MultiplierBPS && existing.CostMicros == input.CostMicros && existing.ReservedMicros == input.ReservedMicros &&
 		existing.Estimated == input.Estimated && existing.UpstreamRequestID == input.UpstreamRequestID
 }
 

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	entuser "github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -29,15 +31,21 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		return Record{}, fmt.Errorf("begin user creation: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	groupID, err := resolveBillingGroupID(ctx, tx.Client(), params.BillingGroupID)
+	if err != nil {
+		return Record{}, err
+	}
 	created, err := tx.User.Create().
+		SetBillingGroupID(groupID).
 		SetUsername(params.Username).
+		SetEmail(params.Email).
 		SetDisplayName(params.DisplayName).
 		SetPasswordHash(params.PasswordHash).
 		SetRole(entuser.Role(params.Role)).
 		SetStatus(entuser.StatusActive).
 		Save(ctx)
 	if ent.IsConstraintError(err) {
-		return Record{}, ErrUsernameTaken
+		return Record{}, identityConstraintError(err)
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create user: %w", err)
@@ -74,8 +82,14 @@ func (s *EntStore) CreateInitialAdmin(ctx context.Context, params CreateParams) 
 	if count != 0 {
 		return Record{}, ErrAlreadyInitialized
 	}
+	groupID, err := resolveBillingGroupID(ctx, tx.Client(), params.BillingGroupID)
+	if err != nil {
+		return Record{}, err
+	}
 	created, err := tx.User.Create().
+		SetBillingGroupID(groupID).
 		SetUsername(params.Username).
+		SetEmail(params.Email).
 		SetDisplayName(params.DisplayName).
 		SetPasswordHash(params.PasswordHash).
 		SetRole(entuser.RoleAdmin).
@@ -118,6 +132,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) (Page, error) {
 	if filter.Search != "" {
 		query = query.Where(entuser.Or(
 			entuser.UsernameContainsFold(filter.Search),
+			entuser.EmailContainsFold(filter.Search),
 			entuser.DisplayNameContainsFold(filter.Search),
 		))
 	}
@@ -128,7 +143,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) (Page, error) {
 	if err != nil {
 		return Page{}, fmt.Errorf("count users: %w", err)
 	}
-	entities, err := query.
+	entities, err := query.WithBillingGroup().
 		Order(ent.Desc(entuser.FieldCreatedAt)).
 		Offset(filter.Offset).
 		Limit(filter.Limit).
@@ -176,6 +191,16 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	}
 	if params.Role != nil {
 		update.SetRole(entuser.Role(*params.Role))
+	}
+	if params.BillingGroupID != nil {
+		group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(*params.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+		if ent.IsNotFound(err) {
+			return Record{}, ErrInvalidInput
+		}
+		if err != nil {
+			return Record{}, fmt.Errorf("read user billing group: %w", err)
+		}
+		update.SetBillingGroupID(group.ID)
 	}
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -255,7 +280,7 @@ func fromEnt(entity *ent.User) Record {
 	if entity == nil {
 		return Record{}
 	}
-	return Record{
+	record := Record{
 		ID:          entity.ID,
 		Username:    entity.Username,
 		DisplayName: entity.DisplayName,
@@ -265,17 +290,49 @@ func fromEnt(entity *ent.User) Record {
 		CreatedAt:   entity.CreatedAt,
 		UpdatedAt:   entity.UpdatedAt,
 	}
+	if entity.Email != nil {
+		record.Email = *entity.Email
+	}
+	record.BillingGroupID = entity.BillingGroupID
+	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
+		record.BillingGroup = &BillingGroupSummary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
+	return record
+}
+
+func resolveBillingGroupID(ctx context.Context, client *ent.Client, requested *uuid.UUID) (uuid.UUID, error) {
+	query := client.BillingGroup.Query().Where(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil())
+	if requested != nil {
+		query = query.Where(entbillinggroup.IDEQ(*requested))
+	} else {
+		query = query.Where(entbillinggroup.IsDefaultEQ(true))
+	}
+	group, err := query.ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return uuid.Nil, ErrInvalidInput
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve billing group: %w", err)
+	}
+	return group.ID, nil
 }
 
 func mapEntError(err error) error {
 	switch {
-	case errors.Is(err, ErrNotFound), errors.Is(err, ErrUsernameTaken):
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrUsernameTaken), errors.Is(err, ErrEmailTaken):
 		return err
 	case ent.IsNotFound(err):
 		return ErrNotFound
 	case ent.IsConstraintError(err):
-		return ErrUsernameTaken
+		return identityConstraintError(err)
 	default:
 		return err
 	}
+}
+
+func identityConstraintError(err error) error {
+	if strings.Contains(strings.ToLower(err.Error()), "email") {
+		return ErrEmailTaken
+	}
+	return ErrUsernameTaken
 }

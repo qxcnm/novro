@@ -13,8 +13,8 @@ import (
 )
 
 // VersionedSQL contains the migrations reviewed and deployed with Novro. The
-// generated Ent schema remains available for model-level inspection, while
-// production startup never performs automatic schema creation.
+// generated Ent schema remains available for model-level inspection; startup
+// applies only these ordered SQL files and never uses automatic schema creation.
 //
 //go:embed migrations/*.sql
 var VersionedSQL embed.FS
@@ -25,8 +25,8 @@ type migrationFile struct {
 	Checksum string
 }
 
-// Apply runs each migration once and records it in a small metadata table.
-// Migrations are executed explicitly by the deployment command.
+// Apply runs each migration once and records it in a small metadata table. It
+// is shared by normal startup and the explicit deployment migration command.
 func Apply(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return fmt.Errorf("migration database is nil")

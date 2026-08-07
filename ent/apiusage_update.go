@@ -14,8 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
+	"github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -74,6 +76,46 @@ func (_u *APIUsageUpdate) SetNillableModelRouteID(v *uuid.UUID) *APIUsageUpdate 
 	return _u
 }
 
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (_u *APIUsageUpdate) SetUpstreamModelID(v uuid.UUID) *APIUsageUpdate {
+	_u.mutation.SetUpstreamModelID(v)
+	return _u
+}
+
+// SetNillableUpstreamModelID sets the "upstream_model_id" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableUpstreamModelID(v *uuid.UUID) *APIUsageUpdate {
+	if v != nil {
+		_u.SetUpstreamModelID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelID clears the value of the "upstream_model_id" field.
+func (_u *APIUsageUpdate) ClearUpstreamModelID() *APIUsageUpdate {
+	_u.mutation.ClearUpstreamModelID()
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *APIUsageUpdate) SetBillingGroupID(v uuid.UUID) *APIUsageUpdate {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableBillingGroupID(v *uuid.UUID) *APIUsageUpdate {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
+	return _u
+}
+
+// ClearBillingGroupID clears the value of the "billing_group_id" field.
+func (_u *APIUsageUpdate) ClearBillingGroupID() *APIUsageUpdate {
+	_u.mutation.ClearBillingGroupID()
+	return _u
+}
+
 // SetRequestID sets the "request_id" field.
 func (_u *APIUsageUpdate) SetRequestID(v uuid.UUID) *APIUsageUpdate {
 	_u.mutation.SetRequestID(v)
@@ -123,6 +165,90 @@ func (_u *APIUsageUpdate) AddInputTokens(v int) *APIUsageUpdate {
 	return _u
 }
 
+// SetUncachedInputTokens sets the "uncached_input_tokens" field.
+func (_u *APIUsageUpdate) SetUncachedInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.ResetUncachedInputTokens()
+	_u.mutation.SetUncachedInputTokens(v)
+	return _u
+}
+
+// SetNillableUncachedInputTokens sets the "uncached_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableUncachedInputTokens(v *int) *APIUsageUpdate {
+	if v != nil {
+		_u.SetUncachedInputTokens(*v)
+	}
+	return _u
+}
+
+// AddUncachedInputTokens adds value to the "uncached_input_tokens" field.
+func (_u *APIUsageUpdate) AddUncachedInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.AddUncachedInputTokens(v)
+	return _u
+}
+
+// SetCacheReadInputTokens sets the "cache_read_input_tokens" field.
+func (_u *APIUsageUpdate) SetCacheReadInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.ResetCacheReadInputTokens()
+	_u.mutation.SetCacheReadInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheReadInputTokens sets the "cache_read_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheReadInputTokens(v *int) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheReadInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheReadInputTokens adds value to the "cache_read_input_tokens" field.
+func (_u *APIUsageUpdate) AddCacheReadInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.AddCacheReadInputTokens(v)
+	return _u
+}
+
+// SetCacheWriteInputTokens sets the "cache_write_input_tokens" field.
+func (_u *APIUsageUpdate) SetCacheWriteInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.ResetCacheWriteInputTokens()
+	_u.mutation.SetCacheWriteInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheWriteInputTokens sets the "cache_write_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheWriteInputTokens(v *int) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheWriteInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheWriteInputTokens adds value to the "cache_write_input_tokens" field.
+func (_u *APIUsageUpdate) AddCacheWriteInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.AddCacheWriteInputTokens(v)
+	return _u
+}
+
+// SetCacheWrite1hInputTokens sets the "cache_write_1h_input_tokens" field.
+func (_u *APIUsageUpdate) SetCacheWrite1hInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.ResetCacheWrite1hInputTokens()
+	_u.mutation.SetCacheWrite1hInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheWrite1hInputTokens sets the "cache_write_1h_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheWrite1hInputTokens(v *int) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheWrite1hInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheWrite1hInputTokens adds value to the "cache_write_1h_input_tokens" field.
+func (_u *APIUsageUpdate) AddCacheWrite1hInputTokens(v int) *APIUsageUpdate {
+	_u.mutation.AddCacheWrite1hInputTokens(v)
+	return _u
+}
+
 // SetOutputTokens sets the "output_tokens" field.
 func (_u *APIUsageUpdate) SetOutputTokens(v int) *APIUsageUpdate {
 	_u.mutation.ResetOutputTokens()
@@ -141,6 +267,174 @@ func (_u *APIUsageUpdate) SetNillableOutputTokens(v *int) *APIUsageUpdate {
 // AddOutputTokens adds value to the "output_tokens" field.
 func (_u *APIUsageUpdate) AddOutputTokens(v int) *APIUsageUpdate {
 	_u.mutation.AddOutputTokens(v)
+	return _u
+}
+
+// SetInputPriceMicros sets the "input_price_micros" field.
+func (_u *APIUsageUpdate) SetInputPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetInputPriceMicros()
+	_u.mutation.SetInputPriceMicros(v)
+	return _u
+}
+
+// SetNillableInputPriceMicros sets the "input_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableInputPriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetInputPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddInputPriceMicros adds value to the "input_price_micros" field.
+func (_u *APIUsageUpdate) AddInputPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddInputPriceMicros(v)
+	return _u
+}
+
+// SetOutputPriceMicros sets the "output_price_micros" field.
+func (_u *APIUsageUpdate) SetOutputPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetOutputPriceMicros()
+	_u.mutation.SetOutputPriceMicros(v)
+	return _u
+}
+
+// SetNillableOutputPriceMicros sets the "output_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableOutputPriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetOutputPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddOutputPriceMicros adds value to the "output_price_micros" field.
+func (_u *APIUsageUpdate) AddOutputPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddOutputPriceMicros(v)
+	return _u
+}
+
+// SetCacheReadPriceMicros sets the "cache_read_price_micros" field.
+func (_u *APIUsageUpdate) SetCacheReadPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetCacheReadPriceMicros()
+	_u.mutation.SetCacheReadPriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheReadPriceMicros sets the "cache_read_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheReadPriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheReadPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheReadPriceMicros adds value to the "cache_read_price_micros" field.
+func (_u *APIUsageUpdate) AddCacheReadPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddCacheReadPriceMicros(v)
+	return _u
+}
+
+// SetCacheWritePriceMicros sets the "cache_write_price_micros" field.
+func (_u *APIUsageUpdate) SetCacheWritePriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetCacheWritePriceMicros()
+	_u.mutation.SetCacheWritePriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheWritePriceMicros sets the "cache_write_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheWritePriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheWritePriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheWritePriceMicros adds value to the "cache_write_price_micros" field.
+func (_u *APIUsageUpdate) AddCacheWritePriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddCacheWritePriceMicros(v)
+	return _u
+}
+
+// SetCacheWrite1hPriceMicros sets the "cache_write_1h_price_micros" field.
+func (_u *APIUsageUpdate) SetCacheWrite1hPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetCacheWrite1hPriceMicros()
+	_u.mutation.SetCacheWrite1hPriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheWrite1hPriceMicros sets the "cache_write_1h_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCacheWrite1hPriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCacheWrite1hPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheWrite1hPriceMicros adds value to the "cache_write_1h_price_micros" field.
+func (_u *APIUsageUpdate) AddCacheWrite1hPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddCacheWrite1hPriceMicros(v)
+	return _u
+}
+
+// SetRequestPriceMicros sets the "request_price_micros" field.
+func (_u *APIUsageUpdate) SetRequestPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetRequestPriceMicros()
+	_u.mutation.SetRequestPriceMicros(v)
+	return _u
+}
+
+// SetNillableRequestPriceMicros sets the "request_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableRequestPriceMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetRequestPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddRequestPriceMicros adds value to the "request_price_micros" field.
+func (_u *APIUsageUpdate) AddRequestPriceMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddRequestPriceMicros(v)
+	return _u
+}
+
+// SetBaseCostMicros sets the "base_cost_micros" field.
+func (_u *APIUsageUpdate) SetBaseCostMicros(v int64) *APIUsageUpdate {
+	_u.mutation.ResetBaseCostMicros()
+	_u.mutation.SetBaseCostMicros(v)
+	return _u
+}
+
+// SetNillableBaseCostMicros sets the "base_cost_micros" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableBaseCostMicros(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetBaseCostMicros(*v)
+	}
+	return _u
+}
+
+// AddBaseCostMicros adds value to the "base_cost_micros" field.
+func (_u *APIUsageUpdate) AddBaseCostMicros(v int64) *APIUsageUpdate {
+	_u.mutation.AddBaseCostMicros(v)
+	return _u
+}
+
+// SetMultiplierBps sets the "multiplier_bps" field.
+func (_u *APIUsageUpdate) SetMultiplierBps(v int64) *APIUsageUpdate {
+	_u.mutation.ResetMultiplierBps()
+	_u.mutation.SetMultiplierBps(v)
+	return _u
+}
+
+// SetNillableMultiplierBps sets the "multiplier_bps" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableMultiplierBps(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetMultiplierBps(*v)
+	}
+	return _u
+}
+
+// AddMultiplierBps adds value to the "multiplier_bps" field.
+func (_u *APIUsageUpdate) AddMultiplierBps(v int64) *APIUsageUpdate {
+	_u.mutation.AddMultiplierBps(v)
 	return _u
 }
 
@@ -214,6 +508,76 @@ func (_u *APIUsageUpdate) SetNillableUpstreamRequestID(v *string) *APIUsageUpdat
 	return _u
 }
 
+// SetModelName sets the "model_name" field.
+func (_u *APIUsageUpdate) SetModelName(v string) *APIUsageUpdate {
+	_u.mutation.SetModelName(v)
+	return _u
+}
+
+// SetNillableModelName sets the "model_name" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableModelName(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetModelName(*v)
+	}
+	return _u
+}
+
+// SetUpstreamModelName sets the "upstream_model_name" field.
+func (_u *APIUsageUpdate) SetUpstreamModelName(v string) *APIUsageUpdate {
+	_u.mutation.SetUpstreamModelName(v)
+	return _u
+}
+
+// SetNillableUpstreamModelName sets the "upstream_model_name" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableUpstreamModelName(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetUpstreamModelName(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupCode sets the "billing_group_code" field.
+func (_u *APIUsageUpdate) SetBillingGroupCode(v string) *APIUsageUpdate {
+	_u.mutation.SetBillingGroupCode(v)
+	return _u
+}
+
+// SetNillableBillingGroupCode sets the "billing_group_code" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableBillingGroupCode(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetBillingGroupCode(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupName sets the "billing_group_name" field.
+func (_u *APIUsageUpdate) SetBillingGroupName(v string) *APIUsageUpdate {
+	_u.mutation.SetBillingGroupName(v)
+	return _u
+}
+
+// SetNillableBillingGroupName sets the "billing_group_name" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableBillingGroupName(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetBillingGroupName(*v)
+	}
+	return _u
+}
+
+// SetCalculationVersion sets the "calculation_version" field.
+func (_u *APIUsageUpdate) SetCalculationVersion(v string) *APIUsageUpdate {
+	_u.mutation.SetCalculationVersion(v)
+	return _u
+}
+
+// SetNillableCalculationVersion sets the "calculation_version" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableCalculationVersion(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetCalculationVersion(*v)
+	}
+	return _u
+}
+
 // SetFinishedAt sets the "finished_at" field.
 func (_u *APIUsageUpdate) SetFinishedAt(v time.Time) *APIUsageUpdate {
 	_u.mutation.SetFinishedAt(v)
@@ -243,6 +607,16 @@ func (_u *APIUsageUpdate) SetModelRoute(v *ModelRoute) *APIUsageUpdate {
 	return _u.SetModelRouteID(v.ID)
 }
 
+// SetUpstreamModel sets the "upstream_model" edge to the UpstreamModel entity.
+func (_u *APIUsageUpdate) SetUpstreamModel(v *UpstreamModel) *APIUsageUpdate {
+	return _u.SetUpstreamModelID(v.ID)
+}
+
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *APIUsageUpdate) SetBillingGroup(v *BillingGroup) *APIUsageUpdate {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // Mutation returns the APIUsageMutation object of the builder.
 func (_u *APIUsageUpdate) Mutation() *APIUsageMutation {
 	return _u.mutation
@@ -263,6 +637,18 @@ func (_u *APIUsageUpdate) ClearAPIKey() *APIUsageUpdate {
 // ClearModelRoute clears the "model_route" edge to the ModelRoute entity.
 func (_u *APIUsageUpdate) ClearModelRoute() *APIUsageUpdate {
 	_u.mutation.ClearModelRoute()
+	return _u
+}
+
+// ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
+func (_u *APIUsageUpdate) ClearUpstreamModel() *APIUsageUpdate {
+	_u.mutation.ClearUpstreamModel()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *APIUsageUpdate) ClearBillingGroup() *APIUsageUpdate {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -305,9 +691,69 @@ func (_u *APIUsageUpdate) check() error {
 			return &ValidationError{Name: "input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.input_tokens": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UncachedInputTokens(); ok {
+		if err := apiusage.UncachedInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "uncached_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.uncached_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheReadInputTokens(); ok {
+		if err := apiusage.CacheReadInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_read_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_read_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWriteInputTokens(); ok {
+		if err := apiusage.CacheWriteInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWrite1hInputTokens(); ok {
+		if err := apiusage.CacheWrite1hInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_1h_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_1h_input_tokens": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.OutputTokens(); ok {
 		if err := apiusage.OutputTokensValidator(v); err != nil {
 			return &ValidationError{Name: "output_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.output_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.InputPriceMicros(); ok {
+		if err := apiusage.InputPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "input_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.input_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutputPriceMicros(); ok {
+		if err := apiusage.OutputPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "output_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.output_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheReadPriceMicros(); ok {
+		if err := apiusage.CacheReadPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_read_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_read_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWritePriceMicros(); ok {
+		if err := apiusage.CacheWritePriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWrite1hPriceMicros(); ok {
+		if err := apiusage.CacheWrite1hPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_1h_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_1h_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestPriceMicros(); ok {
+		if err := apiusage.RequestPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "request_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.request_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BaseCostMicros(); ok {
+		if err := apiusage.BaseCostMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "base_cost_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.base_cost_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.MultiplierBps(); ok {
+		if err := apiusage.MultiplierBpsValidator(v); err != nil {
+			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "APIUsage.multiplier_bps": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CostMicros(); ok {
@@ -323,6 +769,31 @@ func (_u *APIUsageUpdate) check() error {
 	if v, ok := _u.mutation.UpstreamRequestID(); ok {
 		if err := apiusage.UpstreamRequestIDValidator(v); err != nil {
 			return &ValidationError{Name: "upstream_request_id", err: fmt.Errorf(`ent: validator failed for field "APIUsage.upstream_request_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ModelName(); ok {
+		if err := apiusage.ModelNameValidator(v); err != nil {
+			return &ValidationError{Name: "model_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.model_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.UpstreamModelName(); ok {
+		if err := apiusage.UpstreamModelNameValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_model_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.upstream_model_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingGroupCode(); ok {
+		if err := apiusage.BillingGroupCodeValidator(v); err != nil {
+			return &ValidationError{Name: "billing_group_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.billing_group_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingGroupName(); ok {
+		if err := apiusage.BillingGroupNameValidator(v); err != nil {
+			return &ValidationError{Name: "billing_group_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.billing_group_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CalculationVersion(); ok {
+		if err := apiusage.CalculationVersionValidator(v); err != nil {
+			return &ValidationError{Name: "calculation_version", err: fmt.Errorf(`ent: validator failed for field "APIUsage.calculation_version": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -361,11 +832,83 @@ func (_u *APIUsageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedInputTokens(); ok {
 		_spec.AddField(apiusage.FieldInputTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.UncachedInputTokens(); ok {
+		_spec.SetField(apiusage.FieldUncachedInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUncachedInputTokens(); ok {
+		_spec.AddField(apiusage.FieldUncachedInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheReadInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheReadInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheReadInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheWriteInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheWriteInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWriteInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheWriteInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheWrite1hInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheWrite1hInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWrite1hInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheWrite1hInputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.OutputTokens(); ok {
 		_spec.SetField(apiusage.FieldOutputTokens, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedOutputTokens(); ok {
 		_spec.AddField(apiusage.FieldOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.InputPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldInputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInputPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldInputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.OutputPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldOutputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutputPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldOutputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheReadPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheReadPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheReadPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheWritePriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheWritePriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWritePriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheWritePriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheWrite1hPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheWrite1hPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWrite1hPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheWrite1hPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RequestPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldRequestPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRequestPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldRequestPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.BaseCostMicros(); ok {
+		_spec.SetField(apiusage.FieldBaseCostMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBaseCostMicros(); ok {
+		_spec.AddField(apiusage.FieldBaseCostMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.MultiplierBps(); ok {
+		_spec.SetField(apiusage.FieldMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedMultiplierBps(); ok {
+		_spec.AddField(apiusage.FieldMultiplierBps, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.CostMicros(); ok {
 		_spec.SetField(apiusage.FieldCostMicros, field.TypeInt64, value)
@@ -384,6 +927,21 @@ func (_u *APIUsageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpstreamRequestID(); ok {
 		_spec.SetField(apiusage.FieldUpstreamRequestID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ModelName(); ok {
+		_spec.SetField(apiusage.FieldModelName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UpstreamModelName(); ok {
+		_spec.SetField(apiusage.FieldUpstreamModelName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingGroupCode(); ok {
+		_spec.SetField(apiusage.FieldBillingGroupCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingGroupName(); ok {
+		_spec.SetField(apiusage.FieldBillingGroupName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CalculationVersion(); ok {
+		_spec.SetField(apiusage.FieldCalculationVersion, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(apiusage.FieldFinishedAt, field.TypeTime, value)
@@ -475,6 +1033,64 @@ func (_u *APIUsageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.UpstreamModelCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.UpstreamModelTable,
+			Columns: []string{apiusage.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UpstreamModelIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.UpstreamModelTable,
+			Columns: []string{apiusage.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.BillingGroupTable,
+			Columns: []string{apiusage.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.BillingGroupTable,
+			Columns: []string{apiusage.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{apiusage.Label}
@@ -537,6 +1153,46 @@ func (_u *APIUsageUpdateOne) SetNillableModelRouteID(v *uuid.UUID) *APIUsageUpda
 	return _u
 }
 
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (_u *APIUsageUpdateOne) SetUpstreamModelID(v uuid.UUID) *APIUsageUpdateOne {
+	_u.mutation.SetUpstreamModelID(v)
+	return _u
+}
+
+// SetNillableUpstreamModelID sets the "upstream_model_id" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableUpstreamModelID(v *uuid.UUID) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetUpstreamModelID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelID clears the value of the "upstream_model_id" field.
+func (_u *APIUsageUpdateOne) ClearUpstreamModelID() *APIUsageUpdateOne {
+	_u.mutation.ClearUpstreamModelID()
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *APIUsageUpdateOne) SetBillingGroupID(v uuid.UUID) *APIUsageUpdateOne {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
+	return _u
+}
+
+// ClearBillingGroupID clears the value of the "billing_group_id" field.
+func (_u *APIUsageUpdateOne) ClearBillingGroupID() *APIUsageUpdateOne {
+	_u.mutation.ClearBillingGroupID()
+	return _u
+}
+
 // SetRequestID sets the "request_id" field.
 func (_u *APIUsageUpdateOne) SetRequestID(v uuid.UUID) *APIUsageUpdateOne {
 	_u.mutation.SetRequestID(v)
@@ -586,6 +1242,90 @@ func (_u *APIUsageUpdateOne) AddInputTokens(v int) *APIUsageUpdateOne {
 	return _u
 }
 
+// SetUncachedInputTokens sets the "uncached_input_tokens" field.
+func (_u *APIUsageUpdateOne) SetUncachedInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.ResetUncachedInputTokens()
+	_u.mutation.SetUncachedInputTokens(v)
+	return _u
+}
+
+// SetNillableUncachedInputTokens sets the "uncached_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableUncachedInputTokens(v *int) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetUncachedInputTokens(*v)
+	}
+	return _u
+}
+
+// AddUncachedInputTokens adds value to the "uncached_input_tokens" field.
+func (_u *APIUsageUpdateOne) AddUncachedInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.AddUncachedInputTokens(v)
+	return _u
+}
+
+// SetCacheReadInputTokens sets the "cache_read_input_tokens" field.
+func (_u *APIUsageUpdateOne) SetCacheReadInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheReadInputTokens()
+	_u.mutation.SetCacheReadInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheReadInputTokens sets the "cache_read_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheReadInputTokens(v *int) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheReadInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheReadInputTokens adds value to the "cache_read_input_tokens" field.
+func (_u *APIUsageUpdateOne) AddCacheReadInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.AddCacheReadInputTokens(v)
+	return _u
+}
+
+// SetCacheWriteInputTokens sets the "cache_write_input_tokens" field.
+func (_u *APIUsageUpdateOne) SetCacheWriteInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheWriteInputTokens()
+	_u.mutation.SetCacheWriteInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheWriteInputTokens sets the "cache_write_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheWriteInputTokens(v *int) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheWriteInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheWriteInputTokens adds value to the "cache_write_input_tokens" field.
+func (_u *APIUsageUpdateOne) AddCacheWriteInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.AddCacheWriteInputTokens(v)
+	return _u
+}
+
+// SetCacheWrite1hInputTokens sets the "cache_write_1h_input_tokens" field.
+func (_u *APIUsageUpdateOne) SetCacheWrite1hInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheWrite1hInputTokens()
+	_u.mutation.SetCacheWrite1hInputTokens(v)
+	return _u
+}
+
+// SetNillableCacheWrite1hInputTokens sets the "cache_write_1h_input_tokens" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheWrite1hInputTokens(v *int) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheWrite1hInputTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheWrite1hInputTokens adds value to the "cache_write_1h_input_tokens" field.
+func (_u *APIUsageUpdateOne) AddCacheWrite1hInputTokens(v int) *APIUsageUpdateOne {
+	_u.mutation.AddCacheWrite1hInputTokens(v)
+	return _u
+}
+
 // SetOutputTokens sets the "output_tokens" field.
 func (_u *APIUsageUpdateOne) SetOutputTokens(v int) *APIUsageUpdateOne {
 	_u.mutation.ResetOutputTokens()
@@ -604,6 +1344,174 @@ func (_u *APIUsageUpdateOne) SetNillableOutputTokens(v *int) *APIUsageUpdateOne 
 // AddOutputTokens adds value to the "output_tokens" field.
 func (_u *APIUsageUpdateOne) AddOutputTokens(v int) *APIUsageUpdateOne {
 	_u.mutation.AddOutputTokens(v)
+	return _u
+}
+
+// SetInputPriceMicros sets the "input_price_micros" field.
+func (_u *APIUsageUpdateOne) SetInputPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetInputPriceMicros()
+	_u.mutation.SetInputPriceMicros(v)
+	return _u
+}
+
+// SetNillableInputPriceMicros sets the "input_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableInputPriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetInputPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddInputPriceMicros adds value to the "input_price_micros" field.
+func (_u *APIUsageUpdateOne) AddInputPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddInputPriceMicros(v)
+	return _u
+}
+
+// SetOutputPriceMicros sets the "output_price_micros" field.
+func (_u *APIUsageUpdateOne) SetOutputPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetOutputPriceMicros()
+	_u.mutation.SetOutputPriceMicros(v)
+	return _u
+}
+
+// SetNillableOutputPriceMicros sets the "output_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableOutputPriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetOutputPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddOutputPriceMicros adds value to the "output_price_micros" field.
+func (_u *APIUsageUpdateOne) AddOutputPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddOutputPriceMicros(v)
+	return _u
+}
+
+// SetCacheReadPriceMicros sets the "cache_read_price_micros" field.
+func (_u *APIUsageUpdateOne) SetCacheReadPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheReadPriceMicros()
+	_u.mutation.SetCacheReadPriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheReadPriceMicros sets the "cache_read_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheReadPriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheReadPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheReadPriceMicros adds value to the "cache_read_price_micros" field.
+func (_u *APIUsageUpdateOne) AddCacheReadPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddCacheReadPriceMicros(v)
+	return _u
+}
+
+// SetCacheWritePriceMicros sets the "cache_write_price_micros" field.
+func (_u *APIUsageUpdateOne) SetCacheWritePriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheWritePriceMicros()
+	_u.mutation.SetCacheWritePriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheWritePriceMicros sets the "cache_write_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheWritePriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheWritePriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheWritePriceMicros adds value to the "cache_write_price_micros" field.
+func (_u *APIUsageUpdateOne) AddCacheWritePriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddCacheWritePriceMicros(v)
+	return _u
+}
+
+// SetCacheWrite1hPriceMicros sets the "cache_write_1h_price_micros" field.
+func (_u *APIUsageUpdateOne) SetCacheWrite1hPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetCacheWrite1hPriceMicros()
+	_u.mutation.SetCacheWrite1hPriceMicros(v)
+	return _u
+}
+
+// SetNillableCacheWrite1hPriceMicros sets the "cache_write_1h_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCacheWrite1hPriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCacheWrite1hPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddCacheWrite1hPriceMicros adds value to the "cache_write_1h_price_micros" field.
+func (_u *APIUsageUpdateOne) AddCacheWrite1hPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddCacheWrite1hPriceMicros(v)
+	return _u
+}
+
+// SetRequestPriceMicros sets the "request_price_micros" field.
+func (_u *APIUsageUpdateOne) SetRequestPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetRequestPriceMicros()
+	_u.mutation.SetRequestPriceMicros(v)
+	return _u
+}
+
+// SetNillableRequestPriceMicros sets the "request_price_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableRequestPriceMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetRequestPriceMicros(*v)
+	}
+	return _u
+}
+
+// AddRequestPriceMicros adds value to the "request_price_micros" field.
+func (_u *APIUsageUpdateOne) AddRequestPriceMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddRequestPriceMicros(v)
+	return _u
+}
+
+// SetBaseCostMicros sets the "base_cost_micros" field.
+func (_u *APIUsageUpdateOne) SetBaseCostMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetBaseCostMicros()
+	_u.mutation.SetBaseCostMicros(v)
+	return _u
+}
+
+// SetNillableBaseCostMicros sets the "base_cost_micros" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableBaseCostMicros(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetBaseCostMicros(*v)
+	}
+	return _u
+}
+
+// AddBaseCostMicros adds value to the "base_cost_micros" field.
+func (_u *APIUsageUpdateOne) AddBaseCostMicros(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddBaseCostMicros(v)
+	return _u
+}
+
+// SetMultiplierBps sets the "multiplier_bps" field.
+func (_u *APIUsageUpdateOne) SetMultiplierBps(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetMultiplierBps()
+	_u.mutation.SetMultiplierBps(v)
+	return _u
+}
+
+// SetNillableMultiplierBps sets the "multiplier_bps" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableMultiplierBps(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetMultiplierBps(*v)
+	}
+	return _u
+}
+
+// AddMultiplierBps adds value to the "multiplier_bps" field.
+func (_u *APIUsageUpdateOne) AddMultiplierBps(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddMultiplierBps(v)
 	return _u
 }
 
@@ -677,6 +1585,76 @@ func (_u *APIUsageUpdateOne) SetNillableUpstreamRequestID(v *string) *APIUsageUp
 	return _u
 }
 
+// SetModelName sets the "model_name" field.
+func (_u *APIUsageUpdateOne) SetModelName(v string) *APIUsageUpdateOne {
+	_u.mutation.SetModelName(v)
+	return _u
+}
+
+// SetNillableModelName sets the "model_name" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableModelName(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetModelName(*v)
+	}
+	return _u
+}
+
+// SetUpstreamModelName sets the "upstream_model_name" field.
+func (_u *APIUsageUpdateOne) SetUpstreamModelName(v string) *APIUsageUpdateOne {
+	_u.mutation.SetUpstreamModelName(v)
+	return _u
+}
+
+// SetNillableUpstreamModelName sets the "upstream_model_name" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableUpstreamModelName(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetUpstreamModelName(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupCode sets the "billing_group_code" field.
+func (_u *APIUsageUpdateOne) SetBillingGroupCode(v string) *APIUsageUpdateOne {
+	_u.mutation.SetBillingGroupCode(v)
+	return _u
+}
+
+// SetNillableBillingGroupCode sets the "billing_group_code" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableBillingGroupCode(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupCode(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupName sets the "billing_group_name" field.
+func (_u *APIUsageUpdateOne) SetBillingGroupName(v string) *APIUsageUpdateOne {
+	_u.mutation.SetBillingGroupName(v)
+	return _u
+}
+
+// SetNillableBillingGroupName sets the "billing_group_name" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableBillingGroupName(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupName(*v)
+	}
+	return _u
+}
+
+// SetCalculationVersion sets the "calculation_version" field.
+func (_u *APIUsageUpdateOne) SetCalculationVersion(v string) *APIUsageUpdateOne {
+	_u.mutation.SetCalculationVersion(v)
+	return _u
+}
+
+// SetNillableCalculationVersion sets the "calculation_version" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableCalculationVersion(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetCalculationVersion(*v)
+	}
+	return _u
+}
+
 // SetFinishedAt sets the "finished_at" field.
 func (_u *APIUsageUpdateOne) SetFinishedAt(v time.Time) *APIUsageUpdateOne {
 	_u.mutation.SetFinishedAt(v)
@@ -706,6 +1684,16 @@ func (_u *APIUsageUpdateOne) SetModelRoute(v *ModelRoute) *APIUsageUpdateOne {
 	return _u.SetModelRouteID(v.ID)
 }
 
+// SetUpstreamModel sets the "upstream_model" edge to the UpstreamModel entity.
+func (_u *APIUsageUpdateOne) SetUpstreamModel(v *UpstreamModel) *APIUsageUpdateOne {
+	return _u.SetUpstreamModelID(v.ID)
+}
+
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *APIUsageUpdateOne) SetBillingGroup(v *BillingGroup) *APIUsageUpdateOne {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // Mutation returns the APIUsageMutation object of the builder.
 func (_u *APIUsageUpdateOne) Mutation() *APIUsageMutation {
 	return _u.mutation
@@ -726,6 +1714,18 @@ func (_u *APIUsageUpdateOne) ClearAPIKey() *APIUsageUpdateOne {
 // ClearModelRoute clears the "model_route" edge to the ModelRoute entity.
 func (_u *APIUsageUpdateOne) ClearModelRoute() *APIUsageUpdateOne {
 	_u.mutation.ClearModelRoute()
+	return _u
+}
+
+// ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
+func (_u *APIUsageUpdateOne) ClearUpstreamModel() *APIUsageUpdateOne {
+	_u.mutation.ClearUpstreamModel()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *APIUsageUpdateOne) ClearBillingGroup() *APIUsageUpdateOne {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -781,9 +1781,69 @@ func (_u *APIUsageUpdateOne) check() error {
 			return &ValidationError{Name: "input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.input_tokens": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UncachedInputTokens(); ok {
+		if err := apiusage.UncachedInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "uncached_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.uncached_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheReadInputTokens(); ok {
+		if err := apiusage.CacheReadInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_read_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_read_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWriteInputTokens(); ok {
+		if err := apiusage.CacheWriteInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_input_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWrite1hInputTokens(); ok {
+		if err := apiusage.CacheWrite1hInputTokensValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_1h_input_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_1h_input_tokens": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.OutputTokens(); ok {
 		if err := apiusage.OutputTokensValidator(v); err != nil {
 			return &ValidationError{Name: "output_tokens", err: fmt.Errorf(`ent: validator failed for field "APIUsage.output_tokens": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.InputPriceMicros(); ok {
+		if err := apiusage.InputPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "input_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.input_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutputPriceMicros(); ok {
+		if err := apiusage.OutputPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "output_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.output_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheReadPriceMicros(); ok {
+		if err := apiusage.CacheReadPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_read_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_read_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWritePriceMicros(); ok {
+		if err := apiusage.CacheWritePriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CacheWrite1hPriceMicros(); ok {
+		if err := apiusage.CacheWrite1hPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "cache_write_1h_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.cache_write_1h_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestPriceMicros(); ok {
+		if err := apiusage.RequestPriceMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "request_price_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.request_price_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BaseCostMicros(); ok {
+		if err := apiusage.BaseCostMicrosValidator(v); err != nil {
+			return &ValidationError{Name: "base_cost_micros", err: fmt.Errorf(`ent: validator failed for field "APIUsage.base_cost_micros": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.MultiplierBps(); ok {
+		if err := apiusage.MultiplierBpsValidator(v); err != nil {
+			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "APIUsage.multiplier_bps": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CostMicros(); ok {
@@ -799,6 +1859,31 @@ func (_u *APIUsageUpdateOne) check() error {
 	if v, ok := _u.mutation.UpstreamRequestID(); ok {
 		if err := apiusage.UpstreamRequestIDValidator(v); err != nil {
 			return &ValidationError{Name: "upstream_request_id", err: fmt.Errorf(`ent: validator failed for field "APIUsage.upstream_request_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ModelName(); ok {
+		if err := apiusage.ModelNameValidator(v); err != nil {
+			return &ValidationError{Name: "model_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.model_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.UpstreamModelName(); ok {
+		if err := apiusage.UpstreamModelNameValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_model_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.upstream_model_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingGroupCode(); ok {
+		if err := apiusage.BillingGroupCodeValidator(v); err != nil {
+			return &ValidationError{Name: "billing_group_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.billing_group_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingGroupName(); ok {
+		if err := apiusage.BillingGroupNameValidator(v); err != nil {
+			return &ValidationError{Name: "billing_group_name", err: fmt.Errorf(`ent: validator failed for field "APIUsage.billing_group_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CalculationVersion(); ok {
+		if err := apiusage.CalculationVersionValidator(v); err != nil {
+			return &ValidationError{Name: "calculation_version", err: fmt.Errorf(`ent: validator failed for field "APIUsage.calculation_version": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -854,11 +1939,83 @@ func (_u *APIUsageUpdateOne) sqlSave(ctx context.Context) (_node *APIUsage, err 
 	if value, ok := _u.mutation.AddedInputTokens(); ok {
 		_spec.AddField(apiusage.FieldInputTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.UncachedInputTokens(); ok {
+		_spec.SetField(apiusage.FieldUncachedInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUncachedInputTokens(); ok {
+		_spec.AddField(apiusage.FieldUncachedInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheReadInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheReadInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheReadInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheWriteInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheWriteInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWriteInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheWriteInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CacheWrite1hInputTokens(); ok {
+		_spec.SetField(apiusage.FieldCacheWrite1hInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWrite1hInputTokens(); ok {
+		_spec.AddField(apiusage.FieldCacheWrite1hInputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.OutputTokens(); ok {
 		_spec.SetField(apiusage.FieldOutputTokens, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedOutputTokens(); ok {
 		_spec.AddField(apiusage.FieldOutputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.InputPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldInputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInputPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldInputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.OutputPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldOutputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutputPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldOutputPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheReadPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheReadPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheReadPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheWritePriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheWritePriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWritePriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheWritePriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CacheWrite1hPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldCacheWrite1hPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCacheWrite1hPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldCacheWrite1hPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RequestPriceMicros(); ok {
+		_spec.SetField(apiusage.FieldRequestPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRequestPriceMicros(); ok {
+		_spec.AddField(apiusage.FieldRequestPriceMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.BaseCostMicros(); ok {
+		_spec.SetField(apiusage.FieldBaseCostMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBaseCostMicros(); ok {
+		_spec.AddField(apiusage.FieldBaseCostMicros, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.MultiplierBps(); ok {
+		_spec.SetField(apiusage.FieldMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedMultiplierBps(); ok {
+		_spec.AddField(apiusage.FieldMultiplierBps, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.CostMicros(); ok {
 		_spec.SetField(apiusage.FieldCostMicros, field.TypeInt64, value)
@@ -877,6 +2034,21 @@ func (_u *APIUsageUpdateOne) sqlSave(ctx context.Context) (_node *APIUsage, err 
 	}
 	if value, ok := _u.mutation.UpstreamRequestID(); ok {
 		_spec.SetField(apiusage.FieldUpstreamRequestID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ModelName(); ok {
+		_spec.SetField(apiusage.FieldModelName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UpstreamModelName(); ok {
+		_spec.SetField(apiusage.FieldUpstreamModelName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingGroupCode(); ok {
+		_spec.SetField(apiusage.FieldBillingGroupCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingGroupName(); ok {
+		_spec.SetField(apiusage.FieldBillingGroupName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CalculationVersion(); ok {
+		_spec.SetField(apiusage.FieldCalculationVersion, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(apiusage.FieldFinishedAt, field.TypeTime, value)
@@ -961,6 +2133,64 @@ func (_u *APIUsageUpdateOne) sqlSave(ctx context.Context) (_node *APIUsage, err 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UpstreamModelCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.UpstreamModelTable,
+			Columns: []string{apiusage.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UpstreamModelIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.UpstreamModelTable,
+			Columns: []string{apiusage.UpstreamModelColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.BillingGroupTable,
+			Columns: []string{apiusage.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apiusage.BillingGroupTable,
+			Columns: []string{apiusage.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

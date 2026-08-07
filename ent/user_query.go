@@ -16,7 +16,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
+	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
 	"github.com/novro-gateway/novro/ent/usersession"
@@ -36,7 +38,9 @@ type UserQuery struct {
 	withAPIKeys       *APIKeyQuery
 	withWallet        *WalletQuery
 	withWalletEntries *WalletEntryQuery
+	withTopUpOrders   *TopUpOrderQuery
 	withAPIUsages     *APIUsageQuery
+	withBillingGroup  *BillingGroupQuery
 	modifiers         []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -184,6 +188,28 @@ func (_q *UserQuery) QueryWalletEntries() *WalletEntryQuery {
 	return query
 }
 
+// QueryTopUpOrders chains the current query on the "top_up_orders" edge.
+func (_q *UserQuery) QueryTopUpOrders() *TopUpOrderQuery {
+	query := (&TopUpOrderClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(topuporder.Table, topuporder.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TopUpOrdersTable, user.TopUpOrdersColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // QueryAPIUsages chains the current query on the "api_usages" edge.
 func (_q *UserQuery) QueryAPIUsages() *APIUsageQuery {
 	query := (&APIUsageClient{config: _q.config}).Query()
@@ -199,6 +225,28 @@ func (_q *UserQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryBillingGroup chains the current query on the "billing_group" edge.
+func (_q *UserQuery) QueryBillingGroup() *BillingGroupQuery {
+	query := (&BillingGroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, user.BillingGroupTable, user.BillingGroupColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -403,7 +451,9 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withAPIKeys:       _q.withAPIKeys.Clone(),
 		withWallet:        _q.withWallet.Clone(),
 		withWalletEntries: _q.withWalletEntries.Clone(),
+		withTopUpOrders:   _q.withTopUpOrders.Clone(),
 		withAPIUsages:     _q.withAPIUsages.Clone(),
+		withBillingGroup:  _q.withBillingGroup.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -465,6 +515,17 @@ func (_q *UserQuery) WithWalletEntries(opts ...func(*WalletEntryQuery)) *UserQue
 	return _q
 }
 
+// WithTopUpOrders tells the query-builder to eager-load the nodes that are connected to
+// the "top_up_orders" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithTopUpOrders(opts ...func(*TopUpOrderQuery)) *UserQuery {
+	query := (&TopUpOrderClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTopUpOrders = query
+	return _q
+}
+
 // WithAPIUsages tells the query-builder to eager-load the nodes that are connected to
 // the "api_usages" edge. The optional arguments are used to configure the query builder of the edge.
 func (_q *UserQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *UserQuery {
@@ -476,18 +537,29 @@ func (_q *UserQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *UserQuery {
 	return _q
 }
 
+// WithBillingGroup tells the query-builder to eager-load the nodes that are connected to
+// the "billing_group" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithBillingGroup(opts ...func(*BillingGroupQuery)) *UserQuery {
+	query := (&BillingGroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withBillingGroup = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
 // Example:
 //
 //	var v []struct {
-//		Username string `json:"username,omitempty"`
+//		BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.User.Query().
-//		GroupBy(user.FieldUsername).
+//		GroupBy(user.FieldBillingGroupID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
@@ -505,11 +577,11 @@ func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
 // Example:
 //
 //	var v []struct {
-//		Username string `json:"username,omitempty"`
+//		BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
 //	}
 //
 //	client.User.Query().
-//		Select(user.FieldUsername).
+//		Select(user.FieldBillingGroupID).
 //		Scan(ctx, &v)
 func (_q *UserQuery) Select(fields ...string) *UserSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -554,13 +626,15 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [6]bool{
+		loadedTypes = [8]bool{
 			_q.withSessions != nil,
 			_q.withIdentities != nil,
 			_q.withAPIKeys != nil,
 			_q.withWallet != nil,
 			_q.withWalletEntries != nil,
+			_q.withTopUpOrders != nil,
 			_q.withAPIUsages != nil,
+			_q.withBillingGroup != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -618,10 +692,23 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
+	if query := _q.withTopUpOrders; query != nil {
+		if err := _q.loadTopUpOrders(ctx, query, nodes,
+			func(n *User) { n.Edges.TopUpOrders = []*TopUpOrder{} },
+			func(n *User, e *TopUpOrder) { n.Edges.TopUpOrders = append(n.Edges.TopUpOrders, e) }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withAPIUsages; query != nil {
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *User) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *User, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withBillingGroup; query != nil {
+		if err := _q.loadBillingGroup(ctx, query, nodes, nil,
+			func(n *User, e *BillingGroup) { n.Edges.BillingGroup = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -778,6 +865,36 @@ func (_q *UserQuery) loadWalletEntries(ctx context.Context, query *WalletEntryQu
 	}
 	return nil
 }
+func (_q *UserQuery) loadTopUpOrders(ctx context.Context, query *TopUpOrderQuery, nodes []*User, init func(*User), assign func(*User, *TopUpOrder)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(topuporder.FieldUserID)
+	}
+	query.Where(predicate.TopUpOrder(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.TopUpOrdersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
 func (_q *UserQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, nodes []*User, init func(*User), assign func(*User, *APIUsage)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[uuid.UUID]*User)
@@ -805,6 +922,38 @@ func (_q *UserQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, no
 			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadBillingGroup(ctx context.Context, query *BillingGroupQuery, nodes []*User, init func(*User), assign func(*User, *BillingGroup)) error {
+	ids := make([]uuid.UUID, 0, len(nodes))
+	nodeids := make(map[uuid.UUID][]*User)
+	for i := range nodes {
+		if nodes[i].BillingGroupID == nil {
+			continue
+		}
+		fk := *nodes[i].BillingGroupID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(billinggroup.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "billing_group_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
 	}
 	return nil
 }
@@ -836,6 +985,9 @@ func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != user.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withBillingGroup != nil {
+			_spec.Node.AddColumnOnce(user.FieldBillingGroupID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
