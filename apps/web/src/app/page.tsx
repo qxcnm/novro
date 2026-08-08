@@ -44,7 +44,7 @@ export default function Home() {
             <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl lg:min-w-0 lg:flex-1 lg:max-w-4xl">
                 <Badge variant="outline">Novro Gateway · 客户主页</Badge>
-                <h1 className="mt-5 max-w-none text-3xl leading-tight font-semibold tracking-tight sm:text-5xl lg:text-5xl xl:text-6xl">
+                <h1 className="mt-5 max-w-none text-xl leading-tight font-semibold tracking-tight sm:text-2xl xl:text-3xl">
                   一个入口，连接你的模型工作流
                 </h1>
                 <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">

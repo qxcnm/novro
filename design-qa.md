@@ -60,6 +60,51 @@ The lower enabled-state and test-email cards are not shown in the saved desktop 
 
 final result: passed
 
+## Homepage Headline Scale QA (2026-08-08)
+
+### Comparison Target
+
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-38c2f4a5-6c3c-4ebd-83be-fbf9bacbfa99.png`
+- Browser-rendered desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\home-headline-desktop-2048.png`
+- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\home-headline-mobile-390.png`
+- Focused combined comparison: `C:\Users\qxnm\Data\Code\novro\tmp\home-headline-comparison.png`
+- Route: `/` via local Next.js preview at `http://127.0.0.1:3001/`
+- Viewports: 2048 x 967 desktop and 390 x 844 mobile
+- State: public, signed-out, light theme
+
+### Full-View Comparison Evidence
+
+The source screenshot's red-boxed homepage headline was compared with the updated desktop capture at the same 2048px viewport width. The implementation keeps the badge, copy, CTA row, overview panel, and lower model/status sections in their existing positions while reducing only the headline's responsive type scale.
+
+### Focused Region Evidence
+
+The combined comparison image places the source headline crop beside the updated headline crop. The source renders at approximately 60px (`xl:text-6xl`); the updated desktop headline renders at 30px (`xl:text-3xl`) with a 37.5px line box. The mobile capture renders the same headline at 20px with a single clean line at the tested 390px viewport.
+
+### Findings
+
+- No remaining P0, P1, or P2 visual, responsive, accessibility, or interaction findings were identified for the requested headline change.
+- The smaller desktop headline is an intentional deviation from the supplied screenshot and directly satisfies the user's request; no surrounding typography was changed.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: the existing Geist stack, semibold weight, leading, and zero letter spacing remain unchanged; only responsive sizes changed to `text-xl`, `sm:text-2xl`, and `xl:text-3xl`.
+- Spacing and layout rhythm: desktop title bounds were 896px wide by 37.5px high; the overview panel begins below the hero without overlap. At 390px, `documentElement.scrollWidth === documentElement.clientWidth === 375`, indicating no horizontal overflow after the browser scrollbar is accounted for.
+- Colors and visual tokens: the existing neutral light-theme tokens, borders, status green, and button treatments are unchanged.
+- Image quality and asset fidelity: the page contains no source-dependent raster imagery; existing Lucide icons and logo treatment remain unchanged.
+- Copy and content: the Chinese headline, supporting description, CTA labels, and overview copy remain unchanged.
+
+### Primary Interactions Checked
+
+- Desktop hero links remain visible and enabled below/alongside the resized title.
+- Mobile hero links remain visible, keyboard-accessible links and do not overlap the description or overview panel.
+- Browser console inspection contained no warning or error entries for the homepage capture.
+
+### Comparison History
+
+- Pass 1: source and updated desktop/mobile captures were compared in the combined focused artifact. No actionable P0/P1/P2 mismatch remained after the headline-only change.
+
+final result: passed
+
 ---
 
 # Public Homepage And Return-Home QA (2026-08-07)
