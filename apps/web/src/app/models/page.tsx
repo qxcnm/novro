@@ -20,7 +20,7 @@ export default function ModelsPage() {
         <section className="border-b bg-background">
           <div className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8 sm:py-12 lg:px-10">
             <p className="text-sm font-medium text-muted-foreground">模型目录</p>
-            <h1 className="mt-3 text-4xl font-semibold sm:text-5xl">模型与官方牌价</h1>
+            <h1 className="mt-3 text-xl font-semibold sm:text-2xl xl:text-3xl">模型与官方牌价</h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
               共 {modelCatalog.length} 款目录项。价格为模型厂商公开的按量牌价，单位人民币 / 百万 tokens；实际 Novro 结算价以管理员模型路由配置为准。
             </p>

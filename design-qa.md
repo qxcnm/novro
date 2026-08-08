@@ -60,6 +60,36 @@ The lower enabled-state and test-email cards are not shown in the saved desktop 
 
 final result: passed
 
+## All Public Page Heading Scale QA (2026-08-08)
+
+### Comparison Target
+
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-38c2f4a5-6c3c-4ebd-83be-fbf9bacbfa99.png`
+- Implemented routes: `/`, `/models`, `/docs`
+- Viewports: default desktop viewport and 390 x 844 mobile
+- State: public, signed-out, light theme
+
+### Findings
+
+- No remaining P0, P1, or P2 visual, responsive, accessibility, or interaction findings were identified.
+- All public display headings that were above the requested reference size now use the same responsive scale: `text-xl sm:text-2xl xl:text-3xl`.
+- Compact console headings, card titles, and data values were intentionally left unchanged because they are not display headings and are already below the requested size.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: public route `h1`/`h2` headings use the existing Geist stack, semibold weight, and matching 20px mobile / 30px wide-desktop type sizes.
+- Spacing and layout rhythm: route structures and surrounding content remain unchanged; the homepage mobile viewport has no horizontal overflow.
+- Colors and visual tokens: no color, border, radius, or theme token changed.
+- Image quality and asset fidelity: no image asset was involved in this typography-only change.
+- Copy and content: all route copy remains unchanged.
+
+### Comparison History
+
+- Pass 1: scanned all frontend source for heading sizes above the requested 30px level.
+- Pass 2: changed the two remaining public page `h1` elements and reran lint, typecheck, tests, and production build successfully.
+
+final result: passed
+
 ## Homepage Heading Scale Consistency QA (2026-08-08)
 
 ### Comparison Target

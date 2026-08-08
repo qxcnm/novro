@@ -194,7 +194,7 @@ export function ApiDocumentation() {
           <article className="min-w-0 max-w-4xl">
             <section id="quick-start" className="scroll-mt-24">
               <Badge variant="outline">接入中心</Badge>
-              <h1 className="mt-5 text-4xl font-semibold sm:text-5xl">Novro API 接入文档</h1>
+              <h1 className="mt-5 text-xl font-semibold sm:text-2xl xl:text-3xl">Novro API 接入文档</h1>
               <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
                 用 OpenAI 或 Anthropic 客户端接入 Kimi、GLM 与 DeepSeek。正式上线后只需配置一个 API Key 和一个 Base URL。
               </p>
