@@ -60,6 +60,36 @@ The lower enabled-state and test-email cards are not shown in the saved desktop 
 
 final result: passed
 
+## Homepage Heading Scale Consistency QA (2026-08-08)
+
+### Comparison Target
+
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-38c2f4a5-6c3c-4ebd-83be-fbf9bacbfa99.png`
+- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\home-headings-mobile-latest.png`
+- Route: `/` via local Next.js preview at `http://127.0.0.1:3001/`
+- Viewports: default desktop viewport and 390 x 844 mobile
+- State: public, signed-out, light theme
+
+### Findings
+
+- No remaining P0, P1, or P2 visual, responsive, accessibility, or interaction findings were identified.
+- The four remaining homepage section headings now use the same responsive size scale as the requested main headline: 30px at the wide desktop breakpoint, 24px at the small desktop/tablet breakpoint, and 20px on mobile.
+- Homepage data values and compact card titles intentionally remain smaller or denser because they are information labels, not section display headings.
+
+### Required Fidelity Surfaces
+
+- Fonts and typography: all homepage `h1`/`h2` elements use the existing Geist stack, semibold weight, and matching responsive size classes; measured desktop headings are 30px and mobile headings are 20px.
+- Spacing and layout rhythm: the page keeps the existing section spacing and card layout; the 390px check reported `scrollWidth === 375` and no horizontal overflow.
+- Colors and visual tokens: no color, border, radius, or theme token changed.
+- Image quality and asset fidelity: no image asset was involved in this typography-only change.
+- Copy and content: all homepage copy remains unchanged.
+
+### Comparison History
+
+- Pass 1: measured all homepage `h1`/`h2` elements at desktop and mobile after the unified scale change; all matched the requested size family and no actionable P0/P1/P2 issue remained.
+
+final result: passed
+
 ## Homepage Headline Scale QA (2026-08-08)
 
 ### Comparison Target

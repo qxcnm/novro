@@ -123,7 +123,7 @@ export default function Home() {
             <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">模型能力</p>
-                <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">三家模型，一个接入面。</h2>
+                <h2 className="mt-3 text-xl font-semibold sm:text-2xl xl:text-3xl">三家模型，一个接入面。</h2>
                 <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
                   在同一目录比较模型能力、上下文与官方价格，再按场景选择合适的模型。
                 </p>
@@ -160,7 +160,7 @@ export default function Home() {
           <div className="mx-auto grid w-full max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:items-center lg:gap-20 lg:px-10 lg:py-28">
             <div>
               <p className="text-sm font-medium text-muted-foreground">接入方式</p>
-              <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">保留熟悉的客户端，替换一个地址。</h2>
+              <h2 className="mt-3 text-xl font-semibold sm:text-2xl xl:text-3xl">保留熟悉的客户端，替换一个地址。</h2>
               <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
                 兼容 OpenAI Chat Completions、Responses 与 Anthropic Messages，现有应用无需重写调用方式。
               </p>
@@ -203,7 +203,7 @@ const response = await client.chat.completions.create({
           <div className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-muted-foreground">为团队而建</p>
-              <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">把模型接入和日常管理放在一起。</h2>
+              <h2 className="mt-3 text-xl font-semibold sm:text-2xl xl:text-3xl">把模型接入和日常管理放在一起。</h2>
             </div>
             <div className="mt-10 grid border-y sm:grid-cols-2 lg:grid-cols-4">
               {foundations.map((item, index) => (
@@ -221,7 +221,7 @@ const response = await client.chat.completions.create({
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-20 sm:px-8 lg:flex-row lg:items-end lg:justify-between lg:px-10 lg:py-24">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Novro Gateway</p>
-              <h2 className="mt-3 max-w-2xl text-3xl font-semibold sm:text-4xl">用统一入口连接团队与模型。</h2>
+              <h2 className="mt-3 max-w-2xl text-xl font-semibold sm:text-2xl xl:text-3xl">用统一入口连接团队与模型。</h2>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild><Link href="/login">进入控制台</Link></Button>
