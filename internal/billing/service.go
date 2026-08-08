@@ -14,6 +14,7 @@ type Store interface {
 	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Finalize(context.Context, UsageInput) error
+	RecordFailure(context.Context, FailureInput) error
 }
 
 type Service struct{ store Store }
@@ -57,7 +58,10 @@ func (s *Service) Refund(ctx context.Context, userID, referenceID uuid.UUID, amo
 }
 
 func (s *Service) Finalize(ctx context.Context, input UsageInput) error {
-	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
+	if input.StatusCode == 0 {
+		input.StatusCode = 200
+	}
+	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.StatusCode < 100 || input.StatusCode > 599 || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
 		return ErrInvalidInput
 	}
 	quote, err := CalculateCost(input.Tokens, input.Rates, input.MultiplierBPS)
@@ -65,4 +69,16 @@ func (s *Service) Finalize(ctx context.Context, input UsageInput) error {
 		return ErrInvalidInput
 	}
 	return s.store.Finalize(ctx, input)
+}
+
+func (s *Service) RecordFailure(ctx context.Context, input FailureInput) error {
+	input.ErrorCode = strings.TrimSpace(input.ErrorCode)
+	input.ErrorMessage = strings.TrimSpace(input.ErrorMessage)
+	if input.StatusCode == 0 {
+		input.StatusCode = 502
+	}
+	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") || input.StatusCode < 400 || input.StatusCode > 599 || input.ErrorCode == "" || len(input.ErrorCode) > 64 || input.ErrorMessage == "" || len([]rune(input.ErrorMessage)) > 1024 || input.DurationMS < 0 || input.DurationMS > 86_400_000 || input.ModelName == "" || len([]rune(input.ModelName)) > 128 || len([]rune(input.UpstreamModelName)) > 256 || len([]rune(input.BillingGroupCode)) > 64 || len([]rune(input.BillingGroupName)) > 128 {
+		return ErrInvalidInput
+	}
+	return s.store.RecordFailure(ctx, input)
 }

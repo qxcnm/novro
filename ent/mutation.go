@@ -956,6 +956,10 @@ type APIUsageMutation struct {
 	id                             *uuid.UUID
 	request_id                     *uuid.UUID
 	endpoint                       *apiusage.Endpoint
+	status_code                    *int
+	addstatus_code                 *int
+	error_code                     *string
+	error_message                  *string
 	input_tokens                   *int
 	addinput_tokens                *int
 	uncached_input_tokens          *int
@@ -997,6 +1001,8 @@ type APIUsageMutation struct {
 	calculation_version            *string
 	created_at                     *time.Time
 	finished_at                    *time.Time
+	duration_ms                    *int64
+	addduration_ms                 *int64
 	clearedFields                  map[string]struct{}
 	user                           *uuid.UUID
 	cleareduser                    bool
@@ -1393,6 +1399,134 @@ func (m *APIUsageMutation) OldEndpoint(ctx context.Context) (v apiusage.Endpoint
 // ResetEndpoint resets all changes to the "endpoint" field.
 func (m *APIUsageMutation) ResetEndpoint() {
 	m.endpoint = nil
+}
+
+// SetStatusCode sets the "status_code" field.
+func (m *APIUsageMutation) SetStatusCode(i int) {
+	m.status_code = &i
+	m.addstatus_code = nil
+}
+
+// StatusCode returns the value of the "status_code" field in the mutation.
+func (m *APIUsageMutation) StatusCode() (r int, exists bool) {
+	v := m.status_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatusCode returns the old "status_code" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldStatusCode(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatusCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatusCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatusCode: %w", err)
+	}
+	return oldValue.StatusCode, nil
+}
+
+// AddStatusCode adds i to the "status_code" field.
+func (m *APIUsageMutation) AddStatusCode(i int) {
+	if m.addstatus_code != nil {
+		*m.addstatus_code += i
+	} else {
+		m.addstatus_code = &i
+	}
+}
+
+// AddedStatusCode returns the value that was added to the "status_code" field in this mutation.
+func (m *APIUsageMutation) AddedStatusCode() (r int, exists bool) {
+	v := m.addstatus_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStatusCode resets all changes to the "status_code" field.
+func (m *APIUsageMutation) ResetStatusCode() {
+	m.status_code = nil
+	m.addstatus_code = nil
+}
+
+// SetErrorCode sets the "error_code" field.
+func (m *APIUsageMutation) SetErrorCode(s string) {
+	m.error_code = &s
+}
+
+// ErrorCode returns the value of the "error_code" field in the mutation.
+func (m *APIUsageMutation) ErrorCode() (r string, exists bool) {
+	v := m.error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCode returns the old "error_code" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCode: %w", err)
+	}
+	return oldValue.ErrorCode, nil
+}
+
+// ResetErrorCode resets all changes to the "error_code" field.
+func (m *APIUsageMutation) ResetErrorCode() {
+	m.error_code = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *APIUsageMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *APIUsageMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldErrorMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *APIUsageMutation) ResetErrorMessage() {
+	m.error_message = nil
 }
 
 // SetInputTokens sets the "input_tokens" field.
@@ -2615,6 +2749,62 @@ func (m *APIUsageMutation) ResetFinishedAt() {
 	m.finished_at = nil
 }
 
+// SetDurationMs sets the "duration_ms" field.
+func (m *APIUsageMutation) SetDurationMs(i int64) {
+	m.duration_ms = &i
+	m.addduration_ms = nil
+}
+
+// DurationMs returns the value of the "duration_ms" field in the mutation.
+func (m *APIUsageMutation) DurationMs() (r int64, exists bool) {
+	v := m.duration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDurationMs returns the old "duration_ms" field's value of the APIUsage entity.
+// If the APIUsage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIUsageMutation) OldDurationMs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDurationMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDurationMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDurationMs: %w", err)
+	}
+	return oldValue.DurationMs, nil
+}
+
+// AddDurationMs adds i to the "duration_ms" field.
+func (m *APIUsageMutation) AddDurationMs(i int64) {
+	if m.addduration_ms != nil {
+		*m.addduration_ms += i
+	} else {
+		m.addduration_ms = &i
+	}
+}
+
+// AddedDurationMs returns the value that was added to the "duration_ms" field in this mutation.
+func (m *APIUsageMutation) AddedDurationMs() (r int64, exists bool) {
+	v := m.addduration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDurationMs resets all changes to the "duration_ms" field.
+func (m *APIUsageMutation) ResetDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+}
+
 // ClearUser clears the "user" edge to the User entity.
 func (m *APIUsageMutation) ClearUser() {
 	m.cleareduser = true
@@ -2784,7 +2974,7 @@ func (m *APIUsageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIUsageMutation) Fields() []string {
-	fields := make([]string, 0, 32)
+	fields := make([]string, 0, 36)
 	if m.user != nil {
 		fields = append(fields, apiusage.FieldUserID)
 	}
@@ -2805,6 +2995,15 @@ func (m *APIUsageMutation) Fields() []string {
 	}
 	if m.endpoint != nil {
 		fields = append(fields, apiusage.FieldEndpoint)
+	}
+	if m.status_code != nil {
+		fields = append(fields, apiusage.FieldStatusCode)
+	}
+	if m.error_code != nil {
+		fields = append(fields, apiusage.FieldErrorCode)
+	}
+	if m.error_message != nil {
+		fields = append(fields, apiusage.FieldErrorMessage)
 	}
 	if m.input_tokens != nil {
 		fields = append(fields, apiusage.FieldInputTokens)
@@ -2881,6 +3080,9 @@ func (m *APIUsageMutation) Fields() []string {
 	if m.finished_at != nil {
 		fields = append(fields, apiusage.FieldFinishedAt)
 	}
+	if m.duration_ms != nil {
+		fields = append(fields, apiusage.FieldDurationMs)
+	}
 	return fields
 }
 
@@ -2903,6 +3105,12 @@ func (m *APIUsageMutation) Field(name string) (ent.Value, bool) {
 		return m.RequestID()
 	case apiusage.FieldEndpoint:
 		return m.Endpoint()
+	case apiusage.FieldStatusCode:
+		return m.StatusCode()
+	case apiusage.FieldErrorCode:
+		return m.ErrorCode()
+	case apiusage.FieldErrorMessage:
+		return m.ErrorMessage()
 	case apiusage.FieldInputTokens:
 		return m.InputTokens()
 	case apiusage.FieldUncachedInputTokens:
@@ -2953,6 +3161,8 @@ func (m *APIUsageMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case apiusage.FieldFinishedAt:
 		return m.FinishedAt()
+	case apiusage.FieldDurationMs:
+		return m.DurationMs()
 	}
 	return nil, false
 }
@@ -2976,6 +3186,12 @@ func (m *APIUsageMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldRequestID(ctx)
 	case apiusage.FieldEndpoint:
 		return m.OldEndpoint(ctx)
+	case apiusage.FieldStatusCode:
+		return m.OldStatusCode(ctx)
+	case apiusage.FieldErrorCode:
+		return m.OldErrorCode(ctx)
+	case apiusage.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
 	case apiusage.FieldInputTokens:
 		return m.OldInputTokens(ctx)
 	case apiusage.FieldUncachedInputTokens:
@@ -3026,6 +3242,8 @@ func (m *APIUsageMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldCreatedAt(ctx)
 	case apiusage.FieldFinishedAt:
 		return m.OldFinishedAt(ctx)
+	case apiusage.FieldDurationMs:
+		return m.OldDurationMs(ctx)
 	}
 	return nil, fmt.Errorf("unknown APIUsage field %s", name)
 }
@@ -3083,6 +3301,27 @@ func (m *APIUsageMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEndpoint(v)
+		return nil
+	case apiusage.FieldStatusCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatusCode(v)
+		return nil
+	case apiusage.FieldErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCode(v)
+		return nil
+	case apiusage.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
 		return nil
 	case apiusage.FieldInputTokens:
 		v, ok := value.(int)
@@ -3259,6 +3498,13 @@ func (m *APIUsageMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFinishedAt(v)
 		return nil
+	case apiusage.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDurationMs(v)
+		return nil
 	}
 	return fmt.Errorf("unknown APIUsage field %s", name)
 }
@@ -3267,6 +3513,9 @@ func (m *APIUsageMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *APIUsageMutation) AddedFields() []string {
 	var fields []string
+	if m.addstatus_code != nil {
+		fields = append(fields, apiusage.FieldStatusCode)
+	}
 	if m.addinput_tokens != nil {
 		fields = append(fields, apiusage.FieldInputTokens)
 	}
@@ -3315,6 +3564,9 @@ func (m *APIUsageMutation) AddedFields() []string {
 	if m.addreserved_micros != nil {
 		fields = append(fields, apiusage.FieldReservedMicros)
 	}
+	if m.addduration_ms != nil {
+		fields = append(fields, apiusage.FieldDurationMs)
+	}
 	return fields
 }
 
@@ -3323,6 +3575,8 @@ func (m *APIUsageMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *APIUsageMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case apiusage.FieldStatusCode:
+		return m.AddedStatusCode()
 	case apiusage.FieldInputTokens:
 		return m.AddedInputTokens()
 	case apiusage.FieldUncachedInputTokens:
@@ -3355,6 +3609,8 @@ func (m *APIUsageMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCostMicros()
 	case apiusage.FieldReservedMicros:
 		return m.AddedReservedMicros()
+	case apiusage.FieldDurationMs:
+		return m.AddedDurationMs()
 	}
 	return nil, false
 }
@@ -3364,6 +3620,13 @@ func (m *APIUsageMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *APIUsageMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case apiusage.FieldStatusCode:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStatusCode(v)
+		return nil
 	case apiusage.FieldInputTokens:
 		v, ok := value.(int)
 		if !ok {
@@ -3476,6 +3739,13 @@ func (m *APIUsageMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddReservedMicros(v)
 		return nil
+	case apiusage.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDurationMs(v)
+		return nil
 	}
 	return fmt.Errorf("unknown APIUsage numeric field %s", name)
 }
@@ -3538,6 +3808,15 @@ func (m *APIUsageMutation) ResetField(name string) error {
 		return nil
 	case apiusage.FieldEndpoint:
 		m.ResetEndpoint()
+		return nil
+	case apiusage.FieldStatusCode:
+		m.ResetStatusCode()
+		return nil
+	case apiusage.FieldErrorCode:
+		m.ResetErrorCode()
+		return nil
+	case apiusage.FieldErrorMessage:
+		m.ResetErrorMessage()
 		return nil
 	case apiusage.FieldInputTokens:
 		m.ResetInputTokens()
@@ -3613,6 +3892,9 @@ func (m *APIUsageMutation) ResetField(name string) error {
 		return nil
 	case apiusage.FieldFinishedAt:
 		m.ResetFinishedAt()
+		return nil
+	case apiusage.FieldDurationMs:
+		m.ResetDurationMs()
 		return nil
 	}
 	return fmt.Errorf("unknown APIUsage field %s", name)

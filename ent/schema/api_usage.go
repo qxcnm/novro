@@ -24,6 +24,9 @@ func (APIUsage) Fields() []ent.Field {
 		field.UUID("billing_group_id", uuid.UUID{}).Optional().Nillable(),
 		field.UUID("request_id", uuid.UUID{}).Unique(),
 		field.Enum("endpoint").Values("chat_completions", "responses", "messages"),
+		field.Int("status_code").Positive().Default(200),
+		field.String("error_code").MaxLen(64).Default(""),
+		field.String("error_message").MaxLen(1024).Default(""),
 		field.Int("input_tokens").NonNegative().Default(0),
 		field.Int("uncached_input_tokens").NonNegative().Default(0),
 		field.Int("cache_read_input_tokens").NonNegative().Default(0),
@@ -49,6 +52,7 @@ func (APIUsage) Fields() []ent.Field {
 		field.String("calculation_version").MaxLen(32).Default("v1"),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("finished_at").Default(time.Now),
+		field.Int64("duration_ms").NonNegative().Default(0),
 	}
 }
 

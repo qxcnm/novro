@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -52,11 +53,11 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) (
 		if entity.ModelName != "" {
 			modelName = entity.ModelName
 		}
-		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), InputTokens: entity.InputTokens,
+		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), StatusCode: entity.StatusCode, ErrorCode: entity.ErrorCode, ErrorMessage: entity.ErrorMessage, InputTokens: entity.InputTokens,
 			UncachedInputTokens: entity.UncachedInputTokens, CacheReadInputTokens: entity.CacheReadInputTokens, CacheWriteInputTokens: entity.CacheWriteInputTokens, CacheWrite1hInputTokens: entity.CacheWrite1hInputTokens, OutputTokens: entity.OutputTokens,
 			Rates:          RateCard{InputMicros: entity.InputPriceMicros, OutputMicros: entity.OutputPriceMicros, CacheReadMicros: entity.CacheReadPriceMicros, CacheWriteMicros: entity.CacheWritePriceMicros, CacheWrite1hMicros: entity.CacheWrite1hPriceMicros, RequestMicros: entity.RequestPriceMicros},
 			BaseCostMicros: entity.BaseCostMicros, MultiplierBPS: entity.MultiplierBps, CostMicros: entity.CostMicros, ReservedMicros: entity.ReservedMicros, BillingGroupCode: entity.BillingGroupCode, BillingGroupName: entity.BillingGroupName, UpstreamModelName: entity.UpstreamModelName, CalculationVersion: entity.CalculationVersion,
-			Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt})
+			Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt, DurationMS: entity.DurationMs})
 	}
 	return items, nil
 }
@@ -246,11 +247,11 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 		}
 	}
 	create := tx.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetUpstreamModelID(*input.UpstreamModelID).SetBillingGroupID(*input.BillingGroupID).
-		SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetInputTokens(input.InputTokens).
+		SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetStatusCode(input.StatusCode).SetInputTokens(input.InputTokens).
 		SetUncachedInputTokens(input.Tokens.UncachedInput).SetCacheReadInputTokens(input.Tokens.CacheRead).SetCacheWriteInputTokens(input.Tokens.CacheWrite).SetCacheWrite1hInputTokens(input.Tokens.CacheWrite1h).SetOutputTokens(input.OutputTokens).
 		SetInputPriceMicros(input.Rates.InputMicros).SetOutputPriceMicros(input.Rates.OutputMicros).SetCacheReadPriceMicros(input.Rates.CacheReadMicros).SetCacheWritePriceMicros(input.Rates.CacheWriteMicros).SetCacheWrite1hPriceMicros(input.Rates.CacheWrite1hMicros).SetRequestPriceMicros(input.Rates.RequestMicros).
 		SetBaseCostMicros(input.BaseCostMicros).SetMultiplierBps(input.MultiplierBPS).SetCostMicros(input.CostMicros).SetReservedMicros(input.ReservedMicros).SetEstimated(input.Estimated).
-		SetUpstreamRequestID(input.UpstreamRequestID).SetModelName(input.ModelName).SetUpstreamModelName(input.UpstreamModelName).SetBillingGroupCode(input.BillingGroupCode).SetBillingGroupName(input.BillingGroupName).SetCalculationVersion(input.CalculationVersion).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt)
+		SetUpstreamRequestID(input.UpstreamRequestID).SetModelName(input.ModelName).SetUpstreamModelName(input.UpstreamModelName).SetBillingGroupCode(input.BillingGroupCode).SetBillingGroupName(input.BillingGroupName).SetCalculationVersion(input.CalculationVersion).SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt).SetDurationMs(durationMilliseconds(input.CreatedAt, input.FinishedAt))
 	if _, err := create.Save(ctx); err != nil {
 		return fmt.Errorf("record API usage: %w", err)
 	}
@@ -260,9 +261,39 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 	return nil
 }
 
+func durationMilliseconds(startedAt, finishedAt time.Time) int64 {
+	duration := finishedAt.Sub(startedAt).Milliseconds()
+	if duration < 0 {
+		return 0
+	}
+	return duration
+}
+
+func (s *EntStore) RecordFailure(ctx context.Context, input FailureInput) error {
+	existing, err := s.client.APIUsage.Query().Where(entapiusage.RequestIDEQ(input.RequestID)).Only(ctx)
+	if err == nil {
+		if existing.UserID == input.UserID && existing.APIKeyID == input.APIKeyID && existing.StatusCode == input.StatusCode && existing.ErrorCode == input.ErrorCode && existing.ErrorMessage == input.ErrorMessage {
+			return nil
+		}
+		return ErrRequestConflict
+	}
+	if !ent.IsNotFound(err) {
+		return fmt.Errorf("read existing failed usage: %w", err)
+	}
+	create := s.client.APIUsage.Create().SetUserID(input.UserID).SetAPIKeyID(input.APIKeyID).SetModelRouteID(input.ModelRouteID).SetUpstreamModelID(*input.UpstreamModelID).SetBillingGroupID(*input.BillingGroupID).
+		SetRequestID(input.RequestID).SetEndpoint(entapiusage.Endpoint(input.Endpoint)).SetStatusCode(input.StatusCode).SetErrorCode(input.ErrorCode).SetErrorMessage(input.ErrorMessage).
+		SetModelName(input.ModelName).SetUpstreamModelName(input.UpstreamModelName).SetBillingGroupCode(input.BillingGroupCode).SetBillingGroupName(input.BillingGroupName).
+		SetCreatedAt(input.CreatedAt).SetFinishedAt(input.FinishedAt).SetDurationMs(input.DurationMS)
+	if _, err := create.Save(ctx); err != nil {
+		return fmt.Errorf("record failed API usage: %w", err)
+	}
+	return nil
+}
+
 func sameUsage(existing *ent.APIUsage, input UsageInput) bool {
 	return existing != nil && existing.UserID == input.UserID && existing.APIKeyID == input.APIKeyID &&
 		existing.ModelRouteID == input.ModelRouteID && string(existing.Endpoint) == input.Endpoint &&
+		existing.StatusCode == input.StatusCode && existing.ErrorCode == "" && existing.ErrorMessage == "" &&
 		existing.UpstreamModelID != nil && input.UpstreamModelID != nil && *existing.UpstreamModelID == *input.UpstreamModelID && existing.BillingGroupID != nil && input.BillingGroupID != nil && *existing.BillingGroupID == *input.BillingGroupID &&
 		existing.InputTokens == input.InputTokens && existing.UncachedInputTokens == input.Tokens.UncachedInput && existing.CacheReadInputTokens == input.Tokens.CacheRead && existing.CacheWriteInputTokens == input.Tokens.CacheWrite && existing.CacheWrite1hInputTokens == input.Tokens.CacheWrite1h && existing.OutputTokens == input.OutputTokens &&
 		existing.InputPriceMicros == input.Rates.InputMicros && existing.OutputPriceMicros == input.Rates.OutputMicros && existing.CacheReadPriceMicros == input.Rates.CacheReadMicros && existing.CacheWritePriceMicros == input.Rates.CacheWriteMicros && existing.CacheWrite1hPriceMicros == input.Rates.CacheWrite1hMicros && existing.RequestPriceMicros == input.Rates.RequestMicros && existing.BaseCostMicros == input.BaseCostMicros && existing.MultiplierBps == input.MultiplierBPS && existing.CostMicros == input.CostMicros && existing.ReservedMicros == input.ReservedMicros &&

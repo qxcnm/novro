@@ -95,150 +95,174 @@ func init() {
 	apikey.DefaultID = apikeyDescID.Default.(func() uuid.UUID)
 	apiusageFields := schema.APIUsage{}.Fields()
 	_ = apiusageFields
+	// apiusageDescStatusCode is the schema descriptor for status_code field.
+	apiusageDescStatusCode := apiusageFields[8].Descriptor()
+	// apiusage.DefaultStatusCode holds the default value on creation for the status_code field.
+	apiusage.DefaultStatusCode = apiusageDescStatusCode.Default.(int)
+	// apiusage.StatusCodeValidator is a validator for the "status_code" field. It is called by the builders before save.
+	apiusage.StatusCodeValidator = apiusageDescStatusCode.Validators[0].(func(int) error)
+	// apiusageDescErrorCode is the schema descriptor for error_code field.
+	apiusageDescErrorCode := apiusageFields[9].Descriptor()
+	// apiusage.DefaultErrorCode holds the default value on creation for the error_code field.
+	apiusage.DefaultErrorCode = apiusageDescErrorCode.Default.(string)
+	// apiusage.ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
+	apiusage.ErrorCodeValidator = apiusageDescErrorCode.Validators[0].(func(string) error)
+	// apiusageDescErrorMessage is the schema descriptor for error_message field.
+	apiusageDescErrorMessage := apiusageFields[10].Descriptor()
+	// apiusage.DefaultErrorMessage holds the default value on creation for the error_message field.
+	apiusage.DefaultErrorMessage = apiusageDescErrorMessage.Default.(string)
+	// apiusage.ErrorMessageValidator is a validator for the "error_message" field. It is called by the builders before save.
+	apiusage.ErrorMessageValidator = apiusageDescErrorMessage.Validators[0].(func(string) error)
 	// apiusageDescInputTokens is the schema descriptor for input_tokens field.
-	apiusageDescInputTokens := apiusageFields[8].Descriptor()
+	apiusageDescInputTokens := apiusageFields[11].Descriptor()
 	// apiusage.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	apiusage.DefaultInputTokens = apiusageDescInputTokens.Default.(int)
 	// apiusage.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
 	apiusage.InputTokensValidator = apiusageDescInputTokens.Validators[0].(func(int) error)
 	// apiusageDescUncachedInputTokens is the schema descriptor for uncached_input_tokens field.
-	apiusageDescUncachedInputTokens := apiusageFields[9].Descriptor()
+	apiusageDescUncachedInputTokens := apiusageFields[12].Descriptor()
 	// apiusage.DefaultUncachedInputTokens holds the default value on creation for the uncached_input_tokens field.
 	apiusage.DefaultUncachedInputTokens = apiusageDescUncachedInputTokens.Default.(int)
 	// apiusage.UncachedInputTokensValidator is a validator for the "uncached_input_tokens" field. It is called by the builders before save.
 	apiusage.UncachedInputTokensValidator = apiusageDescUncachedInputTokens.Validators[0].(func(int) error)
 	// apiusageDescCacheReadInputTokens is the schema descriptor for cache_read_input_tokens field.
-	apiusageDescCacheReadInputTokens := apiusageFields[10].Descriptor()
+	apiusageDescCacheReadInputTokens := apiusageFields[13].Descriptor()
 	// apiusage.DefaultCacheReadInputTokens holds the default value on creation for the cache_read_input_tokens field.
 	apiusage.DefaultCacheReadInputTokens = apiusageDescCacheReadInputTokens.Default.(int)
 	// apiusage.CacheReadInputTokensValidator is a validator for the "cache_read_input_tokens" field. It is called by the builders before save.
 	apiusage.CacheReadInputTokensValidator = apiusageDescCacheReadInputTokens.Validators[0].(func(int) error)
 	// apiusageDescCacheWriteInputTokens is the schema descriptor for cache_write_input_tokens field.
-	apiusageDescCacheWriteInputTokens := apiusageFields[11].Descriptor()
+	apiusageDescCacheWriteInputTokens := apiusageFields[14].Descriptor()
 	// apiusage.DefaultCacheWriteInputTokens holds the default value on creation for the cache_write_input_tokens field.
 	apiusage.DefaultCacheWriteInputTokens = apiusageDescCacheWriteInputTokens.Default.(int)
 	// apiusage.CacheWriteInputTokensValidator is a validator for the "cache_write_input_tokens" field. It is called by the builders before save.
 	apiusage.CacheWriteInputTokensValidator = apiusageDescCacheWriteInputTokens.Validators[0].(func(int) error)
 	// apiusageDescCacheWrite1hInputTokens is the schema descriptor for cache_write_1h_input_tokens field.
-	apiusageDescCacheWrite1hInputTokens := apiusageFields[12].Descriptor()
+	apiusageDescCacheWrite1hInputTokens := apiusageFields[15].Descriptor()
 	// apiusage.DefaultCacheWrite1hInputTokens holds the default value on creation for the cache_write_1h_input_tokens field.
 	apiusage.DefaultCacheWrite1hInputTokens = apiusageDescCacheWrite1hInputTokens.Default.(int)
 	// apiusage.CacheWrite1hInputTokensValidator is a validator for the "cache_write_1h_input_tokens" field. It is called by the builders before save.
 	apiusage.CacheWrite1hInputTokensValidator = apiusageDescCacheWrite1hInputTokens.Validators[0].(func(int) error)
 	// apiusageDescOutputTokens is the schema descriptor for output_tokens field.
-	apiusageDescOutputTokens := apiusageFields[13].Descriptor()
+	apiusageDescOutputTokens := apiusageFields[16].Descriptor()
 	// apiusage.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	apiusage.DefaultOutputTokens = apiusageDescOutputTokens.Default.(int)
 	// apiusage.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
 	apiusage.OutputTokensValidator = apiusageDescOutputTokens.Validators[0].(func(int) error)
 	// apiusageDescInputPriceMicros is the schema descriptor for input_price_micros field.
-	apiusageDescInputPriceMicros := apiusageFields[14].Descriptor()
+	apiusageDescInputPriceMicros := apiusageFields[17].Descriptor()
 	// apiusage.DefaultInputPriceMicros holds the default value on creation for the input_price_micros field.
 	apiusage.DefaultInputPriceMicros = apiusageDescInputPriceMicros.Default.(int64)
 	// apiusage.InputPriceMicrosValidator is a validator for the "input_price_micros" field. It is called by the builders before save.
 	apiusage.InputPriceMicrosValidator = apiusageDescInputPriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescOutputPriceMicros is the schema descriptor for output_price_micros field.
-	apiusageDescOutputPriceMicros := apiusageFields[15].Descriptor()
+	apiusageDescOutputPriceMicros := apiusageFields[18].Descriptor()
 	// apiusage.DefaultOutputPriceMicros holds the default value on creation for the output_price_micros field.
 	apiusage.DefaultOutputPriceMicros = apiusageDescOutputPriceMicros.Default.(int64)
 	// apiusage.OutputPriceMicrosValidator is a validator for the "output_price_micros" field. It is called by the builders before save.
 	apiusage.OutputPriceMicrosValidator = apiusageDescOutputPriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescCacheReadPriceMicros is the schema descriptor for cache_read_price_micros field.
-	apiusageDescCacheReadPriceMicros := apiusageFields[16].Descriptor()
+	apiusageDescCacheReadPriceMicros := apiusageFields[19].Descriptor()
 	// apiusage.DefaultCacheReadPriceMicros holds the default value on creation for the cache_read_price_micros field.
 	apiusage.DefaultCacheReadPriceMicros = apiusageDescCacheReadPriceMicros.Default.(int64)
 	// apiusage.CacheReadPriceMicrosValidator is a validator for the "cache_read_price_micros" field. It is called by the builders before save.
 	apiusage.CacheReadPriceMicrosValidator = apiusageDescCacheReadPriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescCacheWritePriceMicros is the schema descriptor for cache_write_price_micros field.
-	apiusageDescCacheWritePriceMicros := apiusageFields[17].Descriptor()
+	apiusageDescCacheWritePriceMicros := apiusageFields[20].Descriptor()
 	// apiusage.DefaultCacheWritePriceMicros holds the default value on creation for the cache_write_price_micros field.
 	apiusage.DefaultCacheWritePriceMicros = apiusageDescCacheWritePriceMicros.Default.(int64)
 	// apiusage.CacheWritePriceMicrosValidator is a validator for the "cache_write_price_micros" field. It is called by the builders before save.
 	apiusage.CacheWritePriceMicrosValidator = apiusageDescCacheWritePriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescCacheWrite1hPriceMicros is the schema descriptor for cache_write_1h_price_micros field.
-	apiusageDescCacheWrite1hPriceMicros := apiusageFields[18].Descriptor()
+	apiusageDescCacheWrite1hPriceMicros := apiusageFields[21].Descriptor()
 	// apiusage.DefaultCacheWrite1hPriceMicros holds the default value on creation for the cache_write_1h_price_micros field.
 	apiusage.DefaultCacheWrite1hPriceMicros = apiusageDescCacheWrite1hPriceMicros.Default.(int64)
 	// apiusage.CacheWrite1hPriceMicrosValidator is a validator for the "cache_write_1h_price_micros" field. It is called by the builders before save.
 	apiusage.CacheWrite1hPriceMicrosValidator = apiusageDescCacheWrite1hPriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescRequestPriceMicros is the schema descriptor for request_price_micros field.
-	apiusageDescRequestPriceMicros := apiusageFields[19].Descriptor()
+	apiusageDescRequestPriceMicros := apiusageFields[22].Descriptor()
 	// apiusage.DefaultRequestPriceMicros holds the default value on creation for the request_price_micros field.
 	apiusage.DefaultRequestPriceMicros = apiusageDescRequestPriceMicros.Default.(int64)
 	// apiusage.RequestPriceMicrosValidator is a validator for the "request_price_micros" field. It is called by the builders before save.
 	apiusage.RequestPriceMicrosValidator = apiusageDescRequestPriceMicros.Validators[0].(func(int64) error)
 	// apiusageDescBaseCostMicros is the schema descriptor for base_cost_micros field.
-	apiusageDescBaseCostMicros := apiusageFields[20].Descriptor()
+	apiusageDescBaseCostMicros := apiusageFields[23].Descriptor()
 	// apiusage.DefaultBaseCostMicros holds the default value on creation for the base_cost_micros field.
 	apiusage.DefaultBaseCostMicros = apiusageDescBaseCostMicros.Default.(int64)
 	// apiusage.BaseCostMicrosValidator is a validator for the "base_cost_micros" field. It is called by the builders before save.
 	apiusage.BaseCostMicrosValidator = apiusageDescBaseCostMicros.Validators[0].(func(int64) error)
 	// apiusageDescMultiplierBps is the schema descriptor for multiplier_bps field.
-	apiusageDescMultiplierBps := apiusageFields[21].Descriptor()
+	apiusageDescMultiplierBps := apiusageFields[24].Descriptor()
 	// apiusage.DefaultMultiplierBps holds the default value on creation for the multiplier_bps field.
 	apiusage.DefaultMultiplierBps = apiusageDescMultiplierBps.Default.(int64)
 	// apiusage.MultiplierBpsValidator is a validator for the "multiplier_bps" field. It is called by the builders before save.
 	apiusage.MultiplierBpsValidator = apiusageDescMultiplierBps.Validators[0].(func(int64) error)
 	// apiusageDescCostMicros is the schema descriptor for cost_micros field.
-	apiusageDescCostMicros := apiusageFields[22].Descriptor()
+	apiusageDescCostMicros := apiusageFields[25].Descriptor()
 	// apiusage.DefaultCostMicros holds the default value on creation for the cost_micros field.
 	apiusage.DefaultCostMicros = apiusageDescCostMicros.Default.(int64)
 	// apiusage.CostMicrosValidator is a validator for the "cost_micros" field. It is called by the builders before save.
 	apiusage.CostMicrosValidator = apiusageDescCostMicros.Validators[0].(func(int64) error)
 	// apiusageDescReservedMicros is the schema descriptor for reserved_micros field.
-	apiusageDescReservedMicros := apiusageFields[23].Descriptor()
+	apiusageDescReservedMicros := apiusageFields[26].Descriptor()
 	// apiusage.DefaultReservedMicros holds the default value on creation for the reserved_micros field.
 	apiusage.DefaultReservedMicros = apiusageDescReservedMicros.Default.(int64)
 	// apiusage.ReservedMicrosValidator is a validator for the "reserved_micros" field. It is called by the builders before save.
 	apiusage.ReservedMicrosValidator = apiusageDescReservedMicros.Validators[0].(func(int64) error)
 	// apiusageDescEstimated is the schema descriptor for estimated field.
-	apiusageDescEstimated := apiusageFields[24].Descriptor()
+	apiusageDescEstimated := apiusageFields[27].Descriptor()
 	// apiusage.DefaultEstimated holds the default value on creation for the estimated field.
 	apiusage.DefaultEstimated = apiusageDescEstimated.Default.(bool)
 	// apiusageDescUpstreamRequestID is the schema descriptor for upstream_request_id field.
-	apiusageDescUpstreamRequestID := apiusageFields[25].Descriptor()
+	apiusageDescUpstreamRequestID := apiusageFields[28].Descriptor()
 	// apiusage.DefaultUpstreamRequestID holds the default value on creation for the upstream_request_id field.
 	apiusage.DefaultUpstreamRequestID = apiusageDescUpstreamRequestID.Default.(string)
 	// apiusage.UpstreamRequestIDValidator is a validator for the "upstream_request_id" field. It is called by the builders before save.
 	apiusage.UpstreamRequestIDValidator = apiusageDescUpstreamRequestID.Validators[0].(func(string) error)
 	// apiusageDescModelName is the schema descriptor for model_name field.
-	apiusageDescModelName := apiusageFields[26].Descriptor()
+	apiusageDescModelName := apiusageFields[29].Descriptor()
 	// apiusage.DefaultModelName holds the default value on creation for the model_name field.
 	apiusage.DefaultModelName = apiusageDescModelName.Default.(string)
 	// apiusage.ModelNameValidator is a validator for the "model_name" field. It is called by the builders before save.
 	apiusage.ModelNameValidator = apiusageDescModelName.Validators[0].(func(string) error)
 	// apiusageDescUpstreamModelName is the schema descriptor for upstream_model_name field.
-	apiusageDescUpstreamModelName := apiusageFields[27].Descriptor()
+	apiusageDescUpstreamModelName := apiusageFields[30].Descriptor()
 	// apiusage.DefaultUpstreamModelName holds the default value on creation for the upstream_model_name field.
 	apiusage.DefaultUpstreamModelName = apiusageDescUpstreamModelName.Default.(string)
 	// apiusage.UpstreamModelNameValidator is a validator for the "upstream_model_name" field. It is called by the builders before save.
 	apiusage.UpstreamModelNameValidator = apiusageDescUpstreamModelName.Validators[0].(func(string) error)
 	// apiusageDescBillingGroupCode is the schema descriptor for billing_group_code field.
-	apiusageDescBillingGroupCode := apiusageFields[28].Descriptor()
+	apiusageDescBillingGroupCode := apiusageFields[31].Descriptor()
 	// apiusage.DefaultBillingGroupCode holds the default value on creation for the billing_group_code field.
 	apiusage.DefaultBillingGroupCode = apiusageDescBillingGroupCode.Default.(string)
 	// apiusage.BillingGroupCodeValidator is a validator for the "billing_group_code" field. It is called by the builders before save.
 	apiusage.BillingGroupCodeValidator = apiusageDescBillingGroupCode.Validators[0].(func(string) error)
 	// apiusageDescBillingGroupName is the schema descriptor for billing_group_name field.
-	apiusageDescBillingGroupName := apiusageFields[29].Descriptor()
+	apiusageDescBillingGroupName := apiusageFields[32].Descriptor()
 	// apiusage.DefaultBillingGroupName holds the default value on creation for the billing_group_name field.
 	apiusage.DefaultBillingGroupName = apiusageDescBillingGroupName.Default.(string)
 	// apiusage.BillingGroupNameValidator is a validator for the "billing_group_name" field. It is called by the builders before save.
 	apiusage.BillingGroupNameValidator = apiusageDescBillingGroupName.Validators[0].(func(string) error)
 	// apiusageDescCalculationVersion is the schema descriptor for calculation_version field.
-	apiusageDescCalculationVersion := apiusageFields[30].Descriptor()
+	apiusageDescCalculationVersion := apiusageFields[33].Descriptor()
 	// apiusage.DefaultCalculationVersion holds the default value on creation for the calculation_version field.
 	apiusage.DefaultCalculationVersion = apiusageDescCalculationVersion.Default.(string)
 	// apiusage.CalculationVersionValidator is a validator for the "calculation_version" field. It is called by the builders before save.
 	apiusage.CalculationVersionValidator = apiusageDescCalculationVersion.Validators[0].(func(string) error)
 	// apiusageDescCreatedAt is the schema descriptor for created_at field.
-	apiusageDescCreatedAt := apiusageFields[31].Descriptor()
+	apiusageDescCreatedAt := apiusageFields[34].Descriptor()
 	// apiusage.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apiusage.DefaultCreatedAt = apiusageDescCreatedAt.Default.(func() time.Time)
 	// apiusageDescFinishedAt is the schema descriptor for finished_at field.
-	apiusageDescFinishedAt := apiusageFields[32].Descriptor()
+	apiusageDescFinishedAt := apiusageFields[35].Descriptor()
 	// apiusage.DefaultFinishedAt holds the default value on creation for the finished_at field.
 	apiusage.DefaultFinishedAt = apiusageDescFinishedAt.Default.(func() time.Time)
+	// apiusageDescDurationMs is the schema descriptor for duration_ms field.
+	apiusageDescDurationMs := apiusageFields[36].Descriptor()
+	// apiusage.DefaultDurationMs holds the default value on creation for the duration_ms field.
+	apiusage.DefaultDurationMs = apiusageDescDurationMs.Default.(int64)
+	// apiusage.DurationMsValidator is a validator for the "duration_ms" field. It is called by the builders before save.
+	apiusage.DurationMsValidator = apiusageDescDurationMs.Validators[0].(func(int64) error)
 	// apiusageDescID is the schema descriptor for id field.
 	apiusageDescID := apiusageFields[0].Descriptor()
 	// apiusage.DefaultID holds the default value on creation for the id field.

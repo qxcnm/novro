@@ -37,6 +37,12 @@ type APIUsage struct {
 	RequestID uuid.UUID `json:"request_id,omitempty"`
 	// Endpoint holds the value of the "endpoint" field.
 	Endpoint apiusage.Endpoint `json:"endpoint,omitempty"`
+	// StatusCode holds the value of the "status_code" field.
+	StatusCode int `json:"status_code,omitempty"`
+	// ErrorCode holds the value of the "error_code" field.
+	ErrorCode string `json:"error_code,omitempty"`
+	// ErrorMessage holds the value of the "error_message" field.
+	ErrorMessage string `json:"error_message,omitempty"`
 	// InputTokens holds the value of the "input_tokens" field.
 	InputTokens int `json:"input_tokens,omitempty"`
 	// UncachedInputTokens holds the value of the "uncached_input_tokens" field.
@@ -87,6 +93,8 @@ type APIUsage struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// FinishedAt holds the value of the "finished_at" field.
 	FinishedAt time.Time `json:"finished_at,omitempty"`
+	// DurationMs holds the value of the "duration_ms" field.
+	DurationMs int64 `json:"duration_ms,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the APIUsageQuery when eager-loading is set.
 	Edges        APIUsageEdges `json:"edges"`
@@ -174,9 +182,9 @@ func (*APIUsage) scanValues(columns []string) ([]any, error) {
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case apiusage.FieldEstimated:
 			values[i] = new(sql.NullBool)
-		case apiusage.FieldInputTokens, apiusage.FieldUncachedInputTokens, apiusage.FieldCacheReadInputTokens, apiusage.FieldCacheWriteInputTokens, apiusage.FieldCacheWrite1hInputTokens, apiusage.FieldOutputTokens, apiusage.FieldInputPriceMicros, apiusage.FieldOutputPriceMicros, apiusage.FieldCacheReadPriceMicros, apiusage.FieldCacheWritePriceMicros, apiusage.FieldCacheWrite1hPriceMicros, apiusage.FieldRequestPriceMicros, apiusage.FieldBaseCostMicros, apiusage.FieldMultiplierBps, apiusage.FieldCostMicros, apiusage.FieldReservedMicros:
+		case apiusage.FieldStatusCode, apiusage.FieldInputTokens, apiusage.FieldUncachedInputTokens, apiusage.FieldCacheReadInputTokens, apiusage.FieldCacheWriteInputTokens, apiusage.FieldCacheWrite1hInputTokens, apiusage.FieldOutputTokens, apiusage.FieldInputPriceMicros, apiusage.FieldOutputPriceMicros, apiusage.FieldCacheReadPriceMicros, apiusage.FieldCacheWritePriceMicros, apiusage.FieldCacheWrite1hPriceMicros, apiusage.FieldRequestPriceMicros, apiusage.FieldBaseCostMicros, apiusage.FieldMultiplierBps, apiusage.FieldCostMicros, apiusage.FieldReservedMicros, apiusage.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case apiusage.FieldEndpoint, apiusage.FieldUpstreamRequestID, apiusage.FieldModelName, apiusage.FieldUpstreamModelName, apiusage.FieldBillingGroupCode, apiusage.FieldBillingGroupName, apiusage.FieldCalculationVersion:
+		case apiusage.FieldEndpoint, apiusage.FieldErrorCode, apiusage.FieldErrorMessage, apiusage.FieldUpstreamRequestID, apiusage.FieldModelName, apiusage.FieldUpstreamModelName, apiusage.FieldBillingGroupCode, apiusage.FieldBillingGroupName, apiusage.FieldCalculationVersion:
 			values[i] = new(sql.NullString)
 		case apiusage.FieldCreatedAt, apiusage.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -246,6 +254,24 @@ func (_m *APIUsage) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field endpoint", values[i])
 			} else if value.Valid {
 				_m.Endpoint = apiusage.Endpoint(value.String)
+			}
+		case apiusage.FieldStatusCode:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field status_code", values[i])
+			} else if value.Valid {
+				_m.StatusCode = int(value.Int64)
+			}
+		case apiusage.FieldErrorCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field error_code", values[i])
+			} else if value.Valid {
+				_m.ErrorCode = value.String
+			}
+		case apiusage.FieldErrorMessage:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field error_message", values[i])
+			} else if value.Valid {
+				_m.ErrorMessage = value.String
 			}
 		case apiusage.FieldInputTokens:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -397,6 +423,12 @@ func (_m *APIUsage) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.FinishedAt = value.Time
 			}
+		case apiusage.FieldDurationMs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field duration_ms", values[i])
+			} else if value.Valid {
+				_m.DurationMs = value.Int64
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -483,6 +515,15 @@ func (_m *APIUsage) String() string {
 	builder.WriteString("endpoint=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Endpoint))
 	builder.WriteString(", ")
+	builder.WriteString("status_code=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StatusCode))
+	builder.WriteString(", ")
+	builder.WriteString("error_code=")
+	builder.WriteString(_m.ErrorCode)
+	builder.WriteString(", ")
+	builder.WriteString("error_message=")
+	builder.WriteString(_m.ErrorMessage)
+	builder.WriteString(", ")
 	builder.WriteString("input_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.InputTokens))
 	builder.WriteString(", ")
@@ -557,6 +598,9 @@ func (_m *APIUsage) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("finished_at=")
 	builder.WriteString(_m.FinishedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("duration_ms=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DurationMs))
 	builder.WriteByte(')')
 	return builder.String()
 }

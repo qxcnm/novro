@@ -84,6 +84,48 @@ func (_c *APIUsageCreate) SetEndpoint(v apiusage.Endpoint) *APIUsageCreate {
 	return _c
 }
 
+// SetStatusCode sets the "status_code" field.
+func (_c *APIUsageCreate) SetStatusCode(v int) *APIUsageCreate {
+	_c.mutation.SetStatusCode(v)
+	return _c
+}
+
+// SetNillableStatusCode sets the "status_code" field if the given value is not nil.
+func (_c *APIUsageCreate) SetNillableStatusCode(v *int) *APIUsageCreate {
+	if v != nil {
+		_c.SetStatusCode(*v)
+	}
+	return _c
+}
+
+// SetErrorCode sets the "error_code" field.
+func (_c *APIUsageCreate) SetErrorCode(v string) *APIUsageCreate {
+	_c.mutation.SetErrorCode(v)
+	return _c
+}
+
+// SetNillableErrorCode sets the "error_code" field if the given value is not nil.
+func (_c *APIUsageCreate) SetNillableErrorCode(v *string) *APIUsageCreate {
+	if v != nil {
+		_c.SetErrorCode(*v)
+	}
+	return _c
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (_c *APIUsageCreate) SetErrorMessage(v string) *APIUsageCreate {
+	_c.mutation.SetErrorMessage(v)
+	return _c
+}
+
+// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
+func (_c *APIUsageCreate) SetNillableErrorMessage(v *string) *APIUsageCreate {
+	if v != nil {
+		_c.SetErrorMessage(*v)
+	}
+	return _c
+}
+
 // SetInputTokens sets the "input_tokens" field.
 func (_c *APIUsageCreate) SetInputTokens(v int) *APIUsageCreate {
 	_c.mutation.SetInputTokens(v)
@@ -434,6 +476,20 @@ func (_c *APIUsageCreate) SetNillableFinishedAt(v *time.Time) *APIUsageCreate {
 	return _c
 }
 
+// SetDurationMs sets the "duration_ms" field.
+func (_c *APIUsageCreate) SetDurationMs(v int64) *APIUsageCreate {
+	_c.mutation.SetDurationMs(v)
+	return _c
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_c *APIUsageCreate) SetNillableDurationMs(v *int64) *APIUsageCreate {
+	if v != nil {
+		_c.SetDurationMs(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *APIUsageCreate) SetID(v uuid.UUID) *APIUsageCreate {
 	_c.mutation.SetID(v)
@@ -508,6 +564,18 @@ func (_c *APIUsageCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *APIUsageCreate) defaults() {
+	if _, ok := _c.mutation.StatusCode(); !ok {
+		v := apiusage.DefaultStatusCode
+		_c.mutation.SetStatusCode(v)
+	}
+	if _, ok := _c.mutation.ErrorCode(); !ok {
+		v := apiusage.DefaultErrorCode
+		_c.mutation.SetErrorCode(v)
+	}
+	if _, ok := _c.mutation.ErrorMessage(); !ok {
+		v := apiusage.DefaultErrorMessage
+		_c.mutation.SetErrorMessage(v)
+	}
 	if _, ok := _c.mutation.InputTokens(); !ok {
 		v := apiusage.DefaultInputTokens
 		_c.mutation.SetInputTokens(v)
@@ -608,6 +676,10 @@ func (_c *APIUsageCreate) defaults() {
 		v := apiusage.DefaultFinishedAt()
 		_c.mutation.SetFinishedAt(v)
 	}
+	if _, ok := _c.mutation.DurationMs(); !ok {
+		v := apiusage.DefaultDurationMs
+		_c.mutation.SetDurationMs(v)
+	}
 	if _, ok := _c.mutation.ID(); !ok {
 		v := apiusage.DefaultID()
 		_c.mutation.SetID(v)
@@ -634,6 +706,30 @@ func (_c *APIUsageCreate) check() error {
 	if v, ok := _c.mutation.Endpoint(); ok {
 		if err := apiusage.EndpointValidator(v); err != nil {
 			return &ValidationError{Name: "endpoint", err: fmt.Errorf(`ent: validator failed for field "APIUsage.endpoint": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StatusCode(); !ok {
+		return &ValidationError{Name: "status_code", err: errors.New(`ent: missing required field "APIUsage.status_code"`)}
+	}
+	if v, ok := _c.mutation.StatusCode(); ok {
+		if err := apiusage.StatusCodeValidator(v); err != nil {
+			return &ValidationError{Name: "status_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.status_code": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ErrorCode(); !ok {
+		return &ValidationError{Name: "error_code", err: errors.New(`ent: missing required field "APIUsage.error_code"`)}
+	}
+	if v, ok := _c.mutation.ErrorCode(); ok {
+		if err := apiusage.ErrorCodeValidator(v); err != nil {
+			return &ValidationError{Name: "error_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_code": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ErrorMessage(); !ok {
+		return &ValidationError{Name: "error_message", err: errors.New(`ent: missing required field "APIUsage.error_message"`)}
+	}
+	if v, ok := _c.mutation.ErrorMessage(); ok {
+		if err := apiusage.ErrorMessageValidator(v); err != nil {
+			return &ValidationError{Name: "error_message", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_message": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.InputTokens(); !ok {
@@ -821,6 +917,14 @@ func (_c *APIUsageCreate) check() error {
 	if _, ok := _c.mutation.FinishedAt(); !ok {
 		return &ValidationError{Name: "finished_at", err: errors.New(`ent: missing required field "APIUsage.finished_at"`)}
 	}
+	if _, ok := _c.mutation.DurationMs(); !ok {
+		return &ValidationError{Name: "duration_ms", err: errors.New(`ent: missing required field "APIUsage.duration_ms"`)}
+	}
+	if v, ok := _c.mutation.DurationMs(); ok {
+		if err := apiusage.DurationMsValidator(v); err != nil {
+			return &ValidationError{Name: "duration_ms", err: fmt.Errorf(`ent: validator failed for field "APIUsage.duration_ms": %w`, err)}
+		}
+	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "APIUsage.user"`)}
 	}
@@ -872,6 +976,18 @@ func (_c *APIUsageCreate) createSpec() (*APIUsage, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Endpoint(); ok {
 		_spec.SetField(apiusage.FieldEndpoint, field.TypeEnum, value)
 		_node.Endpoint = value
+	}
+	if value, ok := _c.mutation.StatusCode(); ok {
+		_spec.SetField(apiusage.FieldStatusCode, field.TypeInt, value)
+		_node.StatusCode = value
+	}
+	if value, ok := _c.mutation.ErrorCode(); ok {
+		_spec.SetField(apiusage.FieldErrorCode, field.TypeString, value)
+		_node.ErrorCode = value
+	}
+	if value, ok := _c.mutation.ErrorMessage(); ok {
+		_spec.SetField(apiusage.FieldErrorMessage, field.TypeString, value)
+		_node.ErrorMessage = value
 	}
 	if value, ok := _c.mutation.InputTokens(); ok {
 		_spec.SetField(apiusage.FieldInputTokens, field.TypeInt, value)
@@ -972,6 +1088,10 @@ func (_c *APIUsageCreate) createSpec() (*APIUsage, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FinishedAt(); ok {
 		_spec.SetField(apiusage.FieldFinishedAt, field.TypeTime, value)
 		_node.FinishedAt = value
+	}
+	if value, ok := _c.mutation.DurationMs(); ok {
+		_spec.SetField(apiusage.FieldDurationMs, field.TypeInt64, value)
+		_node.DurationMs = value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

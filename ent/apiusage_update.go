@@ -144,6 +144,55 @@ func (_u *APIUsageUpdate) SetNillableEndpoint(v *apiusage.Endpoint) *APIUsageUpd
 	return _u
 }
 
+// SetStatusCode sets the "status_code" field.
+func (_u *APIUsageUpdate) SetStatusCode(v int) *APIUsageUpdate {
+	_u.mutation.ResetStatusCode()
+	_u.mutation.SetStatusCode(v)
+	return _u
+}
+
+// SetNillableStatusCode sets the "status_code" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableStatusCode(v *int) *APIUsageUpdate {
+	if v != nil {
+		_u.SetStatusCode(*v)
+	}
+	return _u
+}
+
+// AddStatusCode adds value to the "status_code" field.
+func (_u *APIUsageUpdate) AddStatusCode(v int) *APIUsageUpdate {
+	_u.mutation.AddStatusCode(v)
+	return _u
+}
+
+// SetErrorCode sets the "error_code" field.
+func (_u *APIUsageUpdate) SetErrorCode(v string) *APIUsageUpdate {
+	_u.mutation.SetErrorCode(v)
+	return _u
+}
+
+// SetNillableErrorCode sets the "error_code" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableErrorCode(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetErrorCode(*v)
+	}
+	return _u
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (_u *APIUsageUpdate) SetErrorMessage(v string) *APIUsageUpdate {
+	_u.mutation.SetErrorMessage(v)
+	return _u
+}
+
+// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableErrorMessage(v *string) *APIUsageUpdate {
+	if v != nil {
+		_u.SetErrorMessage(*v)
+	}
+	return _u
+}
+
 // SetInputTokens sets the "input_tokens" field.
 func (_u *APIUsageUpdate) SetInputTokens(v int) *APIUsageUpdate {
 	_u.mutation.ResetInputTokens()
@@ -592,6 +641,27 @@ func (_u *APIUsageUpdate) SetNillableFinishedAt(v *time.Time) *APIUsageUpdate {
 	return _u
 }
 
+// SetDurationMs sets the "duration_ms" field.
+func (_u *APIUsageUpdate) SetDurationMs(v int64) *APIUsageUpdate {
+	_u.mutation.ResetDurationMs()
+	_u.mutation.SetDurationMs(v)
+	return _u
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_u *APIUsageUpdate) SetNillableDurationMs(v *int64) *APIUsageUpdate {
+	if v != nil {
+		_u.SetDurationMs(*v)
+	}
+	return _u
+}
+
+// AddDurationMs adds value to the "duration_ms" field.
+func (_u *APIUsageUpdate) AddDurationMs(v int64) *APIUsageUpdate {
+	_u.mutation.AddDurationMs(v)
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *APIUsageUpdate) SetUser(v *User) *APIUsageUpdate {
 	return _u.SetUserID(v.ID)
@@ -684,6 +754,21 @@ func (_u *APIUsageUpdate) check() error {
 	if v, ok := _u.mutation.Endpoint(); ok {
 		if err := apiusage.EndpointValidator(v); err != nil {
 			return &ValidationError{Name: "endpoint", err: fmt.Errorf(`ent: validator failed for field "APIUsage.endpoint": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StatusCode(); ok {
+		if err := apiusage.StatusCodeValidator(v); err != nil {
+			return &ValidationError{Name: "status_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.status_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ErrorCode(); ok {
+		if err := apiusage.ErrorCodeValidator(v); err != nil {
+			return &ValidationError{Name: "error_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ErrorMessage(); ok {
+		if err := apiusage.ErrorMessageValidator(v); err != nil {
+			return &ValidationError{Name: "error_message", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_message": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.InputTokens(); ok {
@@ -796,6 +881,11 @@ func (_u *APIUsageUpdate) check() error {
 			return &ValidationError{Name: "calculation_version", err: fmt.Errorf(`ent: validator failed for field "APIUsage.calculation_version": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DurationMs(); ok {
+		if err := apiusage.DurationMsValidator(v); err != nil {
+			return &ValidationError{Name: "duration_ms", err: fmt.Errorf(`ent: validator failed for field "APIUsage.duration_ms": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIUsage.user"`)
 	}
@@ -825,6 +915,18 @@ func (_u *APIUsageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Endpoint(); ok {
 		_spec.SetField(apiusage.FieldEndpoint, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.StatusCode(); ok {
+		_spec.SetField(apiusage.FieldStatusCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStatusCode(); ok {
+		_spec.AddField(apiusage.FieldStatusCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ErrorCode(); ok {
+		_spec.SetField(apiusage.FieldErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ErrorMessage(); ok {
+		_spec.SetField(apiusage.FieldErrorMessage, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(apiusage.FieldInputTokens, field.TypeInt, value)
@@ -945,6 +1047,12 @@ func (_u *APIUsageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(apiusage.FieldFinishedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DurationMs(); ok {
+		_spec.SetField(apiusage.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDurationMs(); ok {
+		_spec.AddField(apiusage.FieldDurationMs, field.TypeInt64, value)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1217,6 +1325,55 @@ func (_u *APIUsageUpdateOne) SetEndpoint(v apiusage.Endpoint) *APIUsageUpdateOne
 func (_u *APIUsageUpdateOne) SetNillableEndpoint(v *apiusage.Endpoint) *APIUsageUpdateOne {
 	if v != nil {
 		_u.SetEndpoint(*v)
+	}
+	return _u
+}
+
+// SetStatusCode sets the "status_code" field.
+func (_u *APIUsageUpdateOne) SetStatusCode(v int) *APIUsageUpdateOne {
+	_u.mutation.ResetStatusCode()
+	_u.mutation.SetStatusCode(v)
+	return _u
+}
+
+// SetNillableStatusCode sets the "status_code" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableStatusCode(v *int) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetStatusCode(*v)
+	}
+	return _u
+}
+
+// AddStatusCode adds value to the "status_code" field.
+func (_u *APIUsageUpdateOne) AddStatusCode(v int) *APIUsageUpdateOne {
+	_u.mutation.AddStatusCode(v)
+	return _u
+}
+
+// SetErrorCode sets the "error_code" field.
+func (_u *APIUsageUpdateOne) SetErrorCode(v string) *APIUsageUpdateOne {
+	_u.mutation.SetErrorCode(v)
+	return _u
+}
+
+// SetNillableErrorCode sets the "error_code" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableErrorCode(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetErrorCode(*v)
+	}
+	return _u
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (_u *APIUsageUpdateOne) SetErrorMessage(v string) *APIUsageUpdateOne {
+	_u.mutation.SetErrorMessage(v)
+	return _u
+}
+
+// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableErrorMessage(v *string) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetErrorMessage(*v)
 	}
 	return _u
 }
@@ -1669,6 +1826,27 @@ func (_u *APIUsageUpdateOne) SetNillableFinishedAt(v *time.Time) *APIUsageUpdate
 	return _u
 }
 
+// SetDurationMs sets the "duration_ms" field.
+func (_u *APIUsageUpdateOne) SetDurationMs(v int64) *APIUsageUpdateOne {
+	_u.mutation.ResetDurationMs()
+	_u.mutation.SetDurationMs(v)
+	return _u
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_u *APIUsageUpdateOne) SetNillableDurationMs(v *int64) *APIUsageUpdateOne {
+	if v != nil {
+		_u.SetDurationMs(*v)
+	}
+	return _u
+}
+
+// AddDurationMs adds value to the "duration_ms" field.
+func (_u *APIUsageUpdateOne) AddDurationMs(v int64) *APIUsageUpdateOne {
+	_u.mutation.AddDurationMs(v)
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *APIUsageUpdateOne) SetUser(v *User) *APIUsageUpdateOne {
 	return _u.SetUserID(v.ID)
@@ -1774,6 +1952,21 @@ func (_u *APIUsageUpdateOne) check() error {
 	if v, ok := _u.mutation.Endpoint(); ok {
 		if err := apiusage.EndpointValidator(v); err != nil {
 			return &ValidationError{Name: "endpoint", err: fmt.Errorf(`ent: validator failed for field "APIUsage.endpoint": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StatusCode(); ok {
+		if err := apiusage.StatusCodeValidator(v); err != nil {
+			return &ValidationError{Name: "status_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.status_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ErrorCode(); ok {
+		if err := apiusage.ErrorCodeValidator(v); err != nil {
+			return &ValidationError{Name: "error_code", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ErrorMessage(); ok {
+		if err := apiusage.ErrorMessageValidator(v); err != nil {
+			return &ValidationError{Name: "error_message", err: fmt.Errorf(`ent: validator failed for field "APIUsage.error_message": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.InputTokens(); ok {
@@ -1886,6 +2079,11 @@ func (_u *APIUsageUpdateOne) check() error {
 			return &ValidationError{Name: "calculation_version", err: fmt.Errorf(`ent: validator failed for field "APIUsage.calculation_version": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DurationMs(); ok {
+		if err := apiusage.DurationMsValidator(v); err != nil {
+			return &ValidationError{Name: "duration_ms", err: fmt.Errorf(`ent: validator failed for field "APIUsage.duration_ms": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIUsage.user"`)
 	}
@@ -1932,6 +2130,18 @@ func (_u *APIUsageUpdateOne) sqlSave(ctx context.Context) (_node *APIUsage, err 
 	}
 	if value, ok := _u.mutation.Endpoint(); ok {
 		_spec.SetField(apiusage.FieldEndpoint, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.StatusCode(); ok {
+		_spec.SetField(apiusage.FieldStatusCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStatusCode(); ok {
+		_spec.AddField(apiusage.FieldStatusCode, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ErrorCode(); ok {
+		_spec.SetField(apiusage.FieldErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ErrorMessage(); ok {
+		_spec.SetField(apiusage.FieldErrorMessage, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(apiusage.FieldInputTokens, field.TypeInt, value)
@@ -2052,6 +2262,12 @@ func (_u *APIUsageUpdateOne) sqlSave(ctx context.Context) (_node *APIUsage, err 
 	}
 	if value, ok := _u.mutation.FinishedAt(); ok {
 		_spec.SetField(apiusage.FieldFinishedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.DurationMs(); ok {
+		_spec.SetField(apiusage.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDurationMs(); ok {
+		_spec.AddField(apiusage.FieldDurationMs, field.TypeInt64, value)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{

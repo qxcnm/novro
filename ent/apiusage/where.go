@@ -86,6 +86,21 @@ func RequestID(v uuid.UUID) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldRequestID, v))
 }
 
+// StatusCode applies equality check predicate on the "status_code" field. It's identical to StatusCodeEQ.
+func StatusCode(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldStatusCode, v))
+}
+
+// ErrorCode applies equality check predicate on the "error_code" field. It's identical to ErrorCodeEQ.
+func ErrorCode(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldErrorCode, v))
+}
+
+// ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
+func ErrorMessage(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldErrorMessage, v))
+}
+
 // InputTokens applies equality check predicate on the "input_tokens" field. It's identical to InputTokensEQ.
 func InputTokens(v int) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldInputTokens, v))
@@ -209,6 +224,11 @@ func CreatedAt(v time.Time) predicate.APIUsage {
 // FinishedAt applies equality check predicate on the "finished_at" field. It's identical to FinishedAtEQ.
 func FinishedAt(v time.Time) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldEQ(FieldFinishedAt, v))
+}
+
+// DurationMs applies equality check predicate on the "duration_ms" field. It's identical to DurationMsEQ.
+func DurationMs(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldDurationMs, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
@@ -389,6 +409,176 @@ func EndpointIn(vs ...Endpoint) predicate.APIUsage {
 // EndpointNotIn applies the NotIn predicate on the "endpoint" field.
 func EndpointNotIn(vs ...Endpoint) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldNotIn(FieldEndpoint, vs...))
+}
+
+// StatusCodeEQ applies the EQ predicate on the "status_code" field.
+func StatusCodeEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldStatusCode, v))
+}
+
+// StatusCodeNEQ applies the NEQ predicate on the "status_code" field.
+func StatusCodeNEQ(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldStatusCode, v))
+}
+
+// StatusCodeIn applies the In predicate on the "status_code" field.
+func StatusCodeIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldStatusCode, vs...))
+}
+
+// StatusCodeNotIn applies the NotIn predicate on the "status_code" field.
+func StatusCodeNotIn(vs ...int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldStatusCode, vs...))
+}
+
+// StatusCodeGT applies the GT predicate on the "status_code" field.
+func StatusCodeGT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldStatusCode, v))
+}
+
+// StatusCodeGTE applies the GTE predicate on the "status_code" field.
+func StatusCodeGTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldStatusCode, v))
+}
+
+// StatusCodeLT applies the LT predicate on the "status_code" field.
+func StatusCodeLT(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldStatusCode, v))
+}
+
+// StatusCodeLTE applies the LTE predicate on the "status_code" field.
+func StatusCodeLTE(v int) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldStatusCode, v))
+}
+
+// ErrorCodeEQ applies the EQ predicate on the "error_code" field.
+func ErrorCodeEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldErrorCode, v))
+}
+
+// ErrorCodeNEQ applies the NEQ predicate on the "error_code" field.
+func ErrorCodeNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldErrorCode, v))
+}
+
+// ErrorCodeIn applies the In predicate on the "error_code" field.
+func ErrorCodeIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldErrorCode, vs...))
+}
+
+// ErrorCodeNotIn applies the NotIn predicate on the "error_code" field.
+func ErrorCodeNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldErrorCode, vs...))
+}
+
+// ErrorCodeGT applies the GT predicate on the "error_code" field.
+func ErrorCodeGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldErrorCode, v))
+}
+
+// ErrorCodeGTE applies the GTE predicate on the "error_code" field.
+func ErrorCodeGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldErrorCode, v))
+}
+
+// ErrorCodeLT applies the LT predicate on the "error_code" field.
+func ErrorCodeLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldErrorCode, v))
+}
+
+// ErrorCodeLTE applies the LTE predicate on the "error_code" field.
+func ErrorCodeLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldErrorCode, v))
+}
+
+// ErrorCodeContains applies the Contains predicate on the "error_code" field.
+func ErrorCodeContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldErrorCode, v))
+}
+
+// ErrorCodeHasPrefix applies the HasPrefix predicate on the "error_code" field.
+func ErrorCodeHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldErrorCode, v))
+}
+
+// ErrorCodeHasSuffix applies the HasSuffix predicate on the "error_code" field.
+func ErrorCodeHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldErrorCode, v))
+}
+
+// ErrorCodeEqualFold applies the EqualFold predicate on the "error_code" field.
+func ErrorCodeEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldErrorCode, v))
+}
+
+// ErrorCodeContainsFold applies the ContainsFold predicate on the "error_code" field.
+func ErrorCodeContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldErrorCode, v))
+}
+
+// ErrorMessageEQ applies the EQ predicate on the "error_message" field.
+func ErrorMessageEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldErrorMessage, v))
+}
+
+// ErrorMessageNEQ applies the NEQ predicate on the "error_message" field.
+func ErrorMessageNEQ(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldErrorMessage, v))
+}
+
+// ErrorMessageIn applies the In predicate on the "error_message" field.
+func ErrorMessageIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldErrorMessage, vs...))
+}
+
+// ErrorMessageNotIn applies the NotIn predicate on the "error_message" field.
+func ErrorMessageNotIn(vs ...string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldErrorMessage, vs...))
+}
+
+// ErrorMessageGT applies the GT predicate on the "error_message" field.
+func ErrorMessageGT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldErrorMessage, v))
+}
+
+// ErrorMessageGTE applies the GTE predicate on the "error_message" field.
+func ErrorMessageGTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldErrorMessage, v))
+}
+
+// ErrorMessageLT applies the LT predicate on the "error_message" field.
+func ErrorMessageLT(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldErrorMessage, v))
+}
+
+// ErrorMessageLTE applies the LTE predicate on the "error_message" field.
+func ErrorMessageLTE(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldErrorMessage, v))
+}
+
+// ErrorMessageContains applies the Contains predicate on the "error_message" field.
+func ErrorMessageContains(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContains(FieldErrorMessage, v))
+}
+
+// ErrorMessageHasPrefix applies the HasPrefix predicate on the "error_message" field.
+func ErrorMessageHasPrefix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasPrefix(FieldErrorMessage, v))
+}
+
+// ErrorMessageHasSuffix applies the HasSuffix predicate on the "error_message" field.
+func ErrorMessageHasSuffix(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldHasSuffix(FieldErrorMessage, v))
+}
+
+// ErrorMessageEqualFold applies the EqualFold predicate on the "error_message" field.
+func ErrorMessageEqualFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEqualFold(FieldErrorMessage, v))
+}
+
+// ErrorMessageContainsFold applies the ContainsFold predicate on the "error_message" field.
+func ErrorMessageContainsFold(v string) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldContainsFold(FieldErrorMessage, v))
 }
 
 // InputTokensEQ applies the EQ predicate on the "input_tokens" field.
@@ -1509,6 +1699,46 @@ func FinishedAtLT(v time.Time) predicate.APIUsage {
 // FinishedAtLTE applies the LTE predicate on the "finished_at" field.
 func FinishedAtLTE(v time.Time) predicate.APIUsage {
 	return predicate.APIUsage(sql.FieldLTE(FieldFinishedAt, v))
+}
+
+// DurationMsEQ applies the EQ predicate on the "duration_ms" field.
+func DurationMsEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldEQ(FieldDurationMs, v))
+}
+
+// DurationMsNEQ applies the NEQ predicate on the "duration_ms" field.
+func DurationMsNEQ(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNEQ(FieldDurationMs, v))
+}
+
+// DurationMsIn applies the In predicate on the "duration_ms" field.
+func DurationMsIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldIn(FieldDurationMs, vs...))
+}
+
+// DurationMsNotIn applies the NotIn predicate on the "duration_ms" field.
+func DurationMsNotIn(vs ...int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldNotIn(FieldDurationMs, vs...))
+}
+
+// DurationMsGT applies the GT predicate on the "duration_ms" field.
+func DurationMsGT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGT(FieldDurationMs, v))
+}
+
+// DurationMsGTE applies the GTE predicate on the "duration_ms" field.
+func DurationMsGTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldGTE(FieldDurationMs, v))
+}
+
+// DurationMsLT applies the LT predicate on the "duration_ms" field.
+func DurationMsLT(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLT(FieldDurationMs, v))
+}
+
+// DurationMsLTE applies the LTE predicate on the "duration_ms" field.
+func DurationMsLTE(v int64) predicate.APIUsage {
+	return predicate.APIUsage(sql.FieldLTE(FieldDurationMs, v))
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

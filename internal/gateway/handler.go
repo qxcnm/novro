@@ -44,6 +44,7 @@ type BillingService interface {
 	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Finalize(context.Context, billing.UsageInput) error
+	RecordFailure(context.Context, billing.FailureInput) error
 }
 
 type Dependencies struct {
@@ -257,15 +258,22 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			return
 		}
 	}
+	lastRoute := modelroute.Resolved{}
+	failureCode := "upstream_unavailable"
+	failureMessage := "所有上游渠道均暂时不可用"
+	failureStatus := http.StatusBadGateway
 	for index, attempt := range attempts {
 		route := attempt.route
+		lastRoute = route
 		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, stream)
 		if err != nil {
+			failureCode, failureMessage = "upstream_payload_error", "上游请求内容构建失败"
 			h.logger.Warn("build gateway upstream request body", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
 		upstreamURL, err := buildUpstreamURL(route.BaseURL, route.Provider.Protocol, endpoint)
 		if err != nil {
+			failureCode, failureMessage = "upstream_configuration_error", "上游地址配置无效"
 			h.logger.Warn("gateway route has invalid upstream URL", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
 			continue
 		}
@@ -277,13 +285,18 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		setUpstreamHeaders(upstreamRequest, r, route)
 		response, err := h.client.Do(upstreamRequest)
 		if err != nil {
+			failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
 			h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			if r.Context().Err() != nil {
+				failureStatus = 499
+				failureCode, failureMessage = "client_canceled", "客户端取消请求"
 				break
 			}
 			continue
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			failureCode = "upstream_http_error"
+			failureMessage = fmt.Sprintf("上游返回 HTTP %d", response.StatusCode)
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 			_ = response.Body.Close()
 			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
@@ -297,6 +310,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
 		_ = response.Body.Close()
 		if readErr != nil {
+			failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
 			h.logger.Warn("read gateway upstream response", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
 			continue
 		}
@@ -304,7 +318,13 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	h.refund(actor.User.ID, requestID, reserved, "所有上游渠道均失败")
-	writeError(w, http.StatusBadGateway, "upstream_unavailable", "所有上游渠道均暂时不可用")
+	if lastRoute.ID != uuid.Nil {
+		h.recordFailure(actor, lastRoute, requestID, endpoint, failureStatus, failureCode, failureMessage, publicModel, startedAt)
+	}
+	if failureStatus == 499 {
+		return
+	}
+	writeError(w, failureStatus, "upstream_unavailable", "所有上游渠道均暂时不可用")
 }
 
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
@@ -494,13 +514,35 @@ func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelr
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID, RequestID: requestID, Endpoint: endpoint,
-		InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
 		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 	err, attempts := h.retrySettlement(finalizeCtx, func() error { return h.billing.Finalize(finalizeCtx, input) })
 	if err != nil {
 		h.logger.Error("finalize gateway usage", "request_id", requestID, "attempts", attempts, "error", err)
 	}
 	return err
+}
+
+func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, statusCode int, errorCode, errorMessage, modelName string, startedAt time.Time) {
+	if route.UpstreamModel == nil || route.UpstreamModelID == nil || actor.User.BillingGroup == nil || actor.User.BillingGroupID == nil {
+		return
+	}
+	finishedAt := h.now()
+	duration := finishedAt.Sub(startedAt)
+	if duration < 0 {
+		duration = 0
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(context.Background()), 10*time.Second)
+	defer cancel()
+	input := billing.FailureInput{
+		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID,
+		RequestID: requestID, Endpoint: endpoint, StatusCode: statusCode, ErrorCode: errorCode, ErrorMessage: errorMessage,
+		ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName,
+		CreatedAt: startedAt, FinishedAt: finishedAt, DurationMS: duration.Milliseconds(),
+	}
+	if err := h.billing.RecordFailure(ctx, input); err != nil {
+		h.logger.Error("record failed gateway usage", "request_id", requestID, "error", err)
+	}
 }
 
 func (h *Handler) refund(userID, requestID uuid.UUID, amount int64, description string) {

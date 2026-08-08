@@ -50,6 +50,9 @@ type Summary struct {
 type Usage struct {
 	ID                      uuid.UUID `json:"id"`
 	RequestID               uuid.UUID `json:"request_id"`
+	StatusCode              int       `json:"status_code"`
+	ErrorCode               string    `json:"error_code,omitempty"`
+	ErrorMessage            string    `json:"error_message,omitempty"`
 	APIKeyID                uuid.UUID `json:"api_key_id"`
 	APIKeyName              string    `json:"api_key_name"`
 	ModelName               string    `json:"model"`
@@ -73,6 +76,7 @@ type Usage struct {
 	UpstreamRequestID       string    `json:"upstream_request_id,omitempty"`
 	CreatedAt               time.Time `json:"created_at"`
 	FinishedAt              time.Time `json:"finished_at"`
+	DurationMS              int64     `json:"duration_ms"`
 }
 
 type UsageInput struct {
@@ -83,6 +87,7 @@ type UsageInput struct {
 	BillingGroupID     *uuid.UUID
 	RequestID          uuid.UUID
 	Endpoint           string
+	StatusCode         int
 	InputTokens        int
 	Tokens             TokenBreakdown
 	OutputTokens       int
@@ -100,4 +105,24 @@ type UsageInput struct {
 	CalculationVersion string
 	CreatedAt          time.Time
 	FinishedAt         time.Time
+}
+
+type FailureInput struct {
+	UserID            uuid.UUID
+	APIKeyID          uuid.UUID
+	ModelRouteID      uuid.UUID
+	UpstreamModelID   *uuid.UUID
+	BillingGroupID    *uuid.UUID
+	RequestID         uuid.UUID
+	Endpoint          string
+	StatusCode        int
+	ErrorCode         string
+	ErrorMessage      string
+	ModelName         string
+	UpstreamModelName string
+	BillingGroupCode  string
+	BillingGroupName  string
+	CreatedAt         time.Time
+	FinishedAt        time.Time
+	DurationMS        int64
 }

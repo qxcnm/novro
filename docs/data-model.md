@@ -262,14 +262,16 @@ GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不写
 
 - `user_id`、`api_key_id`、`model_route_id`
 - `request_id`、`endpoint`
+- `status_code`、`error_code`、`error_message`、`duration_ms`
 - `input_tokens`、`uncached_input_tokens`、`cache_read_input_tokens`、`cache_write_input_tokens`、
   `cache_write_1h_input_tokens`、`output_tokens`
 - 当时采用的各类价格、`base_cost_micros`、`multiplier_bps`、计费分组和算法版本
 - `reserved_micros`、`cost_micros`、`estimated`
 - `upstream_request_id`、`created_at`、`finished_at`
 
-网关按各维度 `token × 单价` 汇总原始分子，乘计费分组倍率后只向上取整一次；
-该表保存调用审计和不可变结算依据，不保存请求提示词、完整响应或上游凭据。
+网关按各维度 `token × 单价` 汇总原始分子，乘计费分组倍率后只向上取整一次；所有候选上游均失败的请求也会写入
+该表，但费用和 Token 保持为 0，并通过状态码和错误字段标记失败。该表保存调用审计和不可变结算依据，
+不保存请求提示词、完整响应或上游凭据。
 
 ## 16. 数据库扩展
 

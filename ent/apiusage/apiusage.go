@@ -30,6 +30,12 @@ const (
 	FieldRequestID = "request_id"
 	// FieldEndpoint holds the string denoting the endpoint field in the database.
 	FieldEndpoint = "endpoint"
+	// FieldStatusCode holds the string denoting the status_code field in the database.
+	FieldStatusCode = "status_code"
+	// FieldErrorCode holds the string denoting the error_code field in the database.
+	FieldErrorCode = "error_code"
+	// FieldErrorMessage holds the string denoting the error_message field in the database.
+	FieldErrorMessage = "error_message"
 	// FieldInputTokens holds the string denoting the input_tokens field in the database.
 	FieldInputTokens = "input_tokens"
 	// FieldUncachedInputTokens holds the string denoting the uncached_input_tokens field in the database.
@@ -80,6 +86,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldFinishedAt holds the string denoting the finished_at field in the database.
 	FieldFinishedAt = "finished_at"
+	// FieldDurationMs holds the string denoting the duration_ms field in the database.
+	FieldDurationMs = "duration_ms"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeAPIKey holds the string denoting the api_key edge name in mutations.
@@ -139,6 +147,9 @@ var Columns = []string{
 	FieldBillingGroupID,
 	FieldRequestID,
 	FieldEndpoint,
+	FieldStatusCode,
+	FieldErrorCode,
+	FieldErrorMessage,
 	FieldInputTokens,
 	FieldUncachedInputTokens,
 	FieldCacheReadInputTokens,
@@ -164,6 +175,7 @@ var Columns = []string{
 	FieldCalculationVersion,
 	FieldCreatedAt,
 	FieldFinishedAt,
+	FieldDurationMs,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -177,6 +189,18 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultStatusCode holds the default value on creation for the "status_code" field.
+	DefaultStatusCode int
+	// StatusCodeValidator is a validator for the "status_code" field. It is called by the builders before save.
+	StatusCodeValidator func(int) error
+	// DefaultErrorCode holds the default value on creation for the "error_code" field.
+	DefaultErrorCode string
+	// ErrorCodeValidator is a validator for the "error_code" field. It is called by the builders before save.
+	ErrorCodeValidator func(string) error
+	// DefaultErrorMessage holds the default value on creation for the "error_message" field.
+	DefaultErrorMessage string
+	// ErrorMessageValidator is a validator for the "error_message" field. It is called by the builders before save.
+	ErrorMessageValidator func(string) error
 	// DefaultInputTokens holds the default value on creation for the "input_tokens" field.
 	DefaultInputTokens int
 	// InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
@@ -271,6 +295,10 @@ var (
 	DefaultCreatedAt func() time.Time
 	// DefaultFinishedAt holds the default value on creation for the "finished_at" field.
 	DefaultFinishedAt func() time.Time
+	// DefaultDurationMs holds the default value on creation for the "duration_ms" field.
+	DefaultDurationMs int64
+	// DurationMsValidator is a validator for the "duration_ms" field. It is called by the builders before save.
+	DurationMsValidator func(int64) error
 	// DefaultID holds the default value on creation for the "id" field.
 	DefaultID func() uuid.UUID
 )
@@ -340,6 +368,21 @@ func ByRequestID(opts ...sql.OrderTermOption) OrderOption {
 // ByEndpoint orders the results by the endpoint field.
 func ByEndpoint(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEndpoint, opts...).ToFunc()
+}
+
+// ByStatusCode orders the results by the status_code field.
+func ByStatusCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatusCode, opts...).ToFunc()
+}
+
+// ByErrorCode orders the results by the error_code field.
+func ByErrorCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldErrorCode, opts...).ToFunc()
+}
+
+// ByErrorMessage orders the results by the error_message field.
+func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
 }
 
 // ByInputTokens orders the results by the input_tokens field.
@@ -465,6 +508,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByFinishedAt orders the results by the finished_at field.
 func ByFinishedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFinishedAt, opts...).ToFunc()
+}
+
+// ByDurationMs orders the results by the duration_ms field.
+func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDurationMs, opts...).ToFunc()
 }
 
 // ByUserField orders the results by user field.

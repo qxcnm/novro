@@ -61,6 +61,7 @@ type fakeBilling struct {
 	refundCalls    int
 	finalizeCalls  int
 	usage          billing.UsageInput
+	failures       []billing.FailureInput
 }
 
 func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
@@ -92,6 +93,10 @@ func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) erro
 	f.usage = input
 	return nil
 }
+func (f *fakeBilling) RecordFailure(_ context.Context, input billing.FailureInput) error {
+	f.failures = append(f.failures, input)
+	return nil
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -102,6 +107,7 @@ type noopBilling struct{}
 func (noopBilling) Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error { return nil }
 func (noopBilling) Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error  { return nil }
 func (noopBilling) Finalize(context.Context, billing.UsageInput) error                 { return nil }
+func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error          { return nil }
 
 type terminalErrorReader struct {
 	reader *strings.Reader
@@ -386,11 +392,14 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusBadGateway || calls != 2 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 {
+	if response.Code != http.StatusBadGateway || calls != 2 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "upstream_unavailable") {
 		t.Fatalf("unexpected error body: %s", response.Body.String())
+	}
+	if failure := biller.failures[0]; failure.StatusCode != http.StatusBadGateway || failure.ErrorCode != "upstream_http_error" || failure.ErrorMessage != "上游返回 HTTP 429" || failure.ModelName != "deepseek-chat" {
+		t.Fatalf("unexpected failure log: %+v", failure)
 	}
 }
 
