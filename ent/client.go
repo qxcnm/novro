@@ -19,6 +19,8 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
+	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -43,6 +45,10 @@ type Client struct {
 	APIUsage *APIUsageClient
 	// BillingGroup is the client for interacting with the BillingGroup builders.
 	BillingGroup *BillingGroupClient
+	// EmailSMTPConfig is the client for interacting with the EmailSMTPConfig builders.
+	EmailSMTPConfig *EmailSMTPConfigClient
+	// EmailVerificationCode is the client for interacting with the EmailVerificationCode builders.
+	EmailVerificationCode *EmailVerificationCodeClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
 	// PaymentConfig is the client for interacting with the PaymentConfig builders.
@@ -79,6 +85,8 @@ func (c *Client) init() {
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIUsage = NewAPIUsageClient(c.config)
 	c.BillingGroup = NewBillingGroupClient(c.config)
+	c.EmailSMTPConfig = NewEmailSMTPConfigClient(c.config)
+	c.EmailVerificationCode = NewEmailVerificationCodeClient(c.config)
 	c.ModelRoute = NewModelRouteClient(c.config)
 	c.PaymentConfig = NewPaymentConfigClient(c.config)
 	c.Provider = NewProviderClient(c.config)
@@ -180,22 +188,24 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:           ctx,
-		config:        cfg,
-		APIKey:        NewAPIKeyClient(cfg),
-		APIUsage:      NewAPIUsageClient(cfg),
-		BillingGroup:  NewBillingGroupClient(cfg),
-		ModelRoute:    NewModelRouteClient(cfg),
-		PaymentConfig: NewPaymentConfigClient(cfg),
-		Provider:      NewProviderClient(cfg),
-		SystemSetting: NewSystemSettingClient(cfg),
-		TopUpOrder:    NewTopUpOrderClient(cfg),
-		UpstreamModel: NewUpstreamModelClient(cfg),
-		User:          NewUserClient(cfg),
-		UserIdentity:  NewUserIdentityClient(cfg),
-		UserSession:   NewUserSessionClient(cfg),
-		Wallet:        NewWalletClient(cfg),
-		WalletEntry:   NewWalletEntryClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		APIKey:                NewAPIKeyClient(cfg),
+		APIUsage:              NewAPIUsageClient(cfg),
+		BillingGroup:          NewBillingGroupClient(cfg),
+		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
+		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
+		ModelRoute:            NewModelRouteClient(cfg),
+		PaymentConfig:         NewPaymentConfigClient(cfg),
+		Provider:              NewProviderClient(cfg),
+		SystemSetting:         NewSystemSettingClient(cfg),
+		TopUpOrder:            NewTopUpOrderClient(cfg),
+		UpstreamModel:         NewUpstreamModelClient(cfg),
+		User:                  NewUserClient(cfg),
+		UserIdentity:          NewUserIdentityClient(cfg),
+		UserSession:           NewUserSessionClient(cfg),
+		Wallet:                NewWalletClient(cfg),
+		WalletEntry:           NewWalletEntryClient(cfg),
 	}, nil
 }
 
@@ -213,22 +223,24 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:           ctx,
-		config:        cfg,
-		APIKey:        NewAPIKeyClient(cfg),
-		APIUsage:      NewAPIUsageClient(cfg),
-		BillingGroup:  NewBillingGroupClient(cfg),
-		ModelRoute:    NewModelRouteClient(cfg),
-		PaymentConfig: NewPaymentConfigClient(cfg),
-		Provider:      NewProviderClient(cfg),
-		SystemSetting: NewSystemSettingClient(cfg),
-		TopUpOrder:    NewTopUpOrderClient(cfg),
-		UpstreamModel: NewUpstreamModelClient(cfg),
-		User:          NewUserClient(cfg),
-		UserIdentity:  NewUserIdentityClient(cfg),
-		UserSession:   NewUserSessionClient(cfg),
-		Wallet:        NewWalletClient(cfg),
-		WalletEntry:   NewWalletEntryClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		APIKey:                NewAPIKeyClient(cfg),
+		APIUsage:              NewAPIUsageClient(cfg),
+		BillingGroup:          NewBillingGroupClient(cfg),
+		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
+		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
+		ModelRoute:            NewModelRouteClient(cfg),
+		PaymentConfig:         NewPaymentConfigClient(cfg),
+		Provider:              NewProviderClient(cfg),
+		SystemSetting:         NewSystemSettingClient(cfg),
+		TopUpOrder:            NewTopUpOrderClient(cfg),
+		UpstreamModel:         NewUpstreamModelClient(cfg),
+		User:                  NewUserClient(cfg),
+		UserIdentity:          NewUserIdentityClient(cfg),
+		UserSession:           NewUserSessionClient(cfg),
+		Wallet:                NewWalletClient(cfg),
+		WalletEntry:           NewWalletEntryClient(cfg),
 	}, nil
 }
 
@@ -258,7 +270,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIUsage, c.BillingGroup, c.ModelRoute, c.PaymentConfig, c.Provider,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
+		c.EmailVerificationCode, c.ModelRoute, c.PaymentConfig, c.Provider,
 		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
 		c.UserSession, c.Wallet, c.WalletEntry,
 	} {
@@ -270,7 +283,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIUsage, c.BillingGroup, c.ModelRoute, c.PaymentConfig, c.Provider,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
+		c.EmailVerificationCode, c.ModelRoute, c.PaymentConfig, c.Provider,
 		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
 		c.UserSession, c.Wallet, c.WalletEntry,
 	} {
@@ -287,6 +301,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIUsage.mutate(ctx, m)
 	case *BillingGroupMutation:
 		return c.BillingGroup.mutate(ctx, m)
+	case *EmailSMTPConfigMutation:
+		return c.EmailSMTPConfig.mutate(ctx, m)
+	case *EmailVerificationCodeMutation:
+		return c.EmailVerificationCode.mutate(ctx, m)
 	case *ModelRouteMutation:
 		return c.ModelRoute.mutate(ctx, m)
 	case *PaymentConfigMutation:
@@ -854,6 +872,272 @@ func (c *BillingGroupClient) mutate(ctx context.Context, m *BillingGroupMutation
 		return (&BillingGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown BillingGroup mutation op: %q", m.Op())
+	}
+}
+
+// EmailSMTPConfigClient is a client for the EmailSMTPConfig schema.
+type EmailSMTPConfigClient struct {
+	config
+}
+
+// NewEmailSMTPConfigClient returns a client for the EmailSMTPConfig from the given config.
+func NewEmailSMTPConfigClient(c config) *EmailSMTPConfigClient {
+	return &EmailSMTPConfigClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `emailsmtpconfig.Hooks(f(g(h())))`.
+func (c *EmailSMTPConfigClient) Use(hooks ...Hook) {
+	c.hooks.EmailSMTPConfig = append(c.hooks.EmailSMTPConfig, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `emailsmtpconfig.Intercept(f(g(h())))`.
+func (c *EmailSMTPConfigClient) Intercept(interceptors ...Interceptor) {
+	c.inters.EmailSMTPConfig = append(c.inters.EmailSMTPConfig, interceptors...)
+}
+
+// Create returns a builder for creating a EmailSMTPConfig entity.
+func (c *EmailSMTPConfigClient) Create() *EmailSMTPConfigCreate {
+	mutation := newEmailSMTPConfigMutation(c.config, OpCreate)
+	return &EmailSMTPConfigCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of EmailSMTPConfig entities.
+func (c *EmailSMTPConfigClient) CreateBulk(builders ...*EmailSMTPConfigCreate) *EmailSMTPConfigCreateBulk {
+	return &EmailSMTPConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *EmailSMTPConfigClient) MapCreateBulk(slice any, setFunc func(*EmailSMTPConfigCreate, int)) *EmailSMTPConfigCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &EmailSMTPConfigCreateBulk{err: fmt.Errorf("calling to EmailSMTPConfigClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*EmailSMTPConfigCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &EmailSMTPConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for EmailSMTPConfig.
+func (c *EmailSMTPConfigClient) Update() *EmailSMTPConfigUpdate {
+	mutation := newEmailSMTPConfigMutation(c.config, OpUpdate)
+	return &EmailSMTPConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *EmailSMTPConfigClient) UpdateOne(_m *EmailSMTPConfig) *EmailSMTPConfigUpdateOne {
+	mutation := newEmailSMTPConfigMutation(c.config, OpUpdateOne, withEmailSMTPConfig(_m))
+	return &EmailSMTPConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *EmailSMTPConfigClient) UpdateOneID(id string) *EmailSMTPConfigUpdateOne {
+	mutation := newEmailSMTPConfigMutation(c.config, OpUpdateOne, withEmailSMTPConfigID(id))
+	return &EmailSMTPConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for EmailSMTPConfig.
+func (c *EmailSMTPConfigClient) Delete() *EmailSMTPConfigDelete {
+	mutation := newEmailSMTPConfigMutation(c.config, OpDelete)
+	return &EmailSMTPConfigDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *EmailSMTPConfigClient) DeleteOne(_m *EmailSMTPConfig) *EmailSMTPConfigDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *EmailSMTPConfigClient) DeleteOneID(id string) *EmailSMTPConfigDeleteOne {
+	builder := c.Delete().Where(emailsmtpconfig.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &EmailSMTPConfigDeleteOne{builder}
+}
+
+// Query returns a query builder for EmailSMTPConfig.
+func (c *EmailSMTPConfigClient) Query() *EmailSMTPConfigQuery {
+	return &EmailSMTPConfigQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeEmailSMTPConfig},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a EmailSMTPConfig entity by its id.
+func (c *EmailSMTPConfigClient) Get(ctx context.Context, id string) (*EmailSMTPConfig, error) {
+	return c.Query().Where(emailsmtpconfig.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *EmailSMTPConfigClient) GetX(ctx context.Context, id string) *EmailSMTPConfig {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *EmailSMTPConfigClient) Hooks() []Hook {
+	return c.hooks.EmailSMTPConfig
+}
+
+// Interceptors returns the client interceptors.
+func (c *EmailSMTPConfigClient) Interceptors() []Interceptor {
+	return c.inters.EmailSMTPConfig
+}
+
+func (c *EmailSMTPConfigClient) mutate(ctx context.Context, m *EmailSMTPConfigMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&EmailSMTPConfigCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&EmailSMTPConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&EmailSMTPConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&EmailSMTPConfigDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown EmailSMTPConfig mutation op: %q", m.Op())
+	}
+}
+
+// EmailVerificationCodeClient is a client for the EmailVerificationCode schema.
+type EmailVerificationCodeClient struct {
+	config
+}
+
+// NewEmailVerificationCodeClient returns a client for the EmailVerificationCode from the given config.
+func NewEmailVerificationCodeClient(c config) *EmailVerificationCodeClient {
+	return &EmailVerificationCodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `emailverificationcode.Hooks(f(g(h())))`.
+func (c *EmailVerificationCodeClient) Use(hooks ...Hook) {
+	c.hooks.EmailVerificationCode = append(c.hooks.EmailVerificationCode, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `emailverificationcode.Intercept(f(g(h())))`.
+func (c *EmailVerificationCodeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.EmailVerificationCode = append(c.inters.EmailVerificationCode, interceptors...)
+}
+
+// Create returns a builder for creating a EmailVerificationCode entity.
+func (c *EmailVerificationCodeClient) Create() *EmailVerificationCodeCreate {
+	mutation := newEmailVerificationCodeMutation(c.config, OpCreate)
+	return &EmailVerificationCodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of EmailVerificationCode entities.
+func (c *EmailVerificationCodeClient) CreateBulk(builders ...*EmailVerificationCodeCreate) *EmailVerificationCodeCreateBulk {
+	return &EmailVerificationCodeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *EmailVerificationCodeClient) MapCreateBulk(slice any, setFunc func(*EmailVerificationCodeCreate, int)) *EmailVerificationCodeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &EmailVerificationCodeCreateBulk{err: fmt.Errorf("calling to EmailVerificationCodeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*EmailVerificationCodeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &EmailVerificationCodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for EmailVerificationCode.
+func (c *EmailVerificationCodeClient) Update() *EmailVerificationCodeUpdate {
+	mutation := newEmailVerificationCodeMutation(c.config, OpUpdate)
+	return &EmailVerificationCodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *EmailVerificationCodeClient) UpdateOne(_m *EmailVerificationCode) *EmailVerificationCodeUpdateOne {
+	mutation := newEmailVerificationCodeMutation(c.config, OpUpdateOne, withEmailVerificationCode(_m))
+	return &EmailVerificationCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *EmailVerificationCodeClient) UpdateOneID(id uuid.UUID) *EmailVerificationCodeUpdateOne {
+	mutation := newEmailVerificationCodeMutation(c.config, OpUpdateOne, withEmailVerificationCodeID(id))
+	return &EmailVerificationCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for EmailVerificationCode.
+func (c *EmailVerificationCodeClient) Delete() *EmailVerificationCodeDelete {
+	mutation := newEmailVerificationCodeMutation(c.config, OpDelete)
+	return &EmailVerificationCodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *EmailVerificationCodeClient) DeleteOne(_m *EmailVerificationCode) *EmailVerificationCodeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *EmailVerificationCodeClient) DeleteOneID(id uuid.UUID) *EmailVerificationCodeDeleteOne {
+	builder := c.Delete().Where(emailverificationcode.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &EmailVerificationCodeDeleteOne{builder}
+}
+
+// Query returns a query builder for EmailVerificationCode.
+func (c *EmailVerificationCodeClient) Query() *EmailVerificationCodeQuery {
+	return &EmailVerificationCodeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeEmailVerificationCode},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a EmailVerificationCode entity by its id.
+func (c *EmailVerificationCodeClient) Get(ctx context.Context, id uuid.UUID) (*EmailVerificationCode, error) {
+	return c.Query().Where(emailverificationcode.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *EmailVerificationCodeClient) GetX(ctx context.Context, id uuid.UUID) *EmailVerificationCode {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *EmailVerificationCodeClient) Hooks() []Hook {
+	return c.hooks.EmailVerificationCode
+}
+
+// Interceptors returns the client interceptors.
+func (c *EmailVerificationCodeClient) Interceptors() []Interceptor {
+	return c.inters.EmailVerificationCode
+}
+
+func (c *EmailVerificationCodeClient) mutate(ctx context.Context, m *EmailVerificationCodeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&EmailVerificationCodeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&EmailVerificationCodeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&EmailVerificationCodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&EmailVerificationCodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown EmailVerificationCode mutation op: %q", m.Op())
 	}
 }
 
@@ -2003,6 +2287,38 @@ func (c *UserClient) QueryBillingGroup(_m *User) *BillingGroupQuery {
 	return query
 }
 
+// QueryReferrer queries the referrer edge of a User.
+func (c *UserClient) QueryReferrer(_m *User) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, user.ReferrerTable, user.ReferrerColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryReferrals queries the referrals edge of a User.
+func (c *UserClient) QueryReferrals(_m *User) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ReferralsTable, user.ReferralsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -2659,13 +2975,13 @@ func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIUsage, BillingGroup, ModelRoute, PaymentConfig, Provider,
-		SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity, UserSession,
-		Wallet, WalletEntry []ent.Hook
+		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
+		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
+		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Hook
 	}
 	inters struct {
-		APIKey, APIUsage, BillingGroup, ModelRoute, PaymentConfig, Provider,
-		SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity, UserSession,
-		Wallet, WalletEntry []ent.Interceptor
+		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
+		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
+		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Interceptor
 	}
 )

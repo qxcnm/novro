@@ -21,14 +21,22 @@ import (
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/config"
 	"github.com/novro-gateway/novro/internal/database"
+	"github.com/novro-gateway/novro/internal/email"
 	"github.com/novro-gateway/novro/internal/gateway"
 	"github.com/novro-gateway/novro/internal/httpapi"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/providersync"
+	"github.com/novro-gateway/novro/internal/referral"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
+)
+
+const (
+	defaultBootstrapUsername    = "novro"
+	defaultBootstrapEmail       = "novro@novro.local"
+	defaultBootstrapDisplayName = "Novro Administrator"
 )
 
 func main() {
@@ -75,15 +83,6 @@ func main() {
 			return
 		}
 	}
-	if len(os.Args) == 1 {
-		logger.Info("checking database migrations")
-		if err := applyPendingMigrations(ctx, application.DB, migrate.Apply); err != nil {
-			logger.Error("automatic database migration failed", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("database migrations are ready")
-	}
-
 	passwordHasher := password.Hasher{}
 	userService := user.NewService(user.NewEntStore(application.Ent), passwordHasher)
 	apiKeyService := apikey.NewService(apikey.NewEntStore(application.Ent))
@@ -98,22 +97,23 @@ func main() {
 	upstreamModelService := upstreammodel.NewService(upstreammodel.NewEntStore(application.Ent))
 	providerModelService := providersync.NewService(application.Ent, providerCipher, nil)
 	billingGroupService := billinggroup.NewService(billinggroup.NewEntStore(application.Ent))
+	referralService := referral.NewService(referral.NewEntStore(application.Ent), cfg.Referral.RewardBPS, cfg.Auth.PublicURL)
 	paymentService := payment.NewService(
-		payment.NewEntStore(application.Ent), payment.NewConfigEntStore(application.Ent), providerCipher,
+		payment.NewEntStore(application.Ent, cfg.Referral.RewardBPS), payment.NewConfigEntStore(application.Ent), providerCipher,
 		payment.EPayConfig{
 			APIURL: cfg.Payment.EPay.APIURL, MerchantID: cfg.Payment.EPay.MerchantID, MerchantKey: cfg.Payment.EPay.MerchantKey,
 			SiteName: cfg.Payment.EPay.SiteName, Channels: cfg.Payment.EPay.Channels,
 			NotifyURL: cfg.Auth.PublicURL + "/api/payments/epay/notify",
-			ReturnURL: cfg.Auth.PublicURL + "/console/billing?payment=returned",
+			ReturnURL: cfg.Auth.PublicURL + "/api/payments/epay/return",
 		},
 	)
 	if len(os.Args) > 1 && os.Args[1] == "bootstrap-admin" {
-		username := os.Getenv("NOVRO_BOOTSTRAP_USERNAME")
-		email := os.Getenv("NOVRO_BOOTSTRAP_EMAIL")
-		displayName := os.Getenv("NOVRO_BOOTSTRAP_DISPLAY_NAME")
+		username := envOrDefault("NOVRO_BOOTSTRAP_USERNAME", defaultBootstrapUsername)
+		email := envOrDefault("NOVRO_BOOTSTRAP_EMAIL", defaultBootstrapEmail)
+		displayName := envOrDefault("NOVRO_BOOTSTRAP_DISPLAY_NAME", defaultBootstrapDisplayName)
 		plainTextPassword := os.Getenv("NOVRO_BOOTSTRAP_PASSWORD")
-		if username == "" || email == "" || plainTextPassword == "" {
-			logger.Error("bootstrap requires NOVRO_BOOTSTRAP_USERNAME, NOVRO_BOOTSTRAP_EMAIL, and NOVRO_BOOTSTRAP_PASSWORD")
+		if plainTextPassword == "" {
+			logger.Error("bootstrap requires NOVRO_BOOTSTRAP_PASSWORD")
 			os.Exit(1)
 		}
 		created, err := userService.InitializeAdmin(ctx, user.RegisterInput{
@@ -123,10 +123,31 @@ func main() {
 			Password:    plainTextPassword,
 		})
 		if err != nil {
+			if errors.Is(err, user.ErrAlreadyInitialized) {
+				logger.Info("administrator already initialized")
+				return
+			}
 			logger.Error("administrator bootstrap failed", "error", err)
 			os.Exit(1)
 		}
 		logger.Info("administrator created", "user_id", created.ID, "username", created.Username)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "reconcile-top-up" {
+		if len(os.Args) != 3 {
+			logger.Error("reconcile-top-up requires exactly one Novro order number")
+			os.Exit(2)
+		}
+		if err := paymentService.Bootstrap(ctx); err != nil {
+			logger.Error("payment configuration bootstrap failed", "error", err)
+			os.Exit(1)
+		}
+		order, err := paymentService.Reconcile(ctx, os.Args[2])
+		if err != nil {
+			logger.Error("top-up reconciliation failed", "out_trade_no", os.Args[2], "error", err)
+			os.Exit(1)
+		}
+		logger.Info("top-up reconciliation complete", "out_trade_no", order.OutTradeNo, "status", order.Status)
 		return
 	}
 	if len(os.Args) > 1 {
@@ -153,6 +174,16 @@ func main() {
 		os.Exit(1)
 	}
 	oidcService := optionalOIDCService(oidcClient)
+	var developmentMailer email.Mailer
+	if cfg.Environment != "production" {
+		developmentMailer = email.NewLogMailer(logger)
+	}
+	emailConfigService := email.NewService(email.NewEntStore(application.Ent), providerCipher, cfg.Email, developmentMailer, cfg.Environment == "production")
+	emailVerificationService, err := email.NewVerificationService(email.NewSQLStore(application.DB), emailConfigService, cfg.Session.Secret)
+	if err != nil {
+		logger.Error("email verification initialization failed", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
@@ -164,6 +195,7 @@ func main() {
 			Providers:           providerService,
 			Billing:             billingService,
 			Payments:            paymentService,
+			Referrals:           referralService,
 			ModelRoutes:         modelRouteService,
 			UpstreamModels:      upstreamModelService,
 			ProviderModels:      providerModelService,
@@ -177,11 +209,13 @@ func main() {
 			RegistrationEnabled: cfg.Auth.RegistrationEnabled,
 			OIDC:                oidcService,
 			OIDCDisplayName:     cfg.Auth.OIDC.DisplayName,
+			EmailVerification:   emailVerificationService,
+			EmailConfig:         emailConfigService,
 		}),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 0,
+		ReadTimeout:       0,
 		WriteTimeout:      0,
-		IdleTimeout:       60 * time.Second,
+		IdleTimeout:       0,
 	}
 
 	serverErrors := make(chan error, 1)
@@ -203,6 +237,13 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func optionalOIDCService(client *auth.OIDCClient) httpapi.OIDCService {

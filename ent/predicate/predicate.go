@@ -15,6 +15,12 @@ type APIUsage func(*sql.Selector)
 // BillingGroup is the predicate function for billinggroup builders.
 type BillingGroup func(*sql.Selector)
 
+// EmailSMTPConfig is the predicate function for emailsmtpconfig builders.
+type EmailSMTPConfig func(*sql.Selector)
+
+// EmailVerificationCode is the predicate function for emailverificationcode builders.
+type EmailVerificationCode func(*sql.Selector)
+
 // ModelRoute is the predicate function for modelroute builders.
 type ModelRoute func(*sql.Selector)
 

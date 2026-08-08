@@ -22,6 +22,12 @@ func testEnv() map[string]string {
 		"NOVRO_DATABASE_CONN_MAX_LIFETIME": "15m",
 		"NOVRO_DATABASE_MAX_OPEN_CONNS":    "12",
 		"NOVRO_DATABASE_MAX_IDLE_CONNS":    "4",
+		"NOVRO_EMAIL_SMTP_HOST":            "smtp.example.com",
+		"NOVRO_EMAIL_SMTP_PORT":            "587",
+		"NOVRO_EMAIL_SMTP_USERNAME":        "novro@example.com",
+		"NOVRO_EMAIL_SMTP_PASSWORD":        "test-smtp-password",
+		"NOVRO_EMAIL_SMTP_TLS":             "true",
+		"NOVRO_EMAIL_FROM":                 "novro@example.com",
 	}
 }
 
@@ -53,6 +59,9 @@ func TestLoadValidatesAndAppliesDefaults(t *testing.T) {
 	}
 	if !cfg.Auth.RegistrationEnabled || cfg.Auth.OIDC.Enabled() || cfg.Auth.PublicURL != "http://localhost:3000" {
 		t.Fatalf("unexpected authentication config: %+v", cfg.Auth)
+	}
+	if cfg.Referral.RewardBPS != 1_000 {
+		t.Fatalf("unexpected referral config: %+v", cfg.Referral)
 	}
 	if !strings.Contains(cfg.Database.DSN(), "tls=skip-verify") || !strings.Contains(cfg.Database.DSN(), "multiStatements=true") {
 		t.Fatalf("DSN does not contain required connection options: %s", redactDSN(cfg.Database.DSN()))
@@ -123,6 +132,23 @@ func TestLoadValidatesOptionalEPayConfiguration(t *testing.T) {
 	values["NOVRO_EPAY_API_URL"] = "http://pay.example.com"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "https NOVRO_EPAY_API_URL") {
 		t.Fatalf("expected insecure production EPay error, got %v", err)
+	}
+}
+
+func TestLoadValidatesReferralRewardRate(t *testing.T) {
+	values := testEnv()
+	values["NOVRO_REFERRAL_REWARD_BPS"] = "750"
+	cfg, err := loadMap(values)
+	if err != nil || cfg.Referral.RewardBPS != 750 {
+		t.Fatalf("valid referral reward rate rejected: cfg=%+v err=%v", cfg.Referral, err)
+	}
+
+	for _, value := range []string{"-1", "10001", "not-a-number"} {
+		values = testEnv()
+		values["NOVRO_REFERRAL_REWARD_BPS"] = value
+		if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "NOVRO_REFERRAL_REWARD_BPS") {
+			t.Fatalf("reward rate %q was not rejected: %v", value, err)
+		}
 	}
 }
 
@@ -223,6 +249,24 @@ func TestLoadRequiresPublicURLOrigin(t *testing.T) {
 		if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "NOVRO_PUBLIC_URL") {
 			t.Fatalf("public URL %q was not rejected: %v", publicURL, err)
 		}
+	}
+}
+
+func TestLoadAllowsDatabaseManagedSMTPInProduction(t *testing.T) {
+	values := testEnv()
+	values["NOVRO_ENVIRONMENT"] = "production"
+	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
+	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	for _, key := range []string{"NOVRO_EMAIL_SMTP_HOST", "NOVRO_EMAIL_SMTP_USERNAME", "NOVRO_EMAIL_SMTP_PASSWORD", "NOVRO_EMAIL_FROM"} {
+		delete(values, key)
+	}
+	config, err := loadMap(values)
+	if err != nil {
+		t.Fatalf("load production configuration without SMTP environment fallback: %v", err)
+	}
+	if config.Email.Host != "" {
+		t.Fatalf("unexpected SMTP environment fallback: %+v", config.Email)
 	}
 }
 

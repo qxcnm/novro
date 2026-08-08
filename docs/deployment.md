@@ -3,6 +3,10 @@
 本文描述单机或同一内网中的生产部署。Novro 仍是一个 Go API 服务和一个 Next.js
 控制台组成的模块化单体，不需要 Redis、消息队列或额外微服务。
 
+如果希望只维护一个对外的 Novro 应用服务，优先使用 [Docker 单应用部署](docker-deployment.md)：
+Nginx、Go 和 Next.js 在同一个应用容器内运行，MySQL 作为内部数据库容器运行，脚本会
+完成环境安装、迁移、初始化和就绪检查。本文后续章节保留源码进程部署、备份和恢复细节。
+
 ## 1. 前置条件
 
 - Windows Server 或 Linux x86-64 主机，安装 Go `1.26.5`、Node.js `24` 和 pnpm `10.30.3`
@@ -36,6 +40,15 @@ NOVRO_SESSION_COOKIE_SECURE=true
 NOVRO_PUBLIC_URL=https://novro.example.com
 NOVRO_ALLOWED_ORIGINS=https://novro.example.com
 
+# Optional first-run email fallback. The admin email page becomes the runtime
+# source of truth after the first save.
+NOVRO_EMAIL_SMTP_HOST=smtp.example.com
+NOVRO_EMAIL_SMTP_PORT=587
+NOVRO_EMAIL_SMTP_USERNAME=novro@example.com
+NOVRO_EMAIL_SMTP_PASSWORD=<DEPLOYMENT_SECRET>
+NOVRO_EMAIL_SMTP_TLS=true
+NOVRO_EMAIL_FROM=novro@example.com
+
 # Optional first-run bootstrap defaults. The admin payment page becomes the
 # runtime source of truth after the first save.
 NOVRO_EPAY_API_URL=https://pay.example.com
@@ -51,8 +64,21 @@ NOVRO_EPAY_CHANNELS=alipay,wxpay
 `NOVRO_HTTP_ADDR` 也必须使用 loopback 主机，避免绕过反向代理直接访问 Go 服务。
 `/v1/*` 的 API Key 请求不依赖浏览器 `Origin`，可由非浏览器客户端直接调用。
 `NOVRO_PUBLIC_URL` 同样必须是无路径、查询、片段或用户信息的站点 Origin；OIDC
-回调地址由该值拼接 `/api/auth/oidc/callback` 得到，易支付异步通知地址由该值拼接
-`/api/payments/epay/notify` 得到。反向代理必须把这个通知地址转发到 Go 服务。
+回调地址由该值拼接 `/api/auth/oidc/callback` 得到，易支付异步通知与同步返回地址分别由
+该值拼接 `/api/payments/epay/notify` 和 `/api/payments/epay/return` 得到。反向代理必须把这两个
+地址转发到 Go 服务；同步返回会验签、幂等入账后再跳转到余额页。
+
+支付平台已经成功但通知未到达时，不要直接修改钱包或删除、重建订单。先从支付平台账单确认
+Novro 订单号，再在使用同一生产配置的运维环境执行：
+
+```powershell
+./dist/novro.exe reconcile-top-up <NOVRO_OUT_TRADE_NO>
+```
+
+命令只读查询支付平台；仅当平台返回已支付且订单号、金额、渠道全部匹配时，才复用通知处理的
+事务完成入账。已到账订单会直接返回当前状态，重复执行不会重复增加余额或新增充值流水。
+登录用户也可以在余额页对自己的待支付订单点击“查询支付结果”；该操作使用相同的核验和入账
+事务，不能读取其他用户的订单，不会重新发起支付、创建订单或删除历史记录。
 
 Next.js 进程只需要服务端变量：
 
@@ -62,7 +88,11 @@ NOVRO_SERVER_URL=http://127.0.0.1:8080
 
 该值必须是无凭据、路径、查询或片段的 `http/https` Origin；生产构建只接受
 `localhost`、127/8 或 `::1` 回环地址，并应在构建和启动 Next.js 时设置同一个值。
-不要把它改成 `NEXT_PUBLIC_*`。`NOVRO_SESSION_SECRET` 和
+不要把它改成 `NEXT_PUBLIC_*`。公开注册依赖 SMTP 发送一次性验证码。部署可通过上述环境变量
+提供首次兜底，也可在管理员登录后通过 `/admin/email` 保存配置；数据库配置保存后立即生效并优先于
+环境变量。生产环境没有完整 SMTP 配置时服务仍可启动，但验证码发送会返回不可用，不会把验证码写入日志。
+SMTP 密码只能存放在服务端秘密存储或管理页面中，管理页面使用 AES-256-GCM 加密后入库。
+`NOVRO_SESSION_SECRET` 和
 `NOVRO_PROVIDER_ENCRYPTION_SECRET` 必须独立生成；后者丢失后无法解密已保存的提供商
 凭据和支付商户密钥。`NOVRO_EPAY_MERCHANT_KEY` 也是服务端秘密，不得写入 `NEXT_PUBLIC_*`、前端配置或
 日志；三个支付凭据变量可以一起留空，管理员可在 `/admin/payments` 完成配置。生产配置会拒绝
@@ -100,8 +130,8 @@ pnpm --dir apps/web build
 迁移在 `ent/migrate/migrations` 中按文件名排序执行，由数据库锁防止多个实例并发迁移，
 并把版本和 SQL 的 SHA-256 记录到 `novro_schema_migrations`。从旧版本首次升级时会为
 已有版本建立当前校验和基线；之后历史 SQL 被修改，或发布包缺失数据库中已应用的迁移
-时，迁移命令会拒绝继续。正常服务启动也会运行同一套检查并自动补齐遗漏迁移，只有
-迁移全部成功后才监听 HTTP 端口；上线前显式执行仍便于在切流前发现问题。
+时，迁移命令会拒绝继续。正常服务启动不修改数据库结构，发布流程必须在启动新版本前
+显式执行并确认迁移成功。
 
 启动两个受进程管理器监督的进程：
 

@@ -18,7 +18,7 @@ type Store interface {
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
 	Delete(context.Context, uuid.UUID) error
-	Resolve(context.Context, string) (Record, string, string, error)
+	ResolveCandidates(context.Context, string) ([]Resolution, error)
 	ListActive(context.Context) ([]Record, error)
 }
 
@@ -96,16 +96,26 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.store.Delete(ctx, id)
 }
 
-func (s *Service) Resolve(ctx context.Context, publicName string) (Resolved, error) {
-	record, baseURL, encrypted, err := s.store.Resolve(ctx, strings.TrimSpace(publicName))
+func (s *Service) ResolveCandidates(ctx context.Context, publicName string) ([]Resolved, error) {
+	resolutions, err := s.store.ResolveCandidates(ctx, strings.TrimSpace(publicName))
 	if err != nil {
-		return Resolved{}, err
+		return nil, err
 	}
-	apiKey, err := s.cipher.Decrypt(encrypted)
-	if err != nil {
-		return Resolved{}, err
+	resolved := make([]Resolved, 0, len(resolutions))
+	var decryptErr error
+	for _, resolution := range resolutions {
+		apiKey, err := s.cipher.Decrypt(resolution.EncryptedAPIKey)
+		if err != nil {
+			// A broken credential must not take healthy routes in the same pool offline.
+			decryptErr = err
+			continue
+		}
+		resolved = append(resolved, Resolved{Record: resolution.Record, BaseURL: resolution.BaseURL, APIKey: apiKey})
 	}
-	return Resolved{Record: record, BaseURL: baseURL, APIKey: apiKey}, nil
+	if len(resolved) == 0 && decryptErr != nil {
+		return nil, decryptErr
+	}
+	return resolved, nil
 }
 
 func (s *Service) ListActive(ctx context.Context) ([]Record, error) {

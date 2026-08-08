@@ -35,15 +35,27 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 	if err != nil {
 		return Record{}, err
 	}
-	created, err := tx.User.Create().
+	create := tx.User.Create().
 		SetBillingGroupID(groupID).
 		SetUsername(params.Username).
 		SetEmail(params.Email).
 		SetDisplayName(params.DisplayName).
 		SetPasswordHash(params.PasswordHash).
 		SetRole(entuser.Role(params.Role)).
-		SetStatus(entuser.StatusActive).
-		Save(ctx)
+		SetStatus(entuser.StatusActive)
+	if params.ReferralCode != "" {
+		referrer, referrerErr := tx.User.Query().
+			Where(entuser.InviteCodeEQ(params.ReferralCode), entuser.StatusEQ(entuser.StatusActive)).
+			Only(ctx)
+		if ent.IsNotFound(referrerErr) {
+			return Record{}, ErrInvalidReferralCode
+		}
+		if referrerErr != nil {
+			return Record{}, fmt.Errorf("resolve referral code: %w", referrerErr)
+		}
+		create.SetReferredByUserID(referrer.ID)
+	}
+	created, err := create.Save(ctx)
 	if ent.IsConstraintError(err) {
 		return Record{}, identityConstraintError(err)
 	}
@@ -108,6 +120,14 @@ func (s *EntStore) CreateInitialAdmin(ctx context.Context, params CreateParams) 
 		return Record{}, fmt.Errorf("commit administrator initialization: %w", err)
 	}
 	return fromEnt(created), nil
+}
+
+func (s *EntStore) EmailExists(ctx context.Context, email string) (bool, error) {
+	exists, err := s.client.User.Query().Where(entuser.EmailEQ(email)).Exist(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check existing user email: %w", err)
+	}
+	return exists, nil
 }
 
 func (s *EntStore) IsInitialized(ctx context.Context) (bool, error) {

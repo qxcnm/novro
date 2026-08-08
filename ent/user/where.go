@@ -61,6 +61,16 @@ func BillingGroupID(v uuid.UUID) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldBillingGroupID, v))
 }
 
+// InviteCode applies equality check predicate on the "invite_code" field. It's identical to InviteCodeEQ.
+func InviteCode(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldInviteCode, v))
+}
+
+// ReferredByUserID applies equality check predicate on the "referred_by_user_id" field. It's identical to ReferredByUserIDEQ.
+func ReferredByUserID(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldReferredByUserID, v))
+}
+
 // Username applies equality check predicate on the "username" field. It's identical to UsernameEQ.
 func Username(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUsername, v))
@@ -124,6 +134,101 @@ func BillingGroupIDIsNil() predicate.User {
 // BillingGroupIDNotNil applies the NotNil predicate on the "billing_group_id" field.
 func BillingGroupIDNotNil() predicate.User {
 	return predicate.User(sql.FieldNotNull(FieldBillingGroupID))
+}
+
+// InviteCodeEQ applies the EQ predicate on the "invite_code" field.
+func InviteCodeEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldInviteCode, v))
+}
+
+// InviteCodeNEQ applies the NEQ predicate on the "invite_code" field.
+func InviteCodeNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldInviteCode, v))
+}
+
+// InviteCodeIn applies the In predicate on the "invite_code" field.
+func InviteCodeIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldInviteCode, vs...))
+}
+
+// InviteCodeNotIn applies the NotIn predicate on the "invite_code" field.
+func InviteCodeNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldInviteCode, vs...))
+}
+
+// InviteCodeGT applies the GT predicate on the "invite_code" field.
+func InviteCodeGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldInviteCode, v))
+}
+
+// InviteCodeGTE applies the GTE predicate on the "invite_code" field.
+func InviteCodeGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldInviteCode, v))
+}
+
+// InviteCodeLT applies the LT predicate on the "invite_code" field.
+func InviteCodeLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldInviteCode, v))
+}
+
+// InviteCodeLTE applies the LTE predicate on the "invite_code" field.
+func InviteCodeLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldInviteCode, v))
+}
+
+// InviteCodeContains applies the Contains predicate on the "invite_code" field.
+func InviteCodeContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldInviteCode, v))
+}
+
+// InviteCodeHasPrefix applies the HasPrefix predicate on the "invite_code" field.
+func InviteCodeHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldInviteCode, v))
+}
+
+// InviteCodeHasSuffix applies the HasSuffix predicate on the "invite_code" field.
+func InviteCodeHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldInviteCode, v))
+}
+
+// InviteCodeEqualFold applies the EqualFold predicate on the "invite_code" field.
+func InviteCodeEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldInviteCode, v))
+}
+
+// InviteCodeContainsFold applies the ContainsFold predicate on the "invite_code" field.
+func InviteCodeContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldInviteCode, v))
+}
+
+// ReferredByUserIDEQ applies the EQ predicate on the "referred_by_user_id" field.
+func ReferredByUserIDEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldReferredByUserID, v))
+}
+
+// ReferredByUserIDNEQ applies the NEQ predicate on the "referred_by_user_id" field.
+func ReferredByUserIDNEQ(v uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldReferredByUserID, v))
+}
+
+// ReferredByUserIDIn applies the In predicate on the "referred_by_user_id" field.
+func ReferredByUserIDIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldIn(FieldReferredByUserID, vs...))
+}
+
+// ReferredByUserIDNotIn applies the NotIn predicate on the "referred_by_user_id" field.
+func ReferredByUserIDNotIn(vs ...uuid.UUID) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldReferredByUserID, vs...))
+}
+
+// ReferredByUserIDIsNil applies the IsNil predicate on the "referred_by_user_id" field.
+func ReferredByUserIDIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldReferredByUserID))
+}
+
+// ReferredByUserIDNotNil applies the NotNil predicate on the "referred_by_user_id" field.
+func ReferredByUserIDNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldReferredByUserID))
 }
 
 // UsernameEQ applies the EQ predicate on the "username" field.
@@ -752,6 +857,52 @@ func HasBillingGroup() predicate.User {
 func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newBillingGroupStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasReferrer applies the HasEdge predicate on the "referrer" edge.
+func HasReferrer() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ReferrerTable, ReferrerColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasReferrerWith applies the HasEdge predicate on the "referrer" edge with a given conditions (other predicates).
+func HasReferrerWith(preds ...predicate.User) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newReferrerStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasReferrals applies the HasEdge predicate on the "referrals" edge.
+func HasReferrals() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ReferralsTable, ReferralsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasReferralsWith applies the HasEdge predicate on the "referrals" edge with a given conditions (other predicates).
+func HasReferralsWith(preds ...predicate.User) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newReferralsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

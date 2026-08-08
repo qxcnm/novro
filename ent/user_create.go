@@ -43,6 +43,34 @@ func (_c *UserCreate) SetNillableBillingGroupID(v *uuid.UUID) *UserCreate {
 	return _c
 }
 
+// SetInviteCode sets the "invite_code" field.
+func (_c *UserCreate) SetInviteCode(v string) *UserCreate {
+	_c.mutation.SetInviteCode(v)
+	return _c
+}
+
+// SetNillableInviteCode sets the "invite_code" field if the given value is not nil.
+func (_c *UserCreate) SetNillableInviteCode(v *string) *UserCreate {
+	if v != nil {
+		_c.SetInviteCode(*v)
+	}
+	return _c
+}
+
+// SetReferredByUserID sets the "referred_by_user_id" field.
+func (_c *UserCreate) SetReferredByUserID(v uuid.UUID) *UserCreate {
+	_c.mutation.SetReferredByUserID(v)
+	return _c
+}
+
+// SetNillableReferredByUserID sets the "referred_by_user_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableReferredByUserID(v *uuid.UUID) *UserCreate {
+	if v != nil {
+		_c.SetReferredByUserID(*v)
+	}
+	return _c
+}
+
 // SetUsername sets the "username" field.
 func (_c *UserCreate) SetUsername(v string) *UserCreate {
 	_c.mutation.SetUsername(v)
@@ -289,6 +317,40 @@ func (_c *UserCreate) SetBillingGroup(v *BillingGroup) *UserCreate {
 	return _c.SetBillingGroupID(v.ID)
 }
 
+// SetReferrerID sets the "referrer" edge to the User entity by ID.
+func (_c *UserCreate) SetReferrerID(id uuid.UUID) *UserCreate {
+	_c.mutation.SetReferrerID(id)
+	return _c
+}
+
+// SetNillableReferrerID sets the "referrer" edge to the User entity by ID if the given value is not nil.
+func (_c *UserCreate) SetNillableReferrerID(id *uuid.UUID) *UserCreate {
+	if id != nil {
+		_c = _c.SetReferrerID(*id)
+	}
+	return _c
+}
+
+// SetReferrer sets the "referrer" edge to the User entity.
+func (_c *UserCreate) SetReferrer(v *User) *UserCreate {
+	return _c.SetReferrerID(v.ID)
+}
+
+// AddReferralIDs adds the "referrals" edge to the User entity by IDs.
+func (_c *UserCreate) AddReferralIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddReferralIDs(ids...)
+	return _c
+}
+
+// AddReferrals adds the "referrals" edges to the User entity.
+func (_c *UserCreate) AddReferrals(v ...*User) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddReferralIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_c *UserCreate) Mutation() *UserMutation {
 	return _c.mutation
@@ -324,6 +386,10 @@ func (_c *UserCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserCreate) defaults() {
+	if _, ok := _c.mutation.InviteCode(); !ok {
+		v := user.DefaultInviteCode()
+		_c.mutation.SetInviteCode(v)
+	}
 	if _, ok := _c.mutation.DisplayName(); !ok {
 		v := user.DefaultDisplayName
 		_c.mutation.SetDisplayName(v)
@@ -352,6 +418,14 @@ func (_c *UserCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserCreate) check() error {
+	if _, ok := _c.mutation.InviteCode(); !ok {
+		return &ValidationError{Name: "invite_code", err: errors.New(`ent: missing required field "User.invite_code"`)}
+	}
+	if v, ok := _c.mutation.InviteCode(); ok {
+		if err := user.InviteCodeValidator(v); err != nil {
+			return &ValidationError{Name: "invite_code", err: fmt.Errorf(`ent: validator failed for field "User.invite_code": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Username(); !ok {
 		return &ValidationError{Name: "username", err: errors.New(`ent: missing required field "User.username"`)}
 	}
@@ -429,6 +503,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
+	}
+	if value, ok := _c.mutation.InviteCode(); ok {
+		_spec.SetField(user.FieldInviteCode, field.TypeString, value)
+		_node.InviteCode = value
 	}
 	if value, ok := _c.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -593,6 +671,39 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.BillingGroupID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ReferrerIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.ReferrerTable,
+			Columns: []string{user.ReferrerColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.ReferredByUserID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ReferralsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

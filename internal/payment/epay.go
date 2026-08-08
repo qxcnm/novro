@@ -1,11 +1,18 @@
 package payment
 
 import (
+	"context"
 	"crypto/md5" // #nosec G501 -- EPay v1 mandates MD5 for protocol compatibility.
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"net/url"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/go-pay/gopay"
 	"github.com/google/uuid"
@@ -29,6 +36,7 @@ type EPayGateway struct {
 	channels    []string
 	notifyURL   string
 	returnURL   string
+	client      *http.Client
 }
 
 func NewEPayGateway(config EPayConfig) (*EPayGateway, error) {
@@ -50,6 +58,7 @@ func NewEPayGateway(config EPayConfig) (*EPayGateway, error) {
 	return &EPayGateway{
 		submitURL: submitURL, merchantID: strings.TrimSpace(config.MerchantID), merchantKey: strings.TrimSpace(config.MerchantKey),
 		siteName: strings.TrimSpace(config.SiteName), channels: channels, notifyURL: config.NotifyURL, returnURL: config.ReturnURL,
+		client: newEPayHTTPClient(),
 	}, nil
 }
 
@@ -119,6 +128,64 @@ func (g *EPayGateway) ParseNotification(values url.Values) (Notification, error)
 	}, nil
 }
 
+func (g *EPayGateway) Query(ctx context.Context, outTradeNo string) (Notification, bool, error) {
+	outTradeNo = strings.TrimSpace(outTradeNo)
+	if outTradeNo == "" || len(outTradeNo) > 64 {
+		return Notification{}, false, ErrInvalidInput
+	}
+	endpoint, err := epayAPIURL(g.submitURL)
+	if err != nil {
+		return Notification{}, false, ErrGatewayQuery
+	}
+	values := url.Values{
+		"act":          {"order"},
+		"pid":          {g.merchantID},
+		"key":          {g.merchantKey},
+		"out_trade_no": {outTradeNo},
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+values.Encode(), nil)
+	if err != nil {
+		return Notification{}, false, ErrGatewayQuery
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := g.client.Do(request)
+	if err != nil {
+		// net/http errors may contain the request URL and merchant key. Return a
+		// stable sentinel instead of wrapping the credential-bearing error.
+		return Notification{}, false, ErrGatewayQuery
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return Notification{}, false, ErrGatewayQuery
+	}
+	var result struct {
+		Code       int    `json:"code"`
+		Status     int    `json:"status"`
+		TradeNo    string `json:"trade_no"`
+		OutTradeNo string `json:"out_trade_no"`
+		Type       string `json:"type"`
+		Money      string `json:"money"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<10))
+	if err := decoder.Decode(&result); err != nil {
+		return Notification{}, false, ErrGatewayQuery
+	}
+	if result.Code != 1 || result.Status != 1 {
+		return Notification{}, false, nil
+	}
+	if result.OutTradeNo != outTradeNo || len(result.TradeNo) == 0 || len(result.TradeNo) > 128 || !paymentChannelPattern.MatchString(result.Type) {
+		return Notification{}, false, ErrOrderConflict
+	}
+	amount, err := parseEPayMoney(result.Money)
+	if err != nil {
+		return Notification{}, false, ErrOrderConflict
+	}
+	return Notification{
+		OutTradeNo: result.OutTradeNo, ProviderTradeNo: result.TradeNo,
+		Channel: result.Type, AmountMicros: amount,
+	}, true, nil
+}
+
 func (g *EPayGateway) sign(params gopay.BodyMap) string {
 	// GoPay provides the same sorted key=value canonicalization used by EPay.
 	payload := params.EncodeAliPaySignParams() + g.merchantKey
@@ -136,6 +203,31 @@ func epaySubmitURL(value string) (string, error) {
 		parsed.Path = strings.TrimRight(parsed.Path, "/") + "/submit.php"
 	}
 	return parsed.String(), nil
+}
+
+func epayAPIURL(submitURL string) (string, error) {
+	parsed, err := url.Parse(submitURL)
+	if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", ErrInvalidInput
+	}
+	parsed.Path = path.Join(path.Dir(parsed.Path), "api.php")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func newEPayHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			Proxy: nil, DialContext: dialer.DialContext,
+			ForceAttemptHTTP2: true, TLSHandshakeTimeout: 5 * time.Second,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func validAbsoluteHTTPURL(value string) bool {

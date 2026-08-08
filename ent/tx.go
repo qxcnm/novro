@@ -18,6 +18,10 @@ type Tx struct {
 	APIUsage *APIUsageClient
 	// BillingGroup is the client for interacting with the BillingGroup builders.
 	BillingGroup *BillingGroupClient
+	// EmailSMTPConfig is the client for interacting with the EmailSMTPConfig builders.
+	EmailSMTPConfig *EmailSMTPConfigClient
+	// EmailVerificationCode is the client for interacting with the EmailVerificationCode builders.
+	EmailVerificationCode *EmailVerificationCodeClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
 	// PaymentConfig is the client for interacting with the PaymentConfig builders.
@@ -174,6 +178,8 @@ func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
 	tx.APIUsage = NewAPIUsageClient(tx.config)
 	tx.BillingGroup = NewBillingGroupClient(tx.config)
+	tx.EmailSMTPConfig = NewEmailSMTPConfigClient(tx.config)
+	tx.EmailVerificationCode = NewEmailVerificationCodeClient(tx.config)
 	tx.ModelRoute = NewModelRouteClient(tx.config)
 	tx.PaymentConfig = NewPaymentConfigClient(tx.config)
 	tx.Provider = NewProviderClient(tx.config)

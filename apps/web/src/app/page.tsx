@@ -1,10 +1,10 @@
 import {
   ArrowRight,
   Braces,
-  Check,
   Code2,
   DatabaseZap,
   KeyRound,
+  LineChart,
   Route,
   ShieldCheck,
 } from "lucide-react";
@@ -17,27 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { modelCatalog } from "@/lib/models";
 
-const models = [
-  {
-    name: "Kimi",
-    model: "K2.6",
-    description: "原生多模态理解，面向代码与 Agent 工作流。",
-    capability: "多模态 / Coding / Agent",
-  },
-  {
-    name: "GLM",
-    model: "GLM-5.2",
-    description: "1M 长上下文，面向长程任务与工程交付。",
-    capability: "长上下文 / 工具调用",
-  },
-  {
-    name: "DeepSeek",
-    model: "V4",
-    description: "支持思考与非思考模式，兼容主流 API 格式。",
-    capability: "推理 / OpenAI / Anthropic",
-  },
-];
-
 const foundations = [
   { icon: Route, label: "统一入口", description: "用一个地址连接多家模型，减少重复适配。" },
   { icon: ShieldCheck, label: "权限可控", description: "集中管理成员身份、访问边界与账号状态。" },
@@ -46,28 +25,35 @@ const foundations = [
 ];
 
 const featuredModels = modelCatalog.filter((model) => model.featured);
+const vendorCount = new Set(modelCatalog.map((model) => model.vendor)).size;
+
+const overviewStats = [
+  { label: "模型目录", value: `${modelCatalog.length} 款`, detail: "可公开查看能力与牌价", icon: DatabaseZap },
+  { label: "模型厂商", value: `${vendorCount} 家`, detail: "Kimi、GLM、DeepSeek", icon: Route },
+  { label: "兼容协议", value: "3 种", detail: "Chat / Responses / Messages", icon: Code2 },
+  { label: "统一入口", value: "/v1", detail: "接入地址保持稳定", icon: ShieldCheck },
+];
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/30">
       <SiteHeader />
       <main>
-        <section className="mx-auto flex min-h-[calc(100svh-4rem)] w-full max-w-7xl flex-col justify-between px-5 pt-12 sm:px-8 sm:pt-20 lg:px-10 lg:pt-24">
-          <div className="grid gap-10 pb-10 sm:gap-12 sm:pb-16 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)] lg:items-end lg:gap-20 lg:pb-20">
-            <div>
-              <Badge variant="outline">Novro Gateway</Badge>
-              <h1 className="mt-6 max-w-3xl text-[2rem] leading-[1.18] font-semibold sm:text-5xl lg:text-[3.25rem]">
-                统一接入主流国产模型
-              </h1>
-              <p className="mt-7 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-                用一个地址连接 Kimi、GLM 与 DeepSeek，集中管理成员、权限、API Key 与用量。
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
+        <section className="border-b bg-background">
+          <div className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8 sm:py-14 lg:px-10 lg:py-16">
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl lg:min-w-0 lg:flex-1 lg:max-w-4xl">
+                <Badge variant="outline">Novro Gateway · 客户主页</Badge>
+                <h1 className="mt-5 max-w-none text-3xl leading-tight font-semibold tracking-tight sm:text-5xl lg:text-5xl xl:text-6xl">
+                  一个入口，连接你的模型工作流
+                </h1>
+                <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+                  公开查看模型能力、官方牌价和接入方式。登录后，还可以在控制台管理 API Key、余额与每次调用。
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-3">
                 <Button asChild size="lg">
-                  <Link href="/login">
-                    进入控制台
-                    <ArrowRight aria-hidden="true" />
-                  </Link>
+                  <Link href="/login">进入控制台 <ArrowRight aria-hidden="true" /></Link>
                 </Button>
                 <Button asChild size="lg" variant="outline">
                   <Link href="/docs">查看接入文档</Link>
@@ -75,38 +61,64 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="border-l pl-6 sm:pl-8">
-              <p className="text-sm font-medium text-muted-foreground">团队模型入口</p>
-              <p className="mt-3 text-2xl font-semibold">接入更简单，管理更集中</p>
-              <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
-                {[
-                  "统一模型与兼容协议",
-                  "集中用户与访问权限",
-                  "清晰价格与接入文档",
-                ].map((item) => (
-                  <li className="flex items-center gap-2" key={item}>
-                    <Check className="size-4 text-foreground" aria-hidden="true" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div className="grid border-t sm:grid-cols-3" aria-label="模型厂商">
-            {models.map((item, index) => (
-              <div className={`py-5 sm:px-6 ${index === 0 ? "sm:pl-0" : "border-t sm:border-t-0 sm:border-l"}`} key={item.name}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{item.name}</p>
-                  <Badge variant="secondary">{item.model}</Badge>
+            <div className="mt-10 overflow-hidden rounded-lg border bg-background">
+              <div className="flex flex-col gap-3 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <div>
+                  <p className="font-semibold">平台概览</p>
+                  <p className="mt-1 text-sm text-muted-foreground">面向客户公开的模型、协议与管理能力</p>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{item.capability}</p>
+                <Badge className="w-fit gap-1.5" variant="secondary"><span className="size-1.5 rounded-full bg-emerald-500" />可访问</Badge>
               </div>
-            ))}
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+                {overviewStats.map((item, index) => (
+                  <div className={`px-5 py-5 sm:px-6 ${index > 0 ? "border-t sm:border-l sm:border-t-0" : ""} ${index === 2 ? "lg:border-l" : ""}`} key={item.label}>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground"><item.icon aria-hidden="true" className="size-4" />{item.label}</div>
+                    <p className="mt-3 text-2xl font-semibold tracking-tight">{item.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
-        <section id="models" className="scroll-mt-16 border-t bg-muted/30">
+        <section className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+            <Card className="overflow-hidden rounded-lg bg-background">
+              <CardHeader className="border-b">
+                <div className="flex items-start justify-between gap-4">
+                  <div><CardTitle>模型与价格</CardTitle><CardDescription className="mt-1">先比较能力，再选择适合你的模型</CardDescription></div>
+                  <Button asChild className="shrink-0" size="sm" variant="outline"><Link href="/models">全部模型 <ArrowRight aria-hidden="true" /></Link></Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  {featuredModels.map((item) => (
+                    <div className="p-5 sm:p-6" key={item.id}>
+                      <div className="flex items-center justify-between gap-3"><p className="font-semibold">{item.name}</p><Badge variant="outline">{item.contextLabel}</Badge></div>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.vendorName}</p>
+                      <p className="mt-4 min-h-12 text-sm leading-6 text-muted-foreground">{item.description}</p>
+                      <div className="mt-5 grid grid-cols-2 border-t pt-4 text-sm"><div><span className="text-xs text-muted-foreground">输入 / 百万 tokens</span><p className="mt-1 font-semibold">¥{item.pricing?.[0].input}</p></div><div className="border-l pl-3"><span className="text-xs text-muted-foreground">输出 / 百万 tokens</span><p className="mt-1 font-semibold">¥{item.pricing?.[0].output}</p></div></div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-5">
+              <Card className="rounded-lg bg-background">
+                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><LineChart aria-hidden="true" className="size-4" />接入状态</CardTitle><CardDescription>从公开信息开始，登录后查看个人数据</CardDescription></CardHeader>
+                <CardContent className="space-y-4"><div className="flex items-center justify-between border-b pb-3 text-sm"><span className="text-muted-foreground">模型目录</span><span className="font-medium">已开放</span></div><div className="flex items-center justify-between border-b pb-3 text-sm"><span className="text-muted-foreground">API 文档</span><span className="font-medium">可直接阅读</span></div><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">余额与用量</span><span className="font-medium">登录后查看</span></div></CardContent>
+              </Card>
+              <Card className="rounded-lg bg-foreground text-background ring-0 dark:bg-card dark:text-card-foreground dark:ring-1 dark:ring-foreground/10">
+                <CardHeader className="border-b border-background/15 dark:border-border"><CardTitle className="text-base">公告</CardTitle><CardDescription className="text-background/60 dark:text-muted-foreground">当前版本已开放模型目录与统一网关</CardDescription></CardHeader>
+                <CardContent><p className="text-sm leading-6 text-background/75 dark:text-muted-foreground">管理员配置启用路由后，客户即可使用自己的 API Key 调用模型。</p><Button asChild className="mt-5" variant="secondary"><Link href="/docs">查看接入步骤 <ArrowRight aria-hidden="true" /></Link></Button></CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        <section id="models" className="scroll-mt-16 border-t bg-background">
           <div className="mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
             <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
               <div>

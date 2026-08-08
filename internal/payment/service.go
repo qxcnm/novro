@@ -15,6 +15,7 @@ import (
 
 type Store interface {
 	Create(context.Context, CreateParams) (Order, error)
+	Get(context.Context, string) (Order, error)
 	List(context.Context, uuid.UUID, int) ([]Order, error)
 	ListAll(context.Context, AdminListFilter) (AdminPage, error)
 	Complete(context.Context, CompleteParams) (Order, error)
@@ -68,6 +69,7 @@ type Gateway interface {
 	Channels() []string
 	Checkout(Order) (Checkout, error)
 	ParseNotification(url.Values) (Notification, error)
+	Query(context.Context, string) (Notification, bool, error)
 }
 
 type Service struct {
@@ -176,6 +178,62 @@ func (s *Service) HandleNotification(ctx context.Context, values url.Values) err
 		Channel: notification.Channel, AmountMicros: notification.AmountMicros, PaidAt: s.now().UTC(),
 	})
 	return err
+}
+
+// Reconcile queries EPay for an existing order and runs the same idempotent
+// completion transaction used by signed callbacks. It never creates a new
+// payment and returns paid orders without querying the provider again.
+func (s *Service) Reconcile(ctx context.Context, outTradeNo string) (Order, error) {
+	outTradeNo = strings.TrimSpace(outTradeNo)
+	if s == nil || s.store == nil || outTradeNo == "" || len(outTradeNo) > 64 {
+		return Order{}, ErrInvalidInput
+	}
+	order, err := s.store.Get(ctx, outTradeNo)
+	if err != nil {
+		return Order{}, err
+	}
+	return s.reconcileOrder(ctx, order)
+}
+
+// ReconcileForUser exposes the same provider query to an order owner without
+// revealing or touching another user's order.
+func (s *Service) ReconcileForUser(ctx context.Context, userID uuid.UUID, outTradeNo string) (Order, error) {
+	outTradeNo = strings.TrimSpace(outTradeNo)
+	if s == nil || s.store == nil || userID == uuid.Nil || outTradeNo == "" || len(outTradeNo) > 64 {
+		return Order{}, ErrInvalidInput
+	}
+	order, err := s.store.Get(ctx, outTradeNo)
+	if err != nil {
+		return Order{}, err
+	}
+	if order.UserID != userID {
+		return Order{}, ErrOrderNotFound
+	}
+	return s.reconcileOrder(ctx, order)
+}
+
+func (s *Service) reconcileOrder(ctx context.Context, order Order) (Order, error) {
+	if order.Status == StatusPaid {
+		return order, nil
+	}
+	gateway, err := s.gateway(ctx, false)
+	if err != nil {
+		return Order{}, err
+	}
+	notification, paid, err := gateway.Query(ctx, order.OutTradeNo)
+	if err != nil {
+		return Order{}, err
+	}
+	if !paid {
+		return Order{}, ErrOrderUnpaid
+	}
+	if notification.OutTradeNo != order.OutTradeNo {
+		return Order{}, ErrOrderConflict
+	}
+	return s.store.Complete(ctx, CompleteParams{
+		OutTradeNo: notification.OutTradeNo, ProviderTradeNo: notification.ProviderTradeNo,
+		Channel: notification.Channel, AmountMicros: notification.AmountMicros, PaidAt: s.now().UTC(),
+	})
 }
 
 func (s *Service) AdminConfig(ctx context.Context) (AdminConfig, error) {

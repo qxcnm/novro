@@ -22,12 +22,13 @@ const (
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid user input")
-	ErrNotFound           = errors.New("user not found")
-	ErrUsernameTaken      = errors.New("username already exists")
-	ErrEmailTaken         = errors.New("email already exists")
-	ErrLastActiveAdmin    = errors.New("cannot disable the last active administrator")
-	ErrAlreadyInitialized = errors.New("administrator already initialized")
+	ErrInvalidInput        = errors.New("invalid user input")
+	ErrNotFound            = errors.New("user not found")
+	ErrUsernameTaken       = errors.New("username already exists")
+	ErrEmailTaken          = errors.New("email already exists")
+	ErrInvalidReferralCode = errors.New("invalid referral code")
+	ErrLastActiveAdmin     = errors.New("cannot disable the last active administrator")
+	ErrAlreadyInitialized  = errors.New("administrator already initialized")
 )
 
 type Record struct {
@@ -67,10 +68,11 @@ type BillingGroupSummary struct {
 }
 
 type RegisterInput struct {
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Password    string `json:"password"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"display_name"`
+	Password     string `json:"password"`
+	ReferralCode string `json:"referral_code"`
 }
 
 type ListFilter struct {

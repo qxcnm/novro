@@ -293,6 +293,21 @@ func (_u *UserUpdate) SetBillingGroup(v *BillingGroup) *UserUpdate {
 	return _u.SetBillingGroupID(v.ID)
 }
 
+// AddReferralIDs adds the "referrals" edge to the User entity by IDs.
+func (_u *UserUpdate) AddReferralIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddReferralIDs(ids...)
+	return _u
+}
+
+// AddReferrals adds the "referrals" edges to the User entity.
+func (_u *UserUpdate) AddReferrals(v ...*User) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReferralIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -434,6 +449,27 @@ func (_u *UserUpdate) RemoveAPIUsages(v ...*APIUsage) *UserUpdate {
 func (_u *UserUpdate) ClearBillingGroup() *UserUpdate {
 	_u.mutation.ClearBillingGroup()
 	return _u
+}
+
+// ClearReferrals clears all "referrals" edges to the User entity.
+func (_u *UserUpdate) ClearReferrals() *UserUpdate {
+	_u.mutation.ClearReferrals()
+	return _u
+}
+
+// RemoveReferralIDs removes the "referrals" edge to User entities by IDs.
+func (_u *UserUpdate) RemoveReferralIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveReferralIDs(ids...)
+	return _u
+}
+
+// RemoveReferrals removes "referrals" edges to User entities.
+func (_u *UserUpdate) RemoveReferrals(v ...*User) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReferralIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -875,6 +911,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ReferralsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReferralsIDs(); len(nodes) > 0 && !_u.mutation.ReferralsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferralsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -1151,6 +1232,21 @@ func (_u *UserUpdateOne) SetBillingGroup(v *BillingGroup) *UserUpdateOne {
 	return _u.SetBillingGroupID(v.ID)
 }
 
+// AddReferralIDs adds the "referrals" edge to the User entity by IDs.
+func (_u *UserUpdateOne) AddReferralIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddReferralIDs(ids...)
+	return _u
+}
+
+// AddReferrals adds the "referrals" edges to the User entity.
+func (_u *UserUpdateOne) AddReferrals(v ...*User) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddReferralIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -1292,6 +1388,27 @@ func (_u *UserUpdateOne) RemoveAPIUsages(v ...*APIUsage) *UserUpdateOne {
 func (_u *UserUpdateOne) ClearBillingGroup() *UserUpdateOne {
 	_u.mutation.ClearBillingGroup()
 	return _u
+}
+
+// ClearReferrals clears all "referrals" edges to the User entity.
+func (_u *UserUpdateOne) ClearReferrals() *UserUpdateOne {
+	_u.mutation.ClearReferrals()
+	return _u
+}
+
+// RemoveReferralIDs removes the "referrals" edge to User entities by IDs.
+func (_u *UserUpdateOne) RemoveReferralIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveReferralIDs(ids...)
+	return _u
+}
+
+// RemoveReferrals removes "referrals" edges to User entities.
+func (_u *UserUpdateOne) RemoveReferrals(v ...*User) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveReferralIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1756,6 +1873,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ReferralsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedReferralsIDs(); len(nodes) > 0 && !_u.mutation.ReferralsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ReferralsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ReferralsTable,
+			Columns: []string{user.ReferralsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

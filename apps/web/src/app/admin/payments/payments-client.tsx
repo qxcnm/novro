@@ -110,7 +110,7 @@ function normalizePaymentConfig(value?: PaymentConfigResponse | null): PaymentCo
     site_name: value?.site_name || "Novro",
     channels: Array.isArray(value?.channels) ? value.channels : [],
     methods: Array.isArray(value?.methods) ? value.methods : [],
-    min_micros: value?.min_micros ?? 1_000_000,
+    min_micros: value?.min_micros ?? 10_000,
     max_micros: value?.max_micros ?? 50_000_000_000,
     preset_amounts_micros: Array.isArray(value?.preset_amounts_micros) && value.preset_amounts_micros.length > 0 ? value.preset_amounts_micros : defaultPresets,
     bonus_tiers: Array.isArray(value?.bonus_tiers) ? value.bonus_tiers : [],

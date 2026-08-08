@@ -22,6 +22,10 @@ type User struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// BillingGroupID holds the value of the "billing_group_id" field.
 	BillingGroupID *uuid.UUID `json:"billing_group_id,omitempty"`
+	// InviteCode holds the value of the "invite_code" field.
+	InviteCode string `json:"invite_code,omitempty"`
+	// ReferredByUserID holds the value of the "referred_by_user_id" field.
+	ReferredByUserID *uuid.UUID `json:"referred_by_user_id,omitempty"`
 	// Username holds the value of the "username" field.
 	Username string `json:"username,omitempty"`
 	// Email holds the value of the "email" field.
@@ -64,9 +68,13 @@ type UserEdges struct {
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// BillingGroup holds the value of the billing_group edge.
 	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
+	// Referrer holds the value of the referrer edge.
+	Referrer *User `json:"referrer,omitempty"`
+	// Referrals holds the value of the referrals edge.
+	Referrals []*User `json:"referrals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [10]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -145,14 +153,34 @@ func (e UserEdges) BillingGroupOrErr() (*BillingGroup, error) {
 	return nil, &NotLoadedError{edge: "billing_group"}
 }
 
+// ReferrerOrErr returns the Referrer value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e UserEdges) ReferrerOrErr() (*User, error) {
+	if e.Referrer != nil {
+		return e.Referrer, nil
+	} else if e.loadedTypes[8] {
+		return nil, &NotFoundError{label: user.Label}
+	}
+	return nil, &NotLoadedError{edge: "referrer"}
+}
+
+// ReferralsOrErr returns the Referrals value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) ReferralsOrErr() ([]*User, error) {
+	if e.loadedTypes[9] {
+		return e.Referrals, nil
+	}
+	return nil, &NotLoadedError{edge: "referrals"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldBillingGroupID:
+		case user.FieldBillingGroupID, user.FieldReferredByUserID:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
+		case user.FieldInviteCode, user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
 		case user.FieldLastLoginAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -185,6 +213,19 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.BillingGroupID = new(uuid.UUID)
 				*_m.BillingGroupID = *value.S.(*uuid.UUID)
+			}
+		case user.FieldInviteCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field invite_code", values[i])
+			} else if value.Valid {
+				_m.InviteCode = value.String
+			}
+		case user.FieldReferredByUserID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field referred_by_user_id", values[i])
+			} else if value.Valid {
+				_m.ReferredByUserID = new(uuid.UUID)
+				*_m.ReferredByUserID = *value.S.(*uuid.UUID)
 			}
 		case user.FieldUsername:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -296,6 +337,16 @@ func (_m *User) QueryBillingGroup() *BillingGroupQuery {
 	return NewUserClient(_m.config).QueryBillingGroup(_m)
 }
 
+// QueryReferrer queries the "referrer" edge of the User entity.
+func (_m *User) QueryReferrer() *UserQuery {
+	return NewUserClient(_m.config).QueryReferrer(_m)
+}
+
+// QueryReferrals queries the "referrals" edge of the User entity.
+func (_m *User) QueryReferrals() *UserQuery {
+	return NewUserClient(_m.config).QueryReferrals(_m)
+}
+
 // Update returns a builder for updating this User.
 // Note that you need to call User.Unwrap() before calling this method if this User
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -321,6 +372,14 @@ func (_m *User) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	if v := _m.BillingGroupID; v != nil {
 		builder.WriteString("billing_group_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("invite_code=")
+	builder.WriteString(_m.InviteCode)
+	builder.WriteString(", ")
+	if v := _m.ReferredByUserID; v != nil {
+		builder.WriteString("referred_by_user_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

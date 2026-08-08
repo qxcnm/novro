@@ -27,6 +27,9 @@ Wallet
 
 PaymentConfig
 └── administrator-managed payment provider settings
+
+EmailVerificationCode
+└── standalone pre-registration email challenge
 ```
 
 当前认证范围不增加组织、项目和项目成员关系。
@@ -37,6 +40,8 @@ PaymentConfig
 
 - `id`
 - `billing_group_id`，当前计费分组
+- `invite_code`，创建时生成的唯一邀请码，之后不可修改
+- `referred_by_user_id`，可空且创建后不可修改，指向邀请人
 - `username`，唯一
 - `email`，规范化为小写且唯一；新本地账号和 OIDC 自动创建账号必须提供，历史账号迁移时可空
 - `display_name`
@@ -80,8 +85,9 @@ PaymentConfig
 
 ## 5. system_settings
 
-当前仅保存 `initial_admin_created` 安装标记。该表不保存初始化令牌、密码、连接信息或
-其他部署密钥。标记与第一个管理员在同一数据库事务中创建，保证初始化只能完成一次。
+保存 `initial_admin_created` 安装标记和不含秘密的应用设置。`referral_reward_bps` 记录管理员
+设置的全局邀请返现基点；该表不保存初始化令牌、密码、连接信息或其他部署密钥。初始化标记
+与第一个管理员在同一数据库事务中创建，保证初始化只能完成一次。
 
 ## 6. 当前迁移状态
 
@@ -100,8 +106,16 @@ PaymentConfig
 `0012_soft_delete_admin_resources.sql` 为提供商、模型目录、模型路由和计费分组增加
 `deleted_at`；`0013_user_email.sql` 为本地账号和 OIDC 账号增加统一的唯一邮箱字段，并回填
 没有跨用户冲突的已有 OIDC 邮箱；`0014_flexible_payment_settings_and_top_up_credits.sql`
-增加结构化支付方式、充值规则和订单实际到账金额。
-服务启动时自动核对迁移历史并补齐未执行文件，仍保留显式 `migrate` 命令用于部署前检查。
+增加结构化支付方式、充值规则和订单实际到账金额；`0015_email_verification_codes.sql`
+创建公开注册使用的一次性邮箱验证码表。验证码只保存 HMAC 哈希、过期时间和消费时间，
+不保存明文验证码；每个邮箱同时只保留一条记录，发送间隔至少 60 秒，验证成功后立即标记为已消费。
+`0016_email_smtp_configs.sql` 创建管理员维护的单例 SMTP 配置表。SMTP 密码在业务层加密后
+写入 `encrypted_password`，数据库不保存明文凭据；`0017_referral_cashback.sql` 为用户增加
+邀请码和邀请人关系，并为余额流水增加 `referral_reward` 类型；
+`0018_minimum_top_up_one_cent.sql` 将系统最低充值金额调整为一分并迁移默认配置；
+`0019_model_route_failover.sql` 将模型路由唯一约束改为对外模型名、提供商和目录模型的组合，
+允许同一个对外模型配置多个候选渠道；`0020_referral_reward_setting.sql` 初始化数据库返现比例。
+服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。
 
 提供商、模型目录、模型路由和计费分组使用软删除。普通查询和网关路由解析排除
 `deleted_at` 非空记录，但历史用量、钱包流水及外键关联继续保留。删除提供商或目录模型时，
@@ -127,7 +141,7 @@ PaymentConfig
 - `wallet_id`
 - `amount_micros`
 - `balance_after_micros`
-- `entry_type`，`manual_adjustment`、`top_up`、`usage_reservation`、`usage_refund` 或 `usage_settlement`
+- `entry_type`，`manual_adjustment`、`top_up`、`referral_reward`、`usage_reservation`、`usage_refund` 或 `usage_settlement`
 - `reference_id`
 - `description`
 - `actor_user_id`，人工调整时记录管理员
@@ -140,6 +154,9 @@ PaymentConfig
 `reference_id + entry_type` 唯一，使余额预占和退款可以安全重试；相同金额的重复请求
 视为已完成，不同金额的重复请求视为冲突。若真实 usage 超过预占，会追加一条
 `usage_settlement` 补扣流水，不能静默截断费用。
+
+`referral_reward` 使用被邀请用户的充值订单 ID 作为 `reference_id`。同一钱包、订单和流水
+类型的唯一约束保证重复支付回调只能写入一次返现；返现与充值入账在同一事务内提交。
 
 ## 9. top_up_orders
 
@@ -202,12 +219,14 @@ PaymentConfig
 
 - `provider_id`
 - `upstream_model_id`，指向独立模型目录记录
-- `public_name`，对外模型名，唯一且创建后不可修改
+- `public_name`，对外模型名，创建后不可修改；可以在不同提供商或目录模型路由间重复
 - `display_name`
 - 旧版 `upstream_name`、输入/输出价格字段保留用于迁移兼容，新的计费读取上游模型
 - `status`、`created_at`、`updated_at`
 
-只有模型路由、提供商配置和目录模型都启用时，`/v1/models` 才会返回该模型。
+`public_name + provider_id + upstream_model_id` 组合唯一，防止完全相同的渠道重复配置。同一
+`public_name` 下只有模型路由、提供商配置和目录模型都启用的记录才进入候选池；
+`/v1/models` 对同名候选去重后返回。
 
 ## 13. billing_groups
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/novro-gateway/novro/internal/email"
 )
 
 const (
@@ -34,6 +35,8 @@ type Config struct {
 	Auth          AuthConfig
 	Provider      ProviderConfig
 	Payment       PaymentConfig
+	Referral      ReferralConfig
+	Email         email.Config
 	AllowedOrigin []string
 }
 
@@ -43,6 +46,10 @@ type ProviderConfig struct {
 
 type PaymentConfig struct {
 	EPay EPayConfig
+}
+
+type ReferralConfig struct {
+	RewardBPS int64
 }
 
 type EPayConfig struct {
@@ -269,6 +276,28 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	if setupToken != "" && len([]byte(setupToken)) < 24 {
 		return Config{}, errors.New("NOVRO_SETUP_TOKEN must be at least 24 bytes when enabled")
 	}
+	emailConfig := email.Config{
+		Host:     getString("NOVRO_EMAIL_SMTP_HOST", ""),
+		Port:     587,
+		Username: getString("NOVRO_EMAIL_SMTP_USERNAME", ""),
+		Password: getString("NOVRO_EMAIL_SMTP_PASSWORD", ""),
+		From:     getString("NOVRO_EMAIL_FROM", ""),
+	}
+	if rawPort := getString("NOVRO_EMAIL_SMTP_PORT", ""); rawPort != "" {
+		parsedPort, parseErr := strconv.Atoi(rawPort)
+		if parseErr != nil {
+			return Config{}, errors.New("NOVRO_EMAIL_SMTP_PORT must be a valid port")
+		}
+		emailConfig.Port = parsedPort
+	}
+	emailTLS, err := parseBool("NOVRO_EMAIL_SMTP_TLS", true)
+	if err != nil {
+		return Config{}, err
+	}
+	emailConfig.TLS = emailTLS
+	if err := email.ValidateConfig(emailConfig, environment == "production"); err != nil {
+		return Config{}, err
+	}
 
 	epayAPIURL := strings.TrimRight(getString("NOVRO_EPAY_API_URL", ""), "/")
 	epayMerchantID := getString("NOVRO_EPAY_MERCHANT_ID", "")
@@ -310,6 +339,10 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	epaySiteName := getString("NOVRO_EPAY_SITE_NAME", "Novro")
 	if len([]rune(epaySiteName)) > 64 {
 		return Config{}, errors.New("NOVRO_EPAY_SITE_NAME must not exceed 64 characters")
+	}
+	referralRewardBPS, err := strconv.ParseInt(getString("NOVRO_REFERRAL_REWARD_BPS", "1000"), 10, 64)
+	if err != nil || referralRewardBPS < 0 || referralRewardBPS > 10_000 {
+		return Config{}, errors.New("NOVRO_REFERRAL_REWARD_BPS must be an integer between 0 and 10000")
 	}
 
 	origins := make([]string, 0)
@@ -370,6 +403,8 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 			APIURL: epayAPIURL, MerchantID: epayMerchantID, MerchantKey: epayMerchantKey,
 			SiteName: epaySiteName, Channels: epayChannels,
 		}},
+		Referral:      ReferralConfig{RewardBPS: referralRewardBPS},
+		Email:         emailConfig,
 		AllowedOrigin: origins,
 	}, nil
 }

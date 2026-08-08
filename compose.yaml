@@ -1,0 +1,89 @@
+name: novro
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --require-secure-transport=ON
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      TZ: ${TZ:-Asia/Shanghai}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    volumes:
+      - ${NOVRO_DATA_DIR:-./data/novro}/mysql:/var/lib/mysql
+    networks:
+      - backend
+
+  novro:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NOVRO_ALLOWED_ORIGINS: ${NOVRO_PUBLIC_URL:?NOVRO_PUBLIC_URL is required}
+      NOVRO_BOOTSTRAP_DISPLAY_NAME: ${NOVRO_BOOTSTRAP_DISPLAY_NAME:-Novro Administrator}
+      NOVRO_BOOTSTRAP_EMAIL: ${NOVRO_BOOTSTRAP_EMAIL:-novro@novro.local}
+      NOVRO_BOOTSTRAP_PASSWORD: ${NOVRO_BOOTSTRAP_PASSWORD:-}
+      NOVRO_BOOTSTRAP_USERNAME: ${NOVRO_BOOTSTRAP_USERNAME:-novro}
+      NOVRO_DATABASE_CONN_MAX_LIFETIME: ${NOVRO_DATABASE_CONN_MAX_LIFETIME:-30m}
+      NOVRO_DATABASE_DRIVER: mysql
+      NOVRO_DATABASE_HOST: mysql
+      NOVRO_DATABASE_MAX_IDLE_CONNS: ${NOVRO_DATABASE_MAX_IDLE_CONNS:-5}
+      NOVRO_DATABASE_MAX_OPEN_CONNS: ${NOVRO_DATABASE_MAX_OPEN_CONNS:-10}
+      NOVRO_DATABASE_NAME: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      NOVRO_DATABASE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      NOVRO_DATABASE_PORT: "3306"
+      NOVRO_DATABASE_TLS: "true"
+      NOVRO_DATABASE_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      NOVRO_EMAIL_FROM: ${NOVRO_EMAIL_FROM:-}
+      NOVRO_EMAIL_SMTP_HOST: ${NOVRO_EMAIL_SMTP_HOST:-}
+      NOVRO_EMAIL_SMTP_PASSWORD: ${NOVRO_EMAIL_SMTP_PASSWORD:-}
+      NOVRO_EMAIL_SMTP_PORT: ${NOVRO_EMAIL_SMTP_PORT:-587}
+      NOVRO_EMAIL_SMTP_TLS: ${NOVRO_EMAIL_SMTP_TLS:-true}
+      NOVRO_EMAIL_SMTP_USERNAME: ${NOVRO_EMAIL_SMTP_USERNAME:-}
+      NOVRO_ENVIRONMENT: production
+      NOVRO_EPAY_API_URL: ${NOVRO_EPAY_API_URL:-}
+      NOVRO_EPAY_CHANNELS: ${NOVRO_EPAY_CHANNELS:-alipay,wxpay}
+      NOVRO_EPAY_MERCHANT_ID: ${NOVRO_EPAY_MERCHANT_ID:-}
+      NOVRO_EPAY_MERCHANT_KEY: ${NOVRO_EPAY_MERCHANT_KEY:-}
+      NOVRO_EPAY_SITE_NAME: ${NOVRO_EPAY_SITE_NAME:-Novro}
+      NOVRO_HTTP_ADDR: 127.0.0.1:8080
+      NOVRO_OIDC_AUTO_REGISTER: ${NOVRO_OIDC_AUTO_REGISTER:-true}
+      NOVRO_OIDC_CLIENT_ID: ${NOVRO_OIDC_CLIENT_ID:-}
+      NOVRO_OIDC_CLIENT_SECRET: ${NOVRO_OIDC_CLIENT_SECRET:-}
+      NOVRO_OIDC_DISPLAY_NAME: ${NOVRO_OIDC_DISPLAY_NAME:-Enterprise account}
+      NOVRO_OIDC_ISSUER: ${NOVRO_OIDC_ISSUER:-}
+      NOVRO_PROVIDER_ENCRYPTION_SECRET: ${NOVRO_PROVIDER_ENCRYPTION_SECRET:?NOVRO_PROVIDER_ENCRYPTION_SECRET is required}
+      NOVRO_PUBLIC_URL: ${NOVRO_PUBLIC_URL:?NOVRO_PUBLIC_URL is required}
+      NOVRO_REFERRAL_REWARD_BPS: ${NOVRO_REFERRAL_REWARD_BPS:-1000}
+      NOVRO_REGISTRATION_ENABLED: ${NOVRO_REGISTRATION_ENABLED:-true}
+      NOVRO_SESSION_COOKIE_NAME: ${NOVRO_SESSION_COOKIE_NAME:-novro_session}
+      NOVRO_SESSION_COOKIE_SECURE: "true"
+      NOVRO_SESSION_SECRET: ${NOVRO_SESSION_SECRET:?NOVRO_SESSION_SECRET is required}
+      NOVRO_SESSION_TTL: ${NOVRO_SESSION_TTL:-24h}
+      NOVRO_SETUP_TOKEN: ${NOVRO_SETUP_TOKEN:-}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${NOVRO_BIND_ADDRESS:-0.0.0.0}:${NOVRO_HTTP_PORT:-80}:80"
+      - "${NOVRO_BIND_ADDRESS:-0.0.0.0}:${NOVRO_HTTPS_PORT:-443}:443"
+    volumes:
+      - ${NOVRO_DATA_DIR:-./data/novro}/tls:/etc/nginx/tls:ro
+    networks:
+      - backend
+
+networks:
+  backend:

@@ -78,6 +78,15 @@ NOVRO_DATABASE_TLS=true
 当前仓库已新增 `0006_idempotent_wallet_entries`，上述内容是云库在 2026-08-06 的已验证
 快照，不表示该迁移已经应用。正式更新时仍须先生成并校验备份，再按部署文档显式迁移。
 
+注册邮箱验证已加入 `0015_email_verification_codes`，管理员 SMTP 设置已加入
+`0016_email_smtp_configs`，邀请返现已加入 `0017_referral_cashback`，管理员返现设置已加入
+`0020_referral_reward_setting`。返现比例保存在数据库并由 `/admin/referral` 管理，
+`NOVRO_REFERRAL_REWARD_BPS` 只作为数据库无记录时的默认值；邀请关系迁移会为已有用户回填
+唯一邀请码，但不会为历史充值补发返现。开发环境在数据库和环境变量都没有配置 SMTP 时，验证码只写入 Go
+服务日志；生产环境未配置时不会记录验证码。`NOVRO_EMAIL_SMTP_*` 与 `NOVRO_EMAIL_FROM`
+现在只作为首次启动兜底，管理员在 `/admin/email` 保存后数据库配置优先并立即生效。SMTP 密码
+使用与提供商凭据相同的 AES-256-GCM 密钥边界加密保存，部署前仍需显式应用迁移。
+
 同日通过当前 Go 服务和 Next.js 控制台完成云库端到端验证：注册与登录、余额读取、
 API Key 一次性展示和复制、`/v1/models` 鉴权、管理员用户/Key/提供商/模型路由页面、
 提供商凭据密文存储、失败上游请求的等额预占退款，以及 Key 撤销后的即时 `401`。

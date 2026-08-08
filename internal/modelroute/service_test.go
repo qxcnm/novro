@@ -10,11 +10,11 @@ import (
 )
 
 type fakeStore struct {
-	created           CreateInput
-	updated           UpdateParams
-	resolvedEncrypted string
-	deletedID         uuid.UUID
-	err               error
+	created     CreateInput
+	updated     UpdateParams
+	resolutions []Resolution
+	deletedID   uuid.UUID
+	err         error
 }
 
 func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
@@ -33,8 +33,8 @@ func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.err
 }
-func (f *fakeStore) Resolve(context.Context, string) (Record, string, string, error) {
-	return Record{PublicName: "public"}, "https://api.example.com/v1", f.resolvedEncrypted, f.err
+func (f *fakeStore) ResolveCandidates(context.Context, string) ([]Resolution, error) {
+	return f.resolutions, f.err
 }
 func (f *fakeStore) ListActive(context.Context) ([]Record, error) { return nil, f.err }
 
@@ -58,12 +58,29 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	}
 }
 
-func TestResolveDecryptsProviderCredential(t *testing.T) {
+func TestResolveCandidatesDecryptsEveryProviderCredential(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
-	encrypted, _ := cipher.Encrypt("secret-upstream-key")
-	store := &fakeStore{resolvedEncrypted: encrypted}
-	resolved, err := NewService(store, cipher).Resolve(context.Background(), "public")
-	if err != nil || resolved.APIKey != "secret-upstream-key" || resolved.BaseURL != "https://api.example.com/v1" {
+	firstEncrypted, _ := cipher.Encrypt("first-secret")
+	secondEncrypted, _ := cipher.Encrypt("second-secret")
+	store := &fakeStore{resolutions: []Resolution{
+		{Record: Record{PublicName: "public"}, BaseURL: "https://first.example.com/v1", EncryptedAPIKey: firstEncrypted},
+		{Record: Record{PublicName: "public"}, BaseURL: "https://second.example.com/v1", EncryptedAPIKey: secondEncrypted},
+	}}
+	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public")
+	if err != nil || len(resolved) != 2 || resolved[0].APIKey != "first-secret" || resolved[1].APIKey != "second-secret" || resolved[1].BaseURL != "https://second.example.com/v1" {
+		t.Fatalf("resolved=%+v err=%v", resolved, err)
+	}
+}
+
+func TestResolveCandidatesSkipsOneInvalidProviderCredential(t *testing.T) {
+	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
+	encrypted, _ := cipher.Encrypt("healthy-secret")
+	store := &fakeStore{resolutions: []Resolution{
+		{Record: Record{PublicName: "public"}, BaseURL: "https://broken.example.com/v1", EncryptedAPIKey: "not-encrypted"},
+		{Record: Record{PublicName: "public"}, BaseURL: "https://healthy.example.com/v1", EncryptedAPIKey: encrypted},
+	}}
+	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public")
+	if err != nil || len(resolved) != 1 || resolved[0].APIKey != "healthy-secret" || resolved[0].BaseURL != "https://healthy.example.com/v1" {
 		t.Fatalf("resolved=%+v err=%v", resolved, err)
 	}
 }

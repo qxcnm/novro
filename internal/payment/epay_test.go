@@ -1,6 +1,10 @@
 package payment
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -25,7 +29,7 @@ func testEPayGateway(t *testing.T) *EPayGateway {
 func TestEPayCheckoutUsesSignedSubmitForm(t *testing.T) {
 	gateway := testEPayGateway(t)
 	checkout, err := gateway.Checkout(Order{
-		ID: uuid.New(), OutTradeNo: "NVR0123456789", Channel: "alipay", AmountMicros: 10_000_000,
+		ID: uuid.New(), OutTradeNo: "NVR0123456789", Channel: "alipay", AmountMicros: MinTopUpMicros,
 	})
 	if err != nil {
 		t.Fatalf("build checkout: %v", err)
@@ -33,7 +37,7 @@ func TestEPayCheckoutUsesSignedSubmitForm(t *testing.T) {
 	if checkout.Action != "https://pay.example.com/submit.php" || checkout.Method != "POST" {
 		t.Fatalf("unexpected checkout target: %+v", checkout)
 	}
-	if checkout.Fields["money"] != "10.00" || checkout.Fields["pid"] != "1000" || checkout.Fields["sign"] == "" {
+	if checkout.Fields["money"] != "0.01" || checkout.Fields["pid"] != "1000" || checkout.Fields["sign"] == "" {
 		t.Fatalf("unexpected checkout fields: %#v", checkout.Fields)
 	}
 	for key, value := range checkout.Fields {
@@ -81,5 +85,36 @@ func TestEPayNotificationRejectsAmbiguousAndImpreciseValues(t *testing.T) {
 		if _, err := parseEPayMoney(value); err == nil {
 			t.Fatalf("money %q was accepted", value)
 		}
+	}
+}
+
+func TestEPayQueryReturnsVerifiedPaidOrder(t *testing.T) {
+	var received url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = r.URL.Query()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 1, "status": 1, "trade_no": "EPAY-123", "out_trade_no": "NVR0123456789", "type": "alipay", "money": "10.00",
+		})
+	}))
+	defer server.Close()
+
+	gateway, err := NewEPayGateway(EPayConfig{
+		APIURL: server.URL, MerchantID: "1000", MerchantKey: "merchant-secret",
+		SiteName: "Novro", Channels: []string{"alipay"},
+		NotifyURL: "https://novro.example.com/api/payments/epay/notify",
+		ReturnURL: "https://novro.example.com/api/payments/epay/return",
+	})
+	if err != nil {
+		t.Fatalf("create EPay gateway: %v", err)
+	}
+	notification, paid, err := gateway.Query(context.Background(), "NVR0123456789")
+	if err != nil || !paid {
+		t.Fatalf("query paid order: paid=%v err=%v", paid, err)
+	}
+	if notification.ProviderTradeNo != "EPAY-123" || notification.AmountMicros != 10_000_000 || notification.Channel != "alipay" {
+		t.Fatalf("unexpected notification: %+v", notification)
+	}
+	if received.Get("act") != "order" || received.Get("pid") != "1000" || received.Get("key") != "merchant-secret" || received.Get("out_trade_no") != "NVR0123456789" {
+		t.Fatalf("unexpected query: %#v", received)
 	}
 }

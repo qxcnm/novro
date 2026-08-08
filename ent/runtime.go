@@ -9,6 +9,8 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
+	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -303,6 +305,120 @@ func init() {
 	billinggroupDescID := billinggroupFields[0].Descriptor()
 	// billinggroup.DefaultID holds the default value on creation for the id field.
 	billinggroup.DefaultID = billinggroupDescID.Default.(func() uuid.UUID)
+	emailsmtpconfigFields := schema.EmailSMTPConfig{}.Fields()
+	_ = emailsmtpconfigFields
+	// emailsmtpconfigDescEnabled is the schema descriptor for enabled field.
+	emailsmtpconfigDescEnabled := emailsmtpconfigFields[1].Descriptor()
+	// emailsmtpconfig.DefaultEnabled holds the default value on creation for the enabled field.
+	emailsmtpconfig.DefaultEnabled = emailsmtpconfigDescEnabled.Default.(bool)
+	// emailsmtpconfigDescHost is the schema descriptor for host field.
+	emailsmtpconfigDescHost := emailsmtpconfigFields[2].Descriptor()
+	// emailsmtpconfig.DefaultHost holds the default value on creation for the host field.
+	emailsmtpconfig.DefaultHost = emailsmtpconfigDescHost.Default.(string)
+	// emailsmtpconfig.HostValidator is a validator for the "host" field. It is called by the builders before save.
+	emailsmtpconfig.HostValidator = emailsmtpconfigDescHost.Validators[0].(func(string) error)
+	// emailsmtpconfigDescPort is the schema descriptor for port field.
+	emailsmtpconfigDescPort := emailsmtpconfigFields[3].Descriptor()
+	// emailsmtpconfig.DefaultPort holds the default value on creation for the port field.
+	emailsmtpconfig.DefaultPort = emailsmtpconfigDescPort.Default.(int)
+	// emailsmtpconfigDescUsername is the schema descriptor for username field.
+	emailsmtpconfigDescUsername := emailsmtpconfigFields[4].Descriptor()
+	// emailsmtpconfig.DefaultUsername holds the default value on creation for the username field.
+	emailsmtpconfig.DefaultUsername = emailsmtpconfigDescUsername.Default.(string)
+	// emailsmtpconfig.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
+	emailsmtpconfig.UsernameValidator = emailsmtpconfigDescUsername.Validators[0].(func(string) error)
+	// emailsmtpconfigDescEncryptedPassword is the schema descriptor for encrypted_password field.
+	emailsmtpconfigDescEncryptedPassword := emailsmtpconfigFields[5].Descriptor()
+	// emailsmtpconfig.DefaultEncryptedPassword holds the default value on creation for the encrypted_password field.
+	emailsmtpconfig.DefaultEncryptedPassword = emailsmtpconfigDescEncryptedPassword.Default.(string)
+	// emailsmtpconfig.EncryptedPasswordValidator is a validator for the "encrypted_password" field. It is called by the builders before save.
+	emailsmtpconfig.EncryptedPasswordValidator = emailsmtpconfigDescEncryptedPassword.Validators[0].(func(string) error)
+	// emailsmtpconfigDescFromAddress is the schema descriptor for from_address field.
+	emailsmtpconfigDescFromAddress := emailsmtpconfigFields[6].Descriptor()
+	// emailsmtpconfig.DefaultFromAddress holds the default value on creation for the from_address field.
+	emailsmtpconfig.DefaultFromAddress = emailsmtpconfigDescFromAddress.Default.(string)
+	// emailsmtpconfig.FromAddressValidator is a validator for the "from_address" field. It is called by the builders before save.
+	emailsmtpconfig.FromAddressValidator = emailsmtpconfigDescFromAddress.Validators[0].(func(string) error)
+	// emailsmtpconfigDescSecurity is the schema descriptor for security field.
+	emailsmtpconfigDescSecurity := emailsmtpconfigFields[7].Descriptor()
+	// emailsmtpconfig.DefaultSecurity holds the default value on creation for the security field.
+	emailsmtpconfig.DefaultSecurity = emailsmtpconfigDescSecurity.Default.(string)
+	// emailsmtpconfig.SecurityValidator is a validator for the "security" field. It is called by the builders before save.
+	emailsmtpconfig.SecurityValidator = emailsmtpconfigDescSecurity.Validators[0].(func(string) error)
+	// emailsmtpconfigDescCreatedAt is the schema descriptor for created_at field.
+	emailsmtpconfigDescCreatedAt := emailsmtpconfigFields[8].Descriptor()
+	// emailsmtpconfig.DefaultCreatedAt holds the default value on creation for the created_at field.
+	emailsmtpconfig.DefaultCreatedAt = emailsmtpconfigDescCreatedAt.Default.(func() time.Time)
+	// emailsmtpconfigDescUpdatedAt is the schema descriptor for updated_at field.
+	emailsmtpconfigDescUpdatedAt := emailsmtpconfigFields[9].Descriptor()
+	// emailsmtpconfig.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	emailsmtpconfig.DefaultUpdatedAt = emailsmtpconfigDescUpdatedAt.Default.(func() time.Time)
+	// emailsmtpconfig.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	emailsmtpconfig.UpdateDefaultUpdatedAt = emailsmtpconfigDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// emailsmtpconfigDescID is the schema descriptor for id field.
+	emailsmtpconfigDescID := emailsmtpconfigFields[0].Descriptor()
+	// emailsmtpconfig.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	emailsmtpconfig.IDValidator = func() func(string) error {
+		validators := emailsmtpconfigDescID.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(id string) error {
+			for _, fn := range fns {
+				if err := fn(id); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	emailverificationcodeFields := schema.EmailVerificationCode{}.Fields()
+	_ = emailverificationcodeFields
+	// emailverificationcodeDescEmail is the schema descriptor for email field.
+	emailverificationcodeDescEmail := emailverificationcodeFields[1].Descriptor()
+	// emailverificationcode.EmailValidator is a validator for the "email" field. It is called by the builders before save.
+	emailverificationcode.EmailValidator = func() func(string) error {
+		validators := emailverificationcodeDescEmail.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(email string) error {
+			for _, fn := range fns {
+				if err := fn(email); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// emailverificationcodeDescCodeHash is the schema descriptor for code_hash field.
+	emailverificationcodeDescCodeHash := emailverificationcodeFields[2].Descriptor()
+	// emailverificationcode.CodeHashValidator is a validator for the "code_hash" field. It is called by the builders before save.
+	emailverificationcode.CodeHashValidator = func() func(string) error {
+		validators := emailverificationcodeDescCodeHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(code_hash string) error {
+			for _, fn := range fns {
+				if err := fn(code_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// emailverificationcodeDescCreatedAt is the schema descriptor for created_at field.
+	emailverificationcodeDescCreatedAt := emailverificationcodeFields[5].Descriptor()
+	// emailverificationcode.DefaultCreatedAt holds the default value on creation for the created_at field.
+	emailverificationcode.DefaultCreatedAt = emailverificationcodeDescCreatedAt.Default.(func() time.Time)
+	// emailverificationcodeDescID is the schema descriptor for id field.
+	emailverificationcodeDescID := emailverificationcodeFields[0].Descriptor()
+	// emailverificationcode.DefaultID holds the default value on creation for the id field.
+	emailverificationcode.DefaultID = emailverificationcodeDescID.Default.(func() uuid.UUID)
 	modelrouteFields := schema.ModelRoute{}.Fields()
 	_ = modelrouteFields
 	// modelrouteDescPublicName is the schema descriptor for public_name field.
@@ -783,8 +899,28 @@ func init() {
 	upstreammodel.DefaultID = upstreammodelDescID.Default.(func() uuid.UUID)
 	userFields := schema.User{}.Fields()
 	_ = userFields
+	// userDescInviteCode is the schema descriptor for invite_code field.
+	userDescInviteCode := userFields[2].Descriptor()
+	// user.DefaultInviteCode holds the default value on creation for the invite_code field.
+	user.DefaultInviteCode = userDescInviteCode.Default.(func() string)
+	// user.InviteCodeValidator is a validator for the "invite_code" field. It is called by the builders before save.
+	user.InviteCodeValidator = func() func(string) error {
+		validators := userDescInviteCode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(invite_code string) error {
+			for _, fn := range fns {
+				if err := fn(invite_code); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	// userDescUsername is the schema descriptor for username field.
-	userDescUsername := userFields[2].Descriptor()
+	userDescUsername := userFields[4].Descriptor()
 	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	user.UsernameValidator = func() func(string) error {
 		validators := userDescUsername.Validators
@@ -802,7 +938,7 @@ func init() {
 		}
 	}()
 	// userDescEmail is the schema descriptor for email field.
-	userDescEmail := userFields[3].Descriptor()
+	userDescEmail := userFields[5].Descriptor()
 	// user.EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	user.EmailValidator = func() func(string) error {
 		validators := userDescEmail.Validators
@@ -820,17 +956,17 @@ func init() {
 		}
 	}()
 	// userDescDisplayName is the schema descriptor for display_name field.
-	userDescDisplayName := userFields[4].Descriptor()
+	userDescDisplayName := userFields[6].Descriptor()
 	// user.DefaultDisplayName holds the default value on creation for the display_name field.
 	user.DefaultDisplayName = userDescDisplayName.Default.(string)
 	// user.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	user.DisplayNameValidator = userDescDisplayName.Validators[0].(func(string) error)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[9].Descriptor()
+	userDescCreatedAt := userFields[11].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[10].Descriptor()
+	userDescUpdatedAt := userFields[12].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

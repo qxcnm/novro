@@ -182,10 +182,51 @@ var (
 			},
 		},
 	}
+	// EmailSMTPConfigsColumns holds the columns for the "email_smtp_configs" table.
+	EmailSMTPConfigsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 32},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "host", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "port", Type: field.TypeInt, Default: 587},
+		{Name: "username", Type: field.TypeString, Size: 320, Default: ""},
+		{Name: "encrypted_password", Type: field.TypeString, Size: 2048, Default: ""},
+		{Name: "from_address", Type: field.TypeString, Size: 320, Default: ""},
+		{Name: "security", Type: field.TypeString, Size: 16, Default: "starttls"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// EmailSMTPConfigsTable holds the schema information for the "email_smtp_configs" table.
+	EmailSMTPConfigsTable = &schema.Table{
+		Name:       "email_smtp_configs",
+		Columns:    EmailSMTPConfigsColumns,
+		PrimaryKey: []*schema.Column{EmailSMTPConfigsColumns[0]},
+	}
+	// EmailVerificationCodesColumns holds the columns for the "email_verification_codes" table.
+	EmailVerificationCodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "email", Type: field.TypeString, Size: 320},
+		{Name: "code_hash", Type: field.TypeString, Size: 64},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// EmailVerificationCodesTable holds the schema information for the "email_verification_codes" table.
+	EmailVerificationCodesTable = &schema.Table{
+		Name:       "email_verification_codes",
+		Columns:    EmailVerificationCodesColumns,
+		PrimaryKey: []*schema.Column{EmailVerificationCodesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "emailverificationcode_email",
+				Unique:  true,
+				Columns: []*schema.Column{EmailVerificationCodesColumns[1]},
+			},
+		},
+	}
 	// ModelRoutesColumns holds the columns for the "model_routes" table.
 	ModelRoutesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "public_name", Type: field.TypeString, Unique: true, Size: 128},
+		{Name: "public_name", Type: field.TypeString, Size: 128},
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "upstream_name", Type: field.TypeString, Size: 256},
 		{Name: "input_price_micros", Type: field.TypeInt64},
@@ -218,6 +259,11 @@ var (
 		},
 		Indexes: []*schema.Index{
 			{
+				Name:    "modelroute_public_name_provider_id_upstream_model_id",
+				Unique:  true,
+				Columns: []*schema.Column{ModelRoutesColumns[1], ModelRoutesColumns[10], ModelRoutesColumns[11]},
+			},
+			{
 				Name:    "modelroute_provider_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{ModelRoutesColumns[10], ModelRoutesColumns[6]},
@@ -249,7 +295,7 @@ var (
 		{Name: "site_name", Type: field.TypeString, Size: 64, Default: "Novro"},
 		{Name: "channels", Type: field.TypeString, Size: 512, Default: ""},
 		{Name: "methods_json", Type: field.TypeString, Size: 2147483647, Default: "[]"},
-		{Name: "min_top_up_micros", Type: field.TypeInt64, Default: 1000000},
+		{Name: "min_top_up_micros", Type: field.TypeInt64, Default: 10000},
 		{Name: "max_top_up_micros", Type: field.TypeInt64, Default: 50000000000},
 		{Name: "preset_amounts_json", Type: field.TypeString, Size: 2147483647, Default: "[10000000,50000000,100000000,500000000]"},
 		{Name: "bonus_tiers_json", Type: field.TypeString, Size: 2147483647, Default: "[]"},
@@ -397,6 +443,7 @@ var (
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
+		{Name: "invite_code", Type: field.TypeString, Unique: true, Size: 16},
 		{Name: "username", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "email", Type: field.TypeString, Unique: true, Nullable: true, Size: 320},
 		{Name: "display_name", Type: field.TypeString, Size: 128, Default: ""},
@@ -407,6 +454,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "billing_group_id", Type: field.TypeUUID, Nullable: true},
+		{Name: "referred_by_user_id", Type: field.TypeUUID, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -416,8 +464,14 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_billing_groups_users",
-				Columns:    []*schema.Column{UsersColumns[10]},
+				Columns:    []*schema.Column{UsersColumns[11]},
 				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "users_users_referrals",
+				Columns:    []*schema.Column{UsersColumns[12]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
@@ -425,7 +479,12 @@ var (
 			{
 				Name:    "user_role_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[5], UsersColumns[6]},
+				Columns: []*schema.Column{UsersColumns[6], UsersColumns[7]},
+			},
+			{
+				Name:    "user_referred_by_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[12], UsersColumns[9]},
 			},
 		},
 	}
@@ -515,7 +574,7 @@ var (
 	WalletEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "reference_id", Type: field.TypeUUID},
-		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "top_up", "usage_reservation", "usage_refund", "usage_settlement"}},
+		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "top_up", "referral_reward", "usage_reservation", "usage_refund", "usage_settlement"}},
 		{Name: "amount_micros", Type: field.TypeInt64},
 		{Name: "balance_after_micros", Type: field.TypeInt64},
 		{Name: "description", Type: field.TypeString, Size: 255, Default: ""},
@@ -565,6 +624,8 @@ var (
 		APIKeysTable,
 		APIUsagesTable,
 		BillingGroupsTable,
+		EmailSMTPConfigsTable,
+		EmailVerificationCodesTable,
 		ModelRoutesTable,
 		PaymentConfigsTable,
 		ProvidersTable,
@@ -590,6 +651,7 @@ func init() {
 	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
 	TopUpOrdersTable.ForeignKeys[0].RefTable = UsersTable
 	UsersTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	UsersTable.ForeignKeys[1].RefTable = UsersTable
 	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	UserSessionsTable.ForeignKeys[0].RefTable = UsersTable
 	WalletsTable.ForeignKeys[0].RefTable = UsersTable

@@ -2,8 +2,11 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -23,6 +26,15 @@ type fakePaymentStore struct {
 func (f *fakePaymentStore) Create(_ context.Context, params CreateParams) (Order, error) {
 	f.created = params
 	return Order{ID: params.ID, UserID: params.UserID, OutTradeNo: params.OutTradeNo, Provider: "epay", Channel: params.Channel, AmountMicros: params.AmountMicros, CreditedMicros: params.CreditedMicros, Status: StatusPending}, f.err
+}
+
+func (f *fakePaymentStore) Get(_ context.Context, outTradeNo string) (Order, error) {
+	for _, order := range f.orders {
+		if order.OutTradeNo == outTradeNo {
+			return order, f.err
+		}
+	}
+	return Order{}, ErrOrderNotFound
 }
 
 func (f *fakePaymentStore) List(context.Context, uuid.UUID, int) ([]Order, error) {
@@ -47,6 +59,9 @@ func (fakePaymentGateway) Checkout(order Order) (Checkout, error) {
 }
 func (fakePaymentGateway) ParseNotification(url.Values) (Notification, error) {
 	return Notification{OutTradeNo: "NVR1", ProviderTradeNo: "EPAY1", Channel: "alipay", AmountMicros: 10_000_000}, nil
+}
+func (fakePaymentGateway) Query(context.Context, string) (Notification, bool, error) {
+	return Notification{OutTradeNo: "NVR1", ProviderTradeNo: "EPAY1", Channel: "alipay", AmountMicros: 10_000_000}, true, nil
 }
 
 type fakePaymentConfigStore struct {
@@ -129,17 +144,17 @@ func TestServiceCreatesCentAlignedTopUp(t *testing.T) {
 		SiteName: "Novro", Channels: []string{"alipay"}, NotifyURL: "https://novro.example.com/api/payments/epay/notify", ReturnURL: "https://novro.example.com/console/billing",
 	})
 	userID := uuid.New()
-	result, err := service.Create(context.Background(), userID, 10_000_000, " ALIPAY ")
+	result, err := service.Create(context.Background(), userID, MinTopUpMicros, " ALIPAY ")
 	if err != nil {
 		t.Fatalf("create top-up: %v", err)
 	}
-	if store.created.UserID != userID || store.created.AmountMicros != 10_000_000 || store.created.CreditedMicros != 10_000_000 || store.created.Channel != "alipay" || store.created.OutTradeNo == "" {
+	if store.created.UserID != userID || store.created.AmountMicros != MinTopUpMicros || store.created.CreditedMicros != MinTopUpMicros || store.created.Channel != "alipay" || store.created.OutTradeNo == "" {
 		t.Fatalf("unexpected create params: %+v", store.created)
 	}
-	if result.Checkout.Action == "" || result.Order.Status != StatusPending {
+	if result.Checkout.Action == "" || result.Checkout.Fields["money"] != "0.01" || result.Order.Status != StatusPending {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-	for _, amount := range []int64{999_999, 1_000_001, MaxTopUpMicros + 10_000} {
+	for _, amount := range []int64{9_999, 10_001, MaxTopUpMicros + 10_000} {
 		if _, err := service.Create(context.Background(), userID, amount, "alipay"); err != ErrInvalidInput {
 			t.Fatalf("amount %d error = %v, want %v", amount, err, ErrInvalidInput)
 		}
@@ -206,6 +221,72 @@ func TestServiceCompletesVerifiedNotification(t *testing.T) {
 	}
 	if store.completed.OutTradeNo != "NVR1" || store.completed.ProviderTradeNo != "EPAY1" || store.completed.AmountMicros != 10_000_000 || store.completed.PaidAt.IsZero() {
 		t.Fatalf("unexpected completion: %+v", store.completed)
+	}
+}
+
+func TestServiceReconcilesProviderPaidOrder(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": 1, "status": 1, "trade_no": "EPAY1", "out_trade_no": "NVR1", "type": "alipay", "money": "10.00",
+		})
+	}))
+	defer server.Close()
+	store := &fakePaymentStore{orders: []Order{{
+		ID: uuid.New(), OutTradeNo: "NVR1", Channel: "alipay", AmountMicros: 10_000_000, CreditedMicros: 10_000_000, Status: StatusPending,
+	}}}
+	service := NewService(store, nil, nil, EPayConfig{
+		APIURL: server.URL, MerchantID: "1000", MerchantKey: "merchant-secret",
+		SiteName: "Novro", Channels: []string{"alipay"},
+		NotifyURL: "https://novro.example.com/api/payments/epay/notify",
+		ReturnURL: "https://novro.example.com/api/payments/epay/return",
+	})
+	order, err := service.Reconcile(context.Background(), "NVR1")
+	if err != nil {
+		t.Fatalf("reconcile paid order: %v", err)
+	}
+	if order.Status != StatusPaid || store.completed.OutTradeNo != "NVR1" || store.completed.ProviderTradeNo != "EPAY1" || store.completed.AmountMicros != 10_000_000 {
+		t.Fatalf("unexpected reconciliation: order=%+v completed=%+v", order, store.completed)
+	}
+}
+
+func TestServiceDoesNotQueryAlreadyPaidOrder(t *testing.T) {
+	paid := Order{ID: uuid.New(), OutTradeNo: "NVR1", Status: StatusPaid}
+	store := &fakePaymentStore{orders: []Order{paid}}
+	service := NewService(store, nil, nil, EPayConfig{})
+	order, err := service.Reconcile(context.Background(), "NVR1")
+	if err != nil || order.Status != StatusPaid {
+		t.Fatalf("reconcile already paid order: order=%+v err=%v", order, err)
+	}
+	if store.completed.OutTradeNo != "" {
+		t.Fatalf("already paid order was completed again: %+v", store.completed)
+	}
+}
+
+func TestServiceReconcileForUserRejectsAnotherUsersOrder(t *testing.T) {
+	ownerID := uuid.New()
+	store := &fakePaymentStore{orders: []Order{{ID: uuid.New(), UserID: ownerID, OutTradeNo: "NVR1", Status: StatusPending}}}
+	service := NewService(store, nil, nil, EPayConfig{})
+
+	if _, err := service.ReconcileForUser(context.Background(), uuid.New(), "NVR1"); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("reconcile another user's order error = %v, want %v", err, ErrOrderNotFound)
+	}
+	if store.completed.OutTradeNo != "" {
+		t.Fatalf("another user's order was completed: %+v", store.completed)
+	}
+}
+
+func TestServiceReconcileForUserReturnsOwnedPaidOrderWithoutQuery(t *testing.T) {
+	ownerID := uuid.New()
+	paid := Order{ID: uuid.New(), UserID: ownerID, OutTradeNo: "NVR1", Status: StatusPaid}
+	store := &fakePaymentStore{orders: []Order{paid}}
+	service := NewService(store, nil, nil, EPayConfig{})
+
+	order, err := service.ReconcileForUser(context.Background(), ownerID, "NVR1")
+	if err != nil || order.Status != StatusPaid {
+		t.Fatalf("reconcile owned paid order: order=%+v err=%v", order, err)
+	}
+	if store.completed.OutTradeNo != "" {
+		t.Fatalf("owned paid order was completed again: %+v", store.completed)
 	}
 }
 

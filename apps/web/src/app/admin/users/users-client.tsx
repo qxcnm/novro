@@ -35,7 +35,7 @@ type UserRecord = {
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
 type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
-type WalletEntry = { id: string; entry_type: "manual_adjustment" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
+type WalletEntry = { id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string }; entries: WalletEntry[] };
 type ErrorResponse = { error?: { message?: string } };
 
@@ -277,12 +277,12 @@ export default function UsersClient() {
 
 		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: "" }); }} open={createOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>创建用户</DialogTitle><DialogDescription>创建后用户立即启用。初始密码必须为 12 到 72 字节。</DialogDescription></DialogHeader>
+            <DialogHeader><DialogTitle>创建用户</DialogTitle><DialogDescription>创建后用户立即启用。初始密码为 8 到 72 字节，且必须包含英文和数字。</DialogDescription></DialogHeader>
             <form className="space-y-4" id="create-user-form" onSubmit={createUser}>
               <div className="space-y-2"><Label htmlFor="new-username">用户名</Label><Input autoComplete="off" id="new-username" onChange={(event) => setForm({ ...form, username: event.target.value })} pattern="[a-z0-9][a-z0-9._-]{2,63}" placeholder="例如 alice.chen" required value={form.username} /></div>
               <div className="space-y-2"><Label htmlFor="new-email">邮箱</Label><Input autoComplete="email" id="new-email" maxLength={320} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="例如 alice@example.com" required type="email" value={form.email} /></div>
               <div className="space-y-2"><Label htmlFor="new-display-name">显示名称</Label><Input id="new-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 Alice Chen" value={form.display_name} /></div>
-              <div className="space-y-2"><Label htmlFor="new-password">初始密码</Label><Input autoComplete="new-password" id="new-password" minLength={12} onChange={(event) => setForm({ ...form, password: event.target.value })} required type="password" value={form.password} /></div>
+              <div className="space-y-2"><Label htmlFor="new-password">初始密码</Label><Input autoComplete="new-password" id="new-password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.password} /></div>
 			  <div className="space-y-2"><Label htmlFor="new-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setForm({ ...form, role })} value={form.role}><SelectTrigger id="new-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select></div>
 			  <div className="space-y-2"><Label htmlFor="new-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger id="new-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active").map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
               {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
@@ -326,7 +326,7 @@ export default function UsersClient() {
         <Dialog onOpenChange={(open) => { setFormError(""); if (!open) { setResetUser(null); setResetPassword(""); } }} open={resetUser !== null}>
           <DialogContent>
             <DialogHeader><DialogTitle>重置密码</DialogTitle><DialogDescription>为 {resetUser?.username} 设置新密码。保存后该用户的所有现有会话都会立即失效。</DialogDescription></DialogHeader>
-            <form className="space-y-2" id="reset-password-form" onSubmit={submitReset}><Label htmlFor="reset-password">新密码</Label><Input autoComplete="new-password" id="reset-password" minLength={12} onChange={(event) => setResetPassword(event.target.value)} required type="password" value={resetPassword} />{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}</form>
+            <form className="space-y-2" id="reset-password-form" onSubmit={submitReset}><Label htmlFor="reset-password">新密码</Label><Input autoComplete="new-password" id="reset-password" minLength={8} onChange={(event) => setResetPassword(event.target.value)} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={resetPassword} />{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}</form>
             <DialogFooter><Button onClick={() => setResetUser(null)} type="button" variant="outline">取消</Button><Button disabled={busy} form="reset-password-form" type="submit"><KeyRound />{busy ? "正在重置..." : "确认重置"}</Button></DialogFooter>
           </DialogContent>
         </Dialog>

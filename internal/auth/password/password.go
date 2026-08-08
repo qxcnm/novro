@@ -9,11 +9,11 @@ import (
 
 const (
 	DefaultCost      = 12
-	MinPasswordBytes = 12
+	MinPasswordBytes = 8
 	MaxPasswordBytes = 72
 )
 
-var ErrInvalidPassword = errors.New("password must be 12 to 72 bytes and valid UTF-8")
+var ErrInvalidPassword = errors.New("password must be 8 to 72 bytes, valid UTF-8, and contain an English letter and a digit")
 
 type Hasher struct {
 	Cost int
@@ -44,6 +44,18 @@ func (Hasher) Verify(hash, plainText string) bool {
 func Validate(plainText string) error {
 	length := len([]byte(plainText))
 	if !utf8.ValidString(plainText) || length < MinPasswordBytes || length > MaxPasswordBytes {
+		return ErrInvalidPassword
+	}
+	var hasEnglishLetter, hasDigit bool
+	for _, character := range plainText {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') {
+			hasEnglishLetter = true
+		}
+		if character >= '0' && character <= '9' {
+			hasDigit = true
+		}
+	}
+	if !hasEnglishLetter || !hasDigit {
 		return ErrInvalidPassword
 	}
 	return nil

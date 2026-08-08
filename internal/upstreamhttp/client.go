@@ -9,7 +9,7 @@ import (
 )
 
 func NewClient() *http.Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	dialer := &net.Dialer{Timeout: 0, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -39,9 +39,9 @@ func NewClient() *http.Client {
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 60 * time.Second,
+		IdleConnTimeout:       0,
+		TLSHandshakeTimeout:   0,
+		ResponseHeaderTimeout: 0,
 	}
 	return &http.Client{
 		Transport: transport,

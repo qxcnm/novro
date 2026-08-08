@@ -45,6 +45,30 @@ func (f BillingGroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BillingGroupMutation", m)
 }
 
+// The EmailSMTPConfigFunc type is an adapter to allow the use of ordinary
+// function as EmailSMTPConfig mutator.
+type EmailSMTPConfigFunc func(context.Context, *ent.EmailSMTPConfigMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EmailSMTPConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EmailSMTPConfigMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EmailSMTPConfigMutation", m)
+}
+
+// The EmailVerificationCodeFunc type is an adapter to allow the use of ordinary
+// function as EmailVerificationCode mutator.
+type EmailVerificationCodeFunc func(context.Context, *ent.EmailVerificationCodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EmailVerificationCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EmailVerificationCodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EmailVerificationCodeMutation", m)
+}
+
 // The ModelRouteFunc type is an adapter to allow the use of ordinary
 // function as ModelRoute mutator.
 type ModelRouteFunc func(context.Context, *ent.ModelRouteMutation) (ent.Value, error)

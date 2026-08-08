@@ -47,3 +47,14 @@ func TestApplyPendingMigrationsWrapsFailure(t *testing.T) {
 		t.Fatalf("expected wrapped migration failure, got %v", err)
 	}
 }
+
+func TestEnvOrDefault(t *testing.T) {
+	t.Setenv("NOVRO_TEST_DEFAULT", "")
+	if value := envOrDefault("NOVRO_TEST_DEFAULT", "fallback"); value != "fallback" {
+		t.Fatalf("expected fallback value, got %q", value)
+	}
+	t.Setenv("NOVRO_TEST_DEFAULT", "configured")
+	if value := envOrDefault("NOVRO_TEST_DEFAULT", "fallback"); value != "configured" {
+		t.Fatalf("expected configured value, got %q", value)
+	}
+}

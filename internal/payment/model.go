@@ -13,12 +13,14 @@ var (
 	ErrInvalidNotice  = errors.New("invalid payment notification")
 	ErrOrderNotFound  = errors.New("top-up order not found")
 	ErrOrderConflict  = errors.New("top-up order conflicts with payment notification")
+	ErrOrderUnpaid    = errors.New("top-up order is not paid at provider")
 	ErrWalletNotFound = errors.New("wallet not found")
+	ErrGatewayQuery   = errors.New("payment gateway order query failed")
 	ErrConfigNotFound = errors.New("payment configuration not found")
 )
 
 const (
-	MinTopUpMicros int64 = 1_000_000
+	MinTopUpMicros int64 = 10_000
 	MaxTopUpMicros int64 = 50_000_000_000
 )
 

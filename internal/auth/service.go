@@ -61,7 +61,7 @@ type LoginResult struct {
 }
 
 func NewService(store Store, passwords PasswordManager, secret string, ttl time.Duration) (*Service, error) {
-	dummyHash, err := passwords.Hash("novro-dummy-password-value")
+	dummyHash, err := passwords.Hash("novro-dummy-password-value1")
 	if err != nil {
 		return nil, fmt.Errorf("create authentication comparison hash: %w", err)
 	}

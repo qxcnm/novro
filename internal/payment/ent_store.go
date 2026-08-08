@@ -4,18 +4,31 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entsystemsetting "github.com/novro-gateway/novro/ent/systemsetting"
 	enttopuporder "github.com/novro-gateway/novro/ent/topuporder"
 	entuser "github.com/novro-gateway/novro/ent/user"
 	entwallet "github.com/novro-gateway/novro/ent/wallet"
 	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
+	"github.com/novro-gateway/novro/internal/referral"
 )
 
-type EntStore struct{ client *ent.Client }
+type EntStore struct {
+	client                   *ent.Client
+	defaultReferralRewardBPS int64
+}
 
-func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
+func NewEntStore(client *ent.Client, referralRewardBPS ...int64) *EntStore {
+	rate := int64(0)
+	if len(referralRewardBPS) > 0 && referralRewardBPS[0] >= 0 && referralRewardBPS[0] <= 10_000 {
+		rate = referralRewardBPS[0]
+	}
+	return &EntStore{client: client, defaultReferralRewardBPS: rate}
+}
 
 func (s *EntStore) Create(ctx context.Context, params CreateParams) (Order, error) {
 	entity, err := s.client.TopUpOrder.Create().
@@ -29,6 +42,17 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Order, erro
 		Save(ctx)
 	if err != nil {
 		return Order{}, fmt.Errorf("insert top-up order: %w", err)
+	}
+	return orderFromEnt(entity), nil
+}
+
+func (s *EntStore) Get(ctx context.Context, outTradeNo string) (Order, error) {
+	entity, err := s.client.TopUpOrder.Query().Where(enttopuporder.OutTradeNoEQ(outTradeNo)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return Order{}, ErrOrderNotFound
+	}
+	if err != nil {
+		return Order{}, fmt.Errorf("read top-up order: %w", err)
 	}
 	return orderFromEnt(entity), nil
 }
@@ -135,6 +159,9 @@ func (s *EntStore) Complete(ctx context.Context, params CompleteParams) (Order, 
 		Save(ctx); err != nil {
 		return Order{}, fmt.Errorf("record top-up balance: %w", err)
 	}
+	if err := s.creditReferralReward(ctx, tx, orderEntity.UserID, orderEntity.ID, orderEntity.AmountMicros); err != nil {
+		return Order{}, err
+	}
 	updated, err := tx.TopUpOrder.UpdateOneID(orderEntity.ID).
 		SetStatus(enttopuporder.StatusPaid).
 		SetProviderTradeNo(params.ProviderTradeNo).
@@ -147,6 +174,70 @@ func (s *EntStore) Complete(ctx context.Context, params CompleteParams) (Order, 
 		return Order{}, fmt.Errorf("commit top-up completion: %w", err)
 	}
 	return orderFromEnt(updated), nil
+}
+
+func (s *EntStore) creditReferralReward(ctx context.Context, tx *ent.Tx, referredUserID, orderID uuid.UUID, amountMicros int64) error {
+	referredUser, err := tx.User.Query().Where(entuser.IDEQ(referredUserID)).Only(ctx)
+	if err != nil {
+		return fmt.Errorf("read referred user for top-up: %w", err)
+	}
+	if referredUser.ReferredByUserID == nil {
+		return nil
+	}
+	rewardBPS, err := s.referralRewardBPS(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if rewardBPS <= 0 {
+		return nil
+	}
+	if amountMicros > math.MaxInt64/rewardBPS {
+		return ErrOrderConflict
+	}
+	rewardMicros := amountMicros * rewardBPS / 10_000
+	if rewardMicros <= 0 {
+		return nil
+	}
+	referrerWallet, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(*referredUser.ReferredByUserID)).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrWalletNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock referrer wallet for cashback: %w", err)
+	}
+	if referrerWallet.BalanceMicros > math.MaxInt64-rewardMicros {
+		return ErrOrderConflict
+	}
+	nextBalance := referrerWallet.BalanceMicros + rewardMicros
+	if _, err := tx.Wallet.UpdateOneID(referrerWallet.ID).SetBalanceMicros(nextBalance).Save(ctx); err != nil {
+		return fmt.Errorf("credit referral cashback: %w", err)
+	}
+	if _, err := tx.WalletEntry.Create().
+		SetWalletID(referrerWallet.ID).
+		SetReferenceID(orderID).
+		SetEntryType(entwalletentry.EntryTypeReferralReward).
+		SetAmountMicros(rewardMicros).
+		SetBalanceAfterMicros(nextBalance).
+		SetDescription("邀请好友充值返现").
+		Save(ctx); err != nil {
+		return fmt.Errorf("record referral cashback: %w", err)
+	}
+	return nil
+}
+
+func (s *EntStore) referralRewardBPS(ctx context.Context, tx *ent.Tx) (int64, error) {
+	setting, err := tx.SystemSetting.Query().Where(entsystemsetting.IDEQ(referral.RewardBPSSettingKey)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return s.defaultReferralRewardBPS, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read referral reward configuration: %w", err)
+	}
+	rewardBPS, err := strconv.ParseInt(strings.TrimSpace(setting.Value), 10, 64)
+	if err != nil || !referral.ValidRewardBPS(rewardBPS) {
+		return 0, fmt.Errorf("read referral reward configuration: invalid stored rate")
+	}
+	return rewardBPS, nil
 }
 
 func orderFromEnt(entity *ent.TopUpOrder) Order {

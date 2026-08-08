@@ -11,6 +11,8 @@ import (
 type fakeStore struct {
 	createParams  CreateParams
 	initialParams CreateParams
+	emailExists   bool
+	emailCheckErr error
 	initialized   bool
 	listFilter    ListFilter
 	updateParams  UpdateParams
@@ -26,6 +28,10 @@ func (f *fakeStore) Create(_ context.Context, params CreateParams) (Record, erro
 func (f *fakeStore) CreateInitialAdmin(_ context.Context, params CreateParams) (Record, error) {
 	f.initialParams = params
 	return Record{ID: uuid.New(), Username: params.Username, Role: RoleAdmin, Status: StatusActive}, nil
+}
+
+func (f *fakeStore) EmailExists(context.Context, string) (bool, error) {
+	return f.emailExists, f.emailCheckErr
 }
 
 func (f *fakeStore) IsInitialized(context.Context) (bool, error) { return f.initialized, nil }
@@ -88,13 +94,41 @@ func TestRegisterCannotCreateAdministrator(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
 	created, err := service.Register(context.Background(), RegisterInput{
-		Username: "member.one", Email: "member@example.com", DisplayName: "Member", Password: "test-password",
+		Username: "member.one", Email: "member@example.com", DisplayName: "Member", Password: "test-password", ReferralCode: "  abcd1234ef56 ",
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if created.Role != RoleMember || store.createParams.Role != RoleMember {
 		t.Fatalf("registration elevated role: created=%+v params=%+v", created, store.createParams)
+	}
+	if store.createParams.ReferralCode != "ABCD1234EF56" {
+		t.Fatalf("referral code was not normalized: %+v", store.createParams)
+	}
+}
+
+func TestRegisterRejectsMalformedReferralCode(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeHasher{})
+	_, err := service.Register(context.Background(), RegisterInput{
+		Username: "member.one", Email: "member@example.com", Password: "test-password", ReferralCode: "bad-code",
+	})
+	if !errors.Is(err, ErrInvalidReferralCode) {
+		t.Fatalf("expected invalid referral code, got %v", err)
+	}
+}
+
+func TestEmailAvailableNormalizesAndChecksStore(t *testing.T) {
+	store := &fakeStore{emailExists: true}
+	service := NewService(store, fakeHasher{})
+	available, err := service.EmailAvailable(context.Background(), " User@Example.COM ")
+	if err != nil {
+		t.Fatalf("check email availability: %v", err)
+	}
+	if available {
+		t.Fatal("registered email was reported as available")
+	}
+	if _, err := service.EmailAvailable(context.Background(), "not-an-email"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected invalid email error, got %v", err)
 	}
 }
 

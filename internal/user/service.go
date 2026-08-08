@@ -10,13 +10,15 @@ import (
 )
 
 var (
-	usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
-	emailPattern    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	usernamePattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
+	emailPattern        = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	referralCodePattern = regexp.MustCompile(`^[A-Z0-9]{12}$`)
 )
 
 type Store interface {
 	Create(context.Context, CreateParams) (Record, error)
 	CreateInitialAdmin(context.Context, CreateParams) (Record, error)
+	EmailExists(context.Context, string) (bool, error)
 	IsInitialized(context.Context) (bool, error)
 	List(context.Context, ListFilter) (Page, error)
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
@@ -35,6 +37,7 @@ type CreateParams struct {
 	PasswordHash   string
 	Role           Role
 	BillingGroupID *uuid.UUID
+	ReferralCode   string
 }
 
 type UpdateParams struct {
@@ -57,15 +60,34 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (Record, error) {
+	referralCode := strings.ToUpper(strings.TrimSpace(input.ReferralCode))
+	if referralCode != "" && !referralCodePattern.MatchString(referralCode) {
+		return Record{}, ErrInvalidReferralCode
+	}
 	return s.create(ctx, CreateInput{
 		Username: input.Username, Email: input.Email, DisplayName: input.DisplayName, Password: input.Password, Role: RoleMember,
-	}, s.store.Create)
+	}, func(ctx context.Context, params CreateParams) (Record, error) {
+		params.ReferralCode = referralCode
+		return s.store.Create(ctx, params)
+	})
 }
 
 func (s *Service) InitializeAdmin(ctx context.Context, input RegisterInput) (Record, error) {
 	return s.create(ctx, CreateInput{
 		Username: input.Username, Email: input.Email, DisplayName: input.DisplayName, Password: input.Password, Role: RoleAdmin,
 	}, s.store.CreateInitialAdmin)
+}
+
+func (s *Service) EmailAvailable(ctx context.Context, rawEmail string) (bool, error) {
+	email, ok := NormalizeEmail(rawEmail)
+	if !ok {
+		return false, ErrInvalidInput
+	}
+	exists, err := s.store.EmailExists(ctx, email)
+	if err != nil {
+		return false, fmt.Errorf("check email availability: %w", err)
+	}
+	return !exists, nil
 }
 
 func (s *Service) SetupRequired(ctx context.Context) (bool, error) {

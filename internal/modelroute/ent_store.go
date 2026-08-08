@@ -141,23 +141,27 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (s *EntStore) Resolve(ctx context.Context, publicName string) (Record, string, string, error) {
-	entity, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Only(ctx)
-	if ent.IsNotFound(err) {
-		return Record{}, "", "", ErrNotFound
-	}
+func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string) ([]Resolution, error) {
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
-		return Record{}, "", "", fmt.Errorf("resolve model route: %w", err)
+		return nil, fmt.Errorf("resolve model routes: %w", err)
 	}
-	providerEntity, err := entity.Edges.ProviderOrErr()
-	if err != nil {
-		return Record{}, "", "", fmt.Errorf("read resolved provider: %w", err)
+	if len(entities) == 0 {
+		return nil, ErrNotFound
 	}
-	return fromEnt(entity), providerEntity.BaseURL, providerEntity.EncryptedAPIKey, nil
+	resolutions := make([]Resolution, 0, len(entities))
+	for _, entity := range entities {
+		providerEntity, err := entity.Edges.ProviderOrErr()
+		if err != nil {
+			return nil, fmt.Errorf("read resolved provider: %w", err)
+		}
+		resolutions = append(resolutions, Resolution{Record: fromEnt(entity), BaseURL: providerEntity.BaseURL, EncryptedAPIKey: providerEntity.EncryptedAPIKey})
+	}
+	return resolutions, nil
 }
 
 func (s *EntStore) ListActive(ctx context.Context) ([]Record, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active model routes: %w", err)
 	}

@@ -18,6 +18,10 @@ const (
 	FieldID = "id"
 	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
 	FieldBillingGroupID = "billing_group_id"
+	// FieldInviteCode holds the string denoting the invite_code field in the database.
+	FieldInviteCode = "invite_code"
+	// FieldReferredByUserID holds the string denoting the referred_by_user_id field in the database.
+	FieldReferredByUserID = "referred_by_user_id"
 	// FieldUsername holds the string denoting the username field in the database.
 	FieldUsername = "username"
 	// FieldEmail holds the string denoting the email field in the database.
@@ -52,6 +56,10 @@ const (
 	EdgeAPIUsages = "api_usages"
 	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
 	EdgeBillingGroup = "billing_group"
+	// EdgeReferrer holds the string denoting the referrer edge name in mutations.
+	EdgeReferrer = "referrer"
+	// EdgeReferrals holds the string denoting the referrals edge name in mutations.
+	EdgeReferrals = "referrals"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// SessionsTable is the table that holds the sessions relation/edge.
@@ -110,12 +118,22 @@ const (
 	BillingGroupInverseTable = "billing_groups"
 	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
 	BillingGroupColumn = "billing_group_id"
+	// ReferrerTable is the table that holds the referrer relation/edge.
+	ReferrerTable = "users"
+	// ReferrerColumn is the table column denoting the referrer relation/edge.
+	ReferrerColumn = "referred_by_user_id"
+	// ReferralsTable is the table that holds the referrals relation/edge.
+	ReferralsTable = "users"
+	// ReferralsColumn is the table column denoting the referrals relation/edge.
+	ReferralsColumn = "referred_by_user_id"
 )
 
 // Columns holds all SQL columns for user fields.
 var Columns = []string{
 	FieldID,
 	FieldBillingGroupID,
+	FieldInviteCode,
+	FieldReferredByUserID,
 	FieldUsername,
 	FieldEmail,
 	FieldDisplayName,
@@ -138,6 +156,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultInviteCode holds the default value on creation for the "invite_code" field.
+	DefaultInviteCode func() string
+	// InviteCodeValidator is a validator for the "invite_code" field. It is called by the builders before save.
+	InviteCodeValidator func(string) error
 	// UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	UsernameValidator func(string) error
 	// EmailValidator is a validator for the "email" field. It is called by the builders before save.
@@ -219,6 +241,16 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByBillingGroupID orders the results by the billing_group_id field.
 func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
+}
+
+// ByInviteCode orders the results by the invite_code field.
+func ByInviteCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInviteCode, opts...).ToFunc()
+}
+
+// ByReferredByUserID orders the results by the referred_by_user_id field.
+func ByReferredByUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReferredByUserID, opts...).ToFunc()
 }
 
 // ByUsername orders the results by the username field.
@@ -363,6 +395,27 @@ func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption 
 		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByReferrerField orders the results by referrer field.
+func ByReferrerField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newReferrerStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByReferralsCount orders the results by referrals count.
+func ByReferralsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newReferralsStep(), opts...)
+	}
+}
+
+// ByReferrals orders the results by referrals terms.
+func ByReferrals(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newReferralsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newSessionsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -417,5 +470,19 @@ func newBillingGroupStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(BillingGroupInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
+	)
+}
+func newReferrerStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ReferrerTable, ReferrerColumn),
+	)
+}
+func newReferralsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ReferralsTable, ReferralsColumn),
 	)
 }

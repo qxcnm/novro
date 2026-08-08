@@ -23,7 +23,7 @@ func (PaymentConfig) Fields() []ent.Field {
 		field.String("site_name").MaxLen(64).Default("Novro"),
 		field.String("channels").MaxLen(512).Default(""),
 		field.Text("methods_json").Default("[]"),
-		field.Int64("min_top_up_micros").Default(1_000_000),
+		field.Int64("min_top_up_micros").Default(10_000),
 		field.Int64("max_top_up_micros").Default(50_000_000_000),
 		field.Text("preset_amounts_json").Default("[10000000,50000000,100000000,500000000]"),
 		field.Text("bonus_tiers_json").Default("[]"),

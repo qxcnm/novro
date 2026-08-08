@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Menu, PlugZap, ShieldCheck } from "lucide-react";
+import { Boxes, House, Menu, PlugZap, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/", label: "首页", icon: House },
   { href: "/models", label: "模型", icon: Boxes },
   { href: "/docs", label: "接入文档", icon: PlugZap },
 ];

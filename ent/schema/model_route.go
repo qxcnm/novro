@@ -19,7 +19,7 @@ func (ModelRoute) Fields() []ent.Field {
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
 		field.UUID("provider_id", uuid.UUID{}),
 		field.UUID("upstream_model_id", uuid.UUID{}).Optional().Nillable(),
-		field.String("public_name").NotEmpty().MaxLen(128).Unique().Immutable(),
+		field.String("public_name").NotEmpty().MaxLen(128).Immutable(),
 		field.String("display_name").NotEmpty().MaxLen(128),
 		field.String("upstream_name").NotEmpty().MaxLen(256),
 		field.Int64("input_price_micros").NonNegative(),
@@ -41,6 +41,7 @@ func (ModelRoute) Edges() []ent.Edge {
 
 func (ModelRoute) Indexes() []ent.Index {
 	return []ent.Index{
+		index.Fields("public_name", "provider_id", "upstream_model_id").Unique(),
 		index.Fields("provider_id", "status"),
 		index.Fields("upstream_model_id", "status"),
 		index.Fields("status", "created_at"),

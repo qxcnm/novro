@@ -19,7 +19,7 @@ const (
 var (
 	ErrInvalidInput = errors.New("invalid model route input")
 	ErrNotFound     = errors.New("model route not found")
-	ErrNameTaken    = errors.New("public model name already exists")
+	ErrNameTaken    = errors.New("model route already exists")
 )
 
 type ProviderSummary struct {
@@ -76,4 +76,10 @@ type Resolved struct {
 	Record
 	BaseURL string
 	APIKey  string
+}
+
+type Resolution struct {
+	Record          Record
+	BaseURL         string
+	EncryptedAPIKey string
 }

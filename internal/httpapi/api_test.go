@@ -18,10 +18,15 @@ import (
 
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
+	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
+	"github.com/novro-gateway/novro/internal/email"
+	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/providersync"
+	"github.com/novro-gateway/novro/internal/referral"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -29,6 +34,8 @@ type fakeAPIAuth struct {
 	current         user.Record
 	login           auth.LoginResult
 	authErr         error
+	logoutErr       error
+	logoutToken     string
 	loginIdentifier string
 }
 
@@ -48,15 +55,56 @@ func (f *fakeAPIAuth) Authenticate(context.Context, string) (user.Record, error)
 	return f.current, nil
 }
 
-func (f *fakeAPIAuth) Logout(context.Context, string) error { return nil }
+func (f *fakeAPIAuth) Logout(_ context.Context, token string) error {
+	f.logoutToken = token
+	return f.logoutErr
+}
 
 type fakeAPIUsers struct {
 	createInput   user.CreateInput
 	updateInput   user.UpdateInput
 	registerInput user.RegisterInput
+	emailTaken    bool
+	emailCheckErr error
 	setupRequired bool
 	initializeErr error
 	statusErr     error
+}
+
+type fakeAPIEmailVerification struct {
+	sentEmail, verifiedEmail, verifiedCode string
+	sendErr, verifyErr                     error
+}
+
+type fakeAPIEmailConfig struct {
+	config    email.AdminConfig
+	input     email.ConfigInput
+	recipient string
+	err       error
+}
+
+func (f *fakeAPIEmailConfig) AdminConfig(context.Context) (email.AdminConfig, error) {
+	return f.config, f.err
+}
+
+func (f *fakeAPIEmailConfig) UpdateConfig(_ context.Context, input email.ConfigInput) (email.AdminConfig, error) {
+	f.input = input
+	return f.config, f.err
+}
+
+func (f *fakeAPIEmailConfig) Test(_ context.Context, recipient string) error {
+	f.recipient = recipient
+	return f.err
+}
+
+func (f *fakeAPIEmailVerification) Send(_ context.Context, email string) error {
+	f.sentEmail = email
+	return f.sendErr
+}
+
+func (f *fakeAPIEmailVerification) Verify(_ context.Context, email, code string) error {
+	f.verifiedEmail, f.verifiedCode = email, code
+	return f.verifyErr
 }
 
 type fakeAPIKeys struct {
@@ -86,10 +134,61 @@ type fakeProviderModels struct {
 }
 
 type fakePayments struct {
-	notification url.Values
-	listFilter   payment.AdminListFilter
-	err          error
+	notification     url.Values
+	listFilter       payment.AdminListFilter
+	reconcileUserID  uuid.UUID
+	reconcileOrderNo string
+	reconciled       payment.Order
+	err              error
 }
+
+type fakeReferrals struct {
+	summary     referral.Summary
+	config      referral.AdminConfig
+	userID      uuid.UUID
+	updatedRate int64
+	err         error
+}
+
+func (f *fakeReferrals) Summary(_ context.Context, userID uuid.UUID) (referral.Summary, error) {
+	f.userID = userID
+	return f.summary, f.err
+}
+
+func (f *fakeReferrals) AdminConfig(context.Context) (referral.AdminConfig, error) {
+	return f.config, f.err
+}
+
+func (f *fakeReferrals) UpdateRewardBPS(_ context.Context, rewardBPS int64) (referral.AdminConfig, error) {
+	f.updatedRate = rewardBPS
+	if f.err != nil {
+		return referral.AdminConfig{}, f.err
+	}
+	f.config.RewardBPS = rewardBPS
+	return f.config, nil
+}
+
+type fakeModelRoutes struct {
+	active []modelroute.Record
+	err    error
+}
+
+func (f *fakeModelRoutes) Create(context.Context, modelroute.CreateInput) (modelroute.Record, error) {
+	return modelroute.Record{}, f.err
+}
+func (f *fakeModelRoutes) List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error) {
+	return []modelroute.Record{}, f.err
+}
+func (f *fakeModelRoutes) ListActive(context.Context) ([]modelroute.Record, error) {
+	return f.active, f.err
+}
+func (f *fakeModelRoutes) Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error) {
+	return modelroute.Record{}, f.err
+}
+func (f *fakeModelRoutes) SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error) {
+	return modelroute.Record{}, f.err
+}
+func (f *fakeModelRoutes) Delete(context.Context, uuid.UUID) error { return f.err }
 
 func (f *fakePayments) Config(context.Context) (payment.PublicConfig, error) {
 	return payment.PublicConfig{Enabled: true, Provider: "epay", Channels: []string{"alipay"}, MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros}, nil
@@ -109,6 +208,12 @@ func (f *fakePayments) Create(_ context.Context, userID uuid.UUID, amount int64,
 
 func (f *fakePayments) List(context.Context, uuid.UUID) ([]payment.Order, error) {
 	return []payment.Order{}, f.err
+}
+
+func (f *fakePayments) ReconcileForUser(_ context.Context, userID uuid.UUID, outTradeNo string) (payment.Order, error) {
+	f.reconcileUserID = userID
+	f.reconcileOrderNo = outTradeNo
+	return f.reconciled, f.err
 }
 
 func (f *fakePayments) ListAll(_ context.Context, filter payment.AdminListFilter) (payment.AdminPage, error) {
@@ -208,6 +313,13 @@ func (f *fakeAPIUsers) Register(_ context.Context, input user.RegisterInput) (us
 	return user.Record{ID: uuid.New(), Username: input.Username, Role: user.RoleMember, Status: user.StatusActive}, nil
 }
 
+func (f *fakeAPIUsers) EmailAvailable(context.Context, string) (bool, error) {
+	if f.emailCheckErr != nil {
+		return false, f.emailCheckErr
+	}
+	return !f.emailTaken, nil
+}
+
 func (f *fakeAPIUsers) InitializeAdmin(_ context.Context, input user.RegisterInput) (user.Record, error) {
 	if f.initializeErr != nil {
 		return user.Record{}, f.initializeErr
@@ -251,6 +363,7 @@ func testAPI(authService *fakeAPIAuth, users *fakeAPIUsers) http.Handler {
 }
 
 func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fakeAPIKeys) http.Handler {
+	emailVerification := &fakeAPIEmailVerification{}
 	inner := New(Dependencies{
 		Auth:                authService,
 		Users:               users,
@@ -261,6 +374,7 @@ func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fak
 		CookieSecure:        true,
 		AllowedOrigins:      []string{"http://localhost:3000"},
 		RegistrationEnabled: true,
+		EmailVerification:   emailVerification,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && r.Header.Get("Origin") == "" {
@@ -276,12 +390,112 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 		Token: "nvs_test-token", ExpiresAt: time.Now().Add(time.Hour),
 		User: user.Record{ID: uuid.New(), Username: "member.one", Role: user.RoleMember, Status: user.StatusActive},
 	}}
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","display_name":"Member","password":"long-test-password"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","display_name":"Member","password":"long-test-password","verification_code":"123456","referral_code":"ABCD1234EF56"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	testAPI(authService, users).ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || users.registerInput.Username != "member.one" || users.registerInput.Email != "member@example.com" {
+	if response.Code != http.StatusCreated || users.registerInput.Username != "member.one" || users.registerInput.Email != "member@example.com" || users.registerInput.ReferralCode != "ABCD1234EF56" {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), users.registerInput)
+	}
+}
+
+func TestReferralSummaryUsesAuthenticatedUser(t *testing.T) {
+	userID := uuid.New()
+	referrals := &fakeReferrals{summary: referral.Summary{
+		InviteCode: "ABCD1234EF56", InviteURL: "https://novro.example.com/register?ref=ABCD1234EF56",
+		InvitedCount: 4, PendingRewardMicros: 1_000_000, TotalRewardMicros: 2_000_000, RewardBPS: 1_000,
+		Invitations: []referral.Invitation{{Username: "member.one", DisplayName: "Member One"}},
+		Rewards:     []referral.Reward{{Username: "member.one", DisplayName: "Member One", PaidAmountMicros: 10_000_000, RewardMicros: 1_000_000}},
+	}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: userID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Referrals: referrals, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/account/referral", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || referrals.userID != userID || !strings.Contains(response.Body.String(), "ABCD1234EF56") ||
+		!strings.Contains(response.Body.String(), "\"display_name\":\"Member One\"") || strings.Contains(response.Body.String(), "\"email\"") {
+		t.Fatalf("status=%d user=%s body=%s", response.Code, referrals.userID, response.Body.String())
+	}
+}
+
+func TestAdminReferralConfigRequiresAdminAndUpdates(t *testing.T) {
+	referrals := &fakeReferrals{config: referral.AdminConfig{RewardBPS: 1_000}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Referrals: referrals, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/referral", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"reward_bps":1000`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/api/admin/referral", strings.NewReader(`{"reward_bps":625}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || referrals.updatedRate != 625 || !strings.Contains(response.Body.String(), `"reward_bps":625`) {
+		t.Fatalf("status=%d rate=%d body=%s", response.Code, referrals.updatedRate, response.Body.String())
+	}
+
+	memberHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Referrals: referrals, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	request = httptest.NewRequest(http.MethodGet, "/api/admin/referral", nil)
+	response = httptest.NewRecorder()
+	memberHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("member status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminReferralConfigRejectsInvalidRate(t *testing.T) {
+	referrals := &fakeReferrals{err: referral.ErrInvalidInput}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Referrals: referrals, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPut, "/api/admin/referral", strings.NewReader(`{"reward_bps":10001}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_referral_config") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestLogoutClearsCookieEvenWhenRevocationFails(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		logoutErr  error
+		wantStatus int
+	}{
+		{name: "success", wantStatus: http.StatusNoContent},
+		{name: "storage error", logoutErr: errors.New("storage unavailable"), wantStatus: http.StatusInternalServerError},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			authService := &fakeAPIAuth{logoutErr: testCase.logoutErr}
+			handler := New(Dependencies{
+				Auth: authService, Users: &fakeAPIUsers{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+				CookieName: "novro_session", AllowedOrigins: []string{"http://localhost:3000"},
+			})
+			request := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+			request.Header.Set("Origin", "http://localhost:3000")
+			request.AddCookie(&http.Cookie{Name: "novro_session", Value: "nvs_logout-token"})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			cookies := response.Result().Cookies()
+			if response.Code != testCase.wantStatus || authService.logoutToken != "nvs_logout-token" || len(cookies) != 1 || cookies[0].Name != "novro_session" || cookies[0].MaxAge != -1 {
+				t.Fatalf("status=%d token=%q cookies=%#v body=%s", response.Code, authService.logoutToken, cookies, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -300,6 +514,68 @@ func TestEPayNotificationBypassesBrowserOriginCheck(t *testing.T) {
 	}
 	if payments.notification.Get("out_trade_no") != "NVR1" {
 		t.Fatalf("unexpected notification: %#v", payments.notification)
+	}
+}
+
+func TestEPayNotificationAcceptsBodyAboveFormerLimit(t *testing.T) {
+	payments := &fakePayments{}
+	handler := New(Dependencies{Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	padding := strings.Repeat("x", (64<<10)+1024)
+	request := httptest.NewRequest(http.MethodPost, "/api/payments/epay/notify", strings.NewReader("pid=1000&out_trade_no=NVR1&padding="+padding))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || len(payments.notification.Get("padding")) != len(padding) {
+		t.Fatalf("status=%d parsed_padding=%d want=%d", response.Code, len(payments.notification.Get("padding")), len(padding))
+	}
+}
+
+func TestEPayNotificationPrefersSignedFormBodyOverQueryValues(t *testing.T) {
+	payments := &fakePayments{}
+	handler := New(Dependencies{Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	request := httptest.NewRequest(http.MethodPost, "/api/payments/epay/notify?out_trade_no=QUERY", strings.NewReader("pid=1000&out_trade_no=NVR1"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || payments.notification.Get("out_trade_no") != "NVR1" {
+		t.Fatalf("status=%d out_trade_no=%q", response.Code, payments.notification.Get("out_trade_no"))
+	}
+}
+
+func TestEPayReturnCompletesSignedResultAndRemovesUIParameter(t *testing.T) {
+	payments := &fakePayments{}
+	handler := New(Dependencies{
+		Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/payments/epay/return?payment=returned&pid=1000&out_trade_no=NVR1&sign=signed", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/console/billing?payment=returned" {
+		t.Fatalf("status=%d location=%q", response.Code, response.Header().Get("Location"))
+	}
+	if payments.notification.Get("out_trade_no") != "NVR1" || payments.notification.Has("payment") {
+		t.Fatalf("unexpected return values: %#v", payments.notification)
+	}
+}
+
+func TestUserCanReconcileOnlyThroughAuthenticatedOrderFlow(t *testing.T) {
+	userID := uuid.New()
+	payments := &fakePayments{reconciled: payment.Order{ID: uuid.New(), UserID: userID, OutTradeNo: "NVR1", Status: payment.StatusPaid}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: userID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CookieName: "novro_session", AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/account/top-ups/NVR1/reconcile", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.AddCookie(&http.Cookie{Name: "novro_session", Value: "nvs_member-token"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || payments.reconcileUserID != userID || payments.reconcileOrderNo != "NVR1" || !strings.Contains(response.Body.String(), `"status":"paid"`) {
+		t.Fatalf("status=%d body=%s user=%s order=%q", response.Code, response.Body.String(), payments.reconcileUserID, payments.reconcileOrderNo)
 	}
 }
 
@@ -327,6 +603,59 @@ func TestRegistrationHonorsConfigurationAndSetupState(t *testing.T) {
 			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 		}
 	})
+}
+
+func TestRegistrationEmailVerificationEndpoints(t *testing.T) {
+	users := &fakeAPIUsers{}
+	authService := &fakeAPIAuth{login: auth.LoginResult{Token: "nvs_registration-session", ExpiresAt: time.Now().Add(time.Hour)}}
+	verification := &fakeAPIEmailVerification{}
+	handler := New(Dependencies{
+		Auth: authService, Users: users, EmailVerification: verification,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"}, RegistrationEnabled: true,
+	})
+	send := httptest.NewRequest(http.MethodPost, "/api/auth/register/send-code", strings.NewReader(`{"email":"member@example.com"}`))
+	send.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, send)
+	if response.Code != http.StatusOK || verification.sentEmail != "member@example.com" {
+		t.Fatalf("send status=%d body=%s email=%q", response.Code, response.Body.String(), verification.sentEmail)
+	}
+
+	verification.verifyErr = email.ErrInvalidCode
+	register := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","password":"long-test-password","verification_code":"000000"}`))
+	register.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, register)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "verification_invalid") {
+		t.Fatalf("invalid verification status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	verification.verifyErr = nil
+	register = httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","password":"long-test-password","verification_code":"123456"}`))
+	register.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, register)
+	if response.Code != http.StatusCreated || verification.verifiedCode != "123456" {
+		t.Fatalf("register status=%d body=%s code=%q", response.Code, response.Body.String(), verification.verifiedCode)
+	}
+}
+
+func TestRegistrationEmailAvailabilityRejectsTakenEmailBeforeSendingCode(t *testing.T) {
+	users := &fakeAPIUsers{emailTaken: true}
+	verification := &fakeAPIEmailVerification{}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{}, Users: users, EmailVerification: verification,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"}, RegistrationEnabled: true,
+	})
+	send := httptest.NewRequest(http.MethodPost, "/api/auth/register/send-code", strings.NewReader(`{"email":"member@example.com"}`))
+	send.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, send)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "email_taken") || verification.sentEmail != "" {
+		t.Fatalf("send status=%d body=%s sent=%q", response.Code, response.Body.String(), verification.sentEmail)
+	}
 }
 
 func TestAuthOptionsExposeOnlyPublicAuthenticationState(t *testing.T) {
@@ -551,6 +880,9 @@ func TestAdminRoutesRequireAdmin(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/api/admin/api-keys", nil),
 		httptest.NewRequest(http.MethodGet, "/api/admin/providers", nil),
 		httptest.NewRequest(http.MethodGet, "/api/admin/payments", nil),
+		httptest.NewRequest(http.MethodGet, "/api/admin/email", nil),
+		httptest.NewRequest(http.MethodPut, "/api/admin/email", strings.NewReader(`{"enabled":false,"port":587,"security":"starttls"}`)),
+		httptest.NewRequest(http.MethodPost, "/api/admin/email/test", strings.NewReader(`{"recipient":"admin@example.com"}`)),
 		httptest.NewRequest(http.MethodGet, "/api/admin/top-ups", nil),
 	}
 	for _, request := range requests {
@@ -621,6 +953,59 @@ func TestAdminPaymentConfigWithoutServiceReturnsWrappedEmptyChannels(t *testing.
 	}
 }
 
+func TestAdminEmailConfigIsSecretSafeAndSupportsUpdateAndTest(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	emailConfig := &fakeAPIEmailConfig{config: email.AdminConfig{
+		Enabled: true, Configured: true, Host: "smtp.example.com", Port: 587,
+		Username: "verify@example.com", FromAddress: "verify@example.com",
+		Security: email.SecuritySTARTTLS, HasPassword: true,
+	}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, EmailConfig: emailConfig,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/email", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"has_password":true`) || strings.Contains(response.Body.String(), "smtp-secret") || strings.Contains(response.Body.String(), `"password"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/api/admin/email", strings.NewReader(`{"enabled":true,"host":"smtp.example.com","port":465,"username":"verify@example.com","password":"smtp-secret","from_address":"verify@example.com","security":"ssl"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || emailConfig.input.Password == nil || *emailConfig.input.Password != "smtp-secret" || emailConfig.input.Security != email.SecuritySSL || strings.Contains(response.Body.String(), "smtp-secret") {
+		t.Fatalf("status=%d input=%+v body=%s", response.Code, emailConfig.input, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/email/test", strings.NewReader(`{"recipient":"admin@example.com"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || emailConfig.recipient != "admin@example.com" || !strings.Contains(response.Body.String(), `"sent":true`) {
+		t.Fatalf("status=%d recipient=%q body=%s", response.Code, emailConfig.recipient, response.Body.String())
+	}
+}
+
+func TestAdminEmailConfigRejectsInvalidInputWithoutLeakingDetails(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, EmailConfig: &fakeAPIEmailConfig{err: email.ErrInvalidConfig},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPut, "/api/admin/email", strings.NewReader(`{"enabled":true,"host":"bad"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_email_config") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	currentID := uuid.New()
 	authService := &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}}
@@ -640,6 +1025,93 @@ func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent || keys.revokedUserID != currentID || keys.revokedID != keyID {
 		t.Fatalf("status=%d body=%s keys=%+v", response.Code, response.Body.String(), keys)
+	}
+}
+
+func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
+	currentID := uuid.New()
+	authService := &fakeAPIAuth{current: user.Record{
+		ID: currentID, Role: user.RoleMember, Status: user.StatusActive,
+		BillingGroup: &user.BillingGroupSummary{DisplayName: "个人版", MultiplierBPS: 12_500},
+	}}
+	routes := &fakeModelRoutes{active: []modelroute.Record{{
+		PublicName: "deepseek-chat", DisplayName: "DeepSeek Chat",
+		Provider: modelroute.ProviderSummary{DisplayName: "DeepSeek", Protocol: provider.ProtocolOpenAI},
+		UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{
+			InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 200_000, RequestMicros: 1_000,
+		}},
+	}}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, ModelRoutes: routes,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/account/models", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	var body struct {
+		Models []struct {
+			ID           string            `json:"id"`
+			ProviderName string            `json:"provider_name"`
+			Protocol     provider.Protocol `json:"protocol"`
+			Prices       billing.RateCard  `json:"prices"`
+		} `json:"models"`
+		BillingGroup struct {
+			DisplayName   string `json:"display_name"`
+			MultiplierBPS int64  `json:"multiplier_bps"`
+		} `json:"billing_group"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || len(body.Models) != 1 {
+		t.Fatalf("status=%d models=%+v body=%s", response.Code, body.Models, response.Body.String())
+	}
+	model := body.Models[0]
+	if model.ID != "deepseek-chat" || model.ProviderName != "DeepSeek" || model.Protocol != provider.ProtocolOpenAI {
+		t.Fatalf("unexpected model metadata: %+v", model)
+	}
+	if body.BillingGroup.DisplayName != "个人版" || body.BillingGroup.MultiplierBPS != 12_500 {
+		t.Fatalf("unexpected billing group: %+v", body.BillingGroup)
+	}
+	if model.Prices.InputMicros != 2_500_000 || model.Prices.OutputMicros != 10_000_000 || model.Prices.CacheReadMicros != 250_000 || model.Prices.RequestMicros != 1_250 {
+		t.Fatalf("unexpected customer prices: %+v", model.Prices)
+	}
+}
+
+func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
+	currentID := uuid.New()
+	authService := &fakeAPIAuth{current: user.Record{
+		ID: currentID, Role: user.RoleMember, Status: user.StatusActive,
+		BillingGroup: &user.BillingGroupSummary{DisplayName: "个人版", MultiplierBPS: 10_000},
+	}}
+	routes := &fakeModelRoutes{active: []modelroute.Record{
+		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "First", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 500_000}}},
+		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "Second", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 3_000_000, OutputMicros: 7_000_000, CacheReadMicros: 600_000}}},
+	}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, ModelRoutes: routes,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models", nil))
+	var body struct {
+		Models []struct {
+			ID           string           `json:"id"`
+			ProviderName string           `json:"provider_name"`
+			ChannelCount int              `json:"channel_count"`
+			Prices       billing.RateCard `json:"prices"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Code != http.StatusOK || len(body.Models) != 1 {
+		t.Fatalf("status=%d models=%+v body=%s", response.Code, body.Models, response.Body.String())
+	}
+	model := body.Models[0]
+	if model.ID != "shared-chat" || model.ChannelCount != 2 || model.ProviderName != "First" || model.Prices.InputMicros != 3_000_000 || model.Prices.OutputMicros != 8_000_000 || model.Prices.CacheReadMicros != 600_000 {
+		t.Fatalf("unexpected aggregate model: %+v", model)
 	}
 }
 
@@ -805,6 +1277,27 @@ func TestAdminUpdateProtectsLastActiveAdministrator(t *testing.T) {
 	testAPI(authService, users).ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "last_active_admin") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestDecodeJSONAcceptsLargeBodyAndKeepsSchemaValidation(t *testing.T) {
+	type requestBody struct {
+		Value string `json:"value"`
+	}
+	largeValue := strings.Repeat("x", (1<<20)+1024)
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"`+largeValue+`"}`))
+	var decoded requestBody
+	if err := decodeJSON(httptest.NewRecorder(), request, &decoded); err != nil || decoded.Value != largeValue {
+		t.Fatalf("decode large JSON: bytes=%d err=%v", len(decoded.Value), err)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"ok","unknown":true}`))
+	if err := decodeJSON(httptest.NewRecorder(), request, &requestBody{}); err == nil {
+		t.Fatal("unknown JSON field was accepted")
+	}
+	request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"first"}{"value":"second"}`))
+	if err := decodeJSON(httptest.NewRecorder(), request, &requestBody{}); err == nil {
+		t.Fatal("multiple JSON values were accepted")
 	}
 }
 

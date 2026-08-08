@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/migrate"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
+	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
 func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
@@ -103,6 +104,57 @@ func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
 	}
 	if len(listed) != 0 {
 		t.Fatalf("soft-deleted route remained visible: %+v", listed)
+	}
+}
+
+func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
+	client := openModelRouteIntegrationClient(t)
+	ctx := context.Background()
+	firstProvider, err := client.Provider.Create().
+		SetCode("candidate-first").SetDisplayName("Candidate First").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://first.example.com").
+		SetEncryptedAPIKey("first-encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	if err != nil {
+		t.Fatalf("create first provider: %v", err)
+	}
+	secondProvider, err := client.Provider.Create().
+		SetCode("candidate-second").SetDisplayName("Candidate Second").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://second.example.com").
+		SetEncryptedAPIKey("second-encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	if err != nil {
+		t.Fatalf("create second provider: %v", err)
+	}
+	firstModel, err := client.UpstreamModel.Create().SetProviderName("Candidate First").SetUpstreamName("shared-first").SetDisplayName("Shared First").SetStatus(entupstreammodel.StatusActive).Save(ctx)
+	if err != nil {
+		t.Fatalf("create first upstream model: %v", err)
+	}
+	secondModel, err := client.UpstreamModel.Create().SetProviderName("Candidate Second").SetUpstreamName("shared-second").SetDisplayName("Shared Second").SetStatus(entupstreammodel.StatusActive).Save(ctx)
+	if err != nil {
+		t.Fatalf("create second upstream model: %v", err)
+	}
+	createdAt := time.Date(2026, 8, 7, 1, 0, 0, 0, time.UTC)
+	if _, err := client.ModelRoute.Create().SetProviderID(secondProvider.ID).SetUpstreamModelID(secondModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(secondModel.UpstreamName).
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt.Add(time.Minute)).Save(ctx); err != nil {
+		t.Fatalf("create second candidate: %v", err)
+	}
+	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(firstModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(firstModel.UpstreamName).
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt).Save(ctx); err != nil {
+		t.Fatalf("create first candidate: %v", err)
+	}
+
+	resolved, err := NewEntStore(client).ResolveCandidates(ctx, "shared-chat")
+	if err != nil {
+		t.Fatalf("resolve candidates: %v", err)
+	}
+	if len(resolved) != 2 || resolved[0].Record.Provider.Code != "candidate-first" || resolved[0].EncryptedAPIKey != "first-encrypted" || resolved[1].Record.Provider.Code != "candidate-second" {
+		t.Fatalf("unexpected candidates: %+v", resolved)
+	}
+	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(firstModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Duplicate").SetUpstreamName(firstModel.UpstreamName).
+		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); !ent.IsConstraintError(err) {
+		t.Fatalf("duplicate route constraint error=%v", err)
 	}
 }
 

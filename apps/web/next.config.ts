@@ -29,6 +29,7 @@ function isLoopbackHostname(hostname: string) {
 }
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   async rewrites() {
     const backend = normalizeBackendURL(process.env.NOVRO_SERVER_URL);
     return [{

@@ -22,6 +22,7 @@ import (
 	entuser "github.com/novro-gateway/novro/ent/user"
 	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
 	"github.com/novro-gateway/novro/internal/payment"
+	"github.com/novro-gateway/novro/internal/referral"
 )
 
 const mysqlIntegrationDSNEnv = "NOVRO_TEST_MYSQL_DSN"
@@ -289,6 +290,84 @@ func TestMySQLConcurrentTopUpNotificationsCreditOnce(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].AmountMicros != created.AmountMicros {
 		t.Fatalf("top-up ledger=%+v", entries)
+	}
+}
+
+func TestMySQLReferralCashbackCreditsInviterOnce(t *testing.T) {
+	client := openMySQLIntegrationClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	referrer, err := client.User.Create().
+		SetUsername("referrer-" + strings.ReplaceAll(uuid.NewString(), "-", "")).
+		SetDisplayName("Referrer").SetRole(entuser.RoleMember).SetStatus(entuser.StatusActive).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create referrer: %v", err)
+	}
+	referrerWallet, err := client.Wallet.Create().SetUserID(referrer.ID).Save(ctx)
+	if err != nil {
+		t.Fatalf("create referrer wallet: %v", err)
+	}
+	referred, err := client.User.Create().
+		SetUsername("referred-" + strings.ReplaceAll(uuid.NewString(), "-", "")).
+		SetDisplayName("Referred").SetRole(entuser.RoleMember).SetStatus(entuser.StatusActive).
+		SetReferredByUserID(referrer.ID).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create referred user: %v", err)
+	}
+	if _, err := client.Wallet.Create().SetUserID(referred.ID).Save(ctx); err != nil {
+		t.Fatalf("create referred wallet: %v", err)
+	}
+	if _, err := client.SystemSetting.UpdateOneID(referral.RewardBPSSettingKey).SetValue("500").Save(ctx); err != nil {
+		t.Fatalf("set referral reward rate: %v", err)
+	}
+
+	store := payment.NewEntStore(client, 1_000)
+	orderID := uuid.New()
+	created, err := store.Create(ctx, payment.CreateParams{
+		ID: orderID, UserID: referred.ID, OutTradeNo: "NVR" + strings.ReplaceAll(orderID.String(), "-", ""),
+		Channel: "alipay", AmountMicros: 10_000_000, CreditedMicros: 10_000_000,
+	})
+	if err != nil {
+		t.Fatalf("create referred top-up: %v", err)
+	}
+	completion := payment.CompleteParams{
+		OutTradeNo: created.OutTradeNo, ProviderTradeNo: "EPAY-REFERRAL-1", Channel: "alipay",
+		AmountMicros: created.AmountMicros, PaidAt: time.Now().UTC(),
+	}
+	for range 2 {
+		if _, err := store.Complete(ctx, completion); err != nil {
+			t.Fatalf("complete referred top-up: %v", err)
+		}
+	}
+
+	updatedWallet, err := client.Wallet.Get(ctx, referrerWallet.ID)
+	if err != nil {
+		t.Fatalf("read referrer wallet: %v", err)
+	}
+	if updatedWallet.BalanceMicros != 500_000 {
+		t.Fatalf("referrer balance=%d want=500000", updatedWallet.BalanceMicros)
+	}
+	entries, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(referrerWallet.ID),
+		entwalletentry.ReferenceIDEQ(created.ID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeReferralReward),
+	).All(ctx)
+	if err != nil {
+		t.Fatalf("list referral cashback entries: %v", err)
+	}
+	if len(entries) != 1 || entries[0].AmountMicros != 500_000 {
+		t.Fatalf("referral cashback entries=%+v", entries)
+	}
+	stats, err := referral.NewEntStore(client).Stats(ctx, referrer.ID, 500)
+	if err != nil {
+		t.Fatalf("read referral details: %v", err)
+	}
+	if len(stats.Invitations) != 1 || stats.Invitations[0].Username != referred.Username ||
+		len(stats.Rewards) != 1 || stats.Rewards[0].RewardMicros != 500_000 || stats.Rewards[0].PaidAmountMicros != created.AmountMicros {
+		t.Fatalf("referral details=%+v", stats)
 	}
 }
 

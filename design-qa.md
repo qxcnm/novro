@@ -1,224 +1,179 @@
 # Design QA
 
-- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-a857d24c-f4ad-48ee-b6a9-a622096aca8e.png`,
-  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-3143c202-ecb3-4a56-a9af-cfa793eeba97.png`,
-  the supplied QuarkMux product-page reference, and the current account/navigation references
-  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-a2240999-5676-4527-9827-dec0ef4e67d4.png`,
-  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-88a9b95f-6b6d-4b34-ae7a-a40ae31d1a68.png`, and
-  `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-448c6bcc-1654-4077-8025-6b339acbe3f9.png`.
-- Implementation: `http://127.0.0.1:3000/`, `/models`, and `/docs`.
-- Implementation screenshots: `tmp/qa/models-desktop-light-final.png`,
-  `tmp/qa/models-mobile-light-final.png`, `tmp/qa/models-mobile-dark-final.png`,
-  `tmp/qa/home-desktop-light-final.png`, and `tmp/qa/docs-mobile-light-final.png`.
-  The current authenticated account capture is `tmp/qa/account-dashboard-desktop.png`, with
-  focused content evidence in `tmp/qa/account-dashboard-content.png`. The latest persistent-shell
-  captures are `tmp/qa/console-desktop-current.jpg`, `tmp/qa/console-mobile-current.jpg`, and
-  `tmp/qa/api-key-mobile-current.jpg`.
-  These local QA images are intentionally ignored by Git.
-- Side-by-side comparison: `tmp/qa/models-reference-comparison-final.png`.
-- Homepage copy review: `tmp/qa/home-desktop-product-copy.png` and
-  `tmp/qa/home-mobile-product-copy.png`.
-- Viewports: 1280 x 720 desktop and 390 x 844 mobile.
-- States: models light/dark, homepage light, docs light/dark, unauthenticated public state.
-- Authentication states: first-run administrator setup, registration, local login,
-  configured OIDC entry, member console, and light/dark member console.
+## Comparison Target
 
-## Full-view comparison evidence
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-898a8c0e-e888-484c-baaf-2c41b63a1221.png`
+- Browser-rendered implementation: `C:\Users\qxnm\Data\Code\novro\tmp\browser-email-desktop.png`
+- Side-by-side comparison: `C:\Users\qxnm\Data\Code\novro\tmp\browser-email-comparison.png`
+- Route: `/admin/email`
+- Viewport: 2048 x 967 desktop
+- State: authenticated administrator, light theme, enabled and configured SMTP channel, saved password withheld from the browser
 
-The model directory preserves the reference's compact two-column comparison pattern,
-prominent search and filters, thin borders, muted secondary metadata, and highly scannable
-price blocks. It intentionally uses Novro's monochrome token system, existing header and
-footer, official-source links, and clear launch-status labels instead of copying the
-reference branding or claiming its unverified Novro prices.
+## Full-View Comparison Evidence
 
-The public introduction retains the supplied product reference's restrained editorial
-hierarchy and generous whitespace. The public documentation is an original long-form API
-guide rather than a development manual and remains visually consistent with the site.
+The source and implementation were opened together and reviewed again in the combined comparison image. The source is used as an information-architecture reference rather than a visual clone, per the product requirement. Novro preserves the useful host, port, transport security, username, sender address, password-retention, and save concepts while reorganizing them into the existing console shell.
 
-## Focused region comparison evidence
+The implementation intentionally differs through Novro's fixed desktop sidebar, compact status header, two-column card layout, immediate enabled/configured status, and a separate test-email workflow. These changes are consistent with the surrounding console rather than resembling the reference product.
 
-- Typography: Geist and Geist Mono use the same weights and line-height hierarchy across
-  headings, prices, metadata, badges, and code. Long Chinese copy wraps without clipping.
-- Spacing: desktop cards use two stable columns; mobile cards, alerts, and filters stack
-  without overlap. There is no horizontal page overflow at either checked viewport.
-- Colors: all surfaces use the existing shadcn/ui semantic tokens. Light and dark themes
-  keep sufficient text, border, badge, and alert contrast.
-- Assets and icons: the supplied references are UI-only and contain no required bitmap
-  product imagery. Standard interface symbols use Lucide; official shadcn/ui primitives
-  provide inputs, selects, badges, cards, alerts, tabs, and accordions.
-- Copy: official model entries, cached/input/output pricing, verification date, source
-  links, and the upcoming DeepSeek peak-pricing notice are explicit. GLM planning aliases
-  have no invented price and are clearly marked as Novro aliases.
+The source's certificate-verification bypass and forced AUTH LOGIN controls are intentionally not reproduced. Novro verifies SMTP certificates, supports normal SMTP authentication negotiation, and rejects unencrypted SMTP when enabled in production.
 
-## Interaction and browser evidence
+## Focused Region Evidence
 
-- Search for `DeepSeek` returns `2 / 9` models.
-- Vendor, context, and sorting selects are present with accessible labels.
-- The default model order follows release date from newest to oldest; entries without
-  an independent release date remain at the end.
-- The first three models are DeepSeek-V4 Flash (2026-07-31), Kimi K3
-  (2026-07-16), and GLM-5.2 (2026-06-16).
-- Model cards use locally hosted official DeepSeek, Kimi, and Zhipu brand marks.
-- The docs Python tab switches to the Python example.
-- The retry accordion expands and shows the bounded retry policy.
-- Theme switching was checked in light and dark modes.
-- `/docs` contains no Go, pnpm, MySQL, database variable, or `init-db` development text.
-- Browser console warning and error checks were clean.
-- `/login` exposes OIDC and registration only when returned by `/api/auth/options`.
-- A member password login routes to `/console`; first-run setup routes the created
-  administrator to `/admin/users`; registration routes the new member to `/console`.
-- `/setup`, `/register`, `/login`, and `/console` were checked at 1280 x 720 and
-  390 x 844 as applicable. Labels and button names remained accessible, themes switched
-  correctly, and no authentication page had horizontal overflow.
-- The authenticated console sidebar and administrator user management were rechecked at
-  1280 x 800 and 390 x 844 after the navigation refresh. Desktop uses a fixed 240px
-  sidebar; mobile replaces it with a left navigation drawer and has no page-level
-  horizontal overflow.
-- The current production build was rechecked against the current Go backend and an isolated MySQL
-  8.4.9 database at 1280 x 800 and 390 x 844. Navigating through account, API documentation,
-  user management, Key audit, providers, and model routes kept the desktop sidebar visible,
-  never rendered the full-screen `正在加载控制台...` state, and produced no horizontal overflow.
-- On mobile, the persistent desktop sidebar correctly becomes a navigation drawer. Selecting
-  `/console/docs` closes the drawer, retains the console header, and only replaces the content
-  region. The account screen, drawer, and API Key modal all fit the 390px viewport.
-- Create and reset forms use dialogs, status changes use a confirmation dialog, and user
-  details/editing use a right drawer. Dialogs remained inside the mobile viewport, the
-  details drawer stayed independently scrollable, and no write action was submitted during QA.
-- The authenticated account page displayed a balance of `¥43.71`, safe API Key prefixes, and
-  a one-time full key after creation. Copying placed the exact full key in the clipboard and the
-  active count changed from one to two.
-- The current account page created a new Key against the current backend. The full 47-character
-  key appeared only in the save dialog, the list retained only its safe prefix, and the copy
-  button placed the exact full value in the browser clipboard. No browser console warnings or
-  errors were recorded during the current desktop/mobile navigation and Key flow.
-- On 2026-08-06, the current Go service, Next.js console, and migrated cloud MySQL were verified
-  together rather than against a mocked or stale backend. A temporary member registered and
-  received an empty wallet, created and copied a one-time 47-character Key, and used it to obtain
-  a `200` model list. After a temporary provider and route were added, the public model appeared
-  in `/v1/models`; an upstream `502` reserved 360 micros and refunded the same 360 micros, leaving
-  the 10,000-micro balance unchanged. Revoking the Key from the audit page made the same Key return
-  `401` immediately. The temporary user, Key, provider, route, wallet entries, and session were
-  removed after verification.
-- The live console was also rechecked with an explicit 390 x 844 viewport. The page width remained
-  390px with no out-of-bounds buttons; the navigation drawer was about 293px wide, and the 801px
-  Key-audit table stayed inside a 358px local horizontal scroller instead of widening the page.
-- Live QA exposed a typed-nil OIDC assembly bug: an unconfigured `*OIDCClient` assigned to an
-  interface caused the login options endpoint to report enterprise sign-in as enabled. The service
-  assembly now preserves a true nil interface, a regression test covers both states, and the live
-  endpoint returns `oidc_enabled=false` when OIDC is not configured.
-- Navigating from `/console` to `/admin/users` kept the sidebar mounted. The API documentation
-  menu targets `/console/docs`; the current build completed this route and all other console
-  menu transitions without showing the full-screen authentication loader.
+The SMTP connection and sender-authentication regions are readable in the combined image. Labels, supporting copy, input grouping, icon alignment, control height, borders, and card spacing are internally consistent. A separate crop was not needed because the important form controls remain legible at the comparison image's original resolution.
 
-## Comparison history
-
-1. The first model pass placed the two unverified Novro aliases between official models.
-2. Default ordering was changed so the seven official vendor models appear first and the
-   two planning aliases remain visible at the end with prices marked as pending.
-3. The official DeepSeek source was rechecked and its upcoming peak-pricing rule was not
-   visible on the page.
-4. A compact alert was added above the filters. Revised desktop and mobile captures show
-   that it does not alter the two-column card rhythm, overlap content, or create overflow.
-5. Homepage review found that the 72px launch headline dominated the first screen and the
-   copy read like a development status report. The headline was reduced to 52px desktop
-   and 32px mobile, then rewritten as a concise product statement. Version, roadmap, and
-   implementation-status labels were replaced with customer-facing product language.
-6. The first mobile revision left the last character of the headline on its own line.
-   Reducing the mobile title to 32px keeps the full heading on one balanced line at
-   390 x 844, with no horizontal overflow.
+The lower enabled-state and test-email cards are not shown in the saved desktop viewport. Their primary interaction states were exercised directly in the browser and are recorded below; they are not being claimed as additional visual-comparison evidence.
 
 ## Findings
 
-No actionable P0, P1, or P2 differences were visible in the current desktop or mobile console
-captures. The sidebar/header persistence behavior, local content replacement, mobile drawer,
-one-time Key presentation, and copy interaction are directly verified against the current build.
+- No remaining P0, P1, or P2 visual or interaction findings were identified for the desktop source-comparison state.
+- Residual test gap: the browser accepted the 390 x 844 viewport override, but its local-page security policy then blocked supplemental screenshot, layout-metric, dark-theme, and console-log capture. No alternate browser surface was used. These supplemental states are not claimed as visually verified in this report.
 
-The page intentionally does not reproduce vendor brand logos because no approved Novro
-brand assets or reusable official logo files were supplied. Neutral standard icons keep
-the catalog identifiable without presenting approximated logos as official assets.
+## Required Fidelity Surfaces
 
-## Follow-up polish
+- Fonts and typography: Novro's existing Geist typography, weights, line heights, zero letter spacing, and compact admin-page hierarchy remain consistent with the rest of the console. Labels and supporting copy wrap cleanly in the captured desktop state.
+- Spacing and layout rhythm: the implementation uses the console's constrained content width, 8px-or-less surface radii, aligned form rows, predictable five-unit gaps, and a deliberate primary/secondary column split. The denser grouping is an intentional Novro adaptation of the reference's sparse form.
+- Colors and visual tokens: neutral foreground, background, border, muted, success, and destructive tokens use the existing light/dark theme system. The light capture has clear label, helper-text, border, and status contrast.
+- Image quality and asset fidelity: neither the source nor implementation requires raster product imagery. Visible controls use the repository's Lucide icon family; no CSS art, custom SVG substitutes, or placeholder imagery were introduced.
+- Copy and content: Chinese labels are concise and specific to registration verification. Security-sensitive behavior is stated accurately: saved passwords are not returned, blank password input preserves the stored credential, and test mail uses the most recently saved configuration.
 
-- P3: Add approved vendor logo assets after their usage rights and files are defined.
-- P3: Add active-section highlighting to the docs table of contents as the guide grows.
+## Primary Interactions Checked
+
+- Encryption selector opened by keyboard and changed from STARTTLS to SSL/TLS.
+- Saving returned: `SMTP 配置已保存，新的注册验证码邮件会立即使用这组设置。`
+- Test delivery returned: `测试邮件已发送到 admin@example.com，请检查收件箱。`
+- Turning the enabled switch off immediately disabled the test button and showed its guidance; turning it back on restored the button without saving the disabled state.
+- Password visibility changed from `password` to `text` and back to `password`; the synthetic QA-only value was cleared and never saved.
+- The browser viewport override was reset before handoff.
+- Console-log capture was attempted after the interaction pass but was blocked by the browser's local-page security policy; automated lint, typecheck, tests, production build, Go tests, and Go vet all passed.
+
+## Comparison History
+
+- Pass 1: the desktop source and implementation were compared. No actionable desktop visual mismatch was found because the different layout is an explicit product decision, not fidelity drift.
+- Pass 1 interaction finding [P2]: disabling the unsaved form state did not immediately disable the test-email button because it read the last persisted enabled value.
+- Fix: the test button and its guidance now follow `form.enabled`, while persistence still changes only after Save.
+- Pass 2 browser evidence: with `aria-checked=false`, the test button had the native `disabled` attribute and the disabled-state guidance was visible; restoring `aria-checked=true` removed the disabled state.
+- Pass 2 comparison: no remaining actionable P0/P1/P2 finding in the captured desktop source-comparison state.
+
+## Follow-up Polish
+
+- Capture 390 x 844 light and dark states when the in-app browser permits local-page screenshots, then append them as supplemental responsive evidence.
 
 final result: passed
 
-## Payment configuration QA - 2026-08-07
+---
 
-- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-638f6648-5524-4168-a55f-f6d6d44aa149.png`.
-- Implementation: `http://localhost:3000/admin/payments` and the user-facing
-  `http://localhost:3000/console/billing` flow.
-- Implementation screenshots: `tmp/payment-design-qa-desktop-2048.png`,
-  `tmp/payment-design-qa-mobile-rules.png`, `tmp/payment-design-qa-mobile-epay.png`,
-  `tmp/payment-design-qa-mobile-records.png`,
-  `tmp/payment-design-qa-mobile-tier-dialog.png`, and
-  `tmp/payment-design-qa-mobile-method-dialog.png`.
-- Viewports: 2048 x 1154 for the source-aligned desktop comparison and 390 x 844
-  for mobile interaction checks.
-- States: empty/unconfigured gateway, recharge rules, Epay credentials and callback
-  addresses, dynamic payment methods, administrator top-up records, and add-method/
-  add-bonus dialogs. No QA data was saved.
+# Public Homepage And Return-Home QA (2026-08-07)
 
-### Full-view comparison evidence
+## Comparison Target
 
-The reference and Novro desktop capture were inspected together at 2048 x 1154. The
-implementation preserves the reference's operational density and configuration hierarchy:
-global amount rules, editable preset amounts, dynamic payment methods, per-method minimums,
-and tiered recharge incentives are all directly available. Novro intentionally keeps its
-existing console sidebar, monochrome shadcn/ui tokens, compact cards, and three task tabs
-instead of copying the reference product's navigation shell or JSON-editing affordances.
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-b868ca39-f72a-4516-955c-8f2e06f0595c.png`
+- Browser-rendered desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\home-desktop.png` (latest live verification also captured at `http://localhost:3000/`)
+- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\home-mobile.png`
+- Route: `/` (served by the local Next.js preview at `http://localhost:3001/`; production default remains `http://localhost:3000/`)
+- Viewports: default desktop browser viewport and 390 x 844 mobile override
+- State: public, signed-out, light theme
 
-Splitting the workflow into `充值规则`, `易支付`, and `充值记录` keeps the primary page
-scannable while adding capabilities absent from the reference capture: a safe secret field,
-copyable asynchronous callback and completion-return addresses, gateway status metrics, and
-an administrator-wide top-up ledger with search, status/method filters, and pagination.
+## Full-View Comparison Evidence
 
-### Focused region comparison evidence
+The reference image was used as an information-architecture reference for a customer-facing overview rather than a brand clone. The public homepage now presents the same useful hierarchy through Novro's real scope: overview status, model and pricing summary, integration status, and an announcement panel. The existing public model catalog and API documentation remain one click away.
 
-- Payment methods: the add dialog exposes display name, Epay `type` identifier, Lucide icon,
-  per-method minimum amount, and enabled state. Alipay and WeChat templates prefill common
-  values while arbitrary methods remain supported.
-- Recharge rules: minimum/maximum values, removable preset amounts, and highest-applicable
-  bonus tiers match the reference's flexible configuration goal. The bonus is credited to
-  the wallet without changing the signed payment amount.
-- Callback addresses: asynchronous notification and payment-return addresses are visible as
-  read-only fields with separate accessible copy buttons.
-- Records: administrators can scan payment and credited amounts separately and filter by
-  order/gateway reference/user, state, and payment method.
-- Mobile: all three tabs, the sticky page actions, rule cards, callback fields, filters, and
-  both dialogs fit at 390 x 844. The page itself does not overflow horizontally; the record
-  table uses a local 358px scroller for its 406px table.
-- Accessibility: tabs, inputs, switches, selects, copy actions, refresh actions, dialogs, and
-  pagination expose accessible names. Dialogs close without persisting draft values.
+The console shell now has three explicit return-home affordances: the desktop sidebar brand, the desktop/mobile top-bar home control, and the public header's 首页 navigation item. Each uses the root route `/`, which resolves to `http://localhost:3000/` in the requested deployment.
 
-### Interaction and browser evidence
+## Focused Region Evidence
 
-- The Alipay template opened with `支付宝`, `alipay`, the phone icon, a ¥1 minimum, and
-  enabled state; it was closed without saving.
-- The bonus-tier dialog exposed separate threshold and percentage fields and was closed
-  without saving.
-- Recharge records displayed search, status/method filters, pagination, payment amount,
-  credited amount, and an empty state against the current database.
-- The user billing page correctly disabled recharge while the gateway has no enabled payment
-  methods, preventing an unusable order flow.
-- Browser logs contained development HMR messages only; no warning or error was recorded.
-- The temporary mobile viewport override was reset after testing.
+The desktop screenshot confirms the above-the-fold hero, platform overview strip, status badge, and two primary CTAs. The mobile screenshot confirms the same hierarchy stacks without clipping and that navigation collapses into the existing accessible sheet. A focused crop was not needed because the public homepage's key regions are legible in the captured viewport and its remaining sections are straightforward continuation of the same layout.
 
-### Comparison history
+## Findings
 
-1. The initial payment page exposed fixed gateway choices and did not provide the requested
-   reference-level method and amount flexibility.
-2. Configuration was normalized into dynamic payment methods, preset amounts, and bonus tiers.
-3. Callback/return addresses and an administrator-wide recharge ledger were added after the
-   missing operational surfaces were identified.
-4. Desktop and mobile browser checks found no P0, P1, or P2 visual or interaction defect, so
-   no follow-up UI patch was required.
+- No remaining P0, P1, or P2 visual, interaction, accessibility, or responsive findings were identified.
+- An unrelated process initially occupied port 3000, so the first development capture used port 3001. The latest production preview was restarted on port 3000 and the requested URL was rechecked with the revised homepage and zero browser warning/error entries.
 
-### Findings
+## Required Fidelity Surfaces
 
-No actionable P0, P1, or P2 issue remains in the checked payment configuration and recharge
-record flows. The development-only Next.js indicator appears in local screenshots but is not
-part of the production build.
+- Fonts and typography: existing Geist typography, compact labels, strong page title, readable supporting copy, and zero letter spacing are preserved. Chinese headings wrap cleanly at 390px.
+- Spacing and layout rhythm: the hero, overview strip, model card grid, status/announcement cards, and existing lower sections use the repository's constrained width, consistent section gaps, and 8px-or-less card radii. Mobile reported `documentWidth === 375` and `scrollWidth === 375` with no horizontal overflow.
+- Colors and visual tokens: the implementation uses the existing shadcn background, foreground, muted, border, secondary, success, and dark-theme tokens. The public page remains neutral and operational rather than a single-hue marketing surface.
+- Image quality and asset fidelity: the reference and implementation do not require raster product imagery. Visible controls use the existing Lucide icon family; no custom SVG, CSS art, emoji, or placeholder asset was introduced.
+- Copy and content: all new homepage copy describes actual Novro capabilities and clearly separates public information from signed-in balance, usage, and API-key data.
+
+## Primary Interactions Checked
+
+- Public header 首页, 模型, and 接入文档 links resolved to `/`, `/models`, and `/docs`.
+- Hero buttons resolved to `/login` and `/docs`.
+- The desktop and mobile home controls are keyboard-accessible links with accessible labels/titles and target `/`.
+- Mobile navigation collapsed into the existing sheet at 390px and the page had no horizontal overflow.
+- Browser console capture contained no warning or error entries for the public homepage.
+
+## Comparison History
+
+- Pass 1: the public root already exposed models, pricing, and docs, but its first viewport did not express the reference's customer overview hierarchy and the console had no explicit return-home action.
+- Fix: added a customer-oriented platform overview strip, model/pricing summary, integration status and announcement panels; added 首页 and 返回主页 affordances pointing to `/`.
+- Pass 2: desktop and 390px mobile captures showed the revised hierarchy with no actionable P0/P1/P2 mismatch. The mobile viewport was reset before handoff.
+
+## Follow-up Polish
+
+- The existing lower homepage sections intentionally remain available for deeper model, integration, and team-management context below the first viewport.
+
+final result: passed
+
+## Final Implementation Check (2026-08-07)
+
+- Final real preview: `http://localhost:3000`, Next.js rewrites to the Go API at `http://127.0.0.1:8080`.
+- Database evidence: `go run ./cmd/novro migrate` applied the referral setting migration successfully twice; `go run ./cmd/novro check-db` returned `database connection is ready`.
+- Final browser evidence: `C:\Users\qxnm\Data\Code\novro\tmp\referral-profile-desktop.png` at 2048 x 1884 and `C:\Users\qxnm\Data\Code\novro\tmp\referral-profile-mobile-final.png` at 390 x 844. The mobile DOM reported `documentWidth === 390` and no horizontal overflow; profile and referral cards were 358px wide inside the 390px viewport.
+- Interaction evidence: details drawer, reward/invitation tabs, administrator save at 12.35%, empty-value validation, and logout redirect to `/login` with a subsequent `401` session check were exercised against a disposable stateful preview. The disposable preview was stopped before the final real preview was restored.
+- Final result: passed
+
+---
+
+# Referral Cashback Design QA (2026-08-07)
+
+## Comparison Target
+
+- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-273ea5ab-c3ce-48f1-9ab3-bacfe4aa5f01.png`
+- Browser-rendered desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\referral-profile-desktop-card.png`
+- Browser-rendered desktop drawers: `C:\Users\qxnm\Data\Code\novro\tmp\referral-details-drawer-desktop.png` and `C:\Users\qxnm\Data\Code\novro\tmp\referral-invitations-drawer-desktop.png`
+- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\referral-profile-mobile-top.png`
+- Browser-rendered mobile drawers: `C:\Users\qxnm\Data\Code\novro\tmp\referral-details-drawer-mobile.png` and `C:\Users\qxnm\Data\Code\novro\tmp\referral-invitations-drawer-mobile.png`
+- Browser-rendered dark-theme states: `C:\Users\qxnm\Data\Code\novro\tmp\referral-profile-mobile-dark.png` and `C:\Users\qxnm\Data\Code\novro\tmp\referral-details-drawer-mobile-dark.png`
+- Route: `/console/profile`
+- Viewports: 1280 x 720 desktop and 390 x 844 mobile
+- State: authenticated member, populated referral summary, populated reward and invitation histories, light and dark themes
+
+## Full-View And Focused Comparison Evidence
+
+The source and current browser-rendered profile were opened together in `C:\Users\qxnm\Data\Code\novro\tmp\referral-comparison-full.png`. The full view confirms that the recommendation plan now follows the basic-information form and remains inside Novro's existing console shell instead of displacing the primary profile workflow.
+
+The source panel and the rendered Novro card were also normalized into one focused comparison artifact at `C:\Users\qxnm\Data\Code\novro\tmp\referral-comparison-card.png`. Both use the same left-to-right hierarchy: recommendation identity, three financial/invitation metrics, invitation URL, and copy action. Novro intentionally wraps the description at its narrower console content width and adds a second icon-only action for the requested details drawer. Those are responsive and functional adaptations, not unresolved fidelity drift.
+
+## Findings
+
+- No remaining P0, P1, or P2 visual, interaction, accessibility, or responsive findings were identified.
+- Residual QA limitation: the copy action changed to its visible success state and `aria-label="邀请链接已复制"`, while the in-app Browser's virtual clipboard returned an empty value and could not paste it back. The read-only invitation field itself still contained `http://localhost:3000/register?ref=ABCD1234EF56`; clipboard contents are therefore not claimed as independently verified.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: the rendered card uses Novro's existing Geist hierarchy, tabular figures, zero letter spacing, readable muted copy, and consistent desktop/mobile line heights. The narrower console card wraps the explanatory sentence cleanly without truncating the rate or reward meaning.
+- Spacing and layout rhythm: the recommendation panel retains the source's horizontal rhythm on desktop, stacks its metrics and controls predictably below `xl`, and follows the basic-information card with the same five-unit section gap. The 390 x 844 page and drawer both reported `scrollWidth === 390`, with no clipped or overlapping controls.
+- Colors and visual tokens: border, background, foreground, muted, focus, success, and overlay colors use the existing shadcn/ui semantic tokens. Light and dark captures preserve hierarchy and readable reward emphasis without introducing a separate referral palette.
+- Image quality and asset fidelity: the source contains no raster product imagery. Visible share, copy, drawer, gift, user, and close controls use the repository's Lucide icon family; no custom SVG, CSS art, emoji, or placeholder asset was introduced.
+- Copy and content: title, 10% rate, pending reward, total reward, invitation count, invitation URL, reward rows, invitation rows, timestamps, and empty-state guidance are coherent and specific to the referral workflow. Invitee email addresses, wallet IDs, and payment order numbers are not exposed.
+
+## Primary Interactions Checked
+
+- The recommendation card is positioned directly below basic information on desktop and mobile.
+- The details icon opens a right-side drawer on desktop and a full-width drawer at 390 x 844.
+- `返现记录` and `邀请记录` both switch correctly and show the expected populated rows.
+- Reward rows show member, username, recharge amount, reward amount, and credited time; invitation rows show display name, username, and joined time.
+- Light and dark profile/card/drawer states were captured. The preview was restored to light theme before handoff.
+- The copy button changed to its check-mark success state and accessible copied label. Clipboard-content inspection remained unavailable as described above.
+- Browser console inspection contained only the React development-tools notice and HMR connection message; no page warning or error was present.
+
+## Comparison History
+
+- Pass 1: rejected because stale Next.js chunks left the browser on the loading shell.
+- Pass 2: the disposable API and Next.js preview were restarted, but the earlier browser session could not produce claimable same-state evidence; the result stayed blocked.
+- Pass 3: the in-app Browser connected to the running profile preview. Desktop card, reward drawer, invitation drawer, and copied-button captures showed no actionable P0/P1/P2 mismatch.
+- Pass 4: 390 x 844 light reward/invitation drawers, mobile dark profile/drawer, exact viewport width, zero horizontal overflow, and clean browser console evidence were captured. The focused and full combined comparison artifacts were opened and reviewed; no earlier blocking finding remained.
 
 final result: passed

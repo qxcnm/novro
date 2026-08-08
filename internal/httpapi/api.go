@@ -21,16 +21,16 @@ import (
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
+	"github.com/novro-gateway/novro/internal/email"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/providersync"
+	"github.com/novro-gateway/novro/internal/referral"
 	"github.com/novro-gateway/novro/internal/requestid"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
-
-const maxJSONBodyBytes = 1 << 20
 
 type AuthService interface {
 	Login(context.Context, string, string) (auth.LoginResult, error)
@@ -41,6 +41,7 @@ type AuthService interface {
 
 type UserService interface {
 	Create(context.Context, user.CreateInput) (user.Record, error)
+	EmailAvailable(context.Context, string) (bool, error)
 	Register(context.Context, user.RegisterInput) (user.Record, error)
 	InitializeAdmin(context.Context, user.RegisterInput) (user.Record, error)
 	SetupRequired(context.Context) (bool, error)
@@ -78,13 +79,21 @@ type PaymentService interface {
 	UpdateConfig(context.Context, payment.ConfigInput) (payment.AdminConfig, error)
 	Create(context.Context, uuid.UUID, int64, string) (payment.CreateResult, error)
 	List(context.Context, uuid.UUID) ([]payment.Order, error)
+	ReconcileForUser(context.Context, uuid.UUID, string) (payment.Order, error)
 	ListAll(context.Context, payment.AdminListFilter) (payment.AdminPage, error)
 	HandleNotification(context.Context, url.Values) error
+}
+
+type ReferralService interface {
+	Summary(context.Context, uuid.UUID) (referral.Summary, error)
+	AdminConfig(context.Context) (referral.AdminConfig, error)
+	UpdateRewardBPS(context.Context, int64) (referral.AdminConfig, error)
 }
 
 type ModelRouteService interface {
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
+	ListActive(context.Context) ([]modelroute.Record, error)
 	Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error)
 	SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error)
 	Delete(context.Context, uuid.UUID) error
@@ -116,6 +125,17 @@ type OIDCService interface {
 	Complete(context.Context, string, string, string) (auth.OIDCUser, bool, error)
 }
 
+type EmailVerificationService interface {
+	Send(context.Context, string) error
+	Verify(context.Context, string, string) error
+}
+
+type EmailConfigService interface {
+	AdminConfig(context.Context) (email.AdminConfig, error)
+	UpdateConfig(context.Context, email.ConfigInput) (email.AdminConfig, error)
+	Test(context.Context, string) error
+}
+
 type Dependencies struct {
 	Database            databasePinger
 	Auth                AuthService
@@ -124,6 +144,7 @@ type Dependencies struct {
 	Providers           ProviderService
 	Billing             BillingService
 	Payments            PaymentService
+	Referrals           ReferralService
 	ModelRoutes         ModelRouteService
 	UpstreamModels      UpstreamModelService
 	ProviderModels      ProviderModelService
@@ -137,6 +158,8 @@ type Dependencies struct {
 	RegistrationEnabled bool
 	OIDC                OIDCService
 	OIDCDisplayName     string
+	EmailVerification   EmailVerificationService
+	EmailConfig         EmailConfigService
 }
 
 type apiHandler struct {
@@ -146,6 +169,7 @@ type apiHandler struct {
 	providers           ProviderService
 	billing             BillingService
 	payments            PaymentService
+	referrals           ReferralService
 	modelRoutes         ModelRouteService
 	upstreamModels      UpstreamModelService
 	providerModels      ProviderModelService
@@ -158,6 +182,8 @@ type apiHandler struct {
 	registrationEnabled bool
 	oidc                OIDCService
 	oidcDisplayName     string
+	emailVerification   EmailVerificationService
+	emailConfig         EmailConfigService
 }
 
 func New(deps Dependencies) http.Handler {
@@ -172,6 +198,7 @@ func New(deps Dependencies) http.Handler {
 		providers:           deps.Providers,
 		billing:             deps.Billing,
 		payments:            deps.Payments,
+		referrals:           deps.Referrals,
 		modelRoutes:         deps.ModelRoutes,
 		upstreamModels:      deps.UpstreamModels,
 		providerModels:      deps.ProviderModels,
@@ -184,6 +211,8 @@ func New(deps Dependencies) http.Handler {
 		registrationEnabled: deps.RegistrationEnabled,
 		oidc:                deps.OIDC,
 		oidcDisplayName:     deps.OIDCDisplayName,
+		emailVerification:   deps.EmailVerification,
+		emailConfig:         deps.EmailConfig,
 	}
 	for _, origin := range deps.AllowedOrigins {
 		h.allowedOrigins[strings.TrimRight(origin, "/")] = struct{}{}
@@ -197,23 +226,33 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/auth/options", h.authOptions)
 	mux.HandleFunc("POST /api/auth/setup", h.setup)
 	mux.HandleFunc("POST /api/auth/register", h.register)
+	mux.HandleFunc("POST /api/auth/register/send-code", h.sendRegistrationCode)
 	mux.HandleFunc("GET /api/auth/oidc/start", h.oidcStart)
 	mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/auth/me", h.me)
 	mux.HandleFunc("PATCH /api/account/profile", h.updateProfile)
+	mux.HandleFunc("GET /api/account/referral", h.myReferral)
+	mux.HandleFunc("GET /api/admin/referral", h.getReferralConfig)
+	mux.HandleFunc("PUT /api/admin/referral", h.updateReferralConfig)
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
+	mux.HandleFunc("GET /api/account/models", h.listAvailableModels)
 	mux.HandleFunc("GET /api/account/balance", h.myBalance)
 	mux.HandleFunc("GET /api/account/usage", h.myUsage)
 	mux.HandleFunc("GET /api/account/top-ups/config", h.topUpConfig)
 	mux.HandleFunc("GET /api/account/top-ups", h.listMyTopUps)
 	mux.HandleFunc("POST /api/account/top-ups", h.createMyTopUp)
+	mux.HandleFunc("POST /api/account/top-ups/{out_trade_no}/reconcile", h.reconcileMyTopUp)
 	mux.HandleFunc("GET /api/payments/epay/notify", h.epayNotification)
 	mux.HandleFunc("POST /api/payments/epay/notify", h.epayNotification)
+	mux.HandleFunc("GET /api/payments/epay/return", h.epayReturn)
 	mux.HandleFunc("GET /api/admin/payments", h.getPaymentConfig)
 	mux.HandleFunc("PUT /api/admin/payments", h.updatePaymentConfig)
+	mux.HandleFunc("GET /api/admin/email", h.getEmailConfig)
+	mux.HandleFunc("PUT /api/admin/email", h.updateEmailConfig)
+	mux.HandleFunc("POST /api/admin/email/test", h.testEmailConfig)
 	mux.HandleFunc("GET /api/admin/top-ups", h.listAllTopUps)
 	mux.HandleFunc("GET /api/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/admin/users", h.createUser)
@@ -329,9 +368,29 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input user.RegisterInput
-	if err := decodeJSON(w, r, &input); err != nil {
+	var request struct {
+		Username         string `json:"username"`
+		Email            string `json:"email"`
+		DisplayName      string `json:"display_name"`
+		Password         string `json:"password"`
+		VerificationCode string `json:"verification_code"`
+		ReferralCode     string `json:"referral_code"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "注册信息格式无效")
 		return
+	}
+	if h.emailVerification == nil {
+		writeError(w, http.StatusServiceUnavailable, "email_unavailable", "邮箱验证服务暂不可用")
+		return
+	}
+	if err := h.emailVerification.Verify(r.Context(), request.Email, request.VerificationCode); err != nil {
+		h.writeVerificationError(w, err)
+		return
+	}
+	input = user.RegisterInput{
+		Username: request.Username, Email: request.Email, DisplayName: request.DisplayName,
+		Password: request.Password, ReferralCode: request.ReferralCode,
 	}
 	created, err := h.users.Register(r.Context(), input)
 	if err != nil {
@@ -345,6 +404,51 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setSessionCookie(w, result.Token, result.ExpiresAt)
 	writeJSON(w, http.StatusCreated, map[string]any{"user": result.User})
+}
+
+func (h *apiHandler) sendRegistrationCode(w http.ResponseWriter, r *http.Request) {
+	if !h.registrationEnabled {
+		writeError(w, http.StatusForbidden, "registration_disabled", "用户注册未开放")
+		return
+	}
+	setupRequired, err := h.users.SetupRequired(r.Context())
+	if err != nil {
+		h.internalError(w, "check registration readiness", err)
+		return
+	}
+	if setupRequired {
+		writeError(w, http.StatusConflict, "setup_required", "请先初始化管理员账号")
+		return
+	}
+	if h.emailVerification == nil {
+		writeError(w, http.StatusServiceUnavailable, "email_unavailable", "邮箱验证服务暂不可用")
+		return
+	}
+	var request struct {
+		Email string `json:"email"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "邮箱格式无效")
+		return
+	}
+	available, err := h.users.EmailAvailable(r.Context(), request.Email)
+	if err != nil {
+		if errors.Is(err, user.ErrInvalidInput) {
+			writeError(w, http.StatusBadRequest, "invalid_email", "请输入有效的邮箱地址")
+			return
+		}
+		h.internalError(w, "check registration email", err)
+		return
+	}
+	if !available {
+		writeError(w, http.StatusConflict, "email_taken", "该邮箱已经注册，请更换其他邮箱")
+		return
+	}
+	if err := h.emailVerification.Send(r.Context(), request.Email); err != nil {
+		h.writeVerificationError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true})
 }
 
 func (h *apiHandler) oidcStart(w http.ResponseWriter, r *http.Request) {
@@ -430,11 +534,11 @@ func (h *apiHandler) login(w http.ResponseWriter, r *http.Request) {
 
 func (h *apiHandler) logout(w http.ResponseWriter, r *http.Request) {
 	token := h.sessionToken(r)
+	h.clearSessionCookie(w)
 	if err := h.auth.Logout(r.Context(), token); err != nil {
 		h.internalError(w, "logout failed", err)
 		return
 	}
-	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -465,6 +569,62 @@ func (h *apiHandler) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
+}
+
+func (h *apiHandler) myReferral(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if h.referrals == nil {
+		writeError(w, http.StatusServiceUnavailable, "referral_unavailable", "邀请计划暂不可用")
+		return
+	}
+	summary, err := h.referrals.Summary(r.Context(), record.ID)
+	if err != nil {
+		h.internalError(w, "read referral summary", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"referral": summary})
+}
+
+func (h *apiHandler) getReferralConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.referrals == nil {
+		writeError(w, http.StatusServiceUnavailable, "referral_unavailable", "推荐计划暂不可用")
+		return
+	}
+	config, err := h.referrals.AdminConfig(r.Context())
+	if err != nil {
+		h.writeReferralConfigError(w, "read referral configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"referral_config": config})
+}
+
+func (h *apiHandler) updateReferralConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.referrals == nil {
+		writeError(w, http.StatusServiceUnavailable, "referral_unavailable", "推荐计划暂不可用")
+		return
+	}
+	var request struct {
+		RewardBPS int64 `json:"reward_bps"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "返现比例格式无效")
+		return
+	}
+	config, err := h.referrals.UpdateRewardBPS(r.Context(), request.RewardBPS)
+	if err != nil {
+		h.writeReferralConfigError(w, "update referral configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"referral_config": config})
 }
 
 func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -1003,6 +1163,86 @@ func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
+type availableModel struct {
+	ID           string            `json:"id"`
+	DisplayName  string            `json:"display_name"`
+	ProviderName string            `json:"provider_name"`
+	Protocol     provider.Protocol `json:"protocol"`
+	ChannelCount int               `json:"channel_count"`
+	Prices       billing.RateCard  `json:"prices"`
+}
+
+func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	multiplierBPS := billing.BasisPointsUnit
+	billingGroupName := "默认分组"
+	if record.BillingGroup != nil {
+		multiplierBPS = record.BillingGroup.MultiplierBPS
+		billingGroupName = record.BillingGroup.DisplayName
+	}
+	routes, err := h.modelRoutes.ListActive(r.Context())
+	if err != nil {
+		h.writeModelRouteError(w, "list available models", err)
+		return
+	}
+	models := make([]availableModel, 0, len(routes))
+	modelIndexes := make(map[string]int, len(routes))
+	for _, route := range routes {
+		if route.UpstreamModel == nil {
+			continue
+		}
+		prices := route.UpstreamModel.Prices
+		candidate := availableModel{
+			ID: route.PublicName, DisplayName: route.DisplayName,
+			ProviderName: route.Provider.DisplayName, Protocol: route.Provider.Protocol, ChannelCount: 1,
+			Prices: billing.RateCard{
+				InputMicros:        priceWithMultiplier(prices.InputMicros, multiplierBPS),
+				OutputMicros:       priceWithMultiplier(prices.OutputMicros, multiplierBPS),
+				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, multiplierBPS),
+				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, multiplierBPS),
+				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, multiplierBPS),
+				RequestMicros:      priceWithMultiplier(prices.RequestMicros, multiplierBPS),
+			},
+		}
+		key := candidate.ID + "\x00" + string(candidate.Protocol)
+		if index, exists := modelIndexes[key]; exists {
+			models[index].ChannelCount++
+			models[index].Prices = maximumRateCard(models[index].Prices, candidate.Prices)
+			continue
+		}
+		modelIndexes[key] = len(models)
+		models = append(models, candidate)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models": models,
+		"billing_group": map[string]any{
+			"display_name":   billingGroupName,
+			"multiplier_bps": multiplierBPS,
+		},
+	})
+}
+
+func maximumRateCard(first, second billing.RateCard) billing.RateCard {
+	return billing.RateCard{
+		InputMicros:        max(first.InputMicros, second.InputMicros),
+		OutputMicros:       max(first.OutputMicros, second.OutputMicros),
+		CacheReadMicros:    max(first.CacheReadMicros, second.CacheReadMicros),
+		CacheWriteMicros:   max(first.CacheWriteMicros, second.CacheWriteMicros),
+		CacheWrite1hMicros: max(first.CacheWrite1hMicros, second.CacheWrite1hMicros),
+		RequestMicros:      max(first.RequestMicros, second.RequestMicros),
+	}
+}
+
+func priceWithMultiplier(priceMicros, multiplierBPS int64) int64 {
+	if priceMicros == 0 {
+		return 0
+	}
+	return (priceMicros*multiplierBPS + billing.BasisPointsUnit - 1) / billing.BasisPointsUnit
+}
+
 func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1096,6 +1336,76 @@ func (h *apiHandler) updatePaymentConfig(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"payment_config": config})
 }
 
+func (h *apiHandler) getEmailConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.emailConfig == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"email_config": email.AdminConfig{Port: 587, Security: email.SecuritySTARTTLS}})
+		return
+	}
+	config, err := h.emailConfig.AdminConfig(r.Context())
+	if err != nil {
+		h.writeEmailConfigError(w, "read email configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"email_config": config})
+}
+
+func (h *apiHandler) updateEmailConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.emailConfig == nil {
+		writeError(w, http.StatusServiceUnavailable, "email_unavailable", "邮件服务暂不可用")
+		return
+	}
+	var request struct {
+		Enabled     bool    `json:"enabled"`
+		Host        string  `json:"host"`
+		Port        int     `json:"port"`
+		Username    string  `json:"username"`
+		Password    *string `json:"password"`
+		FromAddress string  `json:"from_address"`
+		Security    string  `json:"security"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "邮件配置格式无效")
+		return
+	}
+	config, err := h.emailConfig.UpdateConfig(r.Context(), email.ConfigInput{
+		Enabled: request.Enabled, Host: request.Host, Port: request.Port, Username: request.Username,
+		Password: request.Password, FromAddress: request.FromAddress, Security: request.Security,
+	})
+	if err != nil {
+		h.writeEmailConfigError(w, "update email configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"email_config": config})
+}
+
+func (h *apiHandler) testEmailConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.emailConfig == nil {
+		writeError(w, http.StatusServiceUnavailable, "email_unavailable", "邮件服务暂不可用")
+		return
+	}
+	var request struct {
+		Recipient string `json:"recipient"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "测试收件地址格式无效")
+		return
+	}
+	if err := h.emailConfig.Test(r.Context(), request.Recipient); err != nil {
+		h.writeEmailConfigError(w, "send SMTP test message", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"sent": true})
+}
+
 func (h *apiHandler) listAllTopUps(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1171,6 +1481,23 @@ func (h *apiHandler) createMyTopUp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, result)
 }
 
+func (h *apiHandler) reconcileMyTopUp(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if h.payments == nil {
+		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值服务暂不可用")
+		return
+	}
+	order, err := h.payments.ReconcileForUser(r.Context(), record.ID, r.PathValue("out_trade_no"))
+	if err != nil {
+		h.writePaymentError(w, "reconcile top-up order", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"order": order})
+}
+
 func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -1179,13 +1506,13 @@ func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("fail"))
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	if err := r.ParseForm(); err != nil {
+	values, err := readFormValues(r)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("fail"))
 		return
 	}
-	if err := h.payments.HandleNotification(r.Context(), r.Form); err != nil {
+	if err := h.payments.HandleNotification(r.Context(), values); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, payment.ErrDisabled) {
 			status = http.StatusServiceUnavailable
@@ -1199,6 +1526,29 @@ func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("success"))
+}
+
+// epayReturn handles the browser redirect from EPay. It uses the exact same
+// signed notification path as the server-to-server callback, so a successful
+// payment is credited even when the callback cannot reach a local URL. The
+// payment store keeps this operation transactional and idempotent.
+func (h *apiHandler) epayReturn(w http.ResponseWriter, r *http.Request) {
+	if h.payments == nil {
+		http.Redirect(w, r, "/console/billing?payment=unavailable", http.StatusSeeOther)
+		return
+	}
+	values := r.URL.Query()
+	// Older return URLs included this UI-only query parameter. It is not part
+	// of the gateway signature and must not affect verification.
+	values.Del("payment")
+	if err := h.payments.HandleNotification(r.Context(), values); err != nil {
+		if !errors.Is(err, payment.ErrOrderNotFound) && !errors.Is(err, payment.ErrInvalidNotice) && !errors.Is(err, payment.ErrOrderConflict) {
+			h.logger.Error("complete EPay return", "request_id", requestid.ResponseID(w), "error", err)
+		}
+		http.Redirect(w, r, "/console/billing?payment=failed", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/console/billing?payment=returned", http.StatusSeeOther)
 }
 
 func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
@@ -1413,6 +1763,8 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 		writeError(w, http.StatusConflict, "username_taken", "用户名已存在")
 	case errors.Is(err, user.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "邮箱已被使用")
+	case errors.Is(err, user.ErrInvalidReferralCode):
+		writeError(w, http.StatusBadRequest, "invalid_referral_code", "邀请码无效或邀请账号不可用")
 	case errors.Is(err, user.ErrLastActiveAdmin):
 		writeError(w, http.StatusConflict, "last_active_admin", "不能停用或降级最后一个启用的管理员")
 	case errors.Is(err, user.ErrAlreadyInitialized):
@@ -1420,6 +1772,42 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 	default:
 		h.internalError(w, operation, err)
 	}
+}
+
+func (h *apiHandler) writeVerificationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, user.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_email", "请输入有效的邮箱地址")
+	case errors.Is(err, email.ErrRateLimited):
+		writeError(w, http.StatusTooManyRequests, "verification_rate_limited", "验证码发送过于频繁，请稍后再试")
+	case errors.Is(err, email.ErrExpired):
+		writeError(w, http.StatusBadRequest, "verification_expired", "验证码已过期，请重新获取")
+	case errors.Is(err, email.ErrInvalidCode):
+		writeError(w, http.StatusBadRequest, "verification_invalid", "验证码错误或已使用")
+	case errors.Is(err, email.ErrNotConfigured):
+		writeError(w, http.StatusServiceUnavailable, "email_not_configured", "注册邮件暂不可用，请联系管理员")
+	default:
+		h.internalError(w, "email verification", err)
+	}
+}
+
+func (h *apiHandler) writeEmailConfigError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, email.ErrInvalidConfig):
+		writeError(w, http.StatusBadRequest, "invalid_email_config", "邮件配置无效，请检查主机、端口、发件地址和凭据")
+	case errors.Is(err, email.ErrNotConfigured):
+		writeError(w, http.StatusConflict, "email_not_configured", "请先保存并启用完整的 SMTP 配置")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeReferralConfigError(w http.ResponseWriter, operation string, err error) {
+	if errors.Is(err, referral.ErrInvalidInput) {
+		writeError(w, http.StatusBadRequest, "invalid_referral_config", "返现比例必须在 0% 到 100% 之间")
+		return
+	}
+	h.internalError(w, operation, err)
 }
 
 func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, err error) {
@@ -1482,6 +1870,14 @@ func (h *apiHandler) writePaymentError(w http.ResponseWriter, operation string, 
 		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值暂未开放")
 	case errors.Is(err, payment.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_top_up", "充值金额或支付方式无效")
+	case errors.Is(err, payment.ErrOrderNotFound):
+		writeError(w, http.StatusNotFound, "top_up_not_found", "充值订单不存在")
+	case errors.Is(err, payment.ErrOrderUnpaid):
+		writeError(w, http.StatusConflict, "top_up_unpaid", "支付平台尚未确认该订单到账")
+	case errors.Is(err, payment.ErrOrderConflict):
+		writeError(w, http.StatusConflict, "top_up_conflict", "支付平台记录与充值订单不一致，请联系管理员核对")
+	case errors.Is(err, payment.ErrGatewayQuery):
+		writeError(w, http.StatusBadGateway, "payment_query_failed", "暂时无法查询支付结果，请稍后重试")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1502,7 +1898,7 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 	case errors.Is(err, modelroute.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "模型路由不存在")
 	case errors.Is(err, modelroute.ErrNameTaken):
-		writeError(w, http.StatusConflict, "model_name_taken", "对外模型名称已存在")
+		writeError(w, http.StatusConflict, "model_route_taken", "该对外模型已关联相同的提供商和目录模型")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1567,8 +1963,7 @@ func (h *apiHandler) securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+func decodeJSON(_ http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
@@ -1578,6 +1973,29 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 		return fmt.Errorf("request must contain exactly one JSON value")
 	}
 	return nil
+}
+
+func readFormValues(r *http.Request) (url.Values, error) {
+	queryValues := r.URL.Query()
+	if r.Body == nil {
+		return queryValues, nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	postValues, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, err
+	}
+	values := make(url.Values, len(postValues)+len(queryValues))
+	for key, entries := range postValues {
+		values[key] = append([]string(nil), entries...)
+	}
+	for key, entries := range queryValues {
+		values[key] = append(values[key], entries...)
+	}
+	return values, nil
 }
 
 func parseQueryInt(r *http.Request, key string, fallback int) (int, error) {

@@ -13,7 +13,8 @@ Novro 面向需要在企业内部统一使用 Kimi、GLM、DeepSeek 等模型的
 支持深色/浅色主题和响应式侧边导航的 Next.js 控制台。
 
 统一 API 已提供 `/v1/models`、`/v1/chat/completions`、`/v1/responses` 和
-`/v1/messages`。请求根据模型路由选择启用的提供商，成功后按上游 usage 的普通输入、
+`/v1/messages`。同一对外模型可以配置多条提供商路由；请求在启用渠道间轮询，并在当前
+渠道失败且尚未开始向客户端返回内容时切换下一条路由。成功后按实际命中上游 usage 的普通输入、
 缓存命中、缓存创建和输出分别记录 token，并应用用户分组倍率扣除余额。当前尚未实现
 套餐、订阅、组织、项目和复杂供应商编排。
 
@@ -32,6 +33,7 @@ Novro 面向需要在企业内部统一使用 Kimi、GLM、DeepSeek 等模型的
 ## 文档
 
 - [开发环境、迁移与启动](docs/getting-started.md)
+- [Docker 单应用部署](docs/docker-deployment.md)
 - [生产部署、备份与恢复](docs/deployment.md)
 - [工程规范](docs/engineering.md)
 - [产品概述](docs/product-overview.md)

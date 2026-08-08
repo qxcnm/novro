@@ -127,4 +127,11 @@
   html {
     @apply font-sans;
   }
+
+  [data-slot="label"]:has(+ [data-slot="input"][required])::after,
+  [data-slot="label"]:has(+ * [data-slot="input"][required])::after {
+    color: var(--destructive);
+    content: "*";
+    margin-left: 0.125rem;
+  }
 }

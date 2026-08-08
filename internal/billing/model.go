@@ -19,6 +19,7 @@ type EntryType string
 const (
 	EntryManualAdjustment EntryType = "manual_adjustment"
 	EntryTopUp            EntryType = "top_up"
+	EntryReferralReward   EntryType = "referral_reward"
 	EntryUsageReservation EntryType = "usage_reservation"
 	EntryUsageRefund      EntryType = "usage_refund"
 	EntryUsageSettlement  EntryType = "usage_settlement"

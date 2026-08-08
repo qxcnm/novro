@@ -47,6 +47,19 @@ func TestPopularModelSeedContainsAuditedOfficialRates(t *testing.T) {
 	}
 }
 
+func TestReferralRewardSettingMigrationSeedsDatabaseDefault(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0020_referral_reward_setting.sql")
+	if err != nil {
+		t.Fatalf("read referral reward setting migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{"INSERT IGNORE INTO system_settings", "'referral_reward_bps'", "'1000'"} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("referral reward setting migration is missing %q", expected)
+		}
+	}
+}
+
 func TestValidateAppliedMigrationsRejectsDriftAndMissingFiles(t *testing.T) {
 	migrations := []migrationFile{{Version: "0001_first", Checksum: strings.Repeat("a", 64)}}
 	if _, err := validateAppliedMigrations(migrations, map[string]string{"0001_first": strings.Repeat("b", 64)}); err == nil || !strings.Contains(err.Error(), "checksum") {

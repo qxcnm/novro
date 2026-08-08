@@ -7,8 +7,7 @@ import (
 	"entgo.io/ent/schema/field"
 )
 
-// SystemSetting stores internal installation markers, not user-editable
-// application configuration or secrets.
+// SystemSetting stores installation markers and non-secret application settings.
 type SystemSetting struct {
 	ent.Schema
 }
