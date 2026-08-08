@@ -286,7 +286,7 @@ func catalogProviderName(configured *ent.Provider) string {
 
 func modelListURL(base string, protocol provider.Protocol) (string, error) {
 	parsed, err := url.Parse(base)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return "", ErrInvalidInput
 	}
 	basePath := strings.TrimRight(parsed.Path, "/")

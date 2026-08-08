@@ -52,6 +52,7 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 	}{
 		{name: "OpenAI versioned base", baseURL: "https://api.example.com/v1", protocol: provider.ProtocolOpenAI, want: "https://api.example.com/v1/models"},
 		{name: "Anthropic root base", baseURL: "https://api.anthropic.com", protocol: provider.ProtocolAnthropic, want: "https://api.anthropic.com/v1/models"},
+		{name: "HTTP self-hosted base", baseURL: "http://8.134.107.46:3000/v1", protocol: provider.ProtocolOpenAI, want: "http://8.134.107.46:3000/v1/models"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,8 +62,8 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 			}
 		})
 	}
-	if _, err := modelListURL("http://127.0.0.1:8080", provider.ProtocolOpenAI); err == nil {
-		t.Fatal("expected insecure model URL to be rejected")
+	if _, err := modelListURL("http://127.0.0.1:8080", provider.ProtocolOpenAI); err != nil {
+		t.Fatalf("expected HTTP URL format to be accepted before network filtering: %v", err)
 	}
 }
 

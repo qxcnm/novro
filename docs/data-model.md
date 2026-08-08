@@ -213,7 +213,9 @@ EmailVerificationCode
 - `api_key_hint`，只用于显示末尾提示
 - `status`、`created_at`、`updated_at`
 
-基础地址只允许 HTTPS。网关默认拒绝解析到回环、私有、链路本地或组播地址的上游目标。
+基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
+明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
+上游重定向。
 
 ## 12. model_routes
 

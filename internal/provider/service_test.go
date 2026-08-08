@@ -67,12 +67,27 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 	inputs := []CreateInput{
 		{Code: "x", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret"},
 		{Code: "valid-code", DisplayName: "X", Protocol: Protocol("other"), BaseURL: "https://api.example.com", APIKey: "secret"},
-		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "http://api.example.com", APIKey: "secret"},
+		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "api.example.com", APIKey: "secret"},
 	}
 	for _, input := range inputs {
 		if _, err := service.Create(context.Background(), input); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("expected invalid input for %+v, got %v", input, err)
 		}
+	}
+}
+
+func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
+	store := &fakeStore{}
+	service := testService(t, store)
+	_, err := service.Create(context.Background(), CreateInput{
+		Code: "self-hosted", DisplayName: "自建网关", Protocol: ProtocolOpenAI,
+		BaseURL: "http://8.134.107.46:3000/v1/", APIKey: "secret",
+	})
+	if err != nil {
+		t.Fatalf("expected HTTP self-hosted provider to be accepted: %v", err)
+	}
+	if store.createParams.BaseURL != "http://8.134.107.46:3000/v1" {
+		t.Fatalf("base URL=%q", store.createParams.BaseURL)
 	}
 }
 

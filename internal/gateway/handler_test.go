@@ -773,6 +773,10 @@ func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {
 	if err != nil || url != "https://api.anthropic.com/v1/messages" {
 		t.Fatalf("url=%q err=%v", url, err)
 	}
+	url, err = buildUpstreamURL("http://8.134.107.46:3000/v1", provider.ProtocolOpenAI, "chat_completions")
+	if err != nil || url != "http://8.134.107.46:3000/v1/chat/completions" {
+		t.Fatalf("HTTP self-hosted URL=%q err=%v", url, err)
+	}
 	for _, address := range []string{"127.0.0.1", "10.0.0.1", "169.254.1.1", "::1"} {
 		if !unsafeUpstreamIP(net.ParseIP(address)) {
 			t.Fatalf("expected %s to be blocked", address)

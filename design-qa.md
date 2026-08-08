@@ -60,6 +60,24 @@ The lower enabled-state and test-email cards are not shown in the saved desktop 
 
 final result: passed
 
+## Custom HTTP Provider Validation QA (2026-08-08)
+
+### Findings
+
+- The provider form previously returned `提供商信息无效` for self-hosted or third-party addresses because provider creation, model discovery, and gateway URL construction each required the scheme to be exactly `https`.
+- The validation now accepts `http` and `https` URLs, including public IP addresses with non-default ports such as `http://8.134.107.46:3000/v1`.
+- SSRF protections remain active in the outbound client: loopback, private, link-local, unspecified, and multicast destination IPs remain blocked; redirects remain disabled.
+- Production documentation now warns that HTTP sends the provider API key in cleartext and recommends HTTPS.
+
+### Verification
+
+- `go test ./internal/provider ./internal/providersync ./internal/gateway` passed.
+- `go test ./cmd/... ./internal/... ./ent/...` passed.
+- `go vet ./...` passed.
+- Frontend lint, typecheck, tests, and production build passed.
+
+final result: passed
+
 ## All Public Page Heading Scale QA (2026-08-08)
 
 ### Comparison Target

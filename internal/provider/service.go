@@ -123,7 +123,7 @@ func validProtocol(protocol Protocol) bool {
 func normalizeBaseURL(value string) (string, bool) {
 	value = strings.TrimRight(strings.TrimSpace(value), "/")
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", false
 	}
 	return parsed.String(), true

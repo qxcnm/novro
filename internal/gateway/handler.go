@@ -741,7 +741,7 @@ func protocolSupports(protocol provider.Protocol, endpoint string) bool {
 
 func buildUpstreamURL(base string, protocol provider.Protocol, endpoint string) (string, error) {
 	parsed, err := url.Parse(base)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return "", fmt.Errorf("invalid upstream URL")
 	}
 	path := "/" + strings.ReplaceAll(endpoint, "_", "/")
