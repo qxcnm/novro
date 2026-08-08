@@ -209,11 +209,13 @@ EmailVerificationCode
 - `id`、`code`、`display_name`
 - `protocol`，`openai` 或 `anthropic`
 - `base_url`
+- `model_list_path`，可选的模型获取路径覆盖值
 - `encrypted_api_key`，AES-256-GCM 密文，仅服务端读取
 - `api_key_hint`，只用于显示末尾提示
 - `status`、`created_at`、`updated_at`
 
-基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
+`model_list_path` 保存可选的模型获取路径；空值保留协议默认路径，非空值必须是以 `/` 开头的
+站点绝对路径，并在模型目录同步时覆盖默认拼接规则。基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
 明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
 上游重定向。
 

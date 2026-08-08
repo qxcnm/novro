@@ -26,6 +26,8 @@ type Provider struct {
 	Protocol provider.Protocol `json:"protocol,omitempty"`
 	// BaseURL holds the value of the "base_url" field.
 	BaseURL string `json:"base_url,omitempty"`
+	// ModelListPath holds the value of the "model_list_path" field.
+	ModelListPath string `json:"model_list_path,omitempty"`
 	// EncryptedAPIKey holds the value of the "encrypted_api_key" field.
 	EncryptedAPIKey string `json:"-"`
 	// APIKeyHint holds the value of the "api_key_hint" field.
@@ -67,7 +69,7 @@ func (*Provider) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldBaseURL, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
+		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldBaseURL, provider.FieldModelListPath, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
 			values[i] = new(sql.NullString)
 		case provider.FieldCreatedAt, provider.FieldUpdatedAt, provider.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -117,6 +119,12 @@ func (_m *Provider) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field base_url", values[i])
 			} else if value.Valid {
 				_m.BaseURL = value.String
+			}
+		case provider.FieldModelListPath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field model_list_path", values[i])
+			} else if value.Valid {
+				_m.ModelListPath = value.String
 			}
 		case provider.FieldEncryptedAPIKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -207,6 +215,9 @@ func (_m *Provider) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("base_url=")
 	builder.WriteString(_m.BaseURL)
+	builder.WriteString(", ")
+	builder.WriteString("model_list_path=")
+	builder.WriteString(_m.ModelListPath)
 	builder.WriteString(", ")
 	builder.WriteString("encrypted_api_key=<sensitive>")
 	builder.WriteString(", ")

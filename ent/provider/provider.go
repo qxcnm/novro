@@ -24,6 +24,8 @@ const (
 	FieldProtocol = "protocol"
 	// FieldBaseURL holds the string denoting the base_url field in the database.
 	FieldBaseURL = "base_url"
+	// FieldModelListPath holds the string denoting the model_list_path field in the database.
+	FieldModelListPath = "model_list_path"
 	// FieldEncryptedAPIKey holds the string denoting the encrypted_api_key field in the database.
 	FieldEncryptedAPIKey = "encrypted_api_key"
 	// FieldAPIKeyHint holds the string denoting the api_key_hint field in the database.
@@ -56,6 +58,7 @@ var Columns = []string{
 	FieldDisplayName,
 	FieldProtocol,
 	FieldBaseURL,
+	FieldModelListPath,
 	FieldEncryptedAPIKey,
 	FieldAPIKeyHint,
 	FieldStatus,
@@ -81,6 +84,10 @@ var (
 	DisplayNameValidator func(string) error
 	// BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	BaseURLValidator func(string) error
+	// DefaultModelListPath holds the default value on creation for the "model_list_path" field.
+	DefaultModelListPath string
+	// ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
+	ModelListPathValidator func(string) error
 	// EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	EncryptedAPIKeyValidator func(string) error
 	// APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
@@ -170,6 +177,11 @@ func ByProtocol(opts ...sql.OrderTermOption) OrderOption {
 // ByBaseURL orders the results by the base_url field.
 func ByBaseURL(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBaseURL, opts...).ToFunc()
+}
+
+// ByModelListPath orders the results by the model_list_path field.
+func ByModelListPath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldModelListPath, opts...).ToFunc()
 }
 
 // ByEncryptedAPIKey orders the results by the encrypted_api_key field.

@@ -72,6 +72,20 @@ func (_u *ProviderUpdate) SetNillableBaseURL(v *string) *ProviderUpdate {
 	return _u
 }
 
+// SetModelListPath sets the "model_list_path" field.
+func (_u *ProviderUpdate) SetModelListPath(v string) *ProviderUpdate {
+	_u.mutation.SetModelListPath(v)
+	return _u
+}
+
+// SetNillableModelListPath sets the "model_list_path" field if the given value is not nil.
+func (_u *ProviderUpdate) SetNillableModelListPath(v *string) *ProviderUpdate {
+	if v != nil {
+		_u.SetModelListPath(*v)
+	}
+	return _u
+}
+
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
 func (_u *ProviderUpdate) SetEncryptedAPIKey(v string) *ProviderUpdate {
 	_u.mutation.SetEncryptedAPIKey(v)
@@ -234,6 +248,11 @@ func (_u *ProviderUpdate) check() error {
 			return &ValidationError{Name: "base_url", err: fmt.Errorf(`ent: validator failed for field "Provider.base_url": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ModelListPath(); ok {
+		if err := provider.ModelListPathValidator(v); err != nil {
+			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.EncryptedAPIKey(); ok {
 		if err := provider.EncryptedAPIKeyValidator(v); err != nil {
 			return &ValidationError{Name: "encrypted_api_key", err: fmt.Errorf(`ent: validator failed for field "Provider.encrypted_api_key": %w`, err)}
@@ -272,6 +291,9 @@ func (_u *ProviderUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ModelListPath(); ok {
+		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)
@@ -394,6 +416,20 @@ func (_u *ProviderUpdateOne) SetBaseURL(v string) *ProviderUpdateOne {
 func (_u *ProviderUpdateOne) SetNillableBaseURL(v *string) *ProviderUpdateOne {
 	if v != nil {
 		_u.SetBaseURL(*v)
+	}
+	return _u
+}
+
+// SetModelListPath sets the "model_list_path" field.
+func (_u *ProviderUpdateOne) SetModelListPath(v string) *ProviderUpdateOne {
+	_u.mutation.SetModelListPath(v)
+	return _u
+}
+
+// SetNillableModelListPath sets the "model_list_path" field if the given value is not nil.
+func (_u *ProviderUpdateOne) SetNillableModelListPath(v *string) *ProviderUpdateOne {
+	if v != nil {
+		_u.SetModelListPath(*v)
 	}
 	return _u
 }
@@ -573,6 +609,11 @@ func (_u *ProviderUpdateOne) check() error {
 			return &ValidationError{Name: "base_url", err: fmt.Errorf(`ent: validator failed for field "Provider.base_url": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ModelListPath(); ok {
+		if err := provider.ModelListPathValidator(v); err != nil {
+			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.EncryptedAPIKey(); ok {
 		if err := provider.EncryptedAPIKeyValidator(v); err != nil {
 			return &ValidationError{Name: "encrypted_api_key", err: fmt.Errorf(`ent: validator failed for field "Provider.encrypted_api_key": %w`, err)}
@@ -628,6 +669,9 @@ func (_u *ProviderUpdateOne) sqlSave(ctx context.Context) (_node *Provider, err 
 	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ModelListPath(); ok {
+		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)

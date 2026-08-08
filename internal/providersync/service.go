@@ -209,7 +209,7 @@ type discoveredModel struct {
 }
 
 func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey string) ([]discoveredModel, error) {
-	endpoint, err := modelListURL(configured.BaseURL, provider.Protocol(configured.Protocol))
+	endpoint, err := modelListURL(configured.BaseURL, provider.Protocol(configured.Protocol), configured.ModelListPath)
 	if err != nil {
 		return nil, ErrDiscoveryFailed
 	}
@@ -284,16 +284,23 @@ func catalogProviderName(configured *ent.Provider) string {
 	return configured.DisplayName
 }
 
-func modelListURL(base string, protocol provider.Protocol) (string, error) {
+func modelListURL(base string, protocol provider.Protocol, modelPath string) (string, error) {
 	parsed, err := url.Parse(base)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return "", ErrInvalidInput
 	}
-	basePath := strings.TrimRight(parsed.Path, "/")
-	if protocol == provider.ProtocolAnthropic && !strings.HasSuffix(basePath, "/v1") {
-		basePath += "/v1"
+	if modelPath = strings.TrimSpace(modelPath); modelPath != "" {
+		if !strings.HasPrefix(modelPath, "/") || strings.ContainsAny(modelPath, "?#") {
+			return "", ErrInvalidInput
+		}
+		parsed.Path = modelPath
+	} else {
+		basePath := strings.TrimRight(parsed.Path, "/")
+		if protocol == provider.ProtocolAnthropic && !strings.HasSuffix(basePath, "/v1") {
+			basePath += "/v1"
+		}
+		parsed.Path = basePath + "/models"
 	}
-	parsed.Path = basePath + "/models"
 	parsed.RawPath, parsed.RawQuery, parsed.Fragment = "", "", ""
 	return parsed.String(), nil
 }

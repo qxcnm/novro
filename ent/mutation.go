@@ -8304,6 +8304,7 @@ type ProviderMutation struct {
 	display_name        *string
 	protocol            *provider.Protocol
 	base_url            *string
+	model_list_path     *string
 	encrypted_api_key   *string
 	api_key_hint        *string
 	status              *provider.Status
@@ -8565,6 +8566,42 @@ func (m *ProviderMutation) OldBaseURL(ctx context.Context) (v string, err error)
 // ResetBaseURL resets all changes to the "base_url" field.
 func (m *ProviderMutation) ResetBaseURL() {
 	m.base_url = nil
+}
+
+// SetModelListPath sets the "model_list_path" field.
+func (m *ProviderMutation) SetModelListPath(s string) {
+	m.model_list_path = &s
+}
+
+// ModelListPath returns the value of the "model_list_path" field in the mutation.
+func (m *ProviderMutation) ModelListPath() (r string, exists bool) {
+	v := m.model_list_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelListPath returns the old "model_list_path" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldModelListPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelListPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelListPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelListPath: %w", err)
+	}
+	return oldValue.ModelListPath, nil
+}
+
+// ResetModelListPath resets all changes to the "model_list_path" field.
+func (m *ProviderMutation) ResetModelListPath() {
+	m.model_list_path = nil
 }
 
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
@@ -8884,7 +8921,7 @@ func (m *ProviderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProviderMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.code != nil {
 		fields = append(fields, provider.FieldCode)
 	}
@@ -8896,6 +8933,9 @@ func (m *ProviderMutation) Fields() []string {
 	}
 	if m.base_url != nil {
 		fields = append(fields, provider.FieldBaseURL)
+	}
+	if m.model_list_path != nil {
+		fields = append(fields, provider.FieldModelListPath)
 	}
 	if m.encrypted_api_key != nil {
 		fields = append(fields, provider.FieldEncryptedAPIKey)
@@ -8931,6 +8971,8 @@ func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 		return m.Protocol()
 	case provider.FieldBaseURL:
 		return m.BaseURL()
+	case provider.FieldModelListPath:
+		return m.ModelListPath()
 	case provider.FieldEncryptedAPIKey:
 		return m.EncryptedAPIKey()
 	case provider.FieldAPIKeyHint:
@@ -8960,6 +9002,8 @@ func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldProtocol(ctx)
 	case provider.FieldBaseURL:
 		return m.OldBaseURL(ctx)
+	case provider.FieldModelListPath:
+		return m.OldModelListPath(ctx)
 	case provider.FieldEncryptedAPIKey:
 		return m.OldEncryptedAPIKey(ctx)
 	case provider.FieldAPIKeyHint:
@@ -9008,6 +9052,13 @@ func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBaseURL(v)
+		return nil
+	case provider.FieldModelListPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelListPath(v)
 		return nil
 	case provider.FieldEncryptedAPIKey:
 		v, ok := value.(string)
@@ -9120,6 +9171,9 @@ func (m *ProviderMutation) ResetField(name string) error {
 		return nil
 	case provider.FieldBaseURL:
 		m.ResetBaseURL()
+		return nil
+	case provider.FieldModelListPath:
+		m.ResetModelListPath()
 		return nil
 	case provider.FieldEncryptedAPIKey:
 		m.ResetEncryptedAPIKey()

@@ -71,6 +71,11 @@ func BaseURL(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldBaseURL, v))
 }
 
+// ModelListPath applies equality check predicate on the "model_list_path" field. It's identical to ModelListPathEQ.
+func ModelListPath(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldModelListPath, v))
+}
+
 // EncryptedAPIKey applies equality check predicate on the "encrypted_api_key" field. It's identical to EncryptedAPIKeyEQ.
 func EncryptedAPIKey(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldEncryptedAPIKey, v))
@@ -309,6 +314,71 @@ func BaseURLEqualFold(v string) predicate.Provider {
 // BaseURLContainsFold applies the ContainsFold predicate on the "base_url" field.
 func BaseURLContainsFold(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldContainsFold(FieldBaseURL, v))
+}
+
+// ModelListPathEQ applies the EQ predicate on the "model_list_path" field.
+func ModelListPathEQ(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldModelListPath, v))
+}
+
+// ModelListPathNEQ applies the NEQ predicate on the "model_list_path" field.
+func ModelListPathNEQ(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldNEQ(FieldModelListPath, v))
+}
+
+// ModelListPathIn applies the In predicate on the "model_list_path" field.
+func ModelListPathIn(vs ...string) predicate.Provider {
+	return predicate.Provider(sql.FieldIn(FieldModelListPath, vs...))
+}
+
+// ModelListPathNotIn applies the NotIn predicate on the "model_list_path" field.
+func ModelListPathNotIn(vs ...string) predicate.Provider {
+	return predicate.Provider(sql.FieldNotIn(FieldModelListPath, vs...))
+}
+
+// ModelListPathGT applies the GT predicate on the "model_list_path" field.
+func ModelListPathGT(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldGT(FieldModelListPath, v))
+}
+
+// ModelListPathGTE applies the GTE predicate on the "model_list_path" field.
+func ModelListPathGTE(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldGTE(FieldModelListPath, v))
+}
+
+// ModelListPathLT applies the LT predicate on the "model_list_path" field.
+func ModelListPathLT(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldLT(FieldModelListPath, v))
+}
+
+// ModelListPathLTE applies the LTE predicate on the "model_list_path" field.
+func ModelListPathLTE(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldLTE(FieldModelListPath, v))
+}
+
+// ModelListPathContains applies the Contains predicate on the "model_list_path" field.
+func ModelListPathContains(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldContains(FieldModelListPath, v))
+}
+
+// ModelListPathHasPrefix applies the HasPrefix predicate on the "model_list_path" field.
+func ModelListPathHasPrefix(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldHasPrefix(FieldModelListPath, v))
+}
+
+// ModelListPathHasSuffix applies the HasSuffix predicate on the "model_list_path" field.
+func ModelListPathHasSuffix(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldHasSuffix(FieldModelListPath, v))
+}
+
+// ModelListPathEqualFold applies the EqualFold predicate on the "model_list_path" field.
+func ModelListPathEqualFold(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEqualFold(FieldModelListPath, v))
+}
+
+// ModelListPathContainsFold applies the ContainsFold predicate on the "model_list_path" field.
+func ModelListPathContainsFold(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldContainsFold(FieldModelListPath, v))
 }
 
 // EncryptedAPIKeyEQ applies the EQ predicate on the "encrypted_api_key" field.

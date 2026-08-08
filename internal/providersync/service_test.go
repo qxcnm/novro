@@ -25,9 +25,10 @@ func TestDiscoverUsesConfiguredProviderNameAndCredentials(t *testing.T) {
 
 	service := NewService(nil, nil, server.Client())
 	models, err := service.discover(context.Background(), &ent.Provider{
-		DisplayName: "DeepSeek 主账号",
-		Protocol:    entprovider.ProtocolOpenai,
-		BaseURL:     server.URL + "/v1",
+		DisplayName:   "DeepSeek 主账号",
+		Protocol:      entprovider.ProtocolOpenai,
+		BaseURL:       server.URL + "/v1",
+		ModelListPath: "/catalog/models",
 	}, "provider-secret")
 	if err != nil {
 		t.Fatalf("discover models: %v", err)
@@ -35,8 +36,8 @@ func TestDiscoverUsesConfiguredProviderNameAndCredentials(t *testing.T) {
 	if authorization != "Bearer provider-secret" {
 		t.Fatalf("authorization=%q", authorization)
 	}
-	if requestPath != "/v1/models" {
-		t.Fatalf("path=%q want /v1/models", requestPath)
+	if requestPath != "/catalog/models" {
+		t.Fatalf("path=%q want /catalog/models", requestPath)
 	}
 	if len(models) != 2 || models[0].ProviderName != "DeepSeek 主账号" || models[0].DisplayName != "deepseek-chat" || models[1].DisplayName != "DeepSeek Reasoner" {
 		t.Fatalf("unexpected discovered models: %+v", models)
@@ -56,14 +57,18 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := modelListURL(tt.baseURL, tt.protocol)
+			got, err := modelListURL(tt.baseURL, tt.protocol, "")
 			if err != nil || got != tt.want {
 				t.Fatalf("modelListURL()=(%q, %v), want %q", got, err, tt.want)
 			}
 		})
 	}
-	if _, err := modelListURL("http://127.0.0.1:8080", provider.ProtocolOpenAI); err != nil {
+	if _, err := modelListURL("http://127.0.0.1:8080", provider.ProtocolOpenAI, ""); err != nil {
 		t.Fatalf("expected HTTP URL format to be accepted before network filtering: %v", err)
+	}
+	custom, err := modelListURL("https://models.example.com/v1", provider.ProtocolOpenAI, "/api/catalog")
+	if err != nil || custom != "https://models.example.com/api/catalog" {
+		t.Fatalf("custom model list URL=%q err=%v", custom, err)
 	}
 }
 

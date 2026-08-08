@@ -106,7 +106,9 @@ OIDC 用户首次登录时可按 `NOVRO_OIDC_AUTO_REGISTER` 自动创建普通�
 ## 5. 提供商和模型路由
 
 `/admin/providers` 使用“提供商配置”和“关联模型路由配置”两个 Tab。提供商新增和编辑均
-不超过 6 个输入控件，因此使用弹窗维护 HTTP/HTTPS 基础地址、协议和加密 API Key。自建或
+使用弹窗维护 HTTP/HTTPS 基础地址、协议、模型获取路径和加密 API Key。模型获取路径留空时，
+OpenAI 兼容提供商使用“基础地址 + `/models`”，Anthropic 提供商使用 `/v1/models`；第三方平台
+可以填写以 `/` 开头的站点绝对路径（例如 `/api/models`）覆盖默认规则。自建或
 第三方 OpenAI 兼容网关可以填写公网 HTTP 地址和端口；生产环境优先使用 HTTPS，因为 HTTP
 会以明文传输 API Key。新增成功后
 立即尝试同步一次上游模型；同步结果会补充模型目录并进入多选关联，若上游不支持模型列表，

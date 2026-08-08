@@ -315,6 +315,7 @@ var (
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "protocol", Type: field.TypeEnum, Enums: []string{"openai", "anthropic"}},
 		{Name: "base_url", Type: field.TypeString, Size: 512},
+		{Name: "model_list_path", Type: field.TypeString, Size: 512, Default: ""},
 		{Name: "encrypted_api_key", Type: field.TypeString, Size: 2048},
 		{Name: "api_key_hint", Type: field.TypeString, Size: 8},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
@@ -331,12 +332,12 @@ var (
 			{
 				Name:    "provider_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[7], ProvidersColumns[8]},
+				Columns: []*schema.Column{ProvidersColumns[8], ProvidersColumns[9]},
 			},
 			{
 				Name:    "provider_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[10]},
+				Columns: []*schema.Column{ProvidersColumns[11]},
 			},
 		},
 	}

@@ -24,37 +24,41 @@ var (
 )
 
 type Record struct {
-	ID          uuid.UUID `json:"id"`
-	Code        string    `json:"code"`
-	DisplayName string    `json:"display_name"`
-	Protocol    Protocol  `json:"protocol"`
-	BaseURL     string    `json:"base_url"`
-	APIKeyHint  string    `json:"api_key_hint"`
-	HasAPIKey   bool      `json:"has_api_key"`
-	Status      Status    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	Code          string    `json:"code"`
+	DisplayName   string    `json:"display_name"`
+	Protocol      Protocol  `json:"protocol"`
+	BaseURL       string    `json:"base_url"`
+	ModelListPath string    `json:"model_list_path"`
+	APIKeyHint    string    `json:"api_key_hint"`
+	HasAPIKey     bool      `json:"has_api_key"`
+	Status        Status    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Code        string   `json:"code"`
-	DisplayName string   `json:"display_name"`
-	Protocol    Protocol `json:"protocol"`
-	BaseURL     string   `json:"base_url"`
-	APIKey      string   `json:"api_key"`
+	Code          string   `json:"code"`
+	DisplayName   string   `json:"display_name"`
+	Protocol      Protocol `json:"protocol"`
+	BaseURL       string   `json:"base_url"`
+	ModelListPath string   `json:"model_list_path"`
+	APIKey        string   `json:"api_key"`
 }
 
 type UpdateInput struct {
-	DisplayName *string   `json:"display_name"`
-	Protocol    *Protocol `json:"protocol"`
-	BaseURL     *string   `json:"base_url"`
-	APIKey      *string   `json:"api_key"`
+	DisplayName   *string   `json:"display_name"`
+	Protocol      *Protocol `json:"protocol"`
+	BaseURL       *string   `json:"base_url"`
+	ModelListPath *string   `json:"model_list_path"`
+	APIKey        *string   `json:"api_key"`
 }
 
 type UpdateParams struct {
 	DisplayName     *string
 	Protocol        *Protocol
 	BaseURL         *string
+	ModelListPath   *string
 	EncryptedAPIKey *string
 	APIKeyHint      *string
 }

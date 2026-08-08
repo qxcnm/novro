@@ -46,6 +46,20 @@ func (_c *ProviderCreate) SetBaseURL(v string) *ProviderCreate {
 	return _c
 }
 
+// SetModelListPath sets the "model_list_path" field.
+func (_c *ProviderCreate) SetModelListPath(v string) *ProviderCreate {
+	_c.mutation.SetModelListPath(v)
+	return _c
+}
+
+// SetNillableModelListPath sets the "model_list_path" field if the given value is not nil.
+func (_c *ProviderCreate) SetNillableModelListPath(v *string) *ProviderCreate {
+	if v != nil {
+		_c.SetModelListPath(*v)
+	}
+	return _c
+}
+
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
 func (_c *ProviderCreate) SetEncryptedAPIKey(v string) *ProviderCreate {
 	_c.mutation.SetEncryptedAPIKey(v)
@@ -178,6 +192,10 @@ func (_c *ProviderCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ProviderCreate) defaults() {
+	if _, ok := _c.mutation.ModelListPath(); !ok {
+		v := provider.DefaultModelListPath
+		_c.mutation.SetModelListPath(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := provider.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -228,6 +246,14 @@ func (_c *ProviderCreate) check() error {
 	if v, ok := _c.mutation.BaseURL(); ok {
 		if err := provider.BaseURLValidator(v); err != nil {
 			return &ValidationError{Name: "base_url", err: fmt.Errorf(`ent: validator failed for field "Provider.base_url": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ModelListPath(); !ok {
+		return &ValidationError{Name: "model_list_path", err: errors.New(`ent: missing required field "Provider.model_list_path"`)}
+	}
+	if v, ok := _c.mutation.ModelListPath(); ok {
+		if err := provider.ModelListPathValidator(v); err != nil {
+			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.EncryptedAPIKey(); !ok {
@@ -310,6 +336,10 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)
 		_node.BaseURL = value
+	}
+	if value, ok := _c.mutation.ModelListPath(); ok {
+		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
+		_node.ModelListPath = value
 	}
 	if value, ok := _c.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)

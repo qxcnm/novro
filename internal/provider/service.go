@@ -25,6 +25,7 @@ type CreateParams struct {
 	DisplayName     string
 	Protocol        Protocol
 	BaseURL         string
+	ModelListPath   string
 	EncryptedAPIKey string
 	APIKeyHint      string
 }
@@ -42,8 +43,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	code := strings.ToLower(strings.TrimSpace(input.Code))
 	displayName := strings.TrimSpace(input.DisplayName)
 	baseURL, ok := normalizeBaseURL(input.BaseURL)
+	modelListPath, pathOK := normalizeModelListPath(input.ModelListPath)
 	apiKey := strings.TrimSpace(input.APIKey)
-	if !providerCodePattern.MatchString(code) || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || apiKey == "" || len(apiKey) > 1024 {
+	if !providerCodePattern.MatchString(code) || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 {
 		return Record{}, ErrInvalidInput
 	}
 	encrypted, err := s.cipher.Encrypt(apiKey)
@@ -51,7 +53,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 		return Record{}, err
 	}
 	return s.store.Create(ctx, CreateParams{
-		Code: code, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL,
+		Code: code, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath,
 		EncryptedAPIKey: encrypted, APIKeyHint: secretHint(apiKey),
 	})
 }
@@ -65,7 +67,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.APIKey == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.APIKey == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	params := UpdateParams{Protocol: input.Protocol}
@@ -85,6 +87,13 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 			return Record{}, ErrInvalidInput
 		}
 		params.BaseURL = &value
+	}
+	if input.ModelListPath != nil {
+		value, ok := normalizeModelListPath(*input.ModelListPath)
+		if !ok {
+			return Record{}, ErrInvalidInput
+		}
+		params.ModelListPath = &value
 	}
 	if input.APIKey != nil {
 		value := strings.TrimSpace(*input.APIKey)
@@ -127,6 +136,17 @@ func normalizeBaseURL(value string) (string, bool) {
 		return "", false
 	}
 	return parsed.String(), true
+}
+
+func normalizeModelListPath(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", true
+	}
+	if !strings.HasPrefix(value, "/") || strings.ContainsAny(value, "?#") || len(value) > 512 {
+		return "", false
+	}
+	return "/" + strings.Trim(value, "/"), true
 }
 
 func secretHint(value string) string {

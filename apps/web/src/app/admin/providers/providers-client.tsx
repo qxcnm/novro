@@ -27,6 +27,7 @@ type ProviderRecord = {
   display_name: string;
   protocol: Protocol;
   base_url: string;
+  model_list_path: string;
   api_key_hint: string;
   has_api_key: boolean;
   status: "active" | "disabled";
@@ -49,14 +50,15 @@ type RouteRecord = {
 };
 
 type ErrorResponse = { error?: { message?: string } };
-type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; api_key: string };
-type EditForm = { display_name: string; protocol: Protocol; base_url: string; api_key: string };
+type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string };
+type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string };
 
 const INITIAL_CREATE: CreateForm = {
   code: "",
   display_name: "",
   protocol: "openai",
   base_url: "https://api.openai.com/v1",
+  model_list_path: "",
   api_key: "",
 };
 
@@ -97,7 +99,7 @@ export default function ProvidersClient() {
   const [bulkSyncOpen, setBulkSyncOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(INITIAL_CREATE);
-  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", api_key: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", api_key: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerProvider, setPickerProvider] = useState<ProviderRecord | null>(null);
   const [pickerModels, setPickerModels] = useState<PickerModel[]>([]);
@@ -141,7 +143,7 @@ export default function ProvidersClient() {
 
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
-    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, api_key: "" });
+    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, api_key: "" });
     setFormError("");
   }
 
@@ -211,10 +213,11 @@ export default function ProvidersClient() {
     setBusy(true);
     setMessage("");
     setFormError("");
-    const payload: { display_name: string; protocol: Protocol; base_url: string; api_key?: string } = {
+    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key?: string } = {
       display_name: editForm.display_name,
       protocol: editForm.protocol,
       base_url: editForm.base_url,
+      model_list_path: editForm.model_list_path,
     };
     if (editForm.api_key.trim()) payload.api_key = editForm.api_key;
     const response = await fetch(`/api/admin/providers/${editingProvider.id}`, {
@@ -415,6 +418,7 @@ export default function ProvidersClient() {
             </div>
             <div className="space-y-2"><Label htmlFor="provider-protocol">协议</Label><Select onValueChange={(protocol: Protocol) => setCreateForm({ ...createForm, protocol, base_url: defaultBaseURL(protocol) })} value={createForm.protocol}><SelectTrigger className="w-full" id="provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="provider-base-url">基础地址</Label><Input id="provider-base-url" onChange={(event) => setCreateForm({ ...createForm, base_url: event.target.value })} placeholder="https://api.example.com/v1" required type="url" value={createForm.base_url} /></div>
+            <div className="space-y-2"><Label htmlFor="provider-model-list-path">模型获取路径</Label><Input id="provider-model-list-path" onChange={(event) => setCreateForm({ ...createForm, model_list_path: event.target.value })} placeholder="留空默认使用 /models，例如 /api/models" value={createForm.model_list_path} /><p className="text-xs text-muted-foreground">填写站点路径，以 / 开头；留空时 OpenAI 使用基础地址 + /models，Anthropic 使用 /v1/models。</p></div>
             <div className="space-y-2"><Label htmlFor="provider-api-key">API Key</Label><Input autoComplete="new-password" id="provider-api-key" maxLength={1024} onChange={(event) => setCreateForm({ ...createForm, api_key: event.target.value })} required type="password" value={createForm.api_key} /></div>
             {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
           </form>
@@ -430,6 +434,7 @@ export default function ProvidersClient() {
             <div className="space-y-2"><Label htmlFor="edit-provider-name">显示名称</Label><Input id="edit-provider-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} required value={editForm.display_name} /></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-protocol">协议</Label><Select onValueChange={(protocol: Protocol) => setEditForm({ ...editForm, protocol })} value={editForm.protocol}><SelectTrigger className="w-full" id="edit-provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-base-url">基础地址</Label><Input id="edit-provider-base-url" onChange={(event) => setEditForm({ ...editForm, base_url: event.target.value })} required type="url" value={editForm.base_url} /></div>
+            <div className="space-y-2"><Label htmlFor="edit-provider-model-list-path">模型获取路径</Label><Input id="edit-provider-model-list-path" onChange={(event) => setEditForm({ ...editForm, model_list_path: event.target.value })} placeholder="留空使用默认路径" value={editForm.model_list_path} /><p className="text-xs text-muted-foreground">例如 /api/models。保存后同步模型时使用该路径。</p></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-api-key">替换 API Key</Label><Input autoComplete="new-password" id="edit-provider-api-key" maxLength={1024} onChange={(event) => setEditForm({ ...editForm, api_key: event.target.value })} placeholder="留空则保留当前凭据" type="password" value={editForm.api_key} /><p className="text-xs text-muted-foreground"><KeyRound aria-hidden="true" className="mr-1 inline size-3" />保存新 Key 后，旧凭据会立即被替换。</p></div>
             {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
           </form> : null}

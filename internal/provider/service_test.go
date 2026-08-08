@@ -49,12 +49,12 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
 		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocol: ProtocolOpenAI,
-		BaseURL: "https://api.deepseek.com/", APIKey: "provider-secret-1234",
+		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", APIKey: "provider-secret-1234",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.APIKeyHint != "1234" {
+	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.APIKeyHint != "1234" {
 		t.Fatalf("unexpected provider: record=%+v params=%+v", record, store.createParams)
 	}
 	if store.createParams.EncryptedAPIKey == "provider-secret-1234" || strings.Contains(store.createParams.EncryptedAPIKey, "provider-secret") {
@@ -68,6 +68,7 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 		{Code: "x", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret"},
 		{Code: "valid-code", DisplayName: "X", Protocol: Protocol("other"), BaseURL: "https://api.example.com", APIKey: "secret"},
 		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "api.example.com", APIKey: "secret"},
+		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", ModelListPath: "models", APIKey: "secret"},
 	}
 	for _, input := range inputs {
 		if _, err := service.Create(context.Background(), input); !errors.Is(err, ErrInvalidInput) {

@@ -25,6 +25,7 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		SetDisplayName(params.DisplayName).
 		SetProtocol(entprovider.Protocol(params.Protocol)).
 		SetBaseURL(params.BaseURL).
+		SetModelListPath(params.ModelListPath).
 		SetEncryptedAPIKey(params.EncryptedAPIKey).
 		SetAPIKeyHint(params.APIKeyHint).
 		SetStatus(entprovider.StatusActive).
@@ -71,6 +72,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	}
 	if params.BaseURL != nil {
 		update.SetBaseURL(*params.BaseURL)
+	}
+	if params.ModelListPath != nil {
+		update.SetModelListPath(*params.ModelListPath)
 	}
 	if params.EncryptedAPIKey != nil {
 		update.SetEncryptedAPIKey(*params.EncryptedAPIKey)
@@ -129,7 +133,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 func fromEnt(entity *ent.Provider) Record {
 	return Record{
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
-		Protocol: Protocol(entity.Protocol), BaseURL: entity.BaseURL,
+		Protocol: Protocol(entity.Protocol), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
 		APIKeyHint: entity.APIKeyHint, HasAPIKey: entity.EncryptedAPIKey != "",
 		Status: Status(entity.Status), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt,
 	}
