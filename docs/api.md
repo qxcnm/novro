@@ -51,11 +51,11 @@
 | `PATCH` | `/api/admin/providers/{id}` | 管理员 | 修改提供商配置或替换凭据 |
 | `PATCH` | `/api/admin/providers/{id}/status` | 管理员 | 启用或停用提供商 |
 | `DELETE` | `/api/admin/providers/{id}` | 管理员 | 软删除提供商及其模型路由 |
-| `POST` | `/api/admin/providers/{id}/models/sync` | 管理员 | 从提供商同步模型并补充模型目录 |
+| `POST` | `/api/admin/providers/{id}/models/sync` | 管理员 | 从提供商发现模型 ID；全局目录已有 ID 复用原价格，新 ID 建立待定价记录 |
 | `POST` | `/api/admin/providers/{id}/models` | 管理员 | 从模型目录批量创建关联路由 |
 | `GET` | `/api/admin/upstream-models` | 管理员 | 搜索和筛选模型目录 |
-| `POST` | `/api/admin/upstream-models` | 管理员 | 创建目录模型和完整价格维度 |
-| `PATCH` | `/api/admin/upstream-models/{id}` | 管理员 | 修改目录模型和价格维度 |
+| `POST` | `/api/admin/upstream-models` | 管理员 | 创建全局唯一模型目录记录和完整价格维度 |
+| `PATCH` | `/api/admin/upstream-models/{id}` | 管理员 | 修改全局模型目录和价格维度 |
 | `PATCH` | `/api/admin/upstream-models/{id}/status` | 管理员 | 启用或停用目录模型 |
 | `DELETE` | `/api/admin/upstream-models/{id}` | 管理员 | 软删除目录模型及其模型路由 |
 | `GET` | `/api/admin/model-routes` | 管理员 | 搜索和筛选模型路由 |
@@ -96,8 +96,11 @@ OIDC 使用 Issuer Discovery、Authorization Code、PKCE、state 和 nonce。外
 `/v1` 模型兼容 API 已实现基础非流式和 SSE 流式转发。上游请求会使用管理员配置的
 提供商凭据，浏览器和 API 客户端永远不会收到上游密钥。面向 API 使用者的完整示例由
 前端 `/docs` 提供；公开模型目录的官方牌价不是当前 Novro 结算价，实际结算单价以管理员
-模型目录配置为准。上游返回重定向时网关不会自动跟随到新地址，而是将当前渠道视为失败并
-尝试下一条候选路由，避免把提供商凭据带到未预期的主机；所有渠道都失败后才释放预占余额。
+模型目录配置为准。上游请求固定使用 HTTP/1.1，以兼容会宣传 HTTP/2 但在 TLS 或请求阶段
+提前断开的 OpenAI 兼容网关。上游返回重定向时网关不会自动跟随到新地址，而是将当前渠道
+视为失败并尝试下一条候选路由，避免把提供商凭据带到未预期的主机；所有渠道都失败后才释放预占余额。
+上游连接、TLS 握手和等待响应头分别有 15 秒、30 秒和 180 秒上限；收到响应头后的流式响应继续由下游请求控制，
+上游黑洞会在有限重试后返回可识别的网关错误，而不会无限挂起客户端。
 
 ## 1. 基础信息
 
@@ -124,7 +127,9 @@ Key 或临时 Key。标准入口使用 `Authorization: Bearer`；Anthropic 客�
 GET /v1/models
 ```
 
-返回当前网关可以使用的启用模型。模型名称是管理员配置的 `public_name`；同名的多条启用
+兼容别名：`GET /v1/model`。两个路径返回相同结果。
+
+返回当前网关可以使用的启用模型。模型名称是管理员配置的 `public_name`；自动关联时它等于全局目录的精确 `upstream_name`，并按目录的 `provider_name` 返回厂商标签。同步只是发现上游模型，只有管理员在目录定价并选择关联后才会出现在这里。同步聚合渠道时不会把渠道代码写入公开模型名。历史生成的提供商前缀和数字后缀由迁移归一化，管理员手工别名保持不变。同名的多条启用
 路由只返回一个模型项，响应不会暴露上游 API Key 或加密配置。
 
 同一 `public_name`、同一 API 协议下的启用路由组成渠道池。网关进程为每个模型和协议维护
@@ -182,7 +187,7 @@ POST /v1/messages
 ## 6. 余额规则
 
 - 请求进入网关后先验证用户、Key、模型、提供商和账户状态。
-- 按上游模型配置的普通输入、缓存命中、缓存创建（5 分钟/1 小时）、输出和按次价格，
+- 按 Novro 全局模型目录配置的普通输入、缓存命中、缓存创建（5 分钟/1 小时）、输出和按次价格，
   以人民币微元（1 元 = 1,000,000 微元）结算；用户计费分组倍率作用于汇总费用。
 - 网关根据请求体大小、最大输出 token 和候选渠道中的最高可能费用做一次保守余额预占；
   成功后按实际命中渠道的上游 usage 和单价结算并释放差额。用户可用模型页按同协议渠道池
@@ -230,7 +235,9 @@ Anthropic 的 `cache_read_input_tokens`、`cache_creation_input_tokens` 和 5 �
 
 错误响应统一返回 JSON，并保留 OpenAI 风格的 `error` 对象。错误中不得泄露供应商密钥、
 内部 URL 或数据库信息。错误响应包含顶层 `request_id`。单个渠道的错误不会直接暴露；所有
-兼容渠道均失败时统一返回 `502 upstream_unavailable`。
+兼容渠道均失败时返回 `502 upstream_unavailable`，同时附带最后一次失败的安全错误码和原因，
+便于区分上游 HTTP 错误、连接超时、客户端取消或上游地址自指等情况。上游地址不能配置为
+当前网关对外提供服务的域名，否则请求会递归回到网关自身。
 
 ## 8. Kimi / Moonshot 配置约定
 

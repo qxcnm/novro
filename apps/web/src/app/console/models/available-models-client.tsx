@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clipboard, RefreshCw, Search } from "lucide-react";
+import { Check, Clipboard, Factory, RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -63,6 +63,7 @@ export default function AvailableModelsClient() {
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
   const [protocol, setProtocol] = useState("all");
+  const [provider, setProvider] = useState("all");
   const [copiedID, setCopiedID] = useState("");
 
   const load = useCallback(async () => {
@@ -86,14 +87,21 @@ export default function AvailableModelsClient() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const providers = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const model of models) counts.set(model.provider_name, (counts.get(model.provider_name) ?? 0) + 1);
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort((first, second) => first.name.localeCompare(second.name, "zh-CN"));
+  }, [models]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return models.filter((model) => {
       const matchesProtocol = protocol === "all" || model.protocol === protocol;
+      const matchesProvider = provider === "all" || model.provider_name === provider;
       const matchesQuery = !needle || `${model.id} ${model.display_name} ${model.provider_name}`.toLowerCase().includes(needle);
-      return matchesProtocol && matchesQuery;
+      return matchesProtocol && matchesProvider && matchesQuery;
     });
-  }, [models, protocol, query]);
+  }, [models, protocol, provider, query]);
 
   async function copyModelID(id: string) {
     try {
@@ -134,12 +142,22 @@ export default function AvailableModelsClient() {
       {message ? <p className="border-y bg-background px-4 py-3 text-sm" role="status">{message}</p> : null}
 
       {loading ? <div className="grid gap-4 lg:grid-cols-2" role="status">{[0, 1].map((item) => <div className="h-72 animate-pulse rounded-lg border bg-muted/40" key={item} />)}</div> : null}
-      {!loading && filtered.length === 0 ? <div className="border-y bg-background py-20 text-center"><p className="font-medium">{models.length === 0 ? "暂时没有可用模型" : "没有匹配的模型"}</p><p className="mt-1 text-sm text-muted-foreground">{models.length === 0 ? "模型路由启用后会显示在这里。" : "调整搜索内容或协议筛选后再试。"}</p></div> : null}
-      {!loading && filtered.length > 0 ? <div className="grid gap-4 lg:grid-cols-2">{filtered.map((model) => (
+      {!loading && models.length > 0 ? <div className="grid items-start gap-5 lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <aside className="border-y py-3 lg:sticky lg:top-4" aria-label="按模型厂商筛选">
+          <div className="flex items-center gap-2 px-2 pb-3 text-sm font-medium"><Factory className="size-4" aria-hidden="true" />模型厂商</div>
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            <Button className="shrink-0 justify-between lg:w-full" onClick={() => setProvider("all")} size="sm" variant={provider === "all" ? "secondary" : "ghost"}><span>全部厂商</span><Badge variant="outline">{models.length}</Badge></Button>
+            {providers.map((item) => <Button className="shrink-0 justify-between lg:w-full" key={item.name} onClick={() => setProvider(item.name)} size="sm" variant={provider === item.name ? "secondary" : "ghost"}><span className="truncate">{item.name}</span><Badge variant="outline">{item.count}</Badge></Button>)}
+          </div>
+        </aside>
+        <div className="min-w-0">
+          <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-medium">{filtered.length} 个模型</p>{provider !== "all" ? <Button onClick={() => setProvider("all")} size="sm" variant="ghost">清除厂商筛选</Button> : null}</div>
+          {filtered.length === 0 ? <div className="border-y bg-background py-20 text-center"><p className="font-medium">没有匹配的模型</p><p className="mt-1 text-sm text-muted-foreground">调整搜索内容、厂商或协议筛选后再试。</p></div> : null}
+          {filtered.length > 0 ? <div className="grid gap-4 xl:grid-cols-2">{filtered.map((model) => (
         <Card className="rounded-lg" key={`${model.id}-${model.protocol}`}>
           <CardHeader className="gap-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><CardTitle className="truncate text-base">{model.display_name}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{model.channel_count > 1 ? `${model.channel_count} 个渠道负载` : model.provider_name}</p></div>
+              <div className="min-w-0"><CardTitle className="truncate text-base">{model.display_name}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{model.provider_name} · {model.channel_count} 个渠道</p></div>
               <Badge variant="outline">{model.protocol === "anthropic" ? "Anthropic" : "OpenAI"}</Badge>
             </div>
             <div className="flex min-w-0 items-center gap-2 border-y py-2">
@@ -153,7 +171,10 @@ export default function AvailableModelsClient() {
             </dl>
           </CardContent>
         </Card>
-      ))}</div> : null}
+          ))}</div> : null}
+        </div>
+      </div> : null}
+      {!loading && models.length === 0 ? <div className="border-y bg-background py-20 text-center"><p className="font-medium">暂时没有可用模型</p><p className="mt-1 text-sm text-muted-foreground">模型路由启用后会显示在这里。</p></div> : null}
     </div>
   );
 }

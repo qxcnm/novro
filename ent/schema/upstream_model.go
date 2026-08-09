@@ -43,7 +43,7 @@ func (UpstreamModel) Edges() []ent.Edge {
 
 func (UpstreamModel) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("provider_name", "upstream_name").Unique(),
+		index.Fields("upstream_name").Unique(),
 		index.Fields("provider_name", "status"),
 		index.Fields("status", "created_at"),
 		index.Fields("deleted_at"),

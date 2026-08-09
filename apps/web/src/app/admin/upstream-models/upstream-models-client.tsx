@@ -309,7 +309,7 @@ export default function UpstreamModelsClient() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-lg flex-1">
             <Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input aria-label="搜索模型目录" className="pl-8" onChange={(event) => { setQuery(event.target.value); selection.clearSelection(); }} placeholder={activeProvider === ALL_PROVIDERS ? "搜索模型名称、模型 ID 或提供商" : `在 ${activeProvider} 中搜索模型`} value={query} />
+            <Input aria-label="搜索模型目录" className="pl-8" onChange={(event) => { setQuery(event.target.value); selection.clearSelection(); }} placeholder={activeProvider === ALL_PROVIDERS ? "搜索模型名称或模型 ID" : `在 ${activeProvider} 标签中搜索模型`} value={query} />
           </div>
           <div className="flex gap-2">
             <Button aria-label="刷新模型目录" disabled={loading} onClick={() => void load()} size="icon" title="刷新模型目录" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
@@ -331,7 +331,7 @@ export default function UpstreamModelsClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有目录模型" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>提供商 / 模型</TableHead><TableHead>普通输入</TableHead><TableHead>缓存命中</TableHead><TableHead>缓存创建</TableHead><TableHead>输出</TableHead><TableHead>请求费</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有目录模型" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>模型与统一价格</TableHead><TableHead>普通输入</TableHead><TableHead>缓存命中</TableHead><TableHead>缓存创建</TableHead><TableHead>输出</TableHead><TableHead>请求费</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={9}>加载中...</TableCell></TableRow> : null}
                   {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>{query.trim() ? "没有匹配的目录模型" : "该提供商暂无目录模型"}</TableCell></TableRow> : null}
@@ -360,14 +360,15 @@ export default function UpstreamModelsClient() {
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl" side="right">
           <SheetHeader className="border-b px-6 py-5">
             <SheetTitle>{editing ? "编辑目录模型" : "新增目录模型"}</SheetTitle>
-            <SheetDescription>基础价格使用人民币计价，模型提供商为目录文本，不绑定具体提供商配置。</SheetDescription>
+            <SheetDescription>模型 ID 全局唯一，所有提供商关联同一份目录价格；厂商标签仅用于分类，不绑定具体提供商配置。</SheetDescription>
           </SheetHeader>
           <form className="space-y-5 px-6" id="catalog-model-form" onSubmit={submit}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2"><Label htmlFor="catalog-provider-name">提供商</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required value={form.providerName} /></div>
+              <div className="space-y-2"><Label htmlFor="catalog-provider-name">厂商标签</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required value={form.providerName} /></div>
               <div className="space-y-2"><Label htmlFor="catalog-upstream-name">模型 ID</Label><Input id="catalog-upstream-name" maxLength={256} onChange={(event) => setForm({ ...form, upstreamName: event.target.value })} placeholder="例如 deepseek-chat" required value={form.upstreamName} /></div>
             </div>
             <div className="space-y-2"><Label htmlFor="catalog-display-name">显示名称</Label><Input id="catalog-display-name" maxLength={128} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.displayName} /></div>
+            <p className="border-y py-3 text-sm text-muted-foreground">上游同步只发现模型 ID，不会导入上游价格。下面的价格是 Novro 的全局定价，所有提供商关联同一模型 ID 时共用这一份价格。</p>
             <PriceFields form={form} setForm={setForm} />
           </form>
           <SheetFooter className="border-t px-6"><Button disabled={busy} form="catalog-model-form" type="submit"><Boxes />{busy ? "正在保存..." : "保存目录模型"}</Button></SheetFooter>

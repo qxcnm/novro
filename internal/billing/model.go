@@ -118,6 +118,7 @@ type FailureInput struct {
 	StatusCode        int
 	ErrorCode         string
 	ErrorMessage      string
+	MultiplierBPS     int64
 	ModelName         string
 	UpstreamModelName string
 	BillingGroupCode  string

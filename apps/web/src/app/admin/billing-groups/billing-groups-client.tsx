@@ -168,7 +168,7 @@ export default function BillingGroupsClient() {
   const fields = <>
     <div className="space-y-2"><Label htmlFor="group-code">分组标识</Label><Input disabled={editing !== null} id="group-code" maxLength={64} onChange={(event) => setForm({ ...form, code: event.target.value })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 vip" required value={form.code} /></div>
     <div className="space-y-2"><Label htmlFor="group-name">显示名称</Label><Input id="group-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} required value={form.display_name} /></div>
-    <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">1.0000 表示按上游基础价格计费，1.2000 表示加价 20%。</p></div>
+    <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>
   </>;
 
   return (

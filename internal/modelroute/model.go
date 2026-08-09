@@ -17,9 +17,10 @@ const (
 )
 
 var (
-	ErrInvalidInput = errors.New("invalid model route input")
-	ErrNotFound     = errors.New("model route not found")
-	ErrNameTaken    = errors.New("model route already exists")
+	ErrInvalidInput    = errors.New("invalid model route input")
+	ErrNotFound        = errors.New("model route not found")
+	ErrNameTaken       = errors.New("model route already exists for provider and model")
+	ErrPricingRequired = errors.New("upstream model pricing is required")
 )
 
 type ProviderSummary struct {

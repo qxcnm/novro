@@ -60,6 +60,103 @@ func TestReferralRewardSettingMigrationSeedsDatabaseDefault(t *testing.T) {
 	}
 }
 
+func TestUnifiedModelCatalogMigrationContainsReferenceSafeConsolidation(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0023_unified_model_catalog.sql")
+	if err != nil {
+		t.Fatalf("read unified model catalog migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"PARTITION BY LOWER(upstream_name)",
+		"pricing_configured DESC",
+		"UPDATE api_usages AS usage_record",
+		"SET usage_record.upstream_model_id = model_map.canonical_id",
+		"ADD UNIQUE KEY upstream_models_upstream_name_key (upstream_name)",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("unified model catalog migration is missing %q", expected)
+		}
+	}
+}
+
+func TestGeneratedRouteNormalizationPreservesAliasesAndRepointsUsage(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0024_normalize_generated_model_routes.sql")
+	if err != nil {
+		t.Fatalf("read generated route normalization migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"REGEXP '^[0-9]+$'",
+		"ELSE route.public_name",
+		"SET usage_record.model_route_id = route_map.canonical_route_id",
+		"SET route.public_name = targets.target_public_name",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("generated route normalization migration is missing %q", expected)
+		}
+	}
+}
+
+func TestGeneratedRouteRepairCoversExactPrefixesAndLateDuplicates(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0025_repair_generated_model_route_names.sql")
+	if err != nil {
+		t.Fatalf("read generated route repair migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"LOWER(route.public_name) = LOWER(CONCAT(configured_provider.code, '-', catalog_model.upstream_name))",
+		"REGEXP '^[0-9]+$'",
+		"ELSE route.public_name",
+		"(route.deleted_at IS NULL) DESC",
+		"SET usage_record.model_route_id = route_map.canonical_route_id",
+		"SET route.public_name = targets.target_public_name",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("generated route repair migration is missing %q", expected)
+		}
+	}
+}
+
+func TestSeededModelCatalogRemovalMigrationRemovesBuiltInsOnly(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0026_remove_seeded_model_catalog.sql")
+	if err != nil {
+		t.Fatalf("read seeded model removal migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"UPDATE model_routes",
+		"UPDATE upstream_models",
+		"'10000000-0000-0000-0000-000000000001'",
+		"'30000000-0000-0000-0000-000000000004'",
+		"COALESCE(deleted_at, UTC_TIMESTAMP(6))",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("seeded model removal migration is missing %q", expected)
+		}
+	}
+}
+
+func TestLegacySeededModelCatalogRemovalMatchesDynamicIDsBySeedKey(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0027_remove_legacy_seeded_model_aliases.sql")
+	if err != nil {
+		t.Fatalf("read legacy seeded model removal migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"CREATE TEMPORARY TABLE novro_legacy_seed_catalog_keys",
+		"JOIN upstream_models AS catalog_model ON catalog_model.id = route.upstream_model_id",
+		"seed_key.provider_name = catalog_model.provider_name",
+		"seed_key.upstream_name = catalog_model.upstream_name",
+		"('Kimi', 'kimi-k3')",
+		"COALESCE(route.deleted_at, UTC_TIMESTAMP(6))",
+		"COALESCE(catalog_model.deleted_at, UTC_TIMESTAMP(6))",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("legacy seeded model removal migration is missing %q", expected)
+		}
+	}
+}
+
 func TestValidateAppliedMigrationsRejectsDriftAndMissingFiles(t *testing.T) {
 	migrations := []migrationFile{{Version: "0001_first", Checksum: strings.Repeat("a", 64)}}
 	if _, err := validateAppliedMigrations(migrations, map[string]string{"0001_first": strings.Repeat("b", 64)}); err == nil || !strings.Contains(err.Error(), "checksum") {

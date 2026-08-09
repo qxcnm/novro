@@ -72,7 +72,7 @@ var (
 		{Name: "reserved_micros", Type: field.TypeInt64, Default: 0},
 		{Name: "estimated", Type: field.TypeBool, Default: false},
 		{Name: "upstream_request_id", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "model_name", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "model_name", Type: field.TypeString, Size: 256, Default: ""},
 		{Name: "upstream_model_name", Type: field.TypeString, Size: 256, Default: ""},
 		{Name: "billing_group_code", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "billing_group_name", Type: field.TypeString, Size: 128, Default: ""},
@@ -230,7 +230,7 @@ var (
 	// ModelRoutesColumns holds the columns for the "model_routes" table.
 	ModelRoutesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
-		{Name: "public_name", Type: field.TypeString, Size: 128},
+		{Name: "public_name", Type: field.TypeString, Size: 256},
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "upstream_name", Type: field.TypeString, Size: 256},
 		{Name: "input_price_micros", Type: field.TypeInt64},
@@ -424,9 +424,9 @@ var (
 		PrimaryKey: []*schema.Column{UpstreamModelsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "upstreammodel_provider_name_upstream_name",
+				Name:    "upstreammodel_upstream_name",
 				Unique:  true,
-				Columns: []*schema.Column{UpstreamModelsColumns[1], UpstreamModelsColumns[2]},
+				Columns: []*schema.Column{UpstreamModelsColumns[2]},
 			},
 			{
 				Name:    "upstreammodel_provider_name_status",

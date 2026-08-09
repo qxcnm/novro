@@ -17,7 +17,7 @@ const (
 var (
 	ErrInvalidInput    = errors.New("invalid upstream model input")
 	ErrNotFound        = errors.New("upstream model not found")
-	ErrNameTaken       = errors.New("upstream model already exists for provider")
+	ErrNameTaken       = errors.New("upstream model ID already exists")
 	ErrPricingRequired = errors.New("upstream model pricing is required")
 )
 

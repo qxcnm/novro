@@ -45,7 +45,7 @@ func (APIUsage) Fields() []ent.Field {
 		field.Int64("reserved_micros").NonNegative().Default(0),
 		field.Bool("estimated").Default(false),
 		field.String("upstream_request_id").MaxLen(255).Default(""),
-		field.String("model_name").MaxLen(128).Default(""),
+		field.String("model_name").MaxLen(256).Default(""),
 		field.String("upstream_model_name").MaxLen(256).Default(""),
 		field.String("billing_group_code").MaxLen(64).Default(""),
 		field.String("billing_group_name").MaxLen(128).Default(""),

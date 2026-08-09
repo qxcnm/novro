@@ -8,9 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -26,6 +26,7 @@ const (
 	maxDiscoveredModels = 1000
 	maxLinkModels       = 200
 	maxDiscoveryBody    = 4 << 20
+	modelSyncTimeout    = 30 * time.Second
 )
 
 var (
@@ -33,8 +34,23 @@ var (
 	ErrProviderNotFound  = errors.New("provider not found")
 	ErrDiscoveryFailed   = errors.New("provider model discovery failed")
 	ErrModelsUnavailable = errors.New("provider did not return models")
-	invalidRouteName     = regexp.MustCompile(`[^A-Za-z0-9._:/-]+`)
 )
+
+// DiscoveryError is safe to return to an administrator. It never includes
+// request headers or the upstream response body.
+type DiscoveryError struct {
+	StatusCode int
+	Reason     string
+}
+
+func (e *DiscoveryError) Error() string {
+	if e.StatusCode > 0 {
+		return fmt.Sprintf("上游模型接口返回 HTTP %d：%s", e.StatusCode, e.Reason)
+	}
+	return e.Reason
+}
+
+func (e *DiscoveryError) Unwrap() error { return ErrDiscoveryFailed }
 
 type CatalogModel struct {
 	ID                uuid.UUID `json:"id"`
@@ -44,12 +60,14 @@ type CatalogModel struct {
 	PricingConfigured bool      `json:"pricing_configured"`
 	Status            string    `json:"status"`
 	Added             bool      `json:"added"`
+	Restored          bool      `json:"restored"`
 }
 
 type LinkResult struct {
-	Created  int `json:"created"`
-	Existing int `json:"existing"`
-	Disabled int `json:"disabled"`
+	Created   int `json:"created"`
+	Existing  int `json:"existing"`
+	Reenabled int `json:"reenabled"`
+	Disabled  int `json:"disabled"`
 }
 
 type Service struct {
@@ -69,7 +87,12 @@ func (s *Service) Sync(ctx context.Context, providerID uuid.UUID) ([]CatalogMode
 	if providerID == uuid.Nil {
 		return nil, ErrInvalidInput
 	}
-	configured, err := s.client.Provider.Query().Where(entprovider.IDEQ(providerID), entprovider.DeletedAtIsNil()).Only(ctx)
+	// Model discovery should fail in a bounded time. The shared upstream client
+	// allows long response-header waits for model generation, which is not
+	// appropriate for an administrator dialog waiting on a catalog refresh.
+	syncCtx, cancel := context.WithTimeout(ctx, modelSyncTimeout)
+	defer cancel()
+	configured, err := s.client.Provider.Query().Where(entprovider.IDEQ(providerID), entprovider.DeletedAtIsNil()).Only(syncCtx)
 	if ent.IsNotFound(err) {
 		return nil, ErrProviderNotFound
 	}
@@ -80,51 +103,116 @@ func (s *Service) Sync(ctx context.Context, providerID uuid.UUID) ([]CatalogMode
 	if err != nil {
 		return nil, fmt.Errorf("decrypt provider credential for model sync: %w", err)
 	}
-	discovered, err := s.discover(ctx, configured, apiKey)
+	discovered, err := s.discover(syncCtx, configured, apiKey)
 	if err != nil {
 		return nil, err
 	}
 	if len(discovered) == 0 {
 		return nil, ErrModelsUnavailable
 	}
+	discoveredNames := make(map[string]struct{}, len(discovered))
+	for _, model := range discovered {
+		discoveredNames[strings.ToLower(model.UpstreamName)] = struct{}{}
+	}
 
-	tx, err := s.client.Tx(ctx)
+	tx, err := s.client.Tx(syncCtx)
 	if err != nil {
 		return nil, fmt.Errorf("begin model catalog sync: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	result := make([]CatalogModel, 0, len(discovered))
 	for _, model := range discovered {
-		entity, queryErr := tx.UpstreamModel.Query().Where(
-			entupstreammodel.ProviderNameEQ(model.ProviderName),
-			entupstreammodel.UpstreamNameEQ(model.UpstreamName),
-		).Only(ctx)
+		entity, queryErr := findCatalogModel(syncCtx, tx, model)
 		added := false
-		if queryErr == nil && entity.DeletedAt != nil {
-			// Deletion is an explicit administrator decision. Discovery must not
-			// silently restore a catalog entry that has no recovery workflow.
-			continue
+		restored := false
+		if queryErr != nil {
+			return nil, fmt.Errorf("find model %s in catalog: %w", model.UpstreamName, queryErr)
 		}
-		if ent.IsNotFound(queryErr) {
+		if entity != nil && entity.DeletedAt != nil {
+			// A later authoritative discovery is the recovery workflow for a
+			// catalog entry removed by an earlier sync or administrator action.
+			// Keep the global ID and any reviewed price card, then make the
+			// currently advertised model visible to the administrator again.
+			pricingConfigured := entity.PricingConfigured
+			status := entupstreammodel.StatusDisabled
+			if pricingConfigured {
+				status = entupstreammodel.StatusActive
+			}
+			entity, queryErr = tx.UpstreamModel.UpdateOneID(entity.ID).
+				ClearDeletedAt().
+				SetProviderName(model.ProviderName).
+				SetDisplayName(model.DisplayName).
+				SetStatus(status).
+				Save(syncCtx)
+			restored = queryErr == nil
+		}
+		if entity == nil {
+			// Discovery only creates a candidate. The pricing tab is the sole
+			// source of billing rates and activation decisions.
 			entity, queryErr = tx.UpstreamModel.Create().
 				SetProviderName(model.ProviderName).
 				SetUpstreamName(model.UpstreamName).
 				SetDisplayName(model.DisplayName).
 				SetPricingConfigured(false).
 				SetStatus(entupstreammodel.StatusDisabled).
-				Save(ctx)
+				Save(syncCtx)
 			added = queryErr == nil
 		}
 		if queryErr != nil {
 			return nil, fmt.Errorf("sync model %s into catalog: %w", model.UpstreamName, queryErr)
 		}
-		result = append(result, catalogModel(entity, added))
+		result = append(result, catalogModel(entity, added, restored))
+	}
+	// A successful sync is authoritative for this provider's advertised model
+	// capability. Preserve catalog rows and historical usage, but stop routing
+	// models that disappeared upstream until an administrator explicitly links
+	// them again after a later sync.
+	routes, queryErr := tx.ModelRoute.Query().
+		Where(entmodelroute.ProviderIDEQ(providerID), entmodelroute.DeletedAtIsNil(), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.UpstreamModelIDNotNil()).
+		WithUpstreamModel().All(syncCtx)
+	if queryErr != nil {
+		return nil, fmt.Errorf("read provider routes after model sync: %w", queryErr)
+	}
+	for _, route := range routes {
+		modelEntity, edgeErr := route.Edges.UpstreamModelOrErr()
+		if edgeErr != nil || modelEntity == nil {
+			continue
+		}
+		if _, ok := discoveredNames[strings.ToLower(modelEntity.UpstreamName)]; ok {
+			continue
+		}
+		if _, updateErr := tx.ModelRoute.UpdateOneID(route.ID).SetStatus(entmodelroute.StatusDisabled).Save(syncCtx); updateErr != nil {
+			return nil, fmt.Errorf("disable stale provider route %s: %w", route.ID, updateErr)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit model catalog sync: %w", err)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].UpstreamName < result[j].UpstreamName })
 	return result, nil
+}
+
+// A model ID has one global catalog record and one shared price card. Provider
+// discovery only reuses that record; it never owns or overwrites its pricing.
+func findCatalogModel(ctx context.Context, tx *ent.Tx, model discoveredModel) (*ent.UpstreamModel, error) {
+	entities, err := tx.UpstreamModel.Query().Where(
+		entupstreammodel.UpstreamNameEqualFold(model.UpstreamName),
+	).Order(ent.Desc(entupstreammodel.FieldDeletedAt), ent.Asc(entupstreammodel.FieldCreatedAt)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(entities) > 0 {
+		// Migration 0023 removes historical duplicates. Prefer a visible record
+		// during a rolling deployment, while still honoring an explicit deletion
+		// when it is the only record left.
+		for _, entity := range entities {
+			if entity.DeletedAt == nil {
+				return entity, nil
+			}
+		}
+		return entities[0], nil
+	}
+	return nil, nil
 }
 
 func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (LinkResult, error) {
@@ -151,37 +239,60 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 	if len(models) != len(modelIDs) {
 		return LinkResult{}, ErrInvalidInput
 	}
-	existingRoutes, err := tx.ModelRoute.Query().Where(entmodelroute.ProviderIDEQ(providerID), entmodelroute.UpstreamModelIDIn(modelIDs...), entmodelroute.DeletedAtIsNil()).All(ctx)
+	existingRoutes, err := tx.ModelRoute.Query().Where(entmodelroute.ProviderIDEQ(providerID), entmodelroute.UpstreamModelIDIn(modelIDs...)).All(ctx)
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read existing provider model routes: %w", err)
 	}
-	existing := make(map[uuid.UUID]struct{}, len(existingRoutes))
+	existing := make(map[uuid.UUID]*ent.ModelRoute, len(existingRoutes))
 	for _, route := range existingRoutes {
 		if route.UpstreamModelID != nil {
-			existing[*route.UpstreamModelID] = struct{}{}
+			existing[*route.UpstreamModelID] = route
 		}
-	}
-	publicNames, err := tx.ModelRoute.Query().Select(entmodelroute.FieldPublicName).Strings(ctx)
-	if err != nil {
-		return LinkResult{}, fmt.Errorf("read model route names: %w", err)
-	}
-	usedNames := make(map[string]struct{}, len(publicNames))
-	for _, name := range publicNames {
-		usedNames[name] = struct{}{}
 	}
 
-	result := LinkResult{Existing: len(existingRoutes)}
+	result := LinkResult{}
 	for _, model := range models {
-		if _, ok := existing[model.ID]; ok {
+		if route, ok := existing[model.ID]; ok {
+			result.Existing++
+			status := entmodelroute.StatusDisabled
+			if model.Status == entupstreammodel.StatusActive && model.PricingConfigured {
+				status = entmodelroute.StatusActive
+			}
+			if route.DeletedAt != nil {
+				if _, updateErr := tx.ModelRoute.UpdateOneID(route.ID).
+					ClearDeletedAt().
+					SetDisplayName(model.DisplayName).
+					SetUpstreamName(model.UpstreamName).
+					SetInputPriceMicros(model.InputPriceMicros).
+					SetOutputPriceMicros(model.OutputPriceMicros).
+					SetStatus(status).
+					Save(ctx); updateErr != nil {
+					return LinkResult{}, fmt.Errorf("restore provider model route %s: %w", model.UpstreamName, updateErr)
+				}
+				result.Reenabled++
+			} else if route.Status != status {
+				if _, updateErr := tx.ModelRoute.UpdateOneID(route.ID).SetStatus(status).Save(ctx); updateErr != nil {
+					return LinkResult{}, fmt.Errorf("update provider model route %s: %w", model.UpstreamName, updateErr)
+				}
+				if status == entmodelroute.StatusActive {
+					result.Reenabled++
+				}
+			}
+			if status == entmodelroute.StatusDisabled {
+				result.Disabled++
+			}
 			continue
 		}
-		publicName := availableRouteName(model.UpstreamName, configured.Code, usedNames)
+		if !validAutomaticPublicName(model.UpstreamName) {
+			return LinkResult{}, ErrInvalidInput
+		}
+		publicName := model.UpstreamName
 		status := entmodelroute.StatusActive
 		if model.Status != entupstreammodel.StatusActive || !model.PricingConfigured {
 			status = entmodelroute.StatusDisabled
 			result.Disabled++
 		}
-		if _, err := tx.ModelRoute.Create().
+		route, err := tx.ModelRoute.Create().
 			SetProviderID(configured.ID).
 			SetUpstreamModelID(model.ID).
 			SetPublicName(publicName).
@@ -190,10 +301,11 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 			SetInputPriceMicros(model.InputPriceMicros).
 			SetOutputPriceMicros(model.OutputPriceMicros).
 			SetStatus(status).
-			Save(ctx); err != nil {
+			Save(ctx)
+		if err != nil {
 			return LinkResult{}, fmt.Errorf("create provider model route %s: %w", publicName, err)
 		}
-		usedNames[publicName] = struct{}{}
+		existing[model.ID] = route
 		result.Created++
 	}
 	if err := tx.Commit(); err != nil {
@@ -211,11 +323,11 @@ type discoveredModel struct {
 func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey string) ([]discoveredModel, error) {
 	endpoint, err := modelListURL(configured.BaseURL, provider.Protocol(configured.Protocol), configured.ModelListPath)
 	if err != nil {
-		return nil, ErrDiscoveryFailed
+		return nil, &DiscoveryError{Reason: "模型列表地址配置无效，请检查 Base URL 和模型列表路径"}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create provider model discovery request: %w", err)
+		return nil, &DiscoveryError{Reason: "无法创建模型列表请求，请检查 Base URL 和模型列表路径"}
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "Novro-Gateway/1")
@@ -227,16 +339,22 @@ func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey
 	}
 	response, err := s.http.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("%w: request models: %v", ErrDiscoveryFailed, err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, &DiscoveryError{Reason: "同步模型超时，请检查上游连接或模型列表路径"}
+		}
+		if errors.Is(err, context.Canceled) {
+			return nil, &DiscoveryError{Reason: "同步模型请求已取消"}
+		}
+		return nil, &DiscoveryError{Reason: "连接上游失败，请检查 DNS、TCP 443 端口和 TLS 配置：" + trimError(err.Error(), 320)}
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
-		return nil, fmt.Errorf("%w: upstream status %d", ErrDiscoveryFailed, response.StatusCode)
+		return nil, &DiscoveryError{StatusCode: response.StatusCode, Reason: "请检查模型列表路径和 API 密钥"}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxDiscoveryBody+1))
 	if err != nil || len(body) > maxDiscoveryBody {
-		return nil, fmt.Errorf("%w: invalid response body", ErrDiscoveryFailed)
+		return nil, &DiscoveryError{Reason: "上游响应读取失败或超过大小限制"}
 	}
 	var payload struct {
 		Data []struct {
@@ -245,11 +363,10 @@ func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey
 		} `json:"data"`
 	}
 	if json.Unmarshal(body, &payload) != nil || len(payload.Data) > maxDiscoveredModels {
-		return nil, fmt.Errorf("%w: invalid response format", ErrDiscoveryFailed)
+		return nil, &DiscoveryError{Reason: "上游返回的模型列表格式无效"}
 	}
 	seen := make(map[string]struct{}, len(payload.Data))
 	models := make([]discoveredModel, 0, len(payload.Data))
-	providerName := catalogProviderName(configured)
 	for _, item := range payload.Data {
 		modelID := strings.TrimSpace(item.ID)
 		if modelID == "" || utf8.RuneCountInString(modelID) > 256 {
@@ -264,9 +381,17 @@ func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey
 			continue
 		}
 		seen[key] = struct{}{}
-		models = append(models, discoveredModel{ProviderName: providerName, UpstreamName: modelID, DisplayName: displayName})
+		models = append(models, discoveredModel{ProviderName: catalogProviderNameForModel(configured, modelID), UpstreamName: modelID, DisplayName: displayName})
 	}
 	return models, nil
+}
+
+func trimError(value string, maximum int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if len(value) <= maximum {
+		return value
+	}
+	return value[:maximum] + "..."
 }
 
 func catalogProviderName(configured *ent.Provider) string {
@@ -282,6 +407,20 @@ func catalogProviderName(configured *ent.Provider) string {
 		}
 	}
 	return configured.DisplayName
+}
+
+func catalogProviderNameForModel(configured *ent.Provider, modelID string) string {
+	normalized := strings.ToLower(strings.TrimSpace(modelID))
+	switch {
+	case strings.HasPrefix(normalized, "deepseek-"):
+		return "DeepSeek"
+	case strings.HasPrefix(normalized, "glm-"):
+		return "智谱 GLM"
+	case strings.HasPrefix(normalized, "kimi-"):
+		return "Kimi"
+	default:
+		return catalogProviderName(configured)
+	}
 }
 
 func modelListURL(base string, protocol provider.Protocol, modelPath string) (string, error) {
@@ -305,8 +444,8 @@ func modelListURL(base string, protocol provider.Protocol, modelPath string) (st
 	return parsed.String(), nil
 }
 
-func catalogModel(entity *ent.UpstreamModel, added bool) CatalogModel {
-	return CatalogModel{ID: entity.ID, ProviderName: entity.ProviderName, UpstreamName: entity.UpstreamName, DisplayName: entity.DisplayName, PricingConfigured: entity.PricingConfigured, Status: string(entity.Status), Added: added}
+func catalogModel(entity *ent.UpstreamModel, added, restored bool) CatalogModel {
+	return CatalogModel{ID: entity.ID, ProviderName: entity.ProviderName, UpstreamName: entity.UpstreamName, DisplayName: entity.DisplayName, PricingConfigured: entity.PricingConfigured, Status: string(entity.Status), Added: added, Restored: restored}
 }
 
 func uniqueIDs(values []uuid.UUID) []uuid.UUID {
@@ -325,31 +464,15 @@ func uniqueIDs(values []uuid.UUID) []uuid.UUID {
 	return result
 }
 
-func availableRouteName(modelName, providerCode string, used map[string]struct{}) string {
-	base := strings.Trim(invalidRouteName.ReplaceAllString(strings.TrimSpace(modelName), "-"), "-._:/")
-	if len(base) < 2 {
-		base = providerCode + "-model"
+func validAutomaticPublicName(value string) bool {
+	if len(value) < 2 || len(value) > 256 {
+		return false
 	}
-	base = truncateASCII(base, 128)
-	if _, exists := used[base]; !exists {
-		return base
-	}
-	prefixed := truncateASCII(providerCode+"-"+base, 128)
-	if _, exists := used[prefixed]; !exists {
-		return prefixed
-	}
-	for index := 2; ; index++ {
-		suffix := fmt.Sprintf("-%d", index)
-		candidate := truncateASCII(prefixed, 128-len(suffix)) + suffix
-		if _, exists := used[candidate]; !exists {
-			return candidate
+	for index, char := range value {
+		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || (index > 0 && strings.ContainsRune("._:/-", char)) {
+			continue
 		}
+		return false
 	}
-}
-
-func truncateASCII(value string, maximum int) string {
-	if len(value) <= maximum {
-		return value
-	}
-	return value[:maximum]
+	return true
 }

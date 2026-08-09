@@ -63,6 +63,7 @@ type Handler struct {
 	logger                *slog.Logger
 	now                   func() time.Time
 	settlementRetryDelays []time.Duration
+	upstreamRetryDelays   []time.Duration
 	roundRobinMu          sync.Mutex
 	roundRobinCursors     map[string]uint64
 }
@@ -79,7 +80,8 @@ func New(deps Dependencies) *Handler {
 	return &Handler{
 		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
-		roundRobinCursors: make(map[string]uint64),
+		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
+		roundRobinCursors:   make(map[string]uint64),
 	}
 }
 
@@ -91,7 +93,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+	if r.Method == http.MethodGet && (r.URL.Path == "/v1/models" || r.URL.Path == "/v1/model") {
 		h.listModels(w, r, actor)
 		return
 	}
@@ -146,7 +148,11 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, _ apikey.Ac
 			continue
 		}
 		seen[route.PublicName] = struct{}{}
-		data = append(data, map[string]any{"id": route.PublicName, "object": "model", "created": route.CreatedAt.Unix(), "owned_by": route.Provider.Code})
+		ownedBy := route.Provider.Code
+		if route.UpstreamModel != nil && strings.TrimSpace(route.UpstreamModel.ProviderName) != "" {
+			ownedBy = route.UpstreamModel.ProviderName
+		}
+		data = append(data, map[string]any{"id": route.PublicName, "object": "model", "created": route.CreatedAt.Unix(), "owned_by": ownedBy})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
 }
@@ -265,7 +271,8 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	for index, attempt := range attempts {
 		route := attempt.route
 		lastRoute = route
-		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, stream)
+		upstreamStream := stream && !bufferedUpstreamStream(route)
+		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, upstreamStream)
 		if err != nil {
 			failureCode, failureMessage = "upstream_payload_error", "上游请求内容构建失败"
 			h.logger.Warn("build gateway upstream request body", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
@@ -277,13 +284,39 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Warn("gateway route has invalid upstream URL", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
 			continue
 		}
+		if selfReferentialUpstream(r, route.BaseURL) {
+			failureCode, failureMessage = "upstream_self_reference", "上游地址指向当前网关，请改为实际的上游服务地址"
+			h.logger.Warn("gateway route points back to this gateway", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
+			continue
+		}
 		upstreamRequest, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
 		if err != nil {
 			h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
 		setUpstreamHeaders(upstreamRequest, r, route)
-		response, err := h.client.Do(upstreamRequest)
+		setUpstreamIdempotencyKey(upstreamRequest, r, requestID)
+		retryDelays := h.upstreamRetryDelays
+		if stream && upstreamStream {
+			// A failed upstream stream can be safely retried as a buffered chat
+			// completion below, without waiting through several long header timeouts.
+			retryDelays = nil
+		}
+		response, err := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
+		if err != nil && stream && upstreamStream && endpoint == "chat_completions" {
+			fallbackBody, fallbackErr := buildUpstreamBody(payload, route, endpoint, false)
+			if fallbackErr == nil {
+				fallbackRequest, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
+				if requestErr == nil {
+					setUpstreamHeaders(fallbackRequest, r, route)
+					setUpstreamIdempotencyKey(fallbackRequest, r, requestID)
+					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, h.upstreamRetryDelays); fallbackRequestErr == nil {
+						response, err = fallbackResponse, nil
+						h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
+					}
+				}
+			}
+		}
 		if err != nil {
 			failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
 			h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
@@ -301,6 +334,17 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			_ = response.Body.Close()
 			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
 			continue
+		}
+		if stream && !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+			responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
+			_ = response.Body.Close()
+			if readErr != nil {
+				failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
+				h.logger.Warn("read buffered stream fallback", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
+				continue
+			}
+			h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
+			return
 		}
 		if stream || strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 			h.streamResponse(w, r, response, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
@@ -324,7 +368,136 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	if failureStatus == 499 {
 		return
 	}
-	writeError(w, failureStatus, "upstream_unavailable", "所有上游渠道均暂时不可用")
+	writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("所有上游渠道均暂时不可用：%s（%s）", failureMessage, failureCode))
+}
+
+func (h *Handler) doUpstream(request *http.Request) (*http.Response, error) {
+	return h.doUpstreamWithRetries(request, h.upstreamRetryDelays)
+}
+
+func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []time.Duration) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		attemptRequest := request
+		if attempt > 0 {
+			body, err := request.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("reopen upstream request body: %w", err)
+			}
+			attemptRequest = request.Clone(request.Context())
+			attemptRequest.Body = body
+		}
+		response, err := h.client.Do(attemptRequest)
+		if err == nil || !retryableUpstreamConnectionError(err) || attempt >= len(retryDelays) {
+			return response, err
+		}
+		delay := retryDelays[attempt]
+		if delay <= 0 {
+			continue
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-request.Context().Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil, request.Context().Err()
+		}
+	}
+}
+
+func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
+	usage := parseUsage(body)
+	rates := rateCardFor(route)
+	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.User.BillingGroup.MultiplierBPS)
+	if err != nil {
+		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
+		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
+		return
+	}
+	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
+		h.logger.Error("forward buffered stream after usage finalization failure", "request_id", requestID, "error", err)
+	}
+	copyResponseHeaders(w.Header(), response.Header)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Novro-Request-ID", requestID.String())
+	w.WriteHeader(response.StatusCode)
+	flusher, _ := w.(http.Flusher)
+	if endpoint == "chat_completions" {
+		h.writeBufferedChatEvents(w, body, flusher)
+	} else {
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", bytes.TrimSpace(body))
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+}
+
+func (h *Handler) writeBufferedChatEvents(w http.ResponseWriter, body []byte, flusher http.Flusher) {
+	var root map[string]any
+	if json.Unmarshal(body, &root) != nil {
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", bytes.TrimSpace(body))
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
+	choices, _ := root["choices"].([]any)
+	if len(choices) > 0 {
+		choice, _ := choices[0].(map[string]any)
+		message, _ := choice["message"].(map[string]any)
+		delta := map[string]any{"role": "assistant"}
+		if content, ok := message["content"].(string); ok {
+			delta["content"] = content
+		}
+		if reasoning, ok := message["reasoning_content"].(string); ok && reasoning != "" {
+			delta["reasoning_content"] = reasoning
+		}
+		writeSSEJSON(w, map[string]any{"id": root["id"], "object": "chat.completion.chunk", "created": root["created"], "model": root["model"], "choices": []any{map[string]any{"index": choice["index"], "delta": delta, "finish_reason": nil}}})
+		finish := choice["finish_reason"]
+		final := map[string]any{"index": choice["index"], "delta": map[string]any{}, "finish_reason": finish}
+		finalEvent := map[string]any{"id": root["id"], "object": "chat.completion.chunk", "created": root["created"], "model": root["model"], "choices": []any{final}}
+		if usage, ok := root["usage"]; ok {
+			finalEvent["usage"] = usage
+		}
+		writeSSEJSON(w, finalEvent)
+	} else {
+		writeSSEJSON(w, root)
+	}
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	if flusher != nil {
+		flusher.Flush()
+	}
+}
+
+func writeSSEJSON(w io.Writer, value any) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+}
+
+func retryableUpstreamConnectionError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var urlError *url.Error
+	if errors.As(err, &urlError) {
+		err = urlError.Err
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	var networkError net.Error
+	return errors.As(err, &networkError)
 }
 
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
@@ -370,6 +543,9 @@ func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoi
 		upstreamPayload[key] = value
 	}
 	upstreamPayload["model"] = route.UpstreamName
+	if _, exists := payload["stream"]; exists {
+		upstreamPayload["stream"] = stream
+	}
 	if endpoint == "chat_completions" && stream {
 		options := make(map[string]any)
 		if current, ok := payload["stream_options"].(map[string]any); ok {
@@ -381,6 +557,18 @@ func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoi
 		upstreamPayload["stream_options"] = options
 	}
 	return json.Marshal(upstreamPayload)
+}
+
+// The Reasonix/Kimi gateway can take a long time before producing its first
+// streaming chunk. Generate a buffered completion upstream and translate it
+// back to SSE below so clients with shorter HTTP/2 header deadlines can still
+// receive a complete response.
+func bufferedUpstreamStream(route modelroute.Resolved) bool {
+	if strings.EqualFold(strings.TrimSpace(route.Provider.Code), "reasonix") {
+		return true
+	}
+	parsed, err := url.Parse(route.BaseURL)
+	return err == nil && strings.EqualFold(parsed.Hostname(), "1024token.net")
 }
 
 func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route modelroute.Resolved) {
@@ -400,6 +588,14 @@ func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route mod
 		return
 	}
 	upstreamRequest.Header.Set("Authorization", "Bearer "+route.APIKey)
+}
+
+func setUpstreamIdempotencyKey(upstreamRequest, inboundRequest *http.Request, requestID uuid.UUID) {
+	if value := strings.TrimSpace(inboundRequest.Header.Get("Idempotency-Key")); value != "" {
+		upstreamRequest.Header.Set("Idempotency-Key", value)
+		return
+	}
+	upstreamRequest.Header.Set("Idempotency-Key", "novro-"+requestID.String())
 }
 
 func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
@@ -537,7 +733,7 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	input := billing.FailureInput{
 		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID,
 		RequestID: requestID, Endpoint: endpoint, StatusCode: statusCode, ErrorCode: errorCode, ErrorMessage: errorMessage,
-		ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName,
+		MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName,
 		CreatedAt: startedAt, FinishedAt: finishedAt, DurationMS: duration.Milliseconds(),
 	}
 	if err := h.billing.RecordFailure(ctx, input); err != nil {
@@ -800,6 +996,23 @@ func buildUpstreamURL(base string, protocol provider.Protocol, endpoint string) 
 	parsed.Path = basePath + path
 	parsed.RawPath, parsed.RawQuery, parsed.Fragment = "", "", ""
 	return parsed.String(), nil
+}
+
+func selfReferentialUpstream(request *http.Request, base string) bool {
+	if request == nil || strings.TrimSpace(request.Host) == "" {
+		return false
+	}
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Hostname() == "" {
+		return false
+	}
+	requestHost := request.Host
+	if host, _, splitErr := net.SplitHostPort(requestHost); splitErr == nil {
+		requestHost = host
+	} else {
+		requestHost = strings.Trim(requestHost, "[]")
+	}
+	return strings.EqualFold(parsed.Hostname(), requestHost)
 }
 
 func newOutboundClient() *http.Client {

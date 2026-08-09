@@ -3,6 +3,7 @@ package modelroute
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -55,6 +56,13 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 		if !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("name=%q err=%v", name, err)
 		}
+	}
+	longName := "m" + strings.Repeat("-segment", 30)
+	if len(longName) <= 128 || len(longName) > 256 {
+		t.Fatalf("invalid long-name test fixture length %d", len(longName))
+	}
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, PublicName: longName, DisplayName: "Long Model"}); err != nil {
+		t.Fatalf("256-character model IDs should be accepted: %v", err)
 	}
 }
 

@@ -1236,6 +1236,22 @@ func TestProviderModelSyncFailureUsesSafeError(t *testing.T) {
 	}
 }
 
+func TestProviderModelSyncFailureShowsUpstreamStatus(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	providerModels := &fakeProviderModels{err: &providersync.DiscoveryError{StatusCode: http.StatusUnauthorized, Reason: "请检查模型列表路径和 API 密钥"}}
+	handler := New(Dependencies{
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: &fakeProviders{}, ProviderModels: providerModels,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+uuid.NewString()+"/models/sync", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), "HTTP 401") || !strings.Contains(response.Body.String(), "API 密钥") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestAdminCreatesUserAndProtectsLastAdmin(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	users := &fakeAPIUsers{}

@@ -3,6 +3,7 @@ package modelroute
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -124,22 +125,18 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create second provider: %v", err)
 	}
-	firstModel, err := client.UpstreamModel.Create().SetProviderName("Candidate First").SetUpstreamName("shared-first").SetDisplayName("Shared First").SetStatus(entupstreammodel.StatusActive).Save(ctx)
+	sharedModel, err := client.UpstreamModel.Create().SetProviderName("Shared Catalog").SetUpstreamName("shared-chat").SetDisplayName("Shared Chat").SetStatus(entupstreammodel.StatusActive).Save(ctx)
 	if err != nil {
-		t.Fatalf("create first upstream model: %v", err)
-	}
-	secondModel, err := client.UpstreamModel.Create().SetProviderName("Candidate Second").SetUpstreamName("shared-second").SetDisplayName("Shared Second").SetStatus(entupstreammodel.StatusActive).Save(ctx)
-	if err != nil {
-		t.Fatalf("create second upstream model: %v", err)
+		t.Fatalf("create shared upstream model: %v", err)
 	}
 	createdAt := time.Date(2026, 8, 7, 1, 0, 0, 0, time.UTC)
-	if _, err := client.ModelRoute.Create().SetProviderID(secondProvider.ID).SetUpstreamModelID(secondModel.ID).
-		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(secondModel.UpstreamName).
+	if _, err := client.ModelRoute.Create().SetProviderID(secondProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt.Add(time.Minute)).Save(ctx); err != nil {
 		t.Fatalf("create second candidate: %v", err)
 	}
-	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(firstModel.ID).
-		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(firstModel.UpstreamName).
+	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt).Save(ctx); err != nil {
 		t.Fatalf("create first candidate: %v", err)
 	}
@@ -151,10 +148,50 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	if len(resolved) != 2 || resolved[0].Record.Provider.Code != "candidate-first" || resolved[0].EncryptedAPIKey != "first-encrypted" || resolved[1].Record.Provider.Code != "candidate-second" {
 		t.Fatalf("unexpected candidates: %+v", resolved)
 	}
-	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(firstModel.ID).
-		SetPublicName("shared-chat").SetDisplayName("Duplicate").SetUpstreamName(firstModel.UpstreamName).
+	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetPublicName("shared-chat").SetDisplayName("Duplicate").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); !ent.IsConstraintError(err) {
 		t.Fatalf("duplicate route constraint error=%v", err)
+	}
+}
+
+func TestEntStoreRequiresCatalogPricingForActiveRoute(t *testing.T) {
+	client := openModelRouteIntegrationClient(t)
+	ctx := context.Background()
+	configured, err := client.Provider.Create().
+		SetCode("unpriced-provider").SetDisplayName("Unpriced Provider").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://unpriced.example.com").
+		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	if err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	model, err := client.UpstreamModel.Create().
+		SetProviderName("Unpriced Catalog").SetUpstreamName("unpriced-chat").SetDisplayName("Unpriced Chat").
+		SetPricingConfigured(false).SetStatus(entupstreammodel.StatusDisabled).Save(ctx)
+	if err != nil {
+		t.Fatalf("create unpriced model: %v", err)
+	}
+	route, err := client.ModelRoute.Create().SetProviderID(configured.ID).SetUpstreamModelID(model.ID).
+		SetPublicName("unpriced-chat").SetDisplayName("Unpriced Chat").SetUpstreamName(model.UpstreamName).
+		SetInputPriceMicros(0).SetOutputPriceMicros(0).SetStatus(entmodelroute.StatusDisabled).Save(ctx)
+	if err != nil {
+		t.Fatalf("create unpriced route: %v", err)
+	}
+	store := NewEntStore(client)
+	if _, err := store.SetStatus(ctx, route.ID, StatusActive); !errors.Is(err, ErrPricingRequired) {
+		t.Fatalf("activate unpriced route error=%v", err)
+	}
+	if _, err := client.ModelRoute.UpdateOneID(route.ID).SetStatus(entmodelroute.StatusActive).Save(ctx); err != nil {
+		t.Fatalf("prepare active unpriced route: %v", err)
+	}
+	active, err := store.ListActive(ctx)
+	if err != nil {
+		t.Fatalf("list active routes: %v", err)
+	}
+	for _, item := range active {
+		if item.PublicName == "unpriced-chat" {
+			t.Fatalf("unpriced route was exposed as active: %+v", item)
+		}
 	}
 }
 

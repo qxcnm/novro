@@ -78,11 +78,11 @@ func TestReservePreservesInsufficientBalance(t *testing.T) {
 func TestRecordFailureRequiresSafeAuditableFields(t *testing.T) {
 	store := &fakeStore{}
 	userID, keyID, routeID, upstreamID, groupID, requestID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	input := FailureInput{UserID: userID, APIKeyID: keyID, ModelRouteID: routeID, UpstreamModelID: &upstreamID, BillingGroupID: &groupID, RequestID: requestID, Endpoint: "chat_completions", StatusCode: 502, ErrorCode: "upstream_http_error", ErrorMessage: "上游返回 HTTP 502", ModelName: "demo", UpstreamModelName: "demo-upstream", BillingGroupCode: "default", BillingGroupName: "默认", DurationMS: 120}
+	input := FailureInput{UserID: userID, APIKeyID: keyID, ModelRouteID: routeID, UpstreamModelID: &upstreamID, BillingGroupID: &groupID, RequestID: requestID, Endpoint: "chat_completions", StatusCode: 502, ErrorCode: "upstream_http_error", ErrorMessage: "上游返回 HTTP 502", MultiplierBPS: 4_000, ModelName: "demo", UpstreamModelName: "demo-upstream", BillingGroupCode: "default", BillingGroupName: "默认", DurationMS: 120}
 	if err := NewService(store).RecordFailure(context.Background(), input); err != nil {
 		t.Fatalf("record failure: %v", err)
 	}
-	if store.failure.RequestID != requestID || store.failure.StatusCode != 502 || store.failure.ErrorCode != "upstream_http_error" {
+	if store.failure.RequestID != requestID || store.failure.StatusCode != 502 || store.failure.ErrorCode != "upstream_http_error" || store.failure.MultiplierBPS != 4_000 {
 		t.Fatalf("unexpected failure input: %+v", store.failure)
 	}
 	input.ErrorMessage = ""

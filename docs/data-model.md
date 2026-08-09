@@ -223,9 +223,9 @@ EmailVerificationCode
 
 - `provider_id`
 - `upstream_model_id`，指向独立模型目录记录
-- `public_name`，对外模型名，创建后不可修改；可以在不同提供商或目录模型路由间重复
+- `public_name`，对外模型名，创建后不可修改；自动关联时使用全局目录模型 ID，多个提供商因此进入同一个故障切换池
 - `display_name`
-- 旧版 `upstream_name`、输入/输出价格字段保留用于迁移兼容，新的计费读取上游模型
+- 旧版 `upstream_name`、输入/输出价格字段保留用于迁移兼容，新的计费读取全局模型目录
 - `status`、`created_at`、`updated_at`
 
 `public_name + provider_id + upstream_model_id` 组合唯一，防止完全相同的渠道重复配置。同一
@@ -243,16 +243,19 @@ EmailVerificationCode
 
 ## 14. upstream_models
 
-- `provider_name`，普通文本，不绑定提供商凭据配置
-- `upstream_name`、`display_name`
+- `provider_name`，普通厂商标签，不绑定提供商凭据配置，也不决定价格归属
+- `upstream_name`，全局唯一的精确模型 ID；`display_name` 为管理界面显示名称
 - `input_price_micros`、`output_price_micros`
 - `cache_read_price_micros`、`cache_write_price_micros`、`cache_write_1h_price_micros`
 - `request_price_micros`，按次固定费用
-- `pricing_configured`，同步发现后为 `false`，完成价格维护后变为 `true`
+- `pricing_configured`，新同步模型默认为 `false`；只有管理员在目录定价页保存价格后才会设为 `true`
 - `status`、`created_at`、`updated_at`
 
-所有单价是人民币微元 / 百万 tokens，固定费用是人民币微元 / 次。同步发现的新模型默认
-停用且不能在未完成定价时启用，避免把未知成本按零价格结算。
+所有单价是人民币微元 / 百万 tokens，固定费用是人民币微元 / 次。同一模型 ID 无论被多少
+提供商暴露都只维护这一套价格。同步只发现精确 ID，不读取或导入上游返回的 `pricing` 字段；管理员
+必须在目录定价页维护价格，未知模型默认停用且不能在未完成定价时启用，避免把未知成本按零价格结算
+或复制价格卡。自动关联路由的对外名称
+与精确上游 ID 一致，历史的提供商前缀和数字后缀由后续迁移修复。
 
 初始化目录只包含官方价格可以由单一输入、缓存命中和输出单价准确表达的当前模型。
 GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不写入固定价格，避免按

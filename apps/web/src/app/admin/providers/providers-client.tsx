@@ -42,6 +42,8 @@ type PickerModel = {
   display_name: string;
   pricing_configured: boolean;
   status: "active" | "disabled";
+  added?: boolean;
+  restored?: boolean;
 };
 
 type RouteRecord = {
@@ -61,6 +63,18 @@ const INITIAL_CREATE: CreateForm = {
   model_list_path: "",
   api_key: "",
 };
+
+const MODEL_SYNC_TIMEOUT_MS = 35_000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = MODEL_SYNC_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 async function readError(response: Response) {
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
@@ -157,34 +171,56 @@ export default function ProvidersClient() {
     setSelectedModelIDs(new Set());
     setLinkedModelIDs(new Set());
 
-    let syncedIDs = new Set<string>();
-    if (sync) {
-      const syncResponse = await fetch(`/api/admin/providers/${record.id}/models/sync`, { method: "POST" });
-      if (syncResponse.ok) {
-        const body = (await syncResponse.json()) as { models: PickerModel[] };
-        syncedIDs = new Set(body.models.map((model) => model.id));
-        setPickerNotice(`已同步 ${body.models.length} 个模型`);
-      } else {
-        setPickerNotice(await readError(syncResponse));
-      }
-    }
+	try {
+	  let syncedIDs = new Set<string>();
+	  let syncedModels: PickerModel[] | null = null;
+	  if (sync) {
+	    try {
+	      const syncResponse = await fetchWithTimeout(`/api/admin/providers/${record.id}/models/sync`, { method: "POST" });
+	      if (syncResponse.ok) {
+				const body = (await syncResponse.json()) as { models: PickerModel[] };
+				syncedModels = body.models;
+				syncedIDs = new Set(body.models.map((model) => model.id));
+			const added = body.models.filter((model) => model.added === true).length;
+			const restored = body.models.filter((model) => model.restored === true).length;
+			const pendingPricing = body.models.filter((model) => model.pricing_configured !== true).length;
+			setPickerNotice(`已检查 ${body.models.length} 个模型：新建 ${added} 个目录记录${restored > 0 ? `，恢复 ${restored} 个` : ""}${pendingPricing > 0 ? `，${pendingPricing} 个等待在模型目录维护价格` : ""}`);
+          } else {
+            setPickerNotice(await readError(syncResponse));
+				}
+				} catch (error) {
+					setPickerNotice(error instanceof DOMException && error.name === "AbortError" ? "同步模型超时，请检查上游地址和模型获取路径" : "同步模型失败，请检查上游连接");
+				}
+			}
 
-    const [catalogResponse, routesResponse] = await Promise.all([
-      fetch("/api/admin/upstream-models", { cache: "no-store" }),
-      fetch("/api/admin/model-routes", { cache: "no-store" }),
-    ]);
-    if (!catalogResponse.ok || !routesResponse.ok) {
-      setPickerNotice("加载模型目录失败");
+			if (sync && syncedModels === null) {
+				setPickerModels([]);
+				return;
+			}
+			const routesResponse = await fetchWithTimeout("/api/admin/model-routes", { cache: "no-store" }, 15_000);
+			if (!routesResponse.ok) {
+				setPickerNotice("加载模型路由失败，请稍后重试");
+				return;
+			}
+			const routes = ((await routesResponse.json()) as { model_routes: RouteRecord[] }).model_routes;
+			const linked = new Set(routes.filter((route) => route.provider_id === record.id && route.upstream_model_id).map((route) => route.upstream_model_id as string));
+			if (syncedModels !== null) {
+				setPickerModels(syncedModels);
+			} else {
+				const catalogResponse = await fetchWithTimeout("/api/admin/upstream-models", { cache: "no-store" }, 15_000);
+				if (!catalogResponse.ok) {
+					setPickerNotice("加载模型目录失败，请稍后重试");
+					return;
+				}
+				setPickerModels(((await catalogResponse.json()) as { upstream_models: PickerModel[] }).upstream_models);
+			}
+			setLinkedModelIDs(linked);
+      setSelectedModelIDs(new Set([...syncedIDs].filter((id) => !linked.has(id))));
+    } catch {
+      setPickerNotice("加载模型目录失败，请稍后重试");
+    } finally {
       setPickerLoading(false);
-      return;
     }
-    const catalog = ((await catalogResponse.json()) as { upstream_models: PickerModel[] }).upstream_models;
-    const routes = ((await routesResponse.json()) as { model_routes: RouteRecord[] }).model_routes;
-    const linked = new Set(routes.filter((route) => route.provider_id === record.id && route.upstream_model_id).map((route) => route.upstream_model_id as string));
-    setPickerModels(catalog);
-    setLinkedModelIDs(linked);
-    setSelectedModelIDs(new Set([...syncedIDs].filter((id) => !linked.has(id))));
-    setPickerLoading(false);
   }
 
   async function createProvider(event: FormEvent<HTMLFormElement>) {
@@ -331,9 +367,9 @@ export default function ProvidersClient() {
     });
     setBusy(false);
     if (!response.ok) { setPickerNotice(await readError(response)); return; }
-    const result = (await response.json()) as { created: number; existing: number; disabled: number };
-    setPickerOpen(false);
-    setMessage(`已创建 ${result.created} 条模型路由${result.disabled > 0 ? `，其中 ${result.disabled} 条等待模型定价或启用` : ""}`);
+	const result = (await response.json()) as { created: number; existing: number; reenabled: number; disabled: number };
+	setPickerOpen(false);
+	setMessage(`已创建 ${result.created} 条模型路由${result.reenabled > 0 ? `，恢复 ${result.reenabled} 条` : ""}${result.disabled > 0 ? `，其中 ${result.disabled} 条等待模型定价或启用` : ""}`);
     setRouteRefreshKey((value) => value + 1);
     setActiveTab("routes");
   }
@@ -453,7 +489,7 @@ export default function ProvidersClient() {
               {!pickerLoading && visiblePickerModels.length === 0 ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">模型目录为空</p> : null}
               {!pickerLoading ? visiblePickerModels.map((model) => {
                 const linked = linkedModelIDs.has(model.id);
-                return <label className="flex cursor-pointer items-start gap-3 border-b px-4 py-3 last:border-b-0 has-disabled:cursor-default has-disabled:opacity-60" htmlFor={`provider-model-${model.id}`} key={model.id}><Checkbox checked={linked || selectedModelIDs.has(model.id)} disabled={linked} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{model.provider_name} · {model.upstream_name}</span></span></label>;
+                return <label className="flex cursor-pointer items-start gap-3 border-b px-4 py-3 last:border-b-0 has-disabled:cursor-default has-disabled:opacity-60" htmlFor={`provider-model-${model.id}`} key={model.id}><Checkbox checked={linked || selectedModelIDs.has(model.id)} disabled={linked} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">统一模型 ID · {model.upstream_name} · 厂商标签 {model.provider_name}</span></span></label>;
               }) : null}
             </div>
           </div>

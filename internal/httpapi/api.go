@@ -1195,9 +1195,13 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 		prices := route.UpstreamModel.Prices
+		providerName := route.UpstreamModel.ProviderName
+		if strings.TrimSpace(providerName) == "" {
+			providerName = route.Provider.DisplayName
+		}
 		candidate := availableModel{
 			ID: route.PublicName, DisplayName: route.DisplayName,
-			ProviderName: route.Provider.DisplayName, Protocol: route.Provider.Protocol, ChannelCount: 1,
+			ProviderName: providerName, Protocol: route.Provider.Protocol, ChannelCount: 1,
 			Prices: billing.RateCard{
 				InputMicros:        priceWithMultiplier(prices.InputMicros, multiplierBPS),
 				OutputMicros:       priceWithMultiplier(prices.OutputMicros, multiplierBPS),
@@ -1845,7 +1849,12 @@ func (h *apiHandler) writeProviderModelError(w http.ResponseWriter, operation st
 	case errors.Is(err, providersync.ErrModelsUnavailable):
 		writeError(w, http.StatusUnprocessableEntity, "models_unavailable", "上游没有返回可用的模型列表")
 	case errors.Is(err, providersync.ErrDiscoveryFailed):
-		writeError(w, http.StatusBadGateway, "model_sync_failed", "无法从该提供商同步模型，请从模型目录手动选择")
+		var discoveryError *providersync.DiscoveryError
+		if errors.As(err, &discoveryError) {
+			writeError(w, http.StatusBadGateway, "model_sync_failed", "模型同步失败："+discoveryError.Error())
+			return
+		}
+		writeError(w, http.StatusBadGateway, "model_sync_failed", "无法从该提供商同步模型，请检查模型列表路径和 API 密钥")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1899,6 +1908,8 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 		writeError(w, http.StatusNotFound, "not_found", "模型路由不存在")
 	case errors.Is(err, modelroute.ErrNameTaken):
 		writeError(w, http.StatusConflict, "model_route_taken", "该对外模型已关联相同的提供商和目录模型")
+	case errors.Is(err, modelroute.ErrPricingRequired):
+		writeError(w, http.StatusConflict, "model_pricing_required", "请先在模型目录完成定价并启用模型")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1911,7 +1922,7 @@ func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation st
 	case errors.Is(err, upstreammodel.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "上游模型不存在")
 	case errors.Is(err, upstreammodel.ErrNameTaken):
-		writeError(w, http.StatusConflict, "upstream_model_taken", "该提供商已存在同名上游模型")
+		writeError(w, http.StatusConflict, "upstream_model_taken", "该模型 ID 已存在于全局目录")
 	case errors.Is(err, upstreammodel.ErrPricingRequired):
 		writeError(w, http.StatusConflict, "model_pricing_required", "请先完成模型定价，再启用模型")
 	default:

@@ -121,6 +121,24 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 }
 
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
+	if status == StatusActive {
+		route, err := s.client.ModelRoute.Query().Where(entmodelroute.IDEQ(id), entmodelroute.DeletedAtIsNil()).WithUpstreamModel().Only(ctx)
+		if ent.IsNotFound(err) {
+			return Record{}, ErrNotFound
+		}
+		if err != nil {
+			return Record{}, fmt.Errorf("read model route before status update: %w", err)
+		}
+		if route.UpstreamModelID != nil {
+			upstream, upstreamErr := route.Edges.UpstreamModelOrErr()
+			if upstreamErr != nil {
+				return Record{}, fmt.Errorf("read model route pricing status: %w", upstreamErr)
+			}
+			if upstream.Status != entupstreammodel.StatusActive || !upstream.PricingConfigured || upstream.DeletedAt != nil {
+				return Record{}, ErrPricingRequired
+			}
+		}
+	}
 	if _, err := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil()).SetStatus(entmodelroute.Status(status)).Save(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	} else if err != nil {
@@ -142,7 +160,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string) ([]Resolution, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve model routes: %w", err)
 	}
@@ -161,7 +179,7 @@ func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string) ([]
 }
 
 func (s *EntStore) ListActive(ctx context.Context) ([]Record, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active model routes: %w", err)
 	}
