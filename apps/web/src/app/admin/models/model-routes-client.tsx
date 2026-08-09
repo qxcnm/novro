@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Power, PowerOff, RefreshCw, Route, Search, Trash2 } from "lucide-react";
+import { LayoutGrid, Pencil, Plus, Power, PowerOff, RefreshCw, Route, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -63,6 +63,7 @@ type RouteForm = {
 };
 
 const EMPTY_FORM: RouteForm = { provider_id: "", upstream_model_id: "", public_name: "", display_name: "" };
+const ALL_PROVIDERS = "__all__";
 
 function money(micros: number) {
   return `¥${(micros / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 })}`;
@@ -82,6 +83,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState(ALL_PROVIDERS);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ModelRoute | null>(null);
   const [statusRoute, setStatusRoute] = useState<ModelRoute | null>(null);
@@ -115,17 +117,29 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     return () => window.clearTimeout(timer);
   }, [load, refreshKey]);
 
+  const providerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const route of routes) counts.set(route.provider_id, (counts.get(route.provider_id) ?? 0) + 1);
+    return counts;
+  }, [routes]);
+
+  const activeProvider = selectedProvider === ALL_PROVIDERS || providers.some((provider) => provider.id === selectedProvider)
+    ? selectedProvider
+    : ALL_PROVIDERS;
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return needle
-      ? routes.filter((route) => `${route.public_name} ${route.display_name} ${route.provider.display_name} ${route.upstream_model?.upstream_name ?? ""}`.toLowerCase().includes(needle))
-      : routes;
-  }, [query, routes]);
+    return routes.filter((route) => {
+      const providerMatches = activeProvider === ALL_PROVIDERS || route.provider_id === activeProvider;
+      const queryMatches = !needle || `${route.public_name} ${route.display_name} ${route.provider.display_name} ${route.upstream_model?.upstream_name ?? ""}`.toLowerCase().includes(needle);
+      return providerMatches && queryMatches;
+    });
+  }, [activeProvider, query, routes]);
   const selection = useListSelection(filtered.map((route) => route.id));
 
   function beginCreate() {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, provider_id: activeProvider === ALL_PROVIDERS ? "" : activeProvider });
     setEditorOpen(true);
   }
 
@@ -219,17 +233,33 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
   }
 
   return (
-    <div className="space-y-5">
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[200px_minmax(0,1fr)]">
+      <aside className="min-w-0 border-b pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+        <nav aria-label="按提供商筛选关联模型" className="flex gap-1 overflow-x-auto pb-1 lg:sticky lg:top-24 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0">
+          <Button aria-pressed={activeProvider === ALL_PROVIDERS} className="h-9 shrink-0 justify-between gap-4 lg:w-full" onClick={() => { setSelectedProvider(ALL_PROVIDERS); selection.clearSelection(); }} variant={activeProvider === ALL_PROVIDERS ? "secondary" : "ghost"}>
+            <span className="flex items-center gap-2"><LayoutGrid />全部模型</span><span className="text-xs tabular-nums text-muted-foreground">{routes.length}</span>
+          </Button>
+          {providers.map((provider) => (
+            <Button aria-pressed={activeProvider === provider.id} className="h-9 shrink-0 justify-between gap-4 lg:w-full" key={provider.id} onClick={() => { setSelectedProvider(provider.id); selection.clearSelection(); }} title={provider.display_name} variant={activeProvider === provider.id ? "secondary" : "ghost"}>
+              <span className="max-w-28 truncate">{provider.display_name}</span><span className="text-xs tabular-nums text-muted-foreground">{providerCounts.get(provider.id) ?? 0}</span>
+            </Button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-md flex-1">
           <Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input aria-label="搜索模型路由" className="pl-8" onChange={(event) => { setQuery(event.target.value); selection.clearSelection(); }} placeholder="搜索对外名称、提供商或目录模型" value={query} />
+          <Input aria-label="搜索关联模型" className="pl-8" onChange={(event) => { setQuery(event.target.value); selection.clearSelection(); }} placeholder={activeProvider === ALL_PROVIDERS ? "搜索对外名称、提供商或目录模型" : `在 ${providers.find((provider) => provider.id === activeProvider)?.display_name ?? "当前提供商"} 中搜索`} value={query} />
         </div>
         <div className="flex gap-2">
           <Button aria-label="刷新模型路由" disabled={loading} onClick={() => void load()} size="icon" title="刷新模型路由" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
           <Button onClick={beginCreate}><Plus />新增关联路由</Button>
         </div>
       </div>
+
+      <div className="flex min-h-5 items-center justify-between gap-3 text-xs text-muted-foreground"><span>{activeProvider === ALL_PROVIDERS ? "全部提供商" : providers.find((provider) => provider.id === activeProvider)?.display_name}</span><span>{filtered.length} 个结果</span></div>
 
       {message ? <p className="border-y bg-background px-4 py-3 text-sm" role="status">{message}</p> : null}
 
@@ -246,7 +276,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
               <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有模型路由" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>对外模型</TableHead><TableHead>提供商配置</TableHead><TableHead>目录模型</TableHead><TableHead>输入 / 缓存命中</TableHead><TableHead>缓存创建 / 输出</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
               <TableBody>
                 {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
-                {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>还没有关联模型路由</TableCell></TableRow> : null}
+                {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>{query.trim() ? "没有匹配的关联模型" : activeProvider === ALL_PROVIDERS ? "还没有关联模型路由" : "该提供商暂无关联模型"}</TableCell></TableRow> : null}
                 {filtered.map((route) => (
                   <TableRow key={route.id}>
                     <TableCell><Checkbox aria-label={`选择 ${route.display_name}`} checked={selection.isSelected(route.id)} onCheckedChange={(checked) => selection.toggleOne(route.id, checked === true)} /></TableCell>
@@ -286,6 +316,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
       </AlertDialog>
       <BulkActionDialog busy={busy} confirmLabel={bulkStatus === "active" ? "确认批量启用" : "确认批量停用"} description={`将${bulkStatus === "active" ? "启用" : "停用"}选中的 ${selection.selectedIds.length} 条模型路由。`} destructive={bulkStatus === "disabled"} onConfirm={applyBulkStatus} onOpenChange={(open) => { if (!open) setBulkStatus(null); }} open={bulkStatus !== null} title={bulkStatus === "active" ? "批量启用模型路由" : "批量停用模型路由"} />
       <BulkActionDialog busy={busy} confirmLabel="确认批量删除" description={`将删除选中的 ${selection.selectedIds.length} 条模型路由。历史调用和计费记录会继续保留，失败项目仍会保持选中。`} destructive onConfirm={deleteSelected} onOpenChange={setBulkDeleteOpen} open={bulkDeleteOpen} title="批量删除模型路由" />
+      </div>
     </div>
   );
 }
