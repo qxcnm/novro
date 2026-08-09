@@ -10,7 +10,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
-	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/wallet"
 )
@@ -20,8 +19,6 @@ type User struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
-	// BillingGroupID holds the value of the "billing_group_id" field.
-	BillingGroupID *uuid.UUID `json:"billing_group_id,omitempty"`
 	// InviteCode holds the value of the "invite_code" field.
 	InviteCode string `json:"invite_code,omitempty"`
 	// ReferredByUserID holds the value of the "referred_by_user_id" field.
@@ -34,6 +31,8 @@ type User struct {
 	DisplayName string `json:"display_name,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash *string `json:"-"`
+	// IsSystemAdmin holds the value of the "is_system_admin" field.
+	IsSystemAdmin bool `json:"is_system_admin,omitempty"`
 	// Role holds the value of the "role" field.
 	Role user.Role `json:"role,omitempty"`
 	// Status holds the value of the "status" field.
@@ -66,15 +65,13 @@ type UserEdges struct {
 	TopUpOrders []*TopUpOrder `json:"top_up_orders,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
-	// BillingGroup holds the value of the billing_group edge.
-	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// Referrer holds the value of the referrer edge.
 	Referrer *User `json:"referrer,omitempty"`
 	// Referrals holds the value of the referrals edge.
 	Referrals []*User `json:"referrals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [9]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -142,23 +139,12 @@ func (e UserEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 	return nil, &NotLoadedError{edge: "api_usages"}
 }
 
-// BillingGroupOrErr returns the BillingGroup value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e UserEdges) BillingGroupOrErr() (*BillingGroup, error) {
-	if e.BillingGroup != nil {
-		return e.BillingGroup, nil
-	} else if e.loadedTypes[7] {
-		return nil, &NotFoundError{label: billinggroup.Label}
-	}
-	return nil, &NotLoadedError{edge: "billing_group"}
-}
-
 // ReferrerOrErr returns the Referrer value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ReferrerOrErr() (*User, error) {
 	if e.Referrer != nil {
 		return e.Referrer, nil
-	} else if e.loadedTypes[8] {
+	} else if e.loadedTypes[7] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "referrer"}
@@ -167,7 +153,7 @@ func (e UserEdges) ReferrerOrErr() (*User, error) {
 // ReferralsOrErr returns the Referrals value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ReferralsOrErr() ([]*User, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[8] {
 		return e.Referrals, nil
 	}
 	return nil, &NotLoadedError{edge: "referrals"}
@@ -178,8 +164,10 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldBillingGroupID, user.FieldReferredByUserID:
+		case user.FieldReferredByUserID:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
+		case user.FieldIsSystemAdmin:
+			values[i] = new(sql.NullBool)
 		case user.FieldInviteCode, user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
 		case user.FieldLastLoginAt, user.FieldCreatedAt, user.FieldUpdatedAt:
@@ -206,13 +194,6 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value != nil {
 				_m.ID = *value
-			}
-		case user.FieldBillingGroupID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
-			} else if value.Valid {
-				_m.BillingGroupID = new(uuid.UUID)
-				*_m.BillingGroupID = *value.S.(*uuid.UUID)
 			}
 		case user.FieldInviteCode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -252,6 +233,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PasswordHash = new(string)
 				*_m.PasswordHash = value.String
+			}
+		case user.FieldIsSystemAdmin:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field is_system_admin", values[i])
+			} else if value.Valid {
+				_m.IsSystemAdmin = value.Bool
 			}
 		case user.FieldRole:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -332,11 +319,6 @@ func (_m *User) QueryAPIUsages() *APIUsageQuery {
 	return NewUserClient(_m.config).QueryAPIUsages(_m)
 }
 
-// QueryBillingGroup queries the "billing_group" edge of the User entity.
-func (_m *User) QueryBillingGroup() *BillingGroupQuery {
-	return NewUserClient(_m.config).QueryBillingGroup(_m)
-}
-
 // QueryReferrer queries the "referrer" edge of the User entity.
 func (_m *User) QueryReferrer() *UserQuery {
 	return NewUserClient(_m.config).QueryReferrer(_m)
@@ -370,11 +352,6 @@ func (_m *User) String() string {
 	var builder strings.Builder
 	builder.WriteString("User(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	if v := _m.BillingGroupID; v != nil {
-		builder.WriteString("billing_group_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
 	builder.WriteString("invite_code=")
 	builder.WriteString(_m.InviteCode)
 	builder.WriteString(", ")
@@ -395,6 +372,9 @@ func (_m *User) String() string {
 	builder.WriteString(_m.DisplayName)
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("is_system_admin=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IsSystemAdmin))
 	builder.WriteString(", ")
 	builder.WriteString("role=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Role))

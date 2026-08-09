@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -26,6 +27,12 @@ type APIKeyCreate struct {
 // SetUserID sets the "user_id" field.
 func (_c *APIKeyCreate) SetUserID(v uuid.UUID) *APIKeyCreate {
 	_c.mutation.SetUserID(v)
+	return _c
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_c *APIKeyCreate) SetBillingGroupID(v uuid.UUID) *APIKeyCreate {
+	_c.mutation.SetBillingGroupID(v)
 	return _c
 }
 
@@ -122,6 +129,11 @@ func (_c *APIKeyCreate) SetUser(v *User) *APIKeyCreate {
 	return _c.SetUserID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_c *APIKeyCreate) SetBillingGroup(v *BillingGroup) *APIKeyCreate {
+	return _c.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_c *APIKeyCreate) AddAPIUsageIDs(ids ...uuid.UUID) *APIKeyCreate {
 	_c.mutation.AddAPIUsageIDs(ids...)
@@ -191,6 +203,9 @@ func (_c *APIKeyCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "APIKey.user_id"`)}
 	}
+	if _, ok := _c.mutation.BillingGroupID(); !ok {
+		return &ValidationError{Name: "billing_group_id", err: errors.New(`ent: missing required field "APIKey.billing_group_id"`)}
+	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "APIKey.name"`)}
 	}
@@ -228,6 +243,9 @@ func (_c *APIKeyCreate) check() error {
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "APIKey.user"`)}
+	}
+	if len(_c.mutation.BillingGroupIDs()) == 0 {
+		return &ValidationError{Name: "billing_group", err: errors.New(`ent: missing required edge "APIKey.billing_group"`)}
 	}
 	return nil
 }
@@ -307,6 +325,23 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.UserID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apikey.BillingGroupTable,
+			Columns: []string{apikey.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.BillingGroupID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.APIUsagesIDs(); len(nodes) > 0 {

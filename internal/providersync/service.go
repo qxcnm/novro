@@ -26,7 +26,7 @@ const (
 	maxDiscoveredModels = 1000
 	maxLinkModels       = 200
 	maxDiscoveryBody    = 4 << 20
-	modelSyncTimeout    = 30 * time.Second
+	modelSyncTimeout    = 8 * time.Second
 )
 
 var (
@@ -435,7 +435,12 @@ func modelListURL(base string, protocol provider.Protocol, modelPath string) (st
 		parsed.Path = modelPath
 	} else {
 		basePath := strings.TrimRight(parsed.Path, "/")
-		if protocol == provider.ProtocolAnthropic && !strings.HasSuffix(basePath, "/v1") {
+		if strings.HasSuffix(basePath, "/models") {
+			parsed.Path = basePath
+			parsed.RawPath, parsed.RawQuery, parsed.Fragment = "", "", ""
+			return parsed.String(), nil
+		}
+		if (protocol == provider.ProtocolOpenAI || protocol == provider.ProtocolAnthropic) && !strings.HasSuffix(basePath, "/v1") {
 			basePath += "/v1"
 		}
 		parsed.Path = basePath + "/models"

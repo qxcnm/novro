@@ -108,12 +108,13 @@ func (f *fakeAPIEmailVerification) Verify(_ context.Context, email, code string)
 }
 
 type fakeAPIKeys struct {
-	createdUserID uuid.UUID
-	createdName   string
-	revokedUserID uuid.UUID
-	revokedID     uuid.UUID
-	listFilter    apikey.ListFilter
-	err           error
+	createdUserID  uuid.UUID
+	createdGroupID uuid.UUID
+	createdName    string
+	revokedUserID  uuid.UUID
+	revokedID      uuid.UUID
+	listFilter     apikey.ListFilter
+	err            error
 }
 
 type fakeProviders struct {
@@ -169,8 +170,23 @@ func (f *fakeReferrals) UpdateRewardBPS(_ context.Context, rewardBPS int64) (ref
 }
 
 type fakeModelRoutes struct {
-	active []modelroute.Record
-	err    error
+	active            []modelroute.Record
+	listActiveGroupID uuid.UUID
+	err               error
+}
+
+type fakeBillingGroups struct {
+	records     []billinggroup.Record
+	createInput billinggroup.CreateInput
+	updateInput billinggroup.UpdateInput
+	status      billinggroup.Status
+	deletedID   uuid.UUID
+	listFilter  billinggroup.ListFilter
+	createErr   error
+	listErr     error
+	updateErr   error
+	statusErr   error
+	deleteErr   error
 }
 
 func (f *fakeModelRoutes) Create(context.Context, modelroute.CreateInput) (modelroute.Record, error) {
@@ -179,7 +195,8 @@ func (f *fakeModelRoutes) Create(context.Context, modelroute.CreateInput) (model
 func (f *fakeModelRoutes) List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error) {
 	return []modelroute.Record{}, f.err
 }
-func (f *fakeModelRoutes) ListActive(context.Context) ([]modelroute.Record, error) {
+func (f *fakeModelRoutes) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]modelroute.Record, error) {
+	f.listActiveGroupID = billingGroupID
 	return f.active, f.err
 }
 func (f *fakeModelRoutes) Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error) {
@@ -189,6 +206,76 @@ func (f *fakeModelRoutes) SetStatus(context.Context, uuid.UUID, modelroute.Statu
 	return modelroute.Record{}, f.err
 }
 func (f *fakeModelRoutes) Delete(context.Context, uuid.UUID) error { return f.err }
+
+func activeBillingGroup(id uuid.UUID, code, displayName string, multiplierBPS int64, isDefault bool) billinggroup.Record {
+	return billinggroup.Record{
+		ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS,
+		IsDefault: isDefault, Status: billinggroup.StatusActive,
+	}
+}
+
+func defaultBillingGroups() *fakeBillingGroups {
+	return &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(uuid.New(), billinggroup.DefaultCode, "默认", billinggroup.DefaultMultiplierBPS, true)}}
+}
+
+func (f *fakeBillingGroups) Create(_ context.Context, input billinggroup.CreateInput) (billinggroup.Record, error) {
+	f.createInput = input
+	if f.createErr != nil {
+		return billinggroup.Record{}, f.createErr
+	}
+	return activeBillingGroup(uuid.New(), input.Code, input.DisplayName, input.MultiplierBPS, false), nil
+}
+
+func (f *fakeBillingGroups) List(_ context.Context, filter billinggroup.ListFilter) ([]billinggroup.Record, error) {
+	f.listFilter = filter
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	records := f.records
+	if records == nil {
+		records = defaultBillingGroups().records
+	}
+	if filter.Status == "" {
+		return records, nil
+	}
+	filtered := make([]billinggroup.Record, 0, len(records))
+	for _, record := range records {
+		if record.Status == filter.Status {
+			filtered = append(filtered, record)
+		}
+	}
+	return filtered, nil
+}
+
+func (f *fakeBillingGroups) Update(_ context.Context, id uuid.UUID, input billinggroup.UpdateInput) (billinggroup.Record, error) {
+	f.updateInput = input
+	if f.updateErr != nil {
+		return billinggroup.Record{}, f.updateErr
+	}
+	record := activeBillingGroup(id, "default", "默认", billinggroup.DefaultMultiplierBPS, true)
+	if input.DisplayName != nil {
+		record.DisplayName = *input.DisplayName
+	}
+	if input.MultiplierBPS != nil {
+		record.MultiplierBPS = *input.MultiplierBPS
+	}
+	return record, nil
+}
+
+func (f *fakeBillingGroups) SetStatus(_ context.Context, id uuid.UUID, status billinggroup.Status) (billinggroup.Record, error) {
+	f.status = status
+	if f.statusErr != nil {
+		return billinggroup.Record{}, f.statusErr
+	}
+	record := activeBillingGroup(id, "default", "默认", billinggroup.DefaultMultiplierBPS, true)
+	record.Status = status
+	return record, nil
+}
+
+func (f *fakeBillingGroups) Delete(_ context.Context, id uuid.UUID) error {
+	f.deletedID = id
+	return f.deleteErr
+}
 
 func (f *fakePayments) Config(context.Context) (payment.PublicConfig, error) {
 	return payment.PublicConfig{Enabled: true, Provider: "epay", Channels: []string{"alipay"}, MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros}, nil
@@ -239,7 +326,7 @@ func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, model
 
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
 	f.createInput = input
-	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
+	return provider.Record{ID: uuid.New(), BillingGroupID: input.BillingGroupID, BillingGroup: billinggroup.Summary{ID: input.BillingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
 }
 func (f *fakeProviders) List(context.Context, provider.ListFilter) ([]provider.Record, error) {
 	return []provider.Record{}, f.err
@@ -257,13 +344,13 @@ func (f *fakeProviders) Delete(_ context.Context, id uuid.UUID) error {
 	return f.err
 }
 
-func (f *fakeAPIKeys) Create(_ context.Context, userID uuid.UUID, name string) (apikey.CreateResult, error) {
-	f.createdUserID, f.createdName = userID, name
+func (f *fakeAPIKeys) Create(_ context.Context, userID, billingGroupID uuid.UUID, name string) (apikey.CreateResult, error) {
+	f.createdUserID, f.createdGroupID, f.createdName = userID, billingGroupID, name
 	if f.err != nil {
 		return apikey.CreateResult{}, f.err
 	}
 	return apikey.CreateResult{
-		APIKey: apikey.Record{ID: uuid.New(), UserID: userID, Name: name, KeyPrefix: "nvr_example", Status: apikey.StatusActive},
+		APIKey: apikey.Record{ID: uuid.New(), UserID: userID, BillingGroupID: billingGroupID, BillingGroup: billinggroup.Summary{ID: billingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Name: name, KeyPrefix: "nvr_example", Status: apikey.StatusActive},
 		Key:    "nvr_full-secret-returned-once",
 	}, nil
 }
@@ -357,6 +444,9 @@ func (f *fakeAPIUsers) Update(_ context.Context, id uuid.UUID, input user.Update
 }
 
 func (f *fakeAPIUsers) ResetPassword(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeAPIUsers) FindByUsername(context.Context, string) (user.Record, error) {
+	return user.Record{}, user.ErrNotFound
+}
 
 func testAPI(authService *fakeAPIAuth, users *fakeAPIUsers) http.Handler {
 	return testAPIWithKeys(authService, users, &fakeAPIKeys{})
@@ -369,6 +459,7 @@ func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fak
 		Users:               users,
 		APIKeys:             apiKeys,
 		Providers:           &fakeProviders{},
+		BillingGroups:       defaultBillingGroups(),
 		Logger:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 		CookieName:          "novro_session",
 		CookieSecure:        true,
@@ -1008,14 +1099,15 @@ func TestAdminEmailConfigRejectsInvalidInputWithoutLeakingDetails(t *testing.T) 
 
 func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	currentID := uuid.New()
+	groupID := uuid.New()
 	authService := &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}}
 	keys := &fakeAPIKeys{}
 	handler := testAPIWithKeys(authService, &fakeAPIUsers{}, keys)
 
-	request := httptest.NewRequest(http.MethodPost, "/api/account/api-keys", strings.NewReader(`{"name":"Production"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/account/api-keys", strings.NewReader(`{"name":"Production","billing_group_id":"`+groupID.String()+`"}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || keys.createdUserID != currentID || keys.createdName != "Production" || !strings.Contains(response.Body.String(), "nvr_full-secret-returned-once") {
+	if response.Code != http.StatusCreated || keys.createdUserID != currentID || keys.createdGroupID != groupID || keys.createdName != "Production" || !strings.Contains(response.Body.String(), "nvr_full-secret-returned-once") {
 		t.Fatalf("status=%d body=%s keys=%+v", response.Code, response.Body.String(), keys)
 	}
 
@@ -1030,10 +1122,11 @@ func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 
 func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	currentID := uuid.New()
+	groupID := uuid.New()
 	authService := &fakeAPIAuth{current: user.Record{
 		ID: currentID, Role: user.RoleMember, Status: user.StatusActive,
-		BillingGroup: &user.BillingGroupSummary{DisplayName: "个人版", MultiplierBPS: 12_500},
 	}}
+	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 12_500, false)}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{{
 		PublicName: "deepseek-chat", DisplayName: "DeepSeek Chat",
 		Provider: modelroute.ProviderSummary{DisplayName: "DeepSeek", Protocol: provider.ProtocolOpenAI},
@@ -1042,10 +1135,10 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 		}},
 	}}}
 	handler := New(Dependencies{
-		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, ModelRoutes: routes,
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, BillingGroups: groups, ModelRoutes: routes,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 	})
-	request := httptest.NewRequest(http.MethodGet, "/api/account/models", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/account/models?billing_group_id="+groupID.String(), nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
@@ -1064,8 +1157,8 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v; body=%s", err, response.Body.String())
 	}
-	if response.Code != http.StatusOK || len(body.Models) != 1 {
-		t.Fatalf("status=%d models=%+v body=%s", response.Code, body.Models, response.Body.String())
+	if response.Code != http.StatusOK || len(body.Models) != 1 || routes.listActiveGroupID != groupID || groups.listFilter.Status != billinggroup.StatusActive {
+		t.Fatalf("status=%d models=%+v routeGroup=%s groupFilter=%+v body=%s", response.Code, body.Models, routes.listActiveGroupID, groups.listFilter, response.Body.String())
 	}
 	model := body.Models[0]
 	if model.ID != "deepseek-chat" || model.ProviderName != "DeepSeek" || model.Protocol != provider.ProtocolOpenAI {
@@ -1079,18 +1172,62 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	}
 }
 
+func TestUserListsActiveBillingGroups(t *testing.T) {
+	currentID := uuid.New()
+	activeID := uuid.New()
+	disabledID := uuid.New()
+	active := activeBillingGroup(activeID, "personal", "个人版", 12_500, false)
+	active.APIKeyCount = 7
+	active.ProviderCount = 3
+	active.CreatedAt = time.Unix(1_700_000_000, 0).UTC()
+	groups := &fakeBillingGroups{records: []billinggroup.Record{
+		active,
+		{ID: disabledID, Code: "disabled", DisplayName: "停用组", MultiplierBPS: 20_000, Status: billinggroup.StatusDisabled},
+	}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, BillingGroups: groups,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
+	body := response.Body.String()
+	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || !strings.Contains(body, activeID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "provider_count") || strings.Contains(body, "created_at") {
+		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
+	}
+}
+
+func TestUserModelListRejectsUnavailableBillingGroup(t *testing.T) {
+	currentID := uuid.New()
+	activeID := uuid.New()
+	requestedID := uuid.New()
+	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(activeID, "personal", "个人版", 12_500, false)}}
+	routes := &fakeModelRoutes{}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, BillingGroups: groups, ModelRoutes: routes,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models?billing_group_id="+requestedID.String(), nil))
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "billing_group_unavailable") || routes.listActiveGroupID != uuid.Nil {
+		t.Fatalf("status=%d routeGroup=%s body=%s", response.Code, routes.listActiveGroupID, response.Body.String())
+	}
+}
+
 func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	currentID := uuid.New()
+	groupID := uuid.New()
 	authService := &fakeAPIAuth{current: user.Record{
 		ID: currentID, Role: user.RoleMember, Status: user.StatusActive,
-		BillingGroup: &user.BillingGroupSummary{DisplayName: "个人版", MultiplierBPS: 10_000},
 	}}
+	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 10_000, true)}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{
 		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "First", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 500_000}}},
 		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "Second", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 3_000_000, OutputMicros: 7_000_000, CacheReadMicros: 600_000}}},
 	}}
 	handler := New(Dependencies{
-		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, ModelRoutes: routes,
+		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, BillingGroups: groups, ModelRoutes: routes,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 	})
 	response := httptest.NewRecorder()
@@ -1118,7 +1255,7 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 func TestAPIKeyErrorsAreStable(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}}
 	keys := &fakeAPIKeys{err: apikey.ErrLimitReached}
-	request := httptest.NewRequest(http.MethodPost, "/api/account/api-keys", strings.NewReader(`{"name":"Overflow"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/account/api-keys", strings.NewReader(`{"name":"Overflow","billing_group_id":"`+uuid.NewString()+`"}`))
 	response := httptest.NewRecorder()
 	testAPIWithKeys(authService, &fakeAPIUsers{}, keys).ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "api_key_limit_reached") {
@@ -1128,17 +1265,18 @@ func TestAPIKeyErrorsAreStable(t *testing.T) {
 
 func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	groupID := uuid.New()
 	providers := &fakeProviders{}
 	handler := New(Dependencies{
 		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: providers,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","api_key":"upstream-secret"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","api_key":"upstream-secret","billing_group_id":"`+groupID.String()+`"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || strings.Contains(response.Body.String(), "upstream-secret") {
+	if response.Code != http.StatusCreated || providers.createInput.BillingGroupID != groupID || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || strings.Contains(response.Body.String(), "upstream-secret") {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.createInput)
 	}
 

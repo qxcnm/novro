@@ -14,10 +14,11 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
-	"github.com/novro-gateway/novro/ent/user"
+	"github.com/novro-gateway/novro/ent/provider"
 )
 
 // BillingGroupQuery is the builder for querying BillingGroup entities.
@@ -27,7 +28,8 @@ type BillingGroupQuery struct {
 	order         []billinggroup.OrderOption
 	inters        []Interceptor
 	predicates    []predicate.BillingGroup
-	withUsers     *UserQuery
+	withAPIKeys   *APIKeyQuery
+	withProviders *ProviderQuery
 	withAPIUsages *APIUsageQuery
 	modifiers     []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
@@ -66,9 +68,9 @@ func (_q *BillingGroupQuery) Order(o ...billinggroup.OrderOption) *BillingGroupQ
 	return _q
 }
 
-// QueryUsers chains the current query on the "users" edge.
-func (_q *BillingGroupQuery) QueryUsers() *UserQuery {
-	query := (&UserClient{config: _q.config}).Query()
+// QueryAPIKeys chains the current query on the "api_keys" edge.
+func (_q *BillingGroupQuery) QueryAPIKeys() *APIKeyQuery {
+	query := (&APIKeyClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -79,8 +81,30 @@ func (_q *BillingGroupQuery) QueryUsers() *UserQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.UsersTable, billinggroup.UsersColumn),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.APIKeysTable, billinggroup.APIKeysColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryProviders chains the current query on the "providers" edge.
+func (_q *BillingGroupQuery) QueryProviders() *ProviderQuery {
+	query := (&ProviderClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.ProvidersTable, billinggroup.ProvidersColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -302,7 +326,8 @@ func (_q *BillingGroupQuery) Clone() *BillingGroupQuery {
 		order:         append([]billinggroup.OrderOption{}, _q.order...),
 		inters:        append([]Interceptor{}, _q.inters...),
 		predicates:    append([]predicate.BillingGroup{}, _q.predicates...),
-		withUsers:     _q.withUsers.Clone(),
+		withAPIKeys:   _q.withAPIKeys.Clone(),
+		withProviders: _q.withProviders.Clone(),
 		withAPIUsages: _q.withAPIUsages.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -310,14 +335,25 @@ func (_q *BillingGroupQuery) Clone() *BillingGroupQuery {
 	}
 }
 
-// WithUsers tells the query-builder to eager-load the nodes that are connected to
-// the "users" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *BillingGroupQuery) WithUsers(opts ...func(*UserQuery)) *BillingGroupQuery {
-	query := (&UserClient{config: _q.config}).Query()
+// WithAPIKeys tells the query-builder to eager-load the nodes that are connected to
+// the "api_keys" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BillingGroupQuery) WithAPIKeys(opts ...func(*APIKeyQuery)) *BillingGroupQuery {
+	query := (&APIKeyClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withUsers = query
+	_q.withAPIKeys = query
+	return _q
+}
+
+// WithProviders tells the query-builder to eager-load the nodes that are connected to
+// the "providers" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BillingGroupQuery) WithProviders(opts ...func(*ProviderQuery)) *BillingGroupQuery {
+	query := (&ProviderClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withProviders = query
 	return _q
 }
 
@@ -410,8 +446,9 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*BillingGroup{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
-			_q.withUsers != nil,
+		loadedTypes = [3]bool{
+			_q.withAPIKeys != nil,
+			_q.withProviders != nil,
 			_q.withAPIUsages != nil,
 		}
 	)
@@ -436,10 +473,17 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withUsers; query != nil {
-		if err := _q.loadUsers(ctx, query, nodes,
-			func(n *BillingGroup) { n.Edges.Users = []*User{} },
-			func(n *BillingGroup, e *User) { n.Edges.Users = append(n.Edges.Users, e) }); err != nil {
+	if query := _q.withAPIKeys; query != nil {
+		if err := _q.loadAPIKeys(ctx, query, nodes,
+			func(n *BillingGroup) { n.Edges.APIKeys = []*APIKey{} },
+			func(n *BillingGroup, e *APIKey) { n.Edges.APIKeys = append(n.Edges.APIKeys, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withProviders; query != nil {
+		if err := _q.loadProviders(ctx, query, nodes,
+			func(n *BillingGroup) { n.Edges.Providers = []*Provider{} },
+			func(n *BillingGroup, e *Provider) { n.Edges.Providers = append(n.Edges.Providers, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -453,7 +497,7 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	return nodes, nil
 }
 
-func (_q *BillingGroupQuery) loadUsers(ctx context.Context, query *UserQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *User)) error {
+func (_q *BillingGroupQuery) loadAPIKeys(ctx context.Context, query *APIKeyQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *APIKey)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[uuid.UUID]*BillingGroup)
 	for i := range nodes {
@@ -464,10 +508,10 @@ func (_q *BillingGroupQuery) loadUsers(ctx context.Context, query *UserQuery, no
 		}
 	}
 	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(user.FieldBillingGroupID)
+		query.ctx.AppendFieldOnce(apikey.FieldBillingGroupID)
 	}
-	query.Where(predicate.User(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(billinggroup.UsersColumn), fks...))
+	query.Where(predicate.APIKey(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(billinggroup.APIKeysColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -475,12 +519,39 @@ func (_q *BillingGroupQuery) loadUsers(ctx context.Context, query *UserQuery, no
 	}
 	for _, n := range neighbors {
 		fk := n.BillingGroupID
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "billing_group_id" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
+		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "billing_group_id" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "billing_group_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *BillingGroupQuery) loadProviders(ctx context.Context, query *ProviderQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *Provider)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*BillingGroup)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(provider.FieldBillingGroupID)
+	}
+	query.Where(predicate.Provider(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(billinggroup.ProvidersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.BillingGroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "billing_group_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

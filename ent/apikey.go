@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -21,6 +22,8 @@ type APIKey struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID uuid.UUID `json:"user_id,omitempty"`
+	// BillingGroupID holds the value of the "billing_group_id" field.
+	BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// KeyPrefix holds the value of the "key_prefix" field.
@@ -45,11 +48,13 @@ type APIKey struct {
 type APIKeyEdges struct {
 	// User holds the value of the user edge.
 	User *User `json:"user,omitempty"`
+	// BillingGroup holds the value of the billing_group edge.
+	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -63,10 +68,21 @@ func (e APIKeyEdges) UserOrErr() (*User, error) {
 	return nil, &NotLoadedError{edge: "user"}
 }
 
+// BillingGroupOrErr returns the BillingGroup value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e APIKeyEdges) BillingGroupOrErr() (*BillingGroup, error) {
+	if e.BillingGroup != nil {
+		return e.BillingGroup, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: billinggroup.Label}
+	}
+	return nil, &NotLoadedError{edge: "billing_group"}
+}
+
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
 // was not loaded in eager-loading.
 func (e APIKeyEdges) APIUsagesOrErr() ([]*APIUsage, error) {
-	if e.loadedTypes[1] {
+	if e.loadedTypes[2] {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
@@ -81,7 +97,7 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case apikey.FieldLastUsedAt, apikey.FieldCreatedAt, apikey.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
-		case apikey.FieldID, apikey.FieldUserID:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldBillingGroupID:
 			values[i] = new(uuid.UUID)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -109,6 +125,12 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value != nil {
 				_m.UserID = *value
+			}
+		case apikey.FieldBillingGroupID:
+			if value, ok := values[i].(*uuid.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
+			} else if value != nil {
+				_m.BillingGroupID = *value
 			}
 		case apikey.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -172,6 +194,11 @@ func (_m *APIKey) QueryUser() *UserQuery {
 	return NewAPIKeyClient(_m.config).QueryUser(_m)
 }
 
+// QueryBillingGroup queries the "billing_group" edge of the APIKey entity.
+func (_m *APIKey) QueryBillingGroup() *BillingGroupQuery {
+	return NewAPIKeyClient(_m.config).QueryBillingGroup(_m)
+}
+
 // QueryAPIUsages queries the "api_usages" edge of the APIKey entity.
 func (_m *APIKey) QueryAPIUsages() *APIUsageQuery {
 	return NewAPIKeyClient(_m.config).QueryAPIUsages(_m)
@@ -202,6 +229,9 @@ func (_m *APIKey) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("user_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
+	builder.WriteString(", ")
+	builder.WriteString("billing_group_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BillingGroupID))
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)

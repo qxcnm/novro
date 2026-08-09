@@ -29,7 +29,7 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/admin/api-keys": { title: "API Key 审计", description: "跨用户检索和撤销访问密钥" },
   "/admin/providers": { title: "提供商与路由", description: "提供商配置、模型同步与关联路由" },
   "/admin/upstream-models": { title: "模型目录", description: "模型标识与各计费维度的基础价格" },
-  "/admin/billing-groups": { title: "计费分组", description: "用户分组与结算倍率" },
+  "/admin/billing-groups": { title: "计费分组", description: "API Key、供应商与结算倍率" },
   "/admin/payments": { title: "支付配置", description: "易支付商户信息与充值渠道" },
   "/admin/referral": { title: "推荐设置", description: "邀请返现比例与生效规则" },
   "/admin/email": { title: "邮件设置", description: "注册验证码的 SMTP 发送配置" },
@@ -171,7 +171,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <ConsoleNavigation user={user} />
           <div className="mt-auto border-t p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0"><p className="truncate text-sm font-medium">{user.display_name || user.username}</p><p className="truncate text-xs text-muted-foreground">@{user.username}{user.billing_group ? ` · ${user.billing_group.display_name}` : ""}</p></div>
+              <div className="min-w-0"><p className="truncate text-sm font-medium">{user.display_name || user.username}</p><p className="truncate text-xs text-muted-foreground">@{user.username}</p></div>
               <Badge variant="secondary">{user.role === "admin" ? "管理员" : "成员"}</Badge>
             </div>
           </div>

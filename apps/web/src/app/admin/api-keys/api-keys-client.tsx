@@ -18,6 +18,8 @@ import { useListSelection } from "@/lib/use-list-selection";
 
 type APIKeyRecord = {
   id: string;
+  billing_group_id: string;
+  billing_group: { id: string; code: string; display_name: string; multiplier_bps: number };
   name: string;
   key_prefix: string;
   status: "active" | "revoked";
@@ -145,15 +147,16 @@ export default function AdminAPIKeysClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有可撤销 API Key" checked={selection.checkboxState} disabled={loading || activeCount === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">API Key</TableHead><TableHead className="min-w-44">所属用户</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近使用</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有可撤销 API Key" checked={selection.checkboxState} disabled={loading || activeCount === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">API Key</TableHead><TableHead className="min-w-44">所属用户</TableHead><TableHead>计费分组</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近使用</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}
-                  {!loading && keys.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>没有匹配的 API Key</TableCell></TableRow> : null}
+                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
+                  {!loading && keys.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>没有匹配的 API Key</TableCell></TableRow> : null}
                   {!loading ? keys.map((key) => (
                     <TableRow key={key.id}>
                       <TableCell><Checkbox aria-label={`选择 ${key.owner.username} 的 ${key.name}`} checked={selection.isSelected(key.id)} disabled={key.status !== "active"} onCheckedChange={(checked) => selection.toggleOne(key.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{key.name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{key.key_prefix}••••</p></TableCell>
                       <TableCell><p>{key.owner.display_name || key.owner.username}</p><p className="mt-0.5 text-xs text-muted-foreground">@{key.owner.username}</p></TableCell>
+                      <TableCell><p>{key.billing_group?.display_name ?? "默认分组"}</p><p className="font-mono text-xs text-muted-foreground">{((key.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
                       <TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell>

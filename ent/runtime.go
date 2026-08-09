@@ -32,7 +32,7 @@ func init() {
 	apikeyFields := schema.APIKey{}.Fields()
 	_ = apikeyFields
 	// apikeyDescName is the schema descriptor for name field.
-	apikeyDescName := apikeyFields[2].Descriptor()
+	apikeyDescName := apikeyFields[3].Descriptor()
 	// apikey.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	apikey.NameValidator = func() func(string) error {
 		validators := apikeyDescName.Validators
@@ -50,7 +50,7 @@ func init() {
 		}
 	}()
 	// apikeyDescKeyPrefix is the schema descriptor for key_prefix field.
-	apikeyDescKeyPrefix := apikeyFields[3].Descriptor()
+	apikeyDescKeyPrefix := apikeyFields[4].Descriptor()
 	// apikey.KeyPrefixValidator is a validator for the "key_prefix" field. It is called by the builders before save.
 	apikey.KeyPrefixValidator = func() func(string) error {
 		validators := apikeyDescKeyPrefix.Validators
@@ -68,7 +68,7 @@ func init() {
 		}
 	}()
 	// apikeyDescKeyHash is the schema descriptor for key_hash field.
-	apikeyDescKeyHash := apikeyFields[4].Descriptor()
+	apikeyDescKeyHash := apikeyFields[5].Descriptor()
 	// apikey.KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
 	apikey.KeyHashValidator = func() func(string) error {
 		validators := apikeyDescKeyHash.Validators
@@ -86,7 +86,7 @@ func init() {
 		}
 	}()
 	// apikeyDescCreatedAt is the schema descriptor for created_at field.
-	apikeyDescCreatedAt := apikeyFields[7].Descriptor()
+	apikeyDescCreatedAt := apikeyFields[8].Descriptor()
 	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
 	// apikeyDescID is the schema descriptor for id field.
@@ -608,7 +608,7 @@ func init() {
 	providerFields := schema.Provider{}.Fields()
 	_ = providerFields
 	// providerDescCode is the schema descriptor for code field.
-	providerDescCode := providerFields[1].Descriptor()
+	providerDescCode := providerFields[2].Descriptor()
 	// provider.CodeValidator is a validator for the "code" field. It is called by the builders before save.
 	provider.CodeValidator = func() func(string) error {
 		validators := providerDescCode.Validators
@@ -626,7 +626,7 @@ func init() {
 		}
 	}()
 	// providerDescDisplayName is the schema descriptor for display_name field.
-	providerDescDisplayName := providerFields[2].Descriptor()
+	providerDescDisplayName := providerFields[3].Descriptor()
 	// provider.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	provider.DisplayNameValidator = func() func(string) error {
 		validators := providerDescDisplayName.Validators
@@ -644,7 +644,7 @@ func init() {
 		}
 	}()
 	// providerDescBaseURL is the schema descriptor for base_url field.
-	providerDescBaseURL := providerFields[4].Descriptor()
+	providerDescBaseURL := providerFields[5].Descriptor()
 	// provider.BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	provider.BaseURLValidator = func() func(string) error {
 		validators := providerDescBaseURL.Validators
@@ -662,13 +662,13 @@ func init() {
 		}
 	}()
 	// providerDescModelListPath is the schema descriptor for model_list_path field.
-	providerDescModelListPath := providerFields[5].Descriptor()
+	providerDescModelListPath := providerFields[6].Descriptor()
 	// provider.DefaultModelListPath holds the default value on creation for the model_list_path field.
 	provider.DefaultModelListPath = providerDescModelListPath.Default.(string)
 	// provider.ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
 	provider.ModelListPathValidator = providerDescModelListPath.Validators[0].(func(string) error)
 	// providerDescEncryptedAPIKey is the schema descriptor for encrypted_api_key field.
-	providerDescEncryptedAPIKey := providerFields[6].Descriptor()
+	providerDescEncryptedAPIKey := providerFields[7].Descriptor()
 	// provider.EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	provider.EncryptedAPIKeyValidator = func() func(string) error {
 		validators := providerDescEncryptedAPIKey.Validators
@@ -686,7 +686,7 @@ func init() {
 		}
 	}()
 	// providerDescAPIKeyHint is the schema descriptor for api_key_hint field.
-	providerDescAPIKeyHint := providerFields[7].Descriptor()
+	providerDescAPIKeyHint := providerFields[8].Descriptor()
 	// provider.APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
 	provider.APIKeyHintValidator = func() func(string) error {
 		validators := providerDescAPIKeyHint.Validators
@@ -704,11 +704,11 @@ func init() {
 		}
 	}()
 	// providerDescCreatedAt is the schema descriptor for created_at field.
-	providerDescCreatedAt := providerFields[9].Descriptor()
+	providerDescCreatedAt := providerFields[10].Descriptor()
 	// provider.DefaultCreatedAt holds the default value on creation for the created_at field.
 	provider.DefaultCreatedAt = providerDescCreatedAt.Default.(func() time.Time)
 	// providerDescUpdatedAt is the schema descriptor for updated_at field.
-	providerDescUpdatedAt := providerFields[10].Descriptor()
+	providerDescUpdatedAt := providerFields[11].Descriptor()
 	// provider.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	provider.DefaultUpdatedAt = providerDescUpdatedAt.Default.(func() time.Time)
 	// provider.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -930,7 +930,7 @@ func init() {
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescInviteCode is the schema descriptor for invite_code field.
-	userDescInviteCode := userFields[2].Descriptor()
+	userDescInviteCode := userFields[1].Descriptor()
 	// user.DefaultInviteCode holds the default value on creation for the invite_code field.
 	user.DefaultInviteCode = userDescInviteCode.Default.(func() string)
 	// user.InviteCodeValidator is a validator for the "invite_code" field. It is called by the builders before save.
@@ -950,7 +950,7 @@ func init() {
 		}
 	}()
 	// userDescUsername is the schema descriptor for username field.
-	userDescUsername := userFields[4].Descriptor()
+	userDescUsername := userFields[3].Descriptor()
 	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	user.UsernameValidator = func() func(string) error {
 		validators := userDescUsername.Validators
@@ -968,7 +968,7 @@ func init() {
 		}
 	}()
 	// userDescEmail is the schema descriptor for email field.
-	userDescEmail := userFields[5].Descriptor()
+	userDescEmail := userFields[4].Descriptor()
 	// user.EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	user.EmailValidator = func() func(string) error {
 		validators := userDescEmail.Validators
@@ -986,11 +986,15 @@ func init() {
 		}
 	}()
 	// userDescDisplayName is the schema descriptor for display_name field.
-	userDescDisplayName := userFields[6].Descriptor()
+	userDescDisplayName := userFields[5].Descriptor()
 	// user.DefaultDisplayName holds the default value on creation for the display_name field.
 	user.DefaultDisplayName = userDescDisplayName.Default.(string)
 	// user.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	user.DisplayNameValidator = userDescDisplayName.Validators[0].(func(string) error)
+	// userDescIsSystemAdmin is the schema descriptor for is_system_admin field.
+	userDescIsSystemAdmin := userFields[7].Descriptor()
+	// user.DefaultIsSystemAdmin holds the default value on creation for the is_system_admin field.
+	user.DefaultIsSystemAdmin = userDescIsSystemAdmin.Default.(bool)
 	// userDescCreatedAt is the schema descriptor for created_at field.
 	userDescCreatedAt := userFields[11].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.

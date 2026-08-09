@@ -71,7 +71,7 @@ func newTestService(t *testing.T, store *fakeAuthStore) *Service {
 func TestLoginCreatesHashedSession(t *testing.T) {
 	hash := "hash:correct-password"
 	store := &fakeAuthStore{loginUser: LoginUser{
-		User:         user.Record{ID: uuid.New(), Username: "admin", Status: user.StatusActive},
+		User:         user.Record{ID: uuid.New(), Username: "admin", Status: user.StatusActive, IsSystemAdmin: true},
 		PasswordHash: &hash,
 	}}
 	service := newTestService(t, store)
@@ -81,6 +81,9 @@ func TestLoginCreatesHashedSession(t *testing.T) {
 	}
 	if store.sessionHash == "" || store.sessionHash == result.Token || result.ExpiresAt.Sub(service.now()) != time.Hour {
 		t.Fatalf("unexpected login result: %+v hash=%q", result, store.sessionHash)
+	}
+	if !result.User.IsSystemAdmin {
+		t.Fatal("system administrator marker was lost during login")
 	}
 }
 

@@ -52,7 +52,7 @@ type UserService interface {
 }
 
 type APIKeyService interface {
-	Create(context.Context, uuid.UUID, string) (apikey.CreateResult, error)
+	Create(context.Context, uuid.UUID, uuid.UUID, string) (apikey.CreateResult, error)
 	ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error)
 	RevokeForUser(context.Context, uuid.UUID, uuid.UUID) error
 	ListAll(context.Context, apikey.ListFilter) (apikey.Page, error)
@@ -93,7 +93,7 @@ type ReferralService interface {
 type ModelRouteService interface {
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
-	ListActive(context.Context) ([]modelroute.Record, error)
+	ListActive(context.Context, uuid.UUID) ([]modelroute.Record, error)
 	Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error)
 	SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error)
 	Delete(context.Context, uuid.UUID) error
@@ -238,6 +238,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
+	mux.HandleFunc("GET /api/account/billing-groups", h.listMyBillingGroups)
 	mux.HandleFunc("GET /api/account/models", h.listAvailableModels)
 	mux.HandleFunc("GET /api/account/balance", h.myBalance)
 	mux.HandleFunc("GET /api/account/usage", h.myUsage)
@@ -646,13 +647,14 @@ func (h *apiHandler) createMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request struct {
-		Name string `json:"name"`
+		Name           string    `json:"name"`
+		BillingGroupID uuid.UUID `json:"billing_group_id"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "API Key 信息格式无效")
 		return
 	}
-	created, err := h.apiKeys.Create(r.Context(), record.ID, request.Name)
+	created, err := h.apiKeys.Create(r.Context(), record.ID, request.BillingGroupID, request.Name)
 	if err != nil {
 		h.writeAPIKeyError(w, "create API key", err)
 		return
@@ -1173,17 +1175,41 @@ type availableModel struct {
 }
 
 func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request) {
-	record, ok := h.requireUser(w, r)
-	if !ok {
+	if _, ok := h.requireUser(w, r); !ok {
 		return
 	}
-	multiplierBPS := billing.BasisPointsUnit
-	billingGroupName := "默认分组"
-	if record.BillingGroup != nil {
-		multiplierBPS = record.BillingGroup.MultiplierBPS
-		billingGroupName = record.BillingGroup.DisplayName
+	groups, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive})
+	if err != nil {
+		h.writeBillingGroupError(w, "list account billing groups", err)
+		return
 	}
-	routes, err := h.modelRoutes.ListActive(r.Context())
+	var selected billinggroup.Record
+	requestedID := strings.TrimSpace(r.URL.Query().Get("billing_group_id"))
+	if requestedID != "" {
+		id, parseErr := uuid.Parse(requestedID)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "计费分组 ID 无效")
+			return
+		}
+		for _, group := range groups {
+			if group.ID == id {
+				selected = group
+				break
+			}
+		}
+	} else {
+		for _, group := range groups {
+			if group.IsDefault {
+				selected = group
+				break
+			}
+		}
+	}
+	if selected.ID == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
+		return
+	}
+	routes, err := h.modelRoutes.ListActive(r.Context(), selected.ID)
 	if err != nil {
 		h.writeModelRouteError(w, "list available models", err)
 		return
@@ -1203,12 +1229,12 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 			ID: route.PublicName, DisplayName: route.DisplayName,
 			ProviderName: providerName, Protocol: route.Provider.Protocol, ChannelCount: 1,
 			Prices: billing.RateCard{
-				InputMicros:        priceWithMultiplier(prices.InputMicros, multiplierBPS),
-				OutputMicros:       priceWithMultiplier(prices.OutputMicros, multiplierBPS),
-				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, multiplierBPS),
-				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, multiplierBPS),
-				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, multiplierBPS),
-				RequestMicros:      priceWithMultiplier(prices.RequestMicros, multiplierBPS),
+				InputMicros:        priceWithMultiplier(prices.InputMicros, selected.MultiplierBPS),
+				OutputMicros:       priceWithMultiplier(prices.OutputMicros, selected.MultiplierBPS),
+				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, selected.MultiplierBPS),
+				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, selected.MultiplierBPS),
+				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, selected.MultiplierBPS),
+				RequestMicros:      priceWithMultiplier(prices.RequestMicros, selected.MultiplierBPS),
 			},
 		}
 		key := candidate.ID + "\x00" + string(candidate.Protocol)
@@ -1223,10 +1249,44 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"models": models,
 		"billing_group": map[string]any{
-			"display_name":   billingGroupName,
-			"multiplier_bps": multiplierBPS,
+			"id":             selected.ID,
+			"code":           selected.Code,
+			"display_name":   selected.DisplayName,
+			"multiplier_bps": selected.MultiplierBPS,
 		},
 	})
+}
+
+func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireUser(w, r); !ok {
+		return
+	}
+	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive})
+	if err != nil {
+		h.writeBillingGroupError(w, "list account billing groups", err)
+		return
+	}
+	groups := make([]accountBillingGroup, 0, len(records))
+	for _, record := range records {
+		groups = append(groups, accountBillingGroup{
+			ID:            record.ID,
+			Code:          record.Code,
+			DisplayName:   record.DisplayName,
+			MultiplierBPS: record.MultiplierBPS,
+			IsDefault:     record.IsDefault,
+			Status:        record.Status,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"billing_groups": groups})
+}
+
+type accountBillingGroup struct {
+	ID            uuid.UUID           `json:"id"`
+	Code          string              `json:"code"`
+	DisplayName   string              `json:"display_name"`
+	MultiplierBPS int64               `json:"multiplier_bps"`
+	IsDefault     bool                `json:"is_default"`
+	Status        billinggroup.Status `json:"status"`
 }
 
 func maximumRateCard(first, second billing.RateCard) billing.RateCard {
@@ -1771,6 +1831,8 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 		writeError(w, http.StatusBadRequest, "invalid_referral_code", "邀请码无效或邀请账号不可用")
 	case errors.Is(err, user.ErrLastActiveAdmin):
 		writeError(w, http.StatusConflict, "last_active_admin", "不能停用或降级最后一个启用的管理员")
+	case errors.Is(err, user.ErrProtectedAdmin):
+		writeError(w, http.StatusConflict, "protected_admin", "系统管理员账号不可停用或降级")
 	case errors.Is(err, user.ErrAlreadyInitialized):
 		writeError(w, http.StatusConflict, "already_initialized", "管理员账号已经初始化")
 	default:
@@ -1822,6 +1884,8 @@ func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, e
 		writeError(w, http.StatusNotFound, "not_found", "API Key 不存在")
 	case errors.Is(err, apikey.ErrLimitReached):
 		writeError(w, http.StatusConflict, "api_key_limit_reached", "启用的 API Key 已达到上限")
+	case errors.Is(err, apikey.ErrGroupUnavailable):
+		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1835,6 +1899,8 @@ func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string,
 		writeError(w, http.StatusNotFound, "not_found", "提供商不存在")
 	case errors.Is(err, provider.ErrCodeTaken):
 		writeError(w, http.StatusConflict, "provider_code_taken", "提供商标识已存在")
+	case errors.Is(err, provider.ErrGroupUnavailable):
+		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -1941,7 +2007,7 @@ func (h *apiHandler) writeBillingGroupError(w http.ResponseWriter, operation str
 	case errors.Is(err, billinggroup.ErrProtected):
 		writeError(w, http.StatusConflict, "default_billing_group", "默认计费分组不能停用或删除")
 	case errors.Is(err, billinggroup.ErrInUse):
-		writeError(w, http.StatusConflict, "billing_group_in_use", "计费分组仍分配给用户，请先迁移用户")
+		writeError(w, http.StatusConflict, "billing_group_in_use", "计费分组仍被 API Key 或提供商使用，请先迁移关联配置")
 	default:
 		h.internalError(w, operation, err)
 	}

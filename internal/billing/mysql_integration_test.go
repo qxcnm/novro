@@ -131,11 +131,15 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if _, err := client.Wallet.Create().SetUserID(createdUser.ID).SetBalanceMicros(initialBalance).Save(ctx); err != nil {
 		t.Fatalf("create integration wallet: %v", err)
 	}
-	apiKey, err := client.APIKey.Create().SetUserID(createdUser.ID).SetName("integration").SetKeyPrefix("nvr_test").SetKeyHash(strings.Repeat("a", 64)).Save(ctx)
+	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
+	if err != nil {
+		t.Fatalf("read default billing group: %v", err)
+	}
+	apiKey, err := client.APIKey.Create().SetUserID(createdUser.ID).SetBillingGroupID(group.ID).SetName("integration").SetKeyPrefix("nvr_test").SetKeyHash(strings.Repeat("a", 64)).Save(ctx)
 	if err != nil {
 		t.Fatalf("create integration API key: %v", err)
 	}
-	providerEntity, err := client.Provider.Create().SetCode("integration-provider").SetDisplayName("Integration Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
+	providerEntity, err := client.Provider.Create().SetBillingGroupID(group.ID).SetCode("integration-provider").SetDisplayName("Integration Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
 	if err != nil {
 		t.Fatalf("create integration provider: %v", err)
 	}
@@ -169,10 +173,6 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 		t.Fatalf("conflicting refund err=%v", err)
 	}
 
-	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
-	if err != nil {
-		t.Fatalf("read default billing group: %v", err)
-	}
 	usage := UsageInput{UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, UpstreamModelID: &upstream.ID, BillingGroupID: &group.ID, RequestID: requestID, Endpoint: "chat_completions", InputTokens: 10, Tokens: TokenBreakdown{UncachedInput: 10, Output: 20}, OutputTokens: 20, Rates: RateCard{RequestMicros: 300_000}, BaseCostMicros: 300_000, MultiplierBPS: 10_000, CostMicros: 300_000, ReservedMicros: 400_000, ModelName: "integration-model", UpstreamModelName: "upstream-model", BillingGroupCode: group.Code, BillingGroupName: group.DisplayName, CalculationVersion: CalculationVersion, CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC()}
 	if err := service.Finalize(ctx, usage); err != nil {
 		t.Fatalf("finalize usage: %v", err)

@@ -24,13 +24,14 @@
 | `PUT` | `/api/admin/referral` | 管理员 | 保存全局邀请返现比例并立即用于新的充值到账 |
 | `GET` | `/api/admin/users` | 管理员 | 分页、搜索和状态筛选 |
 | `POST` | `/api/admin/users` | 管理员 | 创建管理员或成员 |
-| `PATCH` | `/api/admin/users/{id}` | 管理员 | 修改显示名称、角色或计费分组 |
+| `PATCH` | `/api/admin/users/{id}` | 管理员 | 修改显示名称或角色 |
 | `PATCH` | `/api/admin/users/{id}/status` | 管理员 | 启用或停用用户 |
 | `POST` | `/api/admin/users/{id}/reset-password` | 管理员 | 重置密码并撤销旧会话 |
 | `GET` | `/api/account/api-keys` | 登录 | 当前用户的 Key 元数据 |
-| `POST` | `/api/account/api-keys` | 登录 | 创建 Key，完整值只返回一次 |
+| `GET` | `/api/account/billing-groups` | 登录 | 当前可选择的启用计费分组 |
+| `POST` | `/api/account/api-keys` | 登录 | 指定计费分组创建 Key，完整值只返回一次 |
 | `DELETE` | `/api/account/api-keys/{id}` | 登录 | 撤销当前用户的 Key |
-| `GET` | `/api/account/models` | 登录 | 当前可用模型和当前用户分组结算单价 |
+| `GET` | `/api/account/models` | 登录 | 当前可用模型和指定或默认分组的结算单价 |
 | `GET` | `/api/account/balance` | 登录 | 当前余额和最近流水 |
 | `GET` | `/api/account/usage` | 登录 | 当前用户最近调用用量 |
 | `GET` | `/api/account/top-ups/config` | 登录 | 充值开关、支付方式、金额范围、预设金额和赠送档位 |
@@ -47,8 +48,8 @@
 | `GET` | `/api/admin/users/{id}/balance` | 管理员 | 查看用户余额和流水 |
 | `POST` | `/api/admin/users/{id}/balance-adjustments` | 管理员 | 原子调整余额并写入流水 |
 | `GET` | `/api/admin/providers` | 管理员 | 搜索和筛选提供商 |
-| `POST` | `/api/admin/providers` | 管理员 | 创建加密凭据配置 |
-| `PATCH` | `/api/admin/providers/{id}` | 管理员 | 修改提供商配置或替换凭据 |
+| `POST` | `/api/admin/providers` | 管理员 | 指定计费分组创建加密凭据配置 |
+| `PATCH` | `/api/admin/providers/{id}` | 管理员 | 修改提供商配置、计费分组或替换凭据 |
 | `PATCH` | `/api/admin/providers/{id}/status` | 管理员 | 启用或停用提供商 |
 | `DELETE` | `/api/admin/providers/{id}` | 管理员 | 软删除提供商及其模型路由 |
 | `POST` | `/api/admin/providers/{id}/models/sync` | 管理员 | 从提供商发现模型 ID；全局目录已有 ID 复用原价格，新 ID 建立待定价记录 |
@@ -63,7 +64,7 @@
 | `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改上游模型映射和显示名称 |
 | `PATCH` | `/api/admin/model-routes/{id}/status` | 管理员 | 启用或停用模型路由 |
 | `DELETE` | `/api/admin/model-routes/{id}` | 管理员 | 软删除模型路由 |
-| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组和用户数 |
+| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、API Key 数和供应商数 |
 | `POST` | `/api/admin/billing-groups` | 管理员 | 创建计费分组和倍率 |
 | `PATCH` | `/api/admin/billing-groups/{id}` | 管理员 | 修改分组名称或倍率 |
 | `PATCH` | `/api/admin/billing-groups/{id}/status` | 管理员 | 启用或停用非默认分组 |
@@ -117,9 +118,9 @@ Authorization: Bearer nvr_xxxxxxxxxxxxxxxxx
 Content-Type: application/json
 ```
 
-API Key 属于单个用户，数据库只保存 SHA-256 哈希和前缀。第一版不引入项目 Key、组织
-Key 或临时 Key。标准入口使用 `Authorization: Bearer`；Anthropic 客户端也可使用
-`x-api-key`。
+API Key 属于单个用户，并绑定一个计费分组。数据库只保存 SHA-256 哈希和前缀。第一版不引入
+项目 Key、组织 Key 或临时 Key。标准入口使用 `Authorization: Bearer`；Anthropic 客户端也可
+使用 `x-api-key`。认证会同时校验用户、Key 和 Key 所属计费分组均启用。
 
 ## 2. 模型列表
 
@@ -129,12 +130,16 @@ GET /v1/models
 
 兼容别名：`GET /v1/model`。两个路径返回相同结果。
 
-返回当前网关可以使用的启用模型。模型名称是管理员配置的 `public_name`；自动关联时它等于全局目录的精确 `upstream_name`，并按目录的 `provider_name` 返回厂商标签。同步只是发现上游模型，只有管理员在目录定价并选择关联后才会出现在这里。同步聚合渠道时不会把渠道代码写入公开模型名。历史生成的提供商前缀和数字后缀由迁移归一化，管理员手工别名保持不变。同名的多条启用
-路由只返回一个模型项，响应不会暴露上游 API Key 或加密配置。
+返回当前 API Key 所属计费分组可以使用的启用模型。模型名称是管理员配置的 `public_name`；
+自动关联时它等于全局目录的精确 `upstream_name`，并按目录的 `provider_name` 返回厂商标签。
+同步只是发现上游模型，只有管理员在目录定价并选择关联后才会出现在这里。同步聚合渠道时不会
+把渠道代码写入公开模型名，管理员手工别名保持不变。同名的多条启用路由只返回一个模型项，
+响应不会暴露上游 API Key 或加密配置。
 
 同一 `public_name`、同一 API 协议下的启用路由组成渠道池。网关进程为每个模型和协议维护
-线程安全的轮询游标，每个请求从下一个渠道开始；连接错误、非 2xx，或普通响应在完整读取前
-失败时继续尝试池中的下一条路由。普通响应只有在完整读取并完成结算后才写给客户端；SSE
+线程安全的轮询游标，每个请求从下一个渠道开始。连接错误以及 `408`、`425`、`429`、`5xx`
+临时状态在当前渠道重试一次，仍失败后再尝试池中的下一条路由；其他非 `2xx` 或普通响应在
+完整读取前失败时直接切换下一条路由。普通响应只有在完整读取并完成结算后才写给客户端；SSE
 一旦收到 2xx 并开始转发便固定使用该渠道，不会把另一个渠道的流拼接到已发送内容中。所有
 兼容渠道都失败时返回 `502 upstream_unavailable`。
 
@@ -188,10 +193,11 @@ POST /v1/messages
 
 - 请求进入网关后先验证用户、Key、模型、提供商和账户状态。
 - 按 Novro 全局模型目录配置的普通输入、缓存命中、缓存创建（5 分钟/1 小时）、输出和按次价格，
-  以人民币微元（1 元 = 1,000,000 微元）结算；用户计费分组倍率作用于汇总费用。
+  以人民币微元（1 元 = 1,000,000 微元）结算；API Key 所属计费分组倍率作用于汇总费用。
 - 网关根据请求体大小、最大输出 token 和候选渠道中的最高可能费用做一次保守余额预占；
-  成功后按实际命中渠道的上游 usage 和单价结算并释放差额。用户可用模型页按同协议渠道池
-  的各维度最高单价展示，避免实际结算高于页面价格。
+  成功后按实际命中渠道的上游 usage 和单价结算并释放差额。候选渠道只来自与当前 API Key
+  同一计费分组的供应商。用户可用模型页按所选分组、同协议渠道池的各维度最高单价展示，
+  避免实际结算高于页面价格。
 - 供应商调用成功后，根据实际 usage 扣减用户余额。
 - 余额不足时拒绝请求，不向供应商发起调用。
 - 单个上游失败不会重复预占或立即退款；所有候选渠道都失败后释放一次预占。流式请求在结束

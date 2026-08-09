@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
-	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
@@ -34,26 +33,6 @@ type UserUpdate struct {
 // Where appends a list predicates to the UserUpdate builder.
 func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	_u.mutation.Where(ps...)
-	return _u
-}
-
-// SetBillingGroupID sets the "billing_group_id" field.
-func (_u *UserUpdate) SetBillingGroupID(v uuid.UUID) *UserUpdate {
-	_u.mutation.SetBillingGroupID(v)
-	return _u
-}
-
-// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableBillingGroupID(v *uuid.UUID) *UserUpdate {
-	if v != nil {
-		_u.SetBillingGroupID(*v)
-	}
-	return _u
-}
-
-// ClearBillingGroupID clears the value of the "billing_group_id" field.
-func (_u *UserUpdate) ClearBillingGroupID() *UserUpdate {
-	_u.mutation.ClearBillingGroupID()
 	return _u
 }
 
@@ -122,6 +101,20 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 // ClearPasswordHash clears the value of the "password_hash" field.
 func (_u *UserUpdate) ClearPasswordHash() *UserUpdate {
 	_u.mutation.ClearPasswordHash()
+	return _u
+}
+
+// SetIsSystemAdmin sets the "is_system_admin" field.
+func (_u *UserUpdate) SetIsSystemAdmin(v bool) *UserUpdate {
+	_u.mutation.SetIsSystemAdmin(v)
+	return _u
+}
+
+// SetNillableIsSystemAdmin sets the "is_system_admin" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableIsSystemAdmin(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetIsSystemAdmin(*v)
+	}
 	return _u
 }
 
@@ -288,11 +281,6 @@ func (_u *UserUpdate) AddAPIUsages(v ...*APIUsage) *UserUpdate {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
-// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
-func (_u *UserUpdate) SetBillingGroup(v *BillingGroup) *UserUpdate {
-	return _u.SetBillingGroupID(v.ID)
-}
-
 // AddReferralIDs adds the "referrals" edge to the User entity by IDs.
 func (_u *UserUpdate) AddReferralIDs(ids ...uuid.UUID) *UserUpdate {
 	_u.mutation.AddReferralIDs(ids...)
@@ -445,12 +433,6 @@ func (_u *UserUpdate) RemoveAPIUsages(v ...*APIUsage) *UserUpdate {
 	return _u.RemoveAPIUsageIDs(ids...)
 }
 
-// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
-func (_u *UserUpdate) ClearBillingGroup() *UserUpdate {
-	_u.mutation.ClearBillingGroup()
-	return _u
-}
-
 // ClearReferrals clears all "referrals" edges to the User entity.
 func (_u *UserUpdate) ClearReferrals() *UserUpdate {
 	_u.mutation.ClearReferrals()
@@ -567,6 +549,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.PasswordHashCleared() {
 		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.IsSystemAdmin(); ok {
+		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -882,35 +867,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.BillingGroupCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   user.BillingGroupTable,
-			Columns: []string{user.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   user.BillingGroupTable,
-			Columns: []string{user.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _u.mutation.ReferralsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -974,26 +930,6 @@ type UserUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *UserMutation
-}
-
-// SetBillingGroupID sets the "billing_group_id" field.
-func (_u *UserUpdateOne) SetBillingGroupID(v uuid.UUID) *UserUpdateOne {
-	_u.mutation.SetBillingGroupID(v)
-	return _u
-}
-
-// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *UserUpdateOne {
-	if v != nil {
-		_u.SetBillingGroupID(*v)
-	}
-	return _u
-}
-
-// ClearBillingGroupID clears the value of the "billing_group_id" field.
-func (_u *UserUpdateOne) ClearBillingGroupID() *UserUpdateOne {
-	_u.mutation.ClearBillingGroupID()
-	return _u
 }
 
 // SetUsername sets the "username" field.
@@ -1061,6 +997,20 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 // ClearPasswordHash clears the value of the "password_hash" field.
 func (_u *UserUpdateOne) ClearPasswordHash() *UserUpdateOne {
 	_u.mutation.ClearPasswordHash()
+	return _u
+}
+
+// SetIsSystemAdmin sets the "is_system_admin" field.
+func (_u *UserUpdateOne) SetIsSystemAdmin(v bool) *UserUpdateOne {
+	_u.mutation.SetIsSystemAdmin(v)
+	return _u
+}
+
+// SetNillableIsSystemAdmin sets the "is_system_admin" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableIsSystemAdmin(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetIsSystemAdmin(*v)
+	}
 	return _u
 }
 
@@ -1227,11 +1177,6 @@ func (_u *UserUpdateOne) AddAPIUsages(v ...*APIUsage) *UserUpdateOne {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
-// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
-func (_u *UserUpdateOne) SetBillingGroup(v *BillingGroup) *UserUpdateOne {
-	return _u.SetBillingGroupID(v.ID)
-}
-
 // AddReferralIDs adds the "referrals" edge to the User entity by IDs.
 func (_u *UserUpdateOne) AddReferralIDs(ids ...uuid.UUID) *UserUpdateOne {
 	_u.mutation.AddReferralIDs(ids...)
@@ -1384,12 +1329,6 @@ func (_u *UserUpdateOne) RemoveAPIUsages(v ...*APIUsage) *UserUpdateOne {
 	return _u.RemoveAPIUsageIDs(ids...)
 }
 
-// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
-func (_u *UserUpdateOne) ClearBillingGroup() *UserUpdateOne {
-	_u.mutation.ClearBillingGroup()
-	return _u
-}
-
 // ClearReferrals clears all "referrals" edges to the User entity.
 func (_u *UserUpdateOne) ClearReferrals() *UserUpdateOne {
 	_u.mutation.ClearReferrals()
@@ -1536,6 +1475,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.PasswordHashCleared() {
 		_spec.ClearField(user.FieldPasswordHash, field.TypeString)
+	}
+	if value, ok := _u.mutation.IsSystemAdmin(); ok {
+		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -1844,35 +1786,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.BillingGroupCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   user.BillingGroupTable,
-			Columns: []string{user.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   user.BillingGroupTable,
-			Columns: []string{user.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

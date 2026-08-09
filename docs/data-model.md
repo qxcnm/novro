@@ -4,7 +4,6 @@
 
 ```text
 User
-├── BillingGroup
 ├── UserSession[]
 ├── UserIdentity[]
 ├── APIKey[]
@@ -12,11 +11,15 @@ User
 ├── TopUpOrder[]
 └── APIUsage[]
 
+APIKey
+└── BillingGroup
+
 Provider
+├── BillingGroup
 └── ModelRoute[]
 
 BillingGroup
-└── User[] / APIUsage[]
+└── APIKey[] / Provider[] / APIUsage[]
 
 UpstreamModel
 ├── ModelRoute[]
@@ -39,7 +42,6 @@ EmailVerificationCode
 建议字段：
 
 - `id`
-- `billing_group_id`，当前计费分组
 - `invite_code`，创建时生成的唯一邀请码，之后不可修改
 - `referred_by_user_id`，可空且创建后不可修改，指向邀请人
 - `username`，唯一
@@ -91,35 +93,16 @@ EmailVerificationCode
 
 ## 6. 当前迁移状态
 
-`0001_users_and_sessions.sql` 创建用户和会话；
-`0002_registration_oidc_and_setup.sql` 将本地密码改为可空，并创建外部身份与安装标记；
-`0003_api_keys.sql` 创建用户 API Key；`0004_providers.sql` 创建加密提供商配置；
-`0005_wallets_model_routes_and_usage.sql` 创建钱包、流水、模型路由和调用用量；
-`0006_idempotent_wallet_entries.sql` 为调用预占和退款增加幂等唯一约束；
-`0007_upstream_models_billing_groups_and_precise_usage.sql` 创建上游模型、计费分组，
-并补齐缓存维度和计费快照字段；`0008_model_catalog_and_provider_routes.sql` 将模型目录
-从提供商凭据配置中解耦，并保留路由到目录模型的关联；
-`0009_seed_popular_model_catalog.sql` 归一化官方提供商目录名称，并按 2026-08-06 的官方
-人民币价格初始化 DeepSeek V4、GLM-5.2/4.7 FlashX 和 Kimi K3/K2.7/K2.6；
-`0010_epay_top_up_orders.sql` 创建充值订单，并为余额流水增加 `top_up` 类型；
-`0011_payment_configs.sql` 创建管理员可编辑的支付配置表，商户密钥以密文保存；
-`0012_soft_delete_admin_resources.sql` 为提供商、模型目录、模型路由和计费分组增加
-`deleted_at`；`0013_user_email.sql` 为本地账号和 OIDC 账号增加统一的唯一邮箱字段，并回填
-没有跨用户冲突的已有 OIDC 邮箱；`0014_flexible_payment_settings_and_top_up_credits.sql`
-增加结构化支付方式、充值规则和订单实际到账金额；`0015_email_verification_codes.sql`
-创建公开注册使用的一次性邮箱验证码表。验证码只保存 HMAC 哈希、过期时间和消费时间，
-不保存明文验证码；每个邮箱同时只保留一条记录，发送间隔至少 60 秒，验证成功后立即标记为已消费。
-`0016_email_smtp_configs.sql` 创建管理员维护的单例 SMTP 配置表。SMTP 密码在业务层加密后
-写入 `encrypted_password`，数据库不保存明文凭据；`0017_referral_cashback.sql` 为用户增加
-邀请码和邀请人关系，并为余额流水增加 `referral_reward` 类型；
-`0018_minimum_top_up_one_cent.sql` 将系统最低充值金额调整为一分并迁移默认配置；
-`0019_model_route_failover.sql` 将模型路由唯一约束改为对外模型名、提供商和目录模型的组合，
-允许同一个对外模型配置多个候选渠道；`0020_referral_reward_setting.sql` 初始化数据库返现比例。
-服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。
+当前迁移已压缩为 `0001_initial_schema.sql`，面向重新部署的空库初始化当前最终结构。
+该迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
+邮件、邀请返现和用量审计相关表，并写入默认计费分组与默认邀请返现比例。
+服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
+当前迁移文件的目标，保留数据升级时需要使用对应历史版本先完成迁移。
 
 提供商、模型目录、模型路由和计费分组使用软删除。普通查询和网关路由解析排除
 `deleted_at` 非空记录，但历史用量、钱包流水及外键关联继续保留。删除提供商或目录模型时，
-关联模型路由在同一事务中一并软删除；默认计费分组以及仍分配给用户的分组拒绝删除。
+关联模型路由在同一事务中一并软删除；默认计费分组以及仍被启用 API Key 或未删除供应商
+使用的分组拒绝删除。
 
 ## 7. wallets
 
@@ -194,6 +177,7 @@ EmailVerificationCode
 
 - `id`
 - `user_id`
+- `billing_group_id`，Key 绑定的计费分组
 - `name`
 - `key_prefix`
 - `key_hash`
@@ -203,10 +187,11 @@ EmailVerificationCode
 - `revoked_at`
 
 完整 Key 只在创建成功时显示一次。数据库只保存哈希和前缀。Key 前缀用于用户识别自己的 Key，但不能用于认证。
+认证时会同时校验用户、Key 和 Key 所属计费分组均启用；停用分组后，该组 Key 不再通过网关认证。
 
 ## 11. providers
 
-- `id`、`code`、`display_name`
+- `id`、`billing_group_id`、`code`、`display_name`
 - `protocol`，`openai` 或 `anthropic`
 - `base_url`
 - `model_list_path`，可选的模型获取路径覆盖值
@@ -218,6 +203,8 @@ EmailVerificationCode
 站点绝对路径，并在模型目录同步时覆盖默认拼接规则。基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
 明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
 上游重定向。
+新增和修改供应商时只能选择启用中的计费分组。网关解析候选路由时只会使用与当前 API Key
+同一计费分组的供应商。
 
 ## 12. model_routes
 
@@ -229,7 +216,8 @@ EmailVerificationCode
 - `status`、`created_at`、`updated_at`
 
 `public_name + provider_id + upstream_model_id` 组合唯一，防止完全相同的渠道重复配置。同一
-`public_name` 下只有模型路由、提供商配置和目录模型都启用的记录才进入候选池；
+`public_name` 下只有模型路由、提供商配置、提供商计费分组和目录模型都启用，且提供商分组
+与当前 API Key 分组一致的记录才进入候选池；
 `/v1/models` 对同名候选去重后返回。
 
 ## 13. billing_groups
@@ -238,8 +226,9 @@ EmailVerificationCode
 - `multiplier_bps`，10000 表示 1.0000 倍
 - `is_default`、`status`、`created_at`、`updated_at`
 
-用户创建时默认进入启用的默认分组，管理员可在用户编辑抽屉中切换到其他启用分组。
-默认分组不能停用。
+计费分组用于 API Key 和供应商两个维度。创建 API Key 时用户选择分组；新增或修改供应商时
+管理员选择分组。调用时以 API Key 所属分组作为结算倍率，并只访问同分组供应商。默认分组
+用于空库初始化和默认选择，不能停用。
 
 ## 14. upstream_models
 
@@ -257,8 +246,8 @@ EmailVerificationCode
 或复制价格卡。自动关联路由的对外名称
 与精确上游 ID 一致，历史的提供商前缀和数字后缀由后续迁移修复。
 
-初始化目录只包含官方价格可以由单一输入、缓存命中和输出单价准确表达的当前模型。
-GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不写入固定价格，避免按
+初始化迁移不再内置官方模型目录。管理员通过供应商同步发现模型后，在模型目录维护价格并启用。
+GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不应写入固定价格，避免按
 最低档少扣或按最高档多扣；支持阶梯价格前只能保持待定价状态。
 
 ## 15. api_usages

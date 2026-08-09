@@ -30,7 +30,8 @@ func (BillingGroup) Fields() []ent.Field {
 
 func (BillingGroup) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("users", User.Type),
+		edge.To("api_keys", APIKey.Type),
+		edge.To("providers", Provider.Type),
 		edge.To("api_usages", APIUsage.Type),
 	}
 }

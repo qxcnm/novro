@@ -7,8 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 )
 
 type EntStore struct {
@@ -20,7 +22,20 @@ func NewEntStore(client *ent.Client) *EntStore {
 }
 
 func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, error) {
-	created, err := s.client.Provider.Create().
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin provider creation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(params.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrGroupUnavailable
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("lock provider billing group: %w", err)
+	}
+	created, err := tx.Provider.Create().
+		SetBillingGroupID(group.ID).
 		SetCode(params.Code).
 		SetDisplayName(params.DisplayName).
 		SetProtocol(entprovider.Protocol(params.Protocol)).
@@ -36,6 +51,10 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 	if err != nil {
 		return Record{}, fmt.Errorf("create provider: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit provider creation: %w", err)
+	}
+	created.Edges.BillingGroup = group
 	return fromEnt(created), nil
 }
 
@@ -51,7 +70,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	if filter.Status != "" {
 		query = query.Where(entprovider.StatusEQ(entprovider.Status(filter.Status)))
 	}
-	entities, err := query.Order(ent.Asc(entprovider.FieldDisplayName)).All(ctx)
+	entities, err := query.WithBillingGroup().Order(ent.Asc(entprovider.FieldDisplayName)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list providers: %w", err)
 	}
@@ -63,7 +82,22 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 }
 
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
-	update := s.client.Provider.UpdateOneID(id).Where(entprovider.DeletedAtIsNil())
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin provider update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	update := tx.Provider.UpdateOneID(id).Where(entprovider.DeletedAtIsNil())
+	if params.BillingGroupID != nil {
+		group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(*params.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+		if ent.IsNotFound(err) {
+			return Record{}, ErrGroupUnavailable
+		}
+		if err != nil {
+			return Record{}, fmt.Errorf("lock provider billing group: %w", err)
+		}
+		update.SetBillingGroupID(group.ID)
+	}
 	if params.DisplayName != nil {
 		update.SetDisplayName(*params.DisplayName)
 	}
@@ -89,7 +123,10 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	if err != nil {
 		return Record{}, fmt.Errorf("update provider: %w", err)
 	}
-	return fromEnt(updated), nil
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit provider update: %w", err)
+	}
+	return s.get(ctx, updated.ID)
 }
 
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
@@ -100,7 +137,7 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 	if err != nil {
 		return Record{}, fmt.Errorf("update provider status: %w", err)
 	}
-	return fromEnt(updated), nil
+	return s.get(ctx, updated.ID)
 }
 
 func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
@@ -131,10 +168,26 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func fromEnt(entity *ent.Provider) Record {
-	return Record{
+	record := Record{
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
-		Protocol: Protocol(entity.Protocol), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
+		BillingGroupID: entity.BillingGroupID,
+		Protocol:       Protocol(entity.Protocol), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
 		APIKeyHint: entity.APIKeyHint, HasAPIKey: entity.EncryptedAPIKey != "",
 		Status: Status(entity.Status), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt,
 	}
+	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
+		record.BillingGroup = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
+	return record
+}
+
+func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
+	entity, err := s.client.Provider.Query().Where(entprovider.IDEQ(id), entprovider.DeletedAtIsNil()).WithBillingGroup().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrNotFound
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("read provider: %w", err)
+	}
+	return fromEnt(entity), nil
 }

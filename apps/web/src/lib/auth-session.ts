@@ -4,7 +4,6 @@ export type CurrentUser = {
   email: string;
   display_name: string;
   role: "admin" | "member";
-  billing_group?: { display_name: string; multiplier_bps: number };
 };
 
 export type SessionCheck =

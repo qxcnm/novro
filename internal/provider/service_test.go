@@ -49,7 +49,7 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
 		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocol: ProtocolOpenAI,
-		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", APIKey: "provider-secret-1234",
+		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", APIKey: "provider-secret-1234", BillingGroupID: uuid.New(),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -82,7 +82,7 @@ func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
 		Code: "self-hosted", DisplayName: "自建网关", Protocol: ProtocolOpenAI,
-		BaseURL: "http://8.134.107.46:3000/v1/", APIKey: "secret",
+		BaseURL: "http://8.134.107.46:3000/v1/", APIKey: "secret", BillingGroupID: uuid.New(),
 	})
 	if err != nil {
 		t.Fatalf("expected HTTP self-hosted provider to be accepted: %v", err)

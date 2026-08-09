@@ -16,8 +16,6 @@ const (
 	Label = "user"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
-	FieldBillingGroupID = "billing_group_id"
 	// FieldInviteCode holds the string denoting the invite_code field in the database.
 	FieldInviteCode = "invite_code"
 	// FieldReferredByUserID holds the string denoting the referred_by_user_id field in the database.
@@ -30,6 +28,8 @@ const (
 	FieldDisplayName = "display_name"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldIsSystemAdmin holds the string denoting the is_system_admin field in the database.
+	FieldIsSystemAdmin = "is_system_admin"
 	// FieldRole holds the string denoting the role field in the database.
 	FieldRole = "role"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -54,8 +54,6 @@ const (
 	EdgeTopUpOrders = "top_up_orders"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
-	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
-	EdgeBillingGroup = "billing_group"
 	// EdgeReferrer holds the string denoting the referrer edge name in mutations.
 	EdgeReferrer = "referrer"
 	// EdgeReferrals holds the string denoting the referrals edge name in mutations.
@@ -111,13 +109,6 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "user_id"
-	// BillingGroupTable is the table that holds the billing_group relation/edge.
-	BillingGroupTable = "users"
-	// BillingGroupInverseTable is the table name for the BillingGroup entity.
-	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
-	BillingGroupInverseTable = "billing_groups"
-	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
-	BillingGroupColumn = "billing_group_id"
 	// ReferrerTable is the table that holds the referrer relation/edge.
 	ReferrerTable = "users"
 	// ReferrerColumn is the table column denoting the referrer relation/edge.
@@ -131,13 +122,13 @@ const (
 // Columns holds all SQL columns for user fields.
 var Columns = []string{
 	FieldID,
-	FieldBillingGroupID,
 	FieldInviteCode,
 	FieldReferredByUserID,
 	FieldUsername,
 	FieldEmail,
 	FieldDisplayName,
 	FieldPasswordHash,
+	FieldIsSystemAdmin,
 	FieldRole,
 	FieldStatus,
 	FieldLastLoginAt,
@@ -168,6 +159,8 @@ var (
 	DefaultDisplayName string
 	// DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	DisplayNameValidator func(string) error
+	// DefaultIsSystemAdmin holds the default value on creation for the "is_system_admin" field.
+	DefaultIsSystemAdmin bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -238,11 +231,6 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByBillingGroupID orders the results by the billing_group_id field.
-func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
-}
-
 // ByInviteCode orders the results by the invite_code field.
 func ByInviteCode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInviteCode, opts...).ToFunc()
@@ -271,6 +259,11 @@ func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
+}
+
+// ByIsSystemAdmin orders the results by the is_system_admin field.
+func ByIsSystemAdmin(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsSystemAdmin, opts...).ToFunc()
 }
 
 // ByRole orders the results by the role field.
@@ -389,13 +382,6 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByBillingGroupField orders the results by billing_group field.
-func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
-	}
-}
-
 // ByReferrerField orders the results by referrer field.
 func ByReferrerField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -463,13 +449,6 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
-	)
-}
-func newBillingGroupStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(BillingGroupInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
 	)
 }
 func newReferrerStep() *sqlgraph.Step {

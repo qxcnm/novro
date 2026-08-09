@@ -31,9 +31,17 @@ type Record struct {
 	MultiplierBPS int64     `json:"multiplier_bps"`
 	IsDefault     bool      `json:"is_default"`
 	Status        Status    `json:"status"`
-	UserCount     int       `json:"user_count"`
+	APIKeyCount   int       `json:"api_key_count"`
+	ProviderCount int       `json:"provider_count"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type Summary struct {
+	ID            uuid.UUID `json:"id"`
+	Code          string    `json:"code"`
+	DisplayName   string    `json:"display_name"`
+	MultiplierBPS int64     `json:"multiplier_bps"`
 }
 
 type CreateInput struct {

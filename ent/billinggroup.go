@@ -42,28 +42,39 @@ type BillingGroup struct {
 
 // BillingGroupEdges holds the relations/edges for other nodes in the graph.
 type BillingGroupEdges struct {
-	// Users holds the value of the users edge.
-	Users []*User `json:"users,omitempty"`
+	// APIKeys holds the value of the api_keys edge.
+	APIKeys []*APIKey `json:"api_keys,omitempty"`
+	// Providers holds the value of the providers edge.
+	Providers []*Provider `json:"providers,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
-// UsersOrErr returns the Users value or an error if the edge
+// APIKeysOrErr returns the APIKeys value or an error if the edge
 // was not loaded in eager-loading.
-func (e BillingGroupEdges) UsersOrErr() ([]*User, error) {
+func (e BillingGroupEdges) APIKeysOrErr() ([]*APIKey, error) {
 	if e.loadedTypes[0] {
-		return e.Users, nil
+		return e.APIKeys, nil
 	}
-	return nil, &NotLoadedError{edge: "users"}
+	return nil, &NotLoadedError{edge: "api_keys"}
+}
+
+// ProvidersOrErr returns the Providers value or an error if the edge
+// was not loaded in eager-loading.
+func (e BillingGroupEdges) ProvidersOrErr() ([]*Provider, error) {
+	if e.loadedTypes[1] {
+		return e.Providers, nil
+	}
+	return nil, &NotLoadedError{edge: "providers"}
 }
 
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
 // was not loaded in eager-loading.
 func (e BillingGroupEdges) APIUsagesOrErr() ([]*APIUsage, error) {
-	if e.loadedTypes[1] {
+	if e.loadedTypes[2] {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
@@ -167,9 +178,14 @@ func (_m *BillingGroup) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryUsers queries the "users" edge of the BillingGroup entity.
-func (_m *BillingGroup) QueryUsers() *UserQuery {
-	return NewBillingGroupClient(_m.config).QueryUsers(_m)
+// QueryAPIKeys queries the "api_keys" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryAPIKeys() *APIKeyQuery {
+	return NewBillingGroupClient(_m.config).QueryAPIKeys(_m)
+}
+
+// QueryProviders queries the "providers" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryProviders() *ProviderQuery {
+	return NewBillingGroupClient(_m.config).QueryProviders(_m)
 }
 
 // QueryAPIUsages queries the "api_usages" edge of the BillingGroup entity.

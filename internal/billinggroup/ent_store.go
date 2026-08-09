@@ -7,8 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entapikey "github.com/novro-gateway/novro/ent/apikey"
 	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
-	entuser "github.com/novro-gateway/novro/ent/user"
+	entprovider "github.com/novro-gateway/novro/ent/provider"
 )
 
 type EntStore struct{ client *ent.Client }
@@ -35,7 +36,10 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	if filter.Status != "" {
 		query = query.Where(entbillinggroup.StatusEQ(entbillinggroup.Status(filter.Status)))
 	}
-	entities, err := query.WithUsers().Order(ent.Desc(entbillinggroup.FieldIsDefault), ent.Asc(entbillinggroup.FieldDisplayName)).All(ctx)
+	entities, err := query.
+		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
+		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).
+		Order(ent.Desc(entbillinggroup.FieldIsDefault), ent.Asc(entbillinggroup.FieldDisplayName)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list billing groups: %w", err)
 	}
@@ -91,11 +95,15 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	if entity.IsDefault {
 		return ErrProtected
 	}
-	hasUsers, err := tx.User.Query().Where(entuser.BillingGroupIDEQ(id)).Exist(ctx)
+	hasAPIKeys, err := tx.APIKey.Query().Where(entapikey.BillingGroupIDEQ(id), entapikey.StatusEQ(entapikey.StatusActive)).Exist(ctx)
 	if err != nil {
-		return fmt.Errorf("check billing group users: %w", err)
+		return fmt.Errorf("check billing group API keys: %w", err)
 	}
-	if hasUsers {
+	hasProviders, err := tx.Provider.Query().Where(entprovider.BillingGroupIDEQ(id), entprovider.DeletedAtIsNil()).Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("check billing group providers: %w", err)
+	}
+	if hasAPIKeys || hasProviders {
 		return ErrInUse
 	}
 	if _, err := entity.Update().SetStatus(entbillinggroup.StatusDisabled).SetDeletedAt(time.Now().UTC()).Save(ctx); err != nil {
@@ -108,7 +116,9 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
-	entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).WithUsers().Only(ctx)
+	entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).
+		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
+		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	}
@@ -128,5 +138,5 @@ func fromEntList(entities []*ent.BillingGroup) []Record {
 
 func fromEnt(entity *ent.BillingGroup) Record {
 	return Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
-		IsDefault: entity.IsDefault, Status: Status(entity.Status), UserCount: len(entity.Edges.Users), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+		IsDefault: entity.IsDefault, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 }

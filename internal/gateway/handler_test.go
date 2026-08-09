@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -20,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
@@ -34,13 +36,17 @@ type fakeKeys struct {
 func (f fakeKeys) Authenticate(context.Context, string) (apikey.Actor, error) { return f.actor, f.err }
 
 type fakeRoutes struct {
-	route      modelroute.Resolved
-	candidates []modelroute.Resolved
-	records    []modelroute.Record
-	err        error
+	route           modelroute.Resolved
+	candidates      []modelroute.Resolved
+	records         []modelroute.Record
+	expectedGroupID uuid.UUID
+	err             error
 }
 
-func (f fakeRoutes) ResolveCandidates(context.Context, string) ([]modelroute.Resolved, error) {
+func (f fakeRoutes) ResolveCandidates(_ context.Context, _ string, billingGroupID uuid.UUID) ([]modelroute.Resolved, error) {
+	if f.expectedGroupID != uuid.Nil && billingGroupID != f.expectedGroupID {
+		return nil, fmt.Errorf("unexpected billing group %s", billingGroupID)
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -49,7 +55,12 @@ func (f fakeRoutes) ResolveCandidates(context.Context, string) ([]modelroute.Res
 	}
 	return []modelroute.Resolved{f.route}, nil
 }
-func (f fakeRoutes) ListActive(context.Context) ([]modelroute.Record, error) { return f.records, f.err }
+func (f fakeRoutes) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]modelroute.Record, error) {
+	if f.expectedGroupID != uuid.Nil && billingGroupID != f.expectedGroupID {
+		return nil, fmt.Errorf("unexpected billing group %s", billingGroupID)
+	}
+	return f.records, f.err
+}
 
 type fakeBilling struct {
 	reserveErr     error
@@ -124,7 +135,7 @@ func (r *terminalErrorReader) Read(target []byte) (int, error) {
 
 func gatewayActor() apikey.Actor {
 	groupID := uuid.New()
-	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New()}, User: user.Record{ID: uuid.New(), Status: user.StatusActive, BillingGroupID: &groupID, BillingGroup: &user.BillingGroupSummary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}}
+	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New(), BillingGroupID: groupID, BillingGroup: billinggroup.Summary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
 }
 
 func openAIRoute() modelroute.Resolved {
@@ -327,7 +338,7 @@ func TestProxyFailsOverAndBillsOnlySuccessfulChannel(t *testing.T) {
 	second := openAIChannel("second", "second.example.com", "second-upstream")
 	second.UpstreamModel.Prices.OutputMicros = 20_000_000
 	biller := &fakeBilling{}
-	hosts := make([]string, 0, 2)
+	hosts := make([]string, 0, 3)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		hosts = append(hosts, request.URL.Host)
 		body, _ := io.ReadAll(request.Body)
@@ -343,10 +354,11 @@ func TestProxyFailsOverAndBillsOnlySuccessfulChannel(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"second-request","usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
 	})}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
+	handler.upstreamRetryDelays = []time.Duration{0}
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,second.example.com" {
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,first.example.com,second.example.com" {
 		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
 	}
 	if biller.reserveCalls != 1 || biller.finalizeCalls != 1 || biller.refundCalls != 0 || biller.usage.ModelRouteID != second.ID || biller.usage.UpstreamRequestID != "second-request" {
@@ -385,14 +397,15 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		calls++
 		if request.URL.Host == "first.example.com" {
-			return nil, errors.New("connection failed")
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection failed")}
 		}
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"limited"}`))}, nil
 	})}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
+	handler.upstreamRetryDelays = []time.Duration{0}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusBadGateway || calls != 2 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
+	if response.Code != http.StatusBadGateway || calls != 4 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "upstream_unavailable") {
@@ -416,7 +429,7 @@ func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 		} else if value != idempotencyKey {
 			t.Fatalf("idempotency key changed across retry: first=%q current=%q", idempotencyKey, value)
 		}
-		if calls < 3 {
+		if calls < 2 {
 			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("temporary connection failure")}
 		}
 		body, _ := io.ReadAll(request.Body)
@@ -426,10 +439,10 @@ func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":1,"completion_tokens":1}}`))}, nil
 	})}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
-	handler.upstreamRetryDelays = []time.Duration{0, 0}
+	handler.upstreamRetryDelays = []time.Duration{0}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusOK || calls != 3 || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+	if response.Code != http.StatusOK || calls != 2 || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 }
@@ -450,6 +463,59 @@ func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
 	if response.Code != http.StatusOK || calls != 2 || !strings.Contains(response.Body.String(), "buffered stream ok") || !strings.Contains(response.Body.String(), "data: [DONE]") || biller.finalizeCalls != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
+	}
+}
+
+func TestProxyStreamRetriesOnceThenFailsOverToNextChannel(t *testing.T) {
+	first := openAIChannel("first", "first.example.com", "first-upstream")
+	second := openAIChannel("second", "second.example.com", "second-upstream")
+	hosts := make([]string, 0, 3)
+	streamModes := make([]bool, 0, 3)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		body, _ := io.ReadAll(request.Body)
+		streamModes = append(streamModes, bytes.Contains(body, []byte(`"stream":true`)))
+		if request.URL.Host == "first.example.com" {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection failed")}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("data: {\"id\":\"second-request\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))}, nil
+	})}
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,first.example.com,second.example.com" {
+		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
+	}
+	if len(streamModes) != 3 || !streamModes[0] || streamModes[1] || !streamModes[2] {
+		t.Fatalf("unexpected upstream stream modes: %v", streamModes)
+	}
+	if biller.finalizeCalls != 1 || biller.usage.ModelRouteID != second.ID || biller.refundCalls != 0 {
+		t.Fatalf("unexpected billing state: %+v", biller)
+	}
+}
+
+func TestProxyStreamRetriesTemporaryHTTPFailureAsBufferedRequest(t *testing.T) {
+	calls := 0
+	streamModes := make([]bool, 0, 2)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		body, _ := io.ReadAll(request.Body)
+		streamModes = append(streamModes, bytes.Contains(body, []byte(`"stream":true`)))
+		if calls == 1 {
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"unavailable"}`))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"buffered-1","choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))}, nil
+	})}
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
+	if response.Code != http.StatusOK || calls != 2 || len(streamModes) != 2 || !streamModes[0] || streamModes[1] {
+		t.Fatalf("status=%d calls=%d stream_modes=%v body=%s", response.Code, calls, streamModes, response.Body.String())
+	}
+	if biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
 
@@ -803,7 +869,8 @@ func TestModelListDeduplicatesFailoverRoutes(t *testing.T) {
 	second := openAIChannel("second", "second.example.com", "second-upstream")
 	first.UpstreamModel = &upstreammodel.Record{ProviderName: "DeepSeek", UpstreamName: "deepseek-chat", DisplayName: "DeepSeek Chat"}
 	second.UpstreamModel = &upstreammodel.Record{ProviderName: "DeepSeek", UpstreamName: "deepseek-chat", DisplayName: "DeepSeek Chat"}
-	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{records: []modelroute.Record{first.Record, second.Record}}, Billing: &fakeBilling{}, Client: &http.Client{}})
+	actor := gatewayActor()
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{records: []modelroute.Record{first.Record, second.Record}, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: &fakeBilling{}, Client: &http.Client{}})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
 	var body struct {

@@ -88,9 +88,11 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 		protocol provider.Protocol
 		want     string
 	}{
+		{name: "OpenAI root base", baseURL: "https://api.example.com", protocol: provider.ProtocolOpenAI, want: "https://api.example.com/v1/models"},
 		{name: "OpenAI versioned base", baseURL: "https://api.example.com/v1", protocol: provider.ProtocolOpenAI, want: "https://api.example.com/v1/models"},
 		{name: "Anthropic root base", baseURL: "https://api.anthropic.com", protocol: provider.ProtocolAnthropic, want: "https://api.anthropic.com/v1/models"},
 		{name: "HTTP self-hosted base", baseURL: "http://8.134.107.46:3000/v1", protocol: provider.ProtocolOpenAI, want: "http://8.134.107.46:3000/v1/models"},
+		{name: "Already models path", baseURL: "https://models.example.com/v1/models", protocol: provider.ProtocolOpenAI, want: "https://models.example.com/v1/models"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

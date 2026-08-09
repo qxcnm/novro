@@ -56,11 +56,6 @@ func IDLTE(id uuid.UUID) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldID, id))
 }
 
-// BillingGroupID applies equality check predicate on the "billing_group_id" field. It's identical to BillingGroupIDEQ.
-func BillingGroupID(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldBillingGroupID, v))
-}
-
 // InviteCode applies equality check predicate on the "invite_code" field. It's identical to InviteCodeEQ.
 func InviteCode(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldInviteCode, v))
@@ -91,6 +86,11 @@ func PasswordHash(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPasswordHash, v))
 }
 
+// IsSystemAdmin applies equality check predicate on the "is_system_admin" field. It's identical to IsSystemAdminEQ.
+func IsSystemAdmin(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldIsSystemAdmin, v))
+}
+
 // LastLoginAt applies equality check predicate on the "last_login_at" field. It's identical to LastLoginAtEQ.
 func LastLoginAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldLastLoginAt, v))
@@ -104,36 +104,6 @@ func CreatedAt(v time.Time) predicate.User {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
-// BillingGroupIDEQ applies the EQ predicate on the "billing_group_id" field.
-func BillingGroupIDEQ(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldBillingGroupID, v))
-}
-
-// BillingGroupIDNEQ applies the NEQ predicate on the "billing_group_id" field.
-func BillingGroupIDNEQ(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldNEQ(FieldBillingGroupID, v))
-}
-
-// BillingGroupIDIn applies the In predicate on the "billing_group_id" field.
-func BillingGroupIDIn(vs ...uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldIn(FieldBillingGroupID, vs...))
-}
-
-// BillingGroupIDNotIn applies the NotIn predicate on the "billing_group_id" field.
-func BillingGroupIDNotIn(vs ...uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldNotIn(FieldBillingGroupID, vs...))
-}
-
-// BillingGroupIDIsNil applies the IsNil predicate on the "billing_group_id" field.
-func BillingGroupIDIsNil() predicate.User {
-	return predicate.User(sql.FieldIsNull(FieldBillingGroupID))
-}
-
-// BillingGroupIDNotNil applies the NotNil predicate on the "billing_group_id" field.
-func BillingGroupIDNotNil() predicate.User {
-	return predicate.User(sql.FieldNotNull(FieldBillingGroupID))
 }
 
 // InviteCodeEQ applies the EQ predicate on the "invite_code" field.
@@ -511,6 +481,16 @@ func PasswordHashContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldPasswordHash, v))
 }
 
+// IsSystemAdminEQ applies the EQ predicate on the "is_system_admin" field.
+func IsSystemAdminEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldIsSystemAdmin, v))
+}
+
+// IsSystemAdminNEQ applies the NEQ predicate on the "is_system_admin" field.
+func IsSystemAdminNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldIsSystemAdmin, v))
+}
+
 // RoleEQ applies the EQ predicate on the "role" field.
 func RoleEQ(v Role) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRole, v))
@@ -834,29 +814,6 @@ func HasAPIUsages() predicate.User {
 func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newAPIUsagesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasBillingGroup applies the HasEdge predicate on the "billing_group" edge.
-func HasBillingGroup() predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasBillingGroupWith applies the HasEdge predicate on the "billing_group" edge with a given conditions (other predicates).
-func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		step := newBillingGroupStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

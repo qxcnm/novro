@@ -11,11 +11,12 @@ import (
 )
 
 type fakeStore struct {
-	created     CreateInput
-	updated     UpdateParams
-	resolutions []Resolution
-	deletedID   uuid.UUID
-	err         error
+	created        CreateInput
+	updated        UpdateParams
+	resolutions    []Resolution
+	deletedID      uuid.UUID
+	billingGroupID uuid.UUID
+	err            error
 }
 
 func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
@@ -34,10 +35,14 @@ func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.err
 }
-func (f *fakeStore) ResolveCandidates(context.Context, string) ([]Resolution, error) {
+func (f *fakeStore) ResolveCandidates(_ context.Context, _ string, billingGroupID uuid.UUID) ([]Resolution, error) {
+	f.billingGroupID = billingGroupID
 	return f.resolutions, f.err
 }
-func (f *fakeStore) ListActive(context.Context) ([]Record, error) { return nil, f.err }
+func (f *fakeStore) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]Record, error) {
+	f.billingGroupID = billingGroupID
+	return nil, f.err
+}
 
 func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
@@ -74,9 +79,13 @@ func TestResolveCandidatesDecryptsEveryProviderCredential(t *testing.T) {
 		{Record: Record{PublicName: "public"}, BaseURL: "https://first.example.com/v1", EncryptedAPIKey: firstEncrypted},
 		{Record: Record{PublicName: "public"}, BaseURL: "https://second.example.com/v1", EncryptedAPIKey: secondEncrypted},
 	}}
-	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public")
+	groupID := uuid.New()
+	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public", groupID)
 	if err != nil || len(resolved) != 2 || resolved[0].APIKey != "first-secret" || resolved[1].APIKey != "second-secret" || resolved[1].BaseURL != "https://second.example.com/v1" {
 		t.Fatalf("resolved=%+v err=%v", resolved, err)
+	}
+	if store.billingGroupID != groupID {
+		t.Fatalf("billing group filter=%s want=%s", store.billingGroupID, groupID)
 	}
 }
 
@@ -87,7 +96,7 @@ func TestResolveCandidatesSkipsOneInvalidProviderCredential(t *testing.T) {
 		{Record: Record{PublicName: "public"}, BaseURL: "https://broken.example.com/v1", EncryptedAPIKey: "not-encrypted"},
 		{Record: Record{PublicName: "public"}, BaseURL: "https://healthy.example.com/v1", EncryptedAPIKey: encrypted},
 	}}
-	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public")
+	resolved, err := NewService(store, cipher).ResolveCandidates(context.Background(), "public", uuid.New())
 	if err != nil || len(resolved) != 1 || resolved[0].APIKey != "healthy-secret" || resolved[0].BaseURL != "https://healthy.example.com/v1" {
 		t.Fatalf("resolved=%+v err=%v", resolved, err)
 	}

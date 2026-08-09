@@ -18,7 +18,6 @@ type User struct {
 func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
-		field.UUID("billing_group_id", uuid.UUID{}).Optional().Nillable(),
 		field.String("invite_code").NotEmpty().MaxLen(16).Unique().Immutable().DefaultFunc(func() string {
 			return strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:12])
 		}),
@@ -27,6 +26,7 @@ func (User) Fields() []ent.Field {
 		field.String("email").NotEmpty().MaxLen(320).Optional().Nillable().Unique(),
 		field.String("display_name").MaxLen(128).Default(""),
 		field.String("password_hash").Optional().Nillable().Sensitive(),
+		field.Bool("is_system_admin").Default(false),
 		field.Enum("role").Values("admin", "member").Default("member"),
 		field.Enum("status").Values("active", "disabled").Default("active"),
 		field.Time("last_login_at").Optional().Nillable(),
@@ -44,7 +44,6 @@ func (User) Edges() []ent.Edge {
 		edge.To("wallet_entries", WalletEntry.Type),
 		edge.To("top_up_orders", TopUpOrder.Type),
 		edge.To("api_usages", APIUsage.Type),
-		edge.From("billing_group", BillingGroup.Type).Ref("users").Unique().Field("billing_group_id"),
 		edge.To("referrals", User.Type).From("referrer").Unique().Field("referred_by_user_id").Immutable(),
 	}
 }

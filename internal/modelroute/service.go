@@ -18,8 +18,8 @@ type Store interface {
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
 	Delete(context.Context, uuid.UUID) error
-	ResolveCandidates(context.Context, string) ([]Resolution, error)
-	ListActive(context.Context) ([]Record, error)
+	ResolveCandidates(context.Context, string, uuid.UUID) ([]Resolution, error)
+	ListActive(context.Context, uuid.UUID) ([]Record, error)
 }
 
 type Service struct {
@@ -96,8 +96,11 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.store.Delete(ctx, id)
 }
 
-func (s *Service) ResolveCandidates(ctx context.Context, publicName string) ([]Resolved, error) {
-	resolutions, err := s.store.ResolveCandidates(ctx, strings.TrimSpace(publicName))
+func (s *Service) ResolveCandidates(ctx context.Context, publicName string, billingGroupID uuid.UUID) ([]Resolved, error) {
+	if billingGroupID == uuid.Nil {
+		return nil, ErrInvalidInput
+	}
+	resolutions, err := s.store.ResolveCandidates(ctx, strings.TrimSpace(publicName), billingGroupID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +121,11 @@ func (s *Service) ResolveCandidates(ctx context.Context, publicName string) ([]R
 	return resolved, nil
 }
 
-func (s *Service) ListActive(ctx context.Context) ([]Record, error) {
-	return s.store.ListActive(ctx)
+func (s *Service) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]Record, error) {
+	if billingGroupID == uuid.Nil {
+		return nil, ErrInvalidInput
+	}
+	return s.store.ListActive(ctx, billingGroupID)
 }
 
 func validText(value string, max int) bool {

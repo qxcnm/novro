@@ -17,7 +17,7 @@ import (
 const maxActiveKeysPerUser = 10
 
 type Store interface {
-	Create(context.Context, uuid.UUID, string, string, string, int) (Record, error)
+	Create(context.Context, uuid.UUID, uuid.UUID, string, string, string, int) (Record, error)
 	ListByUser(context.Context, uuid.UUID) ([]Record, error)
 	RevokeByUser(context.Context, uuid.UUID, uuid.UUID, time.Time) error
 	ListAll(context.Context, ListFilter) (Page, error)
@@ -49,9 +49,9 @@ func NewService(store Store) *Service {
 	return &Service{store: store, now: func() time.Time { return time.Now().UTC() }, generateToken: newToken}
 }
 
-func (s *Service) Create(ctx context.Context, userID uuid.UUID, name string) (CreateResult, error) {
+func (s *Service) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name string) (CreateResult, error) {
 	name = strings.TrimSpace(name)
-	if userID == uuid.Nil || name == "" || utf8.RuneCountInString(name) > 64 {
+	if userID == uuid.Nil || billingGroupID == uuid.Nil || name == "" || utf8.RuneCountInString(name) > 64 {
 		return CreateResult{}, ErrInvalidInput
 	}
 	token, err := s.generateToken()
@@ -60,7 +60,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, name string) (Cr
 	}
 	digest := sha256.Sum256([]byte(token))
 	prefix := token[:12]
-	record, err := s.store.Create(ctx, userID, name, prefix, hex.EncodeToString(digest[:]), maxActiveKeysPerUser)
+	record, err := s.store.Create(ctx, userID, billingGroupID, name, prefix, hex.EncodeToString(digest[:]), maxActiveKeysPerUser)
 	if err != nil {
 		return CreateResult{}, err
 	}

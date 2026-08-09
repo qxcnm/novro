@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/provider"
 )
 
@@ -18,6 +19,8 @@ type Provider struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
+	// BillingGroupID holds the value of the "billing_group_id" field.
+	BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
 	// Code holds the value of the "code" field.
 	Code string `json:"code,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
@@ -48,17 +51,30 @@ type Provider struct {
 
 // ProviderEdges holds the relations/edges for other nodes in the graph.
 type ProviderEdges struct {
+	// BillingGroup holds the value of the billing_group edge.
+	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// ModelRoutes holds the value of the model_routes edge.
 	ModelRoutes []*ModelRoute `json:"model_routes,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
+}
+
+// BillingGroupOrErr returns the BillingGroup value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e ProviderEdges) BillingGroupOrErr() (*BillingGroup, error) {
+	if e.BillingGroup != nil {
+		return e.BillingGroup, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: billinggroup.Label}
+	}
+	return nil, &NotLoadedError{edge: "billing_group"}
 }
 
 // ModelRoutesOrErr returns the ModelRoutes value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProviderEdges) ModelRoutesOrErr() ([]*ModelRoute, error) {
-	if e.loadedTypes[0] {
+	if e.loadedTypes[1] {
 		return e.ModelRoutes, nil
 	}
 	return nil, &NotLoadedError{edge: "model_routes"}
@@ -73,7 +89,7 @@ func (*Provider) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case provider.FieldCreatedAt, provider.FieldUpdatedAt, provider.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
-		case provider.FieldID:
+		case provider.FieldID, provider.FieldBillingGroupID:
 			values[i] = new(uuid.UUID)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -95,6 +111,12 @@ func (_m *Provider) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value != nil {
 				_m.ID = *value
+			}
+		case provider.FieldBillingGroupID:
+			if value, ok := values[i].(*uuid.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
+			} else if value != nil {
+				_m.BillingGroupID = *value
 			}
 		case provider.FieldCode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -176,6 +198,11 @@ func (_m *Provider) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
+// QueryBillingGroup queries the "billing_group" edge of the Provider entity.
+func (_m *Provider) QueryBillingGroup() *BillingGroupQuery {
+	return NewProviderClient(_m.config).QueryBillingGroup(_m)
+}
+
 // QueryModelRoutes queries the "model_routes" edge of the Provider entity.
 func (_m *Provider) QueryModelRoutes() *ModelRouteQuery {
 	return NewProviderClient(_m.config).QueryModelRoutes(_m)
@@ -204,6 +231,9 @@ func (_m *Provider) String() string {
 	var builder strings.Builder
 	builder.WriteString("Provider(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("billing_group_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BillingGroupID))
+	builder.WriteString(", ")
 	builder.WriteString("code=")
 	builder.WriteString(_m.Code)
 	builder.WriteString(", ")

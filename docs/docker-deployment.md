@@ -50,6 +50,10 @@ sudo -E bash scripts/deploy-docker.sh --domain novro.example.com
 脚本会从 `/data/novro/.env.docker` 和运行中的应用容器中移除引导密码。若要重新初始化一个全新的
 数据库，必须在部署前重新设置该环境变量。
 
+首次引导的 `novro` 账号是受保护的系统管理员，不能被停用或降级。遗忘密码时，在维护窗口内
+通过一次性 `NOVRO_ADMIN_PASSWORD` 环境变量执行 `novro reset-admin`，完成后立即清除变量；不要
+把密码写入镜像、Compose 文件或版本库。
+
 ## 2. 文件与职责
 
 | 文件 | 作用 |

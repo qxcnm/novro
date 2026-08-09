@@ -18,6 +18,8 @@ const (
 	FieldID = "id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
+	FieldBillingGroupID = "billing_group_id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldKeyPrefix holds the string denoting the key_prefix field in the database.
@@ -34,6 +36,8 @@ const (
 	FieldRevokedAt = "revoked_at"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
+	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
+	EdgeBillingGroup = "billing_group"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
 	// Table holds the table name of the apikey in the database.
@@ -45,6 +49,13 @@ const (
 	UserInverseTable = "users"
 	// UserColumn is the table column denoting the user relation/edge.
 	UserColumn = "user_id"
+	// BillingGroupTable is the table that holds the billing_group relation/edge.
+	BillingGroupTable = "api_keys"
+	// BillingGroupInverseTable is the table name for the BillingGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
+	BillingGroupInverseTable = "billing_groups"
+	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
+	BillingGroupColumn = "billing_group_id"
 	// APIUsagesTable is the table that holds the api_usages relation/edge.
 	APIUsagesTable = "api_usages"
 	// APIUsagesInverseTable is the table name for the APIUsage entity.
@@ -58,6 +69,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldUserID,
+	FieldBillingGroupID,
 	FieldName,
 	FieldKeyPrefix,
 	FieldKeyHash,
@@ -129,6 +141,11 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
+// ByBillingGroupID orders the results by the billing_group_id field.
+func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
+}
+
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
@@ -171,6 +188,13 @@ func ByUserField(field string, opts ...sql.OrderTermOption) OrderOption {
 	}
 }
 
+// ByBillingGroupField orders the results by billing_group field.
+func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
+	}
+}
+
 // ByAPIUsagesCount orders the results by api_usages count.
 func ByAPIUsagesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -189,6 +213,13 @@ func newUserStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UserInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, UserTable, UserColumn),
+	)
+}
+func newBillingGroupStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BillingGroupInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
 	)
 }
 func newAPIUsagesStep() *sqlgraph.Step {

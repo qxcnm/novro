@@ -16,6 +16,7 @@ type Provider struct {
 
 func (Provider) Edges() []ent.Edge {
 	return []ent.Edge{
+		edge.From("billing_group", BillingGroup.Type).Ref("providers").Unique().Field("billing_group_id").Required(),
 		edge.To("model_routes", ModelRoute.Type),
 	}
 }
@@ -23,6 +24,7 @@ func (Provider) Edges() []ent.Edge {
 func (Provider) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
+		field.UUID("billing_group_id", uuid.UUID{}),
 		field.String("code").NotEmpty().MaxLen(64).Unique().Immutable(),
 		field.String("display_name").NotEmpty().MaxLen(128),
 		field.Enum("protocol").Values("openai", "anthropic"),
@@ -38,5 +40,5 @@ func (Provider) Fields() []ent.Field {
 }
 
 func (Provider) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("status", "created_at"), index.Fields("deleted_at")}
+	return []ent.Index{index.Fields("billing_group_id", "status"), index.Fields("status", "created_at"), index.Fields("deleted_at")}
 }

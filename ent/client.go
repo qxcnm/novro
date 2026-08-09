@@ -456,6 +456,22 @@ func (c *APIKeyClient) QueryUser(_m *APIKey) *UserQuery {
 	return query
 }
 
+// QueryBillingGroup queries the billing_group edge of a APIKey.
+func (c *APIKeyClient) QueryBillingGroup(_m *APIKey) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apikey.BillingGroupTable, apikey.BillingGroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryAPIUsages queries the api_usages edge of a APIKey.
 func (c *APIKeyClient) QueryAPIUsages(_m *APIKey) *APIUsageQuery {
 	query := (&APIUsageClient{config: c.config}).Query()
@@ -818,15 +834,31 @@ func (c *BillingGroupClient) GetX(ctx context.Context, id uuid.UUID) *BillingGro
 	return obj
 }
 
-// QueryUsers queries the users edge of a BillingGroup.
-func (c *BillingGroupClient) QueryUsers(_m *BillingGroup) *UserQuery {
-	query := (&UserClient{config: c.config}).Query()
+// QueryAPIKeys queries the api_keys edge of a BillingGroup.
+func (c *BillingGroupClient) QueryAPIKeys(_m *BillingGroup) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.UsersTable, billinggroup.UsersColumn),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.APIKeysTable, billinggroup.APIKeysColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryProviders queries the providers edge of a BillingGroup.
+func (c *BillingGroupClient) QueryProviders(_m *BillingGroup) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.ProvidersTable, billinggroup.ProvidersColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1563,6 +1595,22 @@ func (c *ProviderClient) GetX(ctx context.Context, id uuid.UUID) *Provider {
 	return obj
 }
 
+// QueryBillingGroup queries the billing_group edge of a Provider.
+func (c *ProviderClient) QueryBillingGroup(_m *Provider) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, provider.BillingGroupTable, provider.BillingGroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryModelRoutes queries the model_routes edge of a Provider.
 func (c *ProviderClient) QueryModelRoutes(_m *Provider) *ModelRouteQuery {
 	query := (&ModelRouteClient{config: c.config}).Query()
@@ -2264,22 +2312,6 @@ func (c *UserClient) QueryAPIUsages(_m *User) *APIUsageQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryBillingGroup queries the billing_group edge of a User.
-func (c *UserClient) QueryBillingGroup(_m *User) *BillingGroupQuery {
-	query := (&BillingGroupClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, user.BillingGroupTable, user.BillingGroupColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil

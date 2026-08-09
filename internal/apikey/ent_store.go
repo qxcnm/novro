@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
 	entapikey "github.com/novro-gateway/novro/ent/apikey"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entuser "github.com/novro-gateway/novro/ent/user"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/user"
 )
 
@@ -18,8 +20,8 @@ type EntStore struct {
 
 func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.Time) (Actor, error) {
 	entity, err := s.client.APIKey.Query().
-		Where(entapikey.KeyHashEQ(hash), entapikey.StatusEQ(entapikey.StatusActive), entapikey.HasUserWith(entuser.StatusEQ(entuser.StatusActive))).
-		WithUser(func(query *ent.UserQuery) { query.WithBillingGroup() }).Only(ctx)
+		Where(entapikey.KeyHashEQ(hash), entapikey.StatusEQ(entapikey.StatusActive), entapikey.HasUserWith(entuser.StatusEQ(entuser.StatusActive)), entapikey.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil())).
+		WithUser().WithBillingGroup().Only(ctx)
 	if ent.IsNotFound(err) {
 		return Actor{}, ErrUnauthenticated
 	}
@@ -33,10 +35,7 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 	if _, err := s.client.APIKey.UpdateOneID(entity.ID).SetLastUsedAt(now).Save(ctx); err != nil {
 		return Actor{}, fmt.Errorf("update API key last use: %w", err)
 	}
-	userRecord := user.Record{ID: owner.ID, BillingGroupID: owner.BillingGroupID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}
-	if group, groupErr := owner.Edges.BillingGroupOrErr(); groupErr == nil {
-		userRecord.BillingGroup = &user.BillingGroupSummary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
-	}
+	userRecord := user.Record{ID: owner.ID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), IsSystemAdmin: owner.IsSystemAdmin, LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}
 	return Actor{APIKey: fromEnt(entity), User: userRecord}, nil
 }
 
@@ -44,7 +43,7 @@ func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
-func (s *EntStore) Create(ctx context.Context, userID uuid.UUID, name, prefix, hash string, maxActive int) (Record, error) {
+func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name, prefix, hash string, maxActive int) (Record, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return Record{}, fmt.Errorf("begin API key creation: %w", err)
@@ -56,6 +55,13 @@ func (s *EntStore) Create(ctx context.Context, userID uuid.UUID, name, prefix, h
 	} else if err != nil {
 		return Record{}, fmt.Errorf("lock API key owner: %w", err)
 	}
+	group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(billingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrGroupUnavailable
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("lock API key billing group: %w", err)
+	}
 	count, err := tx.APIKey.Query().Where(entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive)).Count(ctx)
 	if err != nil {
 		return Record{}, fmt.Errorf("count active API keys: %w", err)
@@ -65,6 +71,7 @@ func (s *EntStore) Create(ctx context.Context, userID uuid.UUID, name, prefix, h
 	}
 	created, err := tx.APIKey.Create().
 		SetUserID(userID).
+		SetBillingGroupID(group.ID).
 		SetName(name).
 		SetKeyPrefix(prefix).
 		SetKeyHash(hash).
@@ -76,12 +83,14 @@ func (s *EntStore) Create(ctx context.Context, userID uuid.UUID, name, prefix, h
 	if err := tx.Commit(); err != nil {
 		return Record{}, fmt.Errorf("commit API key creation: %w", err)
 	}
+	created.Edges.BillingGroup = group
 	return fromEnt(created), nil
 }
 
 func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, error) {
 	entities, err := s.client.APIKey.Query().
 		Where(entapikey.UserIDEQ(userID)).
+		WithBillingGroup().
 		Order(ent.Desc(entapikey.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
@@ -124,7 +133,7 @@ func (s *EntStore) ListAll(ctx context.Context, filter ListFilter) (Page, error)
 	if err != nil {
 		return Page{}, fmt.Errorf("count API keys: %w", err)
 	}
-	entities, err := query.WithUser().
+	entities, err := query.WithUser().WithBillingGroup().
 		Order(ent.Desc(entapikey.FieldCreatedAt)).
 		Offset(filter.Offset).
 		Limit(filter.Limit).
@@ -168,14 +177,19 @@ func (s *EntStore) revoke(ctx context.Context, entity *ent.APIKey, now time.Time
 }
 
 func fromEnt(entity *ent.APIKey) Record {
-	return Record{
-		ID:         entity.ID,
-		UserID:     entity.UserID,
-		Name:       entity.Name,
-		KeyPrefix:  entity.KeyPrefix,
-		Status:     Status(entity.Status),
-		LastUsedAt: entity.LastUsedAt,
-		CreatedAt:  entity.CreatedAt,
-		RevokedAt:  entity.RevokedAt,
+	record := Record{
+		ID:             entity.ID,
+		UserID:         entity.UserID,
+		BillingGroupID: entity.BillingGroupID,
+		Name:           entity.Name,
+		KeyPrefix:      entity.KeyPrefix,
+		Status:         Status(entity.Status),
+		LastUsedAt:     entity.LastUsedAt,
+		CreatedAt:      entity.CreatedAt,
+		RevokedAt:      entity.RevokedAt,
 	}
+	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
+		record.BillingGroup = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
+	return record
 }

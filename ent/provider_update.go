@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -27,6 +28,20 @@ type ProviderUpdate struct {
 // Where appends a list predicates to the ProviderUpdate builder.
 func (_u *ProviderUpdate) Where(ps ...predicate.Provider) *ProviderUpdate {
 	_u.mutation.Where(ps...)
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *ProviderUpdate) SetBillingGroupID(v uuid.UUID) *ProviderUpdate {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *ProviderUpdate) SetNillableBillingGroupID(v *uuid.UUID) *ProviderUpdate {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
 	return _u
 }
 
@@ -154,6 +169,11 @@ func (_u *ProviderUpdate) ClearDeletedAt() *ProviderUpdate {
 	return _u
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *ProviderUpdate) SetBillingGroup(v *BillingGroup) *ProviderUpdate {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
 func (_u *ProviderUpdate) AddModelRouteIDs(ids ...uuid.UUID) *ProviderUpdate {
 	_u.mutation.AddModelRouteIDs(ids...)
@@ -172,6 +192,12 @@ func (_u *ProviderUpdate) AddModelRoutes(v ...*ModelRoute) *ProviderUpdate {
 // Mutation returns the ProviderMutation object of the builder.
 func (_u *ProviderUpdate) Mutation() *ProviderMutation {
 	return _u.mutation
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *ProviderUpdate) ClearBillingGroup() *ProviderUpdate {
+	_u.mutation.ClearBillingGroup()
+	return _u
 }
 
 // ClearModelRoutes clears all "model_routes" edges to the ModelRoute entity.
@@ -268,6 +294,9 @@ func (_u *ProviderUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Provider.status": %w`, err)}
 		}
 	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Provider.billing_group"`)
+	}
 	return nil
 }
 
@@ -312,6 +341,35 @@ func (_u *ProviderUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(provider.FieldDeletedAt, field.TypeTime)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   provider.BillingGroupTable,
+			Columns: []string{provider.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   provider.BillingGroupTable,
+			Columns: []string{provider.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -376,6 +434,20 @@ type ProviderUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *ProviderMutation
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *ProviderUpdateOne) SetBillingGroupID(v uuid.UUID) *ProviderUpdateOne {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *ProviderUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *ProviderUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
+	return _u
 }
 
 // SetDisplayName sets the "display_name" field.
@@ -502,6 +574,11 @@ func (_u *ProviderUpdateOne) ClearDeletedAt() *ProviderUpdateOne {
 	return _u
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *ProviderUpdateOne) SetBillingGroup(v *BillingGroup) *ProviderUpdateOne {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
 func (_u *ProviderUpdateOne) AddModelRouteIDs(ids ...uuid.UUID) *ProviderUpdateOne {
 	_u.mutation.AddModelRouteIDs(ids...)
@@ -520,6 +597,12 @@ func (_u *ProviderUpdateOne) AddModelRoutes(v ...*ModelRoute) *ProviderUpdateOne
 // Mutation returns the ProviderMutation object of the builder.
 func (_u *ProviderUpdateOne) Mutation() *ProviderMutation {
 	return _u.mutation
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *ProviderUpdateOne) ClearBillingGroup() *ProviderUpdateOne {
+	_u.mutation.ClearBillingGroup()
+	return _u
 }
 
 // ClearModelRoutes clears all "model_routes" edges to the ModelRoute entity.
@@ -629,6 +712,9 @@ func (_u *ProviderUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Provider.status": %w`, err)}
 		}
 	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "Provider.billing_group"`)
+	}
 	return nil
 }
 
@@ -690,6 +776,35 @@ func (_u *ProviderUpdateOne) sqlSave(ctx context.Context) (_node *Provider, err 
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(provider.FieldDeletedAt, field.TypeTime)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   provider.BillingGroupTable,
+			Columns: []string{provider.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   provider.BillingGroupTable,
+			Columns: []string{provider.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{

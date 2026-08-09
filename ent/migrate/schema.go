@@ -18,6 +18,7 @@ var (
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "billing_group_id", Type: field.TypeUUID},
 		{Name: "user_id", Type: field.TypeUUID},
 	}
 	// APIKeysTable holds the schema information for the "api_keys" table.
@@ -27,8 +28,14 @@ var (
 		PrimaryKey: []*schema.Column{APIKeysColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "api_keys_users_api_keys",
+				Symbol:     "api_keys_billing_groups_api_keys",
 				Columns:    []*schema.Column{APIKeysColumns[8]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "api_keys_users_api_keys",
+				Columns:    []*schema.Column{APIKeysColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -36,6 +43,11 @@ var (
 		Indexes: []*schema.Index{
 			{
 				Name:    "apikey_user_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[9], APIKeysColumns[4]},
+			},
+			{
+				Name:    "apikey_billing_group_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{APIKeysColumns[8], APIKeysColumns[4]},
 			},
@@ -326,13 +338,27 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "billing_group_id", Type: field.TypeUUID},
 	}
 	// ProvidersTable holds the schema information for the "providers" table.
 	ProvidersTable = &schema.Table{
 		Name:       "providers",
 		Columns:    ProvidersColumns,
 		PrimaryKey: []*schema.Column{ProvidersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "providers_billing_groups_providers",
+				Columns:    []*schema.Column{ProvidersColumns[12]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
+			{
+				Name:    "provider_billing_group_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{ProvidersColumns[12], ProvidersColumns[8]},
+			},
 			{
 				Name:    "provider_status_created_at",
 				Unique:  false,
@@ -453,12 +479,12 @@ var (
 		{Name: "email", Type: field.TypeString, Unique: true, Nullable: true, Size: 320},
 		{Name: "display_name", Type: field.TypeString, Size: 128, Default: ""},
 		{Name: "password_hash", Type: field.TypeString, Nullable: true},
+		{Name: "is_system_admin", Type: field.TypeBool, Default: false},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "member"}, Default: "member"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "last_login_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "billing_group_id", Type: field.TypeUUID, Nullable: true},
 		{Name: "referred_by_user_id", Type: field.TypeUUID, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
@@ -467,12 +493,6 @@ var (
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "users_billing_groups_users",
-				Columns:    []*schema.Column{UsersColumns[11]},
-				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
 			{
 				Symbol:     "users_users_referrals",
 				Columns:    []*schema.Column{UsersColumns[12]},
@@ -484,12 +504,12 @@ var (
 			{
 				Name:    "user_role_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[6], UsersColumns[7]},
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[8]},
 			},
 			{
 				Name:    "user_referred_by_user_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[12], UsersColumns[9]},
+				Columns: []*schema.Column{UsersColumns[12], UsersColumns[10]},
 			},
 		},
 	}
@@ -646,7 +666,8 @@ var (
 )
 
 func init() {
-	APIKeysTable.ForeignKeys[0].RefTable = UsersTable
+	APIKeysTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	APIKeysTable.ForeignKeys[1].RefTable = UsersTable
 	APIUsagesTable.ForeignKeys[0].RefTable = APIKeysTable
 	APIUsagesTable.ForeignKeys[1].RefTable = BillingGroupsTable
 	APIUsagesTable.ForeignKeys[2].RefTable = ModelRoutesTable
@@ -654,9 +675,9 @@ func init() {
 	APIUsagesTable.ForeignKeys[4].RefTable = UsersTable
 	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
 	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
+	ProvidersTable.ForeignKeys[0].RefTable = BillingGroupsTable
 	TopUpOrdersTable.ForeignKeys[0].RefTable = UsersTable
-	UsersTable.ForeignKeys[0].RefTable = BillingGroupsTable
-	UsersTable.ForeignKeys[1].RefTable = UsersTable
+	UsersTable.ForeignKeys[0].RefTable = UsersTable
 	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable
 	UserSessionsTable.ForeignKeys[0].RefTable = UsersTable
 	WalletsTable.ForeignKeys[0].RefTable = UsersTable

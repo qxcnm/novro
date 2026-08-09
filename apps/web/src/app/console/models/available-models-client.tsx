@@ -28,7 +28,7 @@ type AvailableModel = {
   prices: Prices;
 };
 
-type BillingGroup = { display_name: string; multiplier_bps: number };
+type BillingGroup = { id: string; code: string; display_name: string; multiplier_bps: number; is_default?: boolean; status?: "active" | "disabled" };
 
 type ErrorResponse = { error?: { message?: string } };
 
@@ -58,6 +58,8 @@ const priceFields: Array<{ key: keyof Prices; label: string; unit: string }> = [
 export default function AvailableModelsClient() {
   const router = useRouter();
   const [models, setModels] = useState<AvailableModel[]>([]);
+  const [billingGroups, setBillingGroups] = useState<BillingGroup[]>([]);
+  const [selectedBillingGroupID, setSelectedBillingGroupID] = useState("");
   const [billingGroup, setBillingGroup] = useState<BillingGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -66,10 +68,30 @@ export default function AvailableModelsClient() {
   const [provider, setProvider] = useState("all");
   const [copiedID, setCopiedID] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (requestedBillingGroupID?: string) => {
     setLoading(true);
     setMessage("");
-    const response = await fetch("/api/account/models", { cache: "no-store" });
+    const groupsResponse = await fetch("/api/account/billing-groups", { cache: "no-store" });
+    if (groupsResponse.status === 401) { router.replace("/login"); return; }
+    if (!groupsResponse.ok) {
+      setMessage(await readError(groupsResponse));
+      setLoading(false);
+      return;
+    }
+    const groups = ((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups;
+    setBillingGroups(groups);
+    const nextBillingGroupID = requestedBillingGroupID ?? groups.find((group) => group.is_default)?.id ?? groups[0]?.id ?? "";
+    if (!nextBillingGroupID) {
+      setModels([]);
+      setBillingGroup(null);
+      setSelectedBillingGroupID("");
+      setMessage("当前没有可用计费分组");
+      setLoading(false);
+      return;
+    }
+    setSelectedBillingGroupID(nextBillingGroupID);
+    const query = new URLSearchParams({ billing_group_id: nextBillingGroupID });
+    const response = await fetch(`/api/account/models?${query}`, { cache: "no-store" });
     if (response.status === 401) { router.replace("/login"); return; }
     if (!response.ok) {
       setMessage(await readError(response));
@@ -79,6 +101,7 @@ export default function AvailableModelsClient() {
     const body = (await response.json()) as { models: AvailableModel[]; billing_group: BillingGroup };
     setModels(body.models);
     setBillingGroup(body.billing_group);
+    setProvider("all");
     setLoading(false);
   }, [router]);
 
@@ -131,11 +154,15 @@ export default function AvailableModelsClient() {
           <Input aria-label="搜索可用模型" className="pl-8" onChange={(event) => setQuery(event.target.value)} placeholder="搜索模型 ID、名称或提供商" value={query} />
         </div>
         <div className="flex gap-2">
+          <Select onValueChange={(value) => void load(value)} value={selectedBillingGroupID}>
+            <SelectTrigger aria-label="选择计费分组" className="min-w-44"><SelectValue placeholder="选择计费分组" /></SelectTrigger>
+            <SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent>
+          </Select>
           <Select onValueChange={setProtocol} value={protocol}>
             <SelectTrigger aria-label="按兼容协议筛选" className="min-w-36"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">全部协议</SelectItem><SelectItem value="openai">OpenAI</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent>
           </Select>
-          <Button aria-label="刷新可用模型" disabled={loading} onClick={() => void load()} size="icon" title="刷新可用模型" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
+          <Button aria-label="刷新可用模型" disabled={loading} onClick={() => void load(selectedBillingGroupID)} size="icon" title="刷新可用模型" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
         </div>
       </div>
 

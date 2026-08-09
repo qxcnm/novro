@@ -23,6 +23,8 @@ import { useListSelection } from "@/lib/use-list-selection";
 type Protocol = "openai" | "anthropic";
 type ProviderRecord = {
   id: string;
+  billing_group_id: string;
+  billing_group: { id: string; code: string; display_name: string; multiplier_bps: number };
   code: string;
   display_name: string;
   protocol: Protocol;
@@ -52,8 +54,9 @@ type RouteRecord = {
 };
 
 type ErrorResponse = { error?: { message?: string } };
-type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string };
-type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string };
+type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
+type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string; billing_group_id: string };
+type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key: string; billing_group_id: string };
 
 const INITIAL_CREATE: CreateForm = {
   code: "",
@@ -62,6 +65,7 @@ const INITIAL_CREATE: CreateForm = {
   base_url: "https://api.openai.com/v1",
   model_list_path: "",
   api_key: "",
+  billing_group_id: "",
 };
 
 const MODEL_SYNC_TIMEOUT_MS = 35_000;
@@ -98,6 +102,7 @@ export default function ProvidersClient() {
   const [activeTab, setActiveTab] = useState("providers");
   const [routeRefreshKey, setRouteRefreshKey] = useState(0);
   const [providers, setProviders] = useState<ProviderRecord[]>([]);
+  const [billingGroups, setBillingGroups] = useState<BillingGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -113,7 +118,7 @@ export default function ProvidersClient() {
   const [bulkSyncOpen, setBulkSyncOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(INITIAL_CREATE);
-  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", api_key: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", api_key: "", billing_group_id: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerProvider, setPickerProvider] = useState<ProviderRecord | null>(null);
   const [pickerModels, setPickerModels] = useState<PickerModel[]>([]);
@@ -129,11 +134,19 @@ export default function ProvidersClient() {
     const query = new URLSearchParams();
     if (search) query.set("search", search);
     if (status !== "all") query.set("status", status);
-    const response = await fetch(`/api/admin/providers?${query}`, { cache: "no-store" });
+    const [response, groupsResponse] = await Promise.all([
+      fetch(`/api/admin/providers?${query}`, { cache: "no-store" }),
+      fetch("/api/admin/billing-groups", { cache: "no-store" }),
+    ]);
     if (response.status === 401) { router.replace("/login"); return; }
     if (response.status === 403) { router.replace("/console"); return; }
     if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
     setProviders(((await response.json()) as { providers: ProviderRecord[] }).providers);
+    if (groupsResponse.ok) {
+      setBillingGroups(((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups);
+    } else {
+      setMessage(await readError(groupsResponse));
+    }
     setLoading(false);
   }, [router, search, status]);
 
@@ -157,7 +170,7 @@ export default function ProvidersClient() {
 
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
-    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, api_key: "" });
+    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, api_key: "", billing_group_id: record.billing_group_id });
     setFormError("");
   }
 
@@ -225,6 +238,10 @@ export default function ProvidersClient() {
 
   async function createProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!createForm.billing_group_id) {
+      setFormError("请选择计费分组");
+      return;
+    }
     setBusy(true);
     setMessage("");
     setFormError("");
@@ -249,13 +266,14 @@ export default function ProvidersClient() {
     setBusy(true);
     setMessage("");
     setFormError("");
-    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key?: string } = {
+    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; api_key?: string; billing_group_id?: string } = {
       display_name: editForm.display_name,
       protocol: editForm.protocol,
       base_url: editForm.base_url,
       model_list_path: editForm.model_list_path,
     };
     if (editForm.api_key.trim()) payload.api_key = editForm.api_key;
+    if (editForm.billing_group_id && editForm.billing_group_id !== editingProvider.billing_group_id) payload.billing_group_id = editForm.billing_group_id;
     const response = await fetch(`/api/admin/providers/${editingProvider.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -376,6 +394,8 @@ export default function ProvidersClient() {
 
   const activeCount = providers.filter((item) => item.status === "active").length;
   const disabledCount = providers.filter((item) => item.status === "disabled").length;
+  const activeBillingGroups = billingGroups.filter((group) => group.status === "active");
+  const defaultBillingGroupID = activeBillingGroups.find((group) => group.is_default)?.id ?? activeBillingGroups[0]?.id ?? "";
 
   return (
     <Tabs onValueChange={setActiveTab} value={activeTab}>
@@ -402,7 +422,7 @@ export default function ProvidersClient() {
               <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
             </Select>
             <Button aria-label="刷新提供商列表" disabled={loading} onClick={() => void loadProviders()} size="icon" title="刷新提供商列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
-            <Button onClick={() => setCreateOpen(true)}><Plus />添加提供商</Button>
+            <Button onClick={() => { setCreateForm({ ...INITIAL_CREATE, billing_group_id: defaultBillingGroupID }); setCreateOpen(true); }}><Plus />添加提供商</Button>
           </div>
         </div>
 
@@ -419,14 +439,15 @@ export default function ProvidersClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>协议</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>计费分组</TableHead><TableHead>协议</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
-                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>没有匹配的提供商</TableCell></TableRow> : null}
+                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={9}>加载中...</TableCell></TableRow> : null}
+                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>没有匹配的提供商</TableCell></TableRow> : null}
                   {!loading ? providers.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell><Checkbox aria-label={`选择提供商 ${item.display_name}`} checked={selection.isSelected(item.id)} onCheckedChange={(checked) => selection.toggleOne(item.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{item.display_name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.code}</p></TableCell>
+                      <TableCell><p>{item.billing_group?.display_name ?? "未分组"}</p><p className="font-mono text-xs text-muted-foreground">{((item.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
                       <TableCell><Badge variant="secondary">{protocolLabel(item.protocol)}</Badge></TableCell>
                       <TableCell><p className="max-w-72 truncate font-mono text-xs" title={item.base_url}>{item.base_url}</p></TableCell>
                       <TableCell className="font-mono text-xs">{item.has_api_key ? `••••${item.api_key_hint}` : "未配置"}</TableCell>
@@ -452,9 +473,10 @@ export default function ProvidersClient() {
               <div className="space-y-2"><Label htmlFor="provider-code">代码</Label><Input autoComplete="off" id="provider-code" maxLength={64} minLength={3} onChange={(event) => setCreateForm({ ...createForm, code: event.target.value.toLowerCase() })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 deepseek-main" required value={createForm.code} /></div>
               <div className="space-y-2"><Label htmlFor="provider-name">显示名称</Label><Input id="provider-name" maxLength={128} onChange={(event) => setCreateForm({ ...createForm, display_name: event.target.value })} placeholder="例如 DeepSeek 主账号" required value={createForm.display_name} /></div>
             </div>
+            <div className="space-y-2"><Label htmlFor="provider-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setCreateForm({ ...createForm, billing_group_id })} value={createForm.billing_group_id}><SelectTrigger className="w-full" id="provider-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{activeBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="provider-protocol">协议</Label><Select onValueChange={(protocol: Protocol) => setCreateForm({ ...createForm, protocol, base_url: defaultBaseURL(protocol) })} value={createForm.protocol}><SelectTrigger className="w-full" id="provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="provider-base-url">基础地址</Label><Input id="provider-base-url" onChange={(event) => setCreateForm({ ...createForm, base_url: event.target.value })} placeholder="https://api.example.com/v1" required type="url" value={createForm.base_url} /></div>
-            <div className="space-y-2"><Label htmlFor="provider-model-list-path">模型获取路径</Label><Input id="provider-model-list-path" onChange={(event) => setCreateForm({ ...createForm, model_list_path: event.target.value })} placeholder="留空默认使用 /models，例如 /api/models" value={createForm.model_list_path} /><p className="text-xs text-muted-foreground">填写站点路径，以 / 开头；留空时 OpenAI 使用基础地址 + /models，Anthropic 使用 /v1/models。</p></div>
+            <div className="space-y-2"><Label htmlFor="provider-model-list-path">模型获取路径</Label><Input id="provider-model-list-path" onChange={(event) => setCreateForm({ ...createForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models，例如 /api/models" value={createForm.model_list_path} /><p className="text-xs text-muted-foreground">填写站点路径，以 / 开头；留空时 OpenAI 兼容和 Anthropic 都使用基础地址 + /v1/models。</p></div>
             <div className="space-y-2"><Label htmlFor="provider-api-key">API Key</Label><Input autoComplete="new-password" id="provider-api-key" maxLength={1024} onChange={(event) => setCreateForm({ ...createForm, api_key: event.target.value })} required type="password" value={createForm.api_key} /></div>
             {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
           </form>
@@ -468,9 +490,10 @@ export default function ProvidersClient() {
           {editingProvider ? <form className="space-y-4" id="edit-provider-form" onSubmit={updateProvider}>
             <div className="grid grid-cols-2 gap-4 border-y py-4 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={editingProvider.status === "active" ? "outline" : "secondary"}>{editingProvider.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">当前凭据</p><p className="mt-2 font-mono text-xs">{editingProvider.has_api_key ? `••••${editingProvider.api_key_hint}` : "未配置"}</p></div></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-name">显示名称</Label><Input id="edit-provider-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} required value={editForm.display_name} /></div>
+            <div className="space-y-2"><Label htmlFor="edit-provider-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setEditForm({ ...editForm, billing_group_id })} value={editForm.billing_group_id}><SelectTrigger className="w-full" id="edit-provider-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active" || group.id === editingProvider.billing_group_id).map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×{group.status === "disabled" ? " · 已停用" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-protocol">协议</Label><Select onValueChange={(protocol: Protocol) => setEditForm({ ...editForm, protocol })} value={editForm.protocol}><SelectTrigger className="w-full" id="edit-provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-base-url">基础地址</Label><Input id="edit-provider-base-url" onChange={(event) => setEditForm({ ...editForm, base_url: event.target.value })} required type="url" value={editForm.base_url} /></div>
-            <div className="space-y-2"><Label htmlFor="edit-provider-model-list-path">模型获取路径</Label><Input id="edit-provider-model-list-path" onChange={(event) => setEditForm({ ...editForm, model_list_path: event.target.value })} placeholder="留空使用默认路径" value={editForm.model_list_path} /><p className="text-xs text-muted-foreground">例如 /api/models。保存后同步模型时使用该路径。</p></div>
+            <div className="space-y-2"><Label htmlFor="edit-provider-model-list-path">模型获取路径</Label><Input id="edit-provider-model-list-path" onChange={(event) => setEditForm({ ...editForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models" value={editForm.model_list_path} /><p className="text-xs text-muted-foreground">例如 /api/models。留空时同步模型默认使用基础地址 + /v1/models。</p></div>
             <div className="space-y-2"><Label htmlFor="edit-provider-api-key">替换 API Key</Label><Input autoComplete="new-password" id="edit-provider-api-key" maxLength={1024} onChange={(event) => setEditForm({ ...editForm, api_key: event.target.value })} placeholder="留空则保留当前凭据" type="password" value={editForm.api_key} /><p className="text-xs text-muted-foreground"><KeyRound aria-hidden="true" className="mr-1 inline size-3" />保存新 Key 后，旧凭据会立即被替换。</p></div>
             {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
           </form> : null}

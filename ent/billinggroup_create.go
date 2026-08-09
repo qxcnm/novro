@@ -11,9 +11,10 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
-	"github.com/novro-gateway/novro/ent/user"
+	"github.com/novro-gateway/novro/ent/provider"
 )
 
 // BillingGroupCreate is the builder for creating a BillingGroup entity.
@@ -133,19 +134,34 @@ func (_c *BillingGroupCreate) SetNillableID(v *uuid.UUID) *BillingGroupCreate {
 	return _c
 }
 
-// AddUserIDs adds the "users" edge to the User entity by IDs.
-func (_c *BillingGroupCreate) AddUserIDs(ids ...uuid.UUID) *BillingGroupCreate {
-	_c.mutation.AddUserIDs(ids...)
+// AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
+func (_c *BillingGroupCreate) AddAPIKeyIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddAPIKeyIDs(ids...)
 	return _c
 }
 
-// AddUsers adds the "users" edges to the User entity.
-func (_c *BillingGroupCreate) AddUsers(v ...*User) *BillingGroupCreate {
+// AddAPIKeys adds the "api_keys" edges to the APIKey entity.
+func (_c *BillingGroupCreate) AddAPIKeys(v ...*APIKey) *BillingGroupCreate {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddUserIDs(ids...)
+	return _c.AddAPIKeyIDs(ids...)
+}
+
+// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
+func (_c *BillingGroupCreate) AddProviderIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddProviderIDs(ids...)
+	return _c
+}
+
+// AddProviders adds the "providers" edges to the Provider entity.
+func (_c *BillingGroupCreate) AddProviders(v ...*Provider) *BillingGroupCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddProviderIDs(ids...)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -334,15 +350,31 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 		_spec.SetField(billinggroup.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
 	}
-	if nodes := _c.mutation.UsersIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.UsersTable,
-			Columns: []string{billinggroup.UsersColumn},
+			Table:   billinggroup.APIKeysTable,
+			Columns: []string{billinggroup.APIKeysColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ProvidersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.ProvidersTable,
+			Columns: []string{billinggroup.ProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

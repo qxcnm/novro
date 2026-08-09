@@ -16,6 +16,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/migrate"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
@@ -39,10 +40,15 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"shared-kimi-test","display_name":"Shared Kimi Test","pricing":{"unit":"rmb_per_million_tokens","input":1,"output":2}}]}`))
 	}))
 	defer server.Close()
+	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
+	if err != nil {
+		t.Fatalf("read default billing group: %v", err)
+	}
 
 	createProvider := func(code string) *ent.Provider {
 		t.Helper()
 		created, err := client.Provider.Create().
+			SetBillingGroupID(group.ID).
 			SetCode(code).
 			SetDisplayName(strings.ToUpper(code)).
 			SetProtocol(entprovider.ProtocolOpenai).

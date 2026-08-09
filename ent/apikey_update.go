@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
 )
@@ -41,6 +42,20 @@ func (_u *APIKeyUpdate) SetUserID(v uuid.UUID) *APIKeyUpdate {
 func (_u *APIKeyUpdate) SetNillableUserID(v *uuid.UUID) *APIKeyUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *APIKeyUpdate) SetBillingGroupID(v uuid.UUID) *APIKeyUpdate {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableBillingGroupID(v *uuid.UUID) *APIKeyUpdate {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
 	}
 	return _u
 }
@@ -146,6 +161,11 @@ func (_u *APIKeyUpdate) SetUser(v *User) *APIKeyUpdate {
 	return _u.SetUserID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *APIKeyUpdate) SetBillingGroup(v *BillingGroup) *APIKeyUpdate {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *APIKeyUpdate) AddAPIUsageIDs(ids ...uuid.UUID) *APIKeyUpdate {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -169,6 +189,12 @@ func (_u *APIKeyUpdate) Mutation() *APIKeyMutation {
 // ClearUser clears the "user" edge to the User entity.
 func (_u *APIKeyUpdate) ClearUser() *APIKeyUpdate {
 	_u.mutation.ClearUser()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *APIKeyUpdate) ClearBillingGroup() *APIKeyUpdate {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -245,6 +271,9 @@ func (_u *APIKeyUpdate) check() error {
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "APIKey.billing_group"`)
+	}
 	return nil
 }
 
@@ -306,6 +335,35 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apikey.BillingGroupTable,
+			Columns: []string{apikey.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apikey.BillingGroupTable,
+			Columns: []string{apikey.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -388,6 +446,20 @@ func (_u *APIKeyUpdateOne) SetUserID(v uuid.UUID) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableUserID(v *uuid.UUID) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetUserID(*v)
+	}
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *APIKeyUpdateOne) SetBillingGroupID(v uuid.UUID) *APIKeyUpdateOne {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
 	}
 	return _u
 }
@@ -493,6 +565,11 @@ func (_u *APIKeyUpdateOne) SetUser(v *User) *APIKeyUpdateOne {
 	return _u.SetUserID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *APIKeyUpdateOne) SetBillingGroup(v *BillingGroup) *APIKeyUpdateOne {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *APIKeyUpdateOne) AddAPIUsageIDs(ids ...uuid.UUID) *APIKeyUpdateOne {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -516,6 +593,12 @@ func (_u *APIKeyUpdateOne) Mutation() *APIKeyMutation {
 // ClearUser clears the "user" edge to the User entity.
 func (_u *APIKeyUpdateOne) ClearUser() *APIKeyUpdateOne {
 	_u.mutation.ClearUser()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *APIKeyUpdateOne) ClearBillingGroup() *APIKeyUpdateOne {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -605,6 +688,9 @@ func (_u *APIKeyUpdateOne) check() error {
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "APIKey.billing_group"`)
+	}
 	return nil
 }
 
@@ -683,6 +769,35 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apikey.BillingGroupTable,
+			Columns: []string{apikey.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   apikey.BillingGroupTable,
+			Columns: []string{apikey.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

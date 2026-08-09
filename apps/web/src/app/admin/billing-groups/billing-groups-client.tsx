@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Power, PowerOff, RefreshCw, Search, Trash2, UsersRound } from "lucide-react";
+import { KeyRound, Pencil, Plus, Power, PowerOff, RefreshCw, Search, ServerCog, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
@@ -25,7 +25,8 @@ type Group = {
   multiplier_bps: number;
   is_default: boolean;
   status: "active" | "disabled";
-  user_count: number;
+  api_key_count: number;
+  provider_count: number;
 };
 
 type Form = { code: string; display_name: string; multiplier: string };
@@ -173,9 +174,10 @@ export default function BillingGroupsClient() {
 
   return (
     <div className="space-y-5">
-      <section className="grid border-y bg-background sm:grid-cols-3">
+      <section className="grid border-y bg-background sm:grid-cols-4">
         <div className="px-4 py-4 sm:border-r"><p className="text-xs text-muted-foreground">计费分组</p><p className="mt-1 text-xl font-semibold">{groups.length}</p></div>
-        <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">已分配用户</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.user_count, 0)}</p></div>
+        <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">API Key</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.api_key_count, 0)}</p></div>
+        <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">供应商</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.provider_count, 0)}</p></div>
         <div className="border-t px-4 py-4 sm:border-t-0"><p className="text-xs text-muted-foreground">默认倍率</p><p className="mt-1 text-xl font-semibold">{((groups.find((group) => group.is_default)?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}x</p></div>
       </section>
 
@@ -195,15 +197,16 @@ export default function BillingGroupsClient() {
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有可操作计费分组" checked={selection.checkboxState} disabled={loading || filtered.filter((group) => !group.is_default).length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>分组</TableHead><TableHead>倍率</TableHead><TableHead>用户数</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有可操作计费分组" checked={selection.checkboxState} disabled={loading || filtered.filter((group) => !group.is_default).length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>分组</TableHead><TableHead>倍率</TableHead><TableHead>API Key</TableHead><TableHead>供应商</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>
-              {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={6}>加载中...</TableCell></TableRow> : null}
-              {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={6}>还没有计费分组</TableCell></TableRow> : null}
+              {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}
+              {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>还没有计费分组</TableCell></TableRow> : null}
               {filtered.map((group) => <TableRow key={group.id}>
                 <TableCell><Checkbox aria-label={`选择 ${group.display_name}`} checked={selection.isSelected(group.id)} disabled={group.is_default} onCheckedChange={(checked) => selection.toggleOne(group.id, checked === true)} /></TableCell>
                 <TableCell><p className="font-medium">{group.display_name} {group.is_default ? <Badge className="ml-1" variant="secondary">默认</Badge> : null}</p><p className="font-mono text-xs text-muted-foreground">{group.code}</p></TableCell>
                 <TableCell className="font-mono">{(group.multiplier_bps / 10_000).toFixed(4)}x</TableCell>
-                <TableCell><span className="inline-flex items-center gap-1"><UsersRound className="size-4 text-muted-foreground" />{group.user_count}</span></TableCell>
+                <TableCell><span className="inline-flex items-center gap-1"><KeyRound className="size-4 text-muted-foreground" />{group.api_key_count}</span></TableCell>
+                <TableCell><span className="inline-flex items-center gap-1"><ServerCog className="size-4 text-muted-foreground" />{group.provider_count}</span></TableCell>
                 <TableCell><Badge variant={group.status === "active" ? "outline" : "destructive"}>{group.status === "active" ? "启用" : "停用"}</Badge></TableCell>
                 <TableCell><div className="flex justify-end gap-1"><Button aria-label={`编辑 ${group.display_name}`} onClick={() => beginEdit(group)} size="icon-sm" title="编辑" variant="ghost"><Pencil /></Button><Button aria-label={`${group.status === "active" ? "停用" : "启用"} ${group.display_name}`} disabled={group.is_default} onClick={() => setStatusGroup(group)} size="icon-sm" title={group.is_default ? "默认分组不能停用" : group.status === "active" ? "停用" : "启用"} variant="ghost">{group.status === "active" ? <PowerOff /> : <Power />}</Button><Button aria-label={`删除 ${group.display_name}`} disabled={group.is_default} onClick={() => setDeletingGroup(group)} size="icon-sm" title={group.is_default ? "默认分组不能删除" : "删除计费分组"} variant="ghost"><Trash2 /></Button></div></TableCell>
               </TableRow>)}
@@ -213,7 +216,7 @@ export default function BillingGroupsClient() {
       </Card>
 
       <Dialog onOpenChange={setCreateOpen} open={createOpen}>
-        <DialogContent><DialogHeader><DialogTitle>新增计费分组</DialogTitle><DialogDescription>用户归入分组后，后续调用按该倍率结算。</DialogDescription></DialogHeader><form className="space-y-4" id="create-group-form" onSubmit={submit}>{fields}</form><DialogFooter><Button onClick={() => setCreateOpen(false)} variant="outline">取消</Button><Button disabled={busy} form="create-group-form" type="submit"><Plus />创建分组</Button></DialogFooter></DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>新增计费分组</DialogTitle><DialogDescription>API Key 和供应商选择同一分组后，调用会按该倍率结算并只使用同组供应商。</DialogDescription></DialogHeader><form className="space-y-4" id="create-group-form" onSubmit={submit}>{fields}</form><DialogFooter><Button onClick={() => setCreateOpen(false)} variant="outline">取消</Button><Button disabled={busy} form="create-group-form" type="submit"><Plus />创建分组</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <Sheet onOpenChange={(open) => { if (!open) { setEditing(null); setForm(emptyForm); } }} open={editing !== null}>
@@ -221,15 +224,15 @@ export default function BillingGroupsClient() {
       </Sheet>
 
       <AlertDialog onOpenChange={(open) => { if (!open) setStatusGroup(null); }} open={statusGroup !== null}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{statusGroup?.status === "active" ? "停用计费分组" : "启用计费分组"}</AlertDialogTitle><AlertDialogDescription>停用后不能再把新用户分配到该分组，已有用户需要迁移到其他启用分组。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void toggleStatus(); }}>{statusGroup?.status === "active" ? "确认停用" : "确认启用"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{statusGroup?.status === "active" ? "停用计费分组" : "启用计费分组"}</AlertDialogTitle><AlertDialogDescription>停用后不能再新建该组 API Key 或供应商，该组现有 API Key 也会停止认证。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void toggleStatus(); }}>{statusGroup?.status === "active" ? "确认停用" : "确认启用"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       <AlertDialog onOpenChange={(open) => { if (!open) setDeletingGroup(null); }} open={deletingGroup !== null}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除计费分组</AlertDialogTitle><AlertDialogDescription>将删除 {deletingGroup?.display_name ?? "该计费分组"}。历史用量记录会继续保留；如果仍有用户属于此分组，请先迁移用户。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void deleteOneGroup(); }} variant="destructive">确认删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除计费分组</AlertDialogTitle><AlertDialogDescription>将删除 {deletingGroup?.display_name ?? "该计费分组"}。历史用量记录会继续保留；如果仍有启用中的 API Key 或供应商使用此分组，请先迁移或删除。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void deleteOneGroup(); }} variant="destructive">确认删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       <BulkActionDialog busy={busy} confirmLabel={bulkStatus === "active" ? "确认批量启用" : "确认批量停用"} description={`将${bulkStatus === "active" ? "启用" : "停用"}选中的 ${selection.selectedIds.length} 个计费分组；默认分组不能被批量选中。`} destructive={bulkStatus === "disabled"} onConfirm={applyBulkStatus} onOpenChange={(open) => { if (!open) setBulkStatus(null); }} open={bulkStatus !== null} title={bulkStatus === "active" ? "批量启用计费分组" : "批量停用计费分组"} />
-      <BulkActionDialog busy={busy} confirmLabel="确认批量删除" description={`将删除选中的 ${selection.selectedIds.length} 个计费分组。历史用量记录会继续保留；仍有用户的分组会被拒绝并保持选中。`} destructive onConfirm={deleteSelected} onOpenChange={setBulkDeleteOpen} open={bulkDeleteOpen} title="批量删除计费分组" />
+      <BulkActionDialog busy={busy} confirmLabel="确认批量删除" description={`将删除选中的 ${selection.selectedIds.length} 个计费分组。历史用量记录会继续保留；仍被 API Key 或供应商使用的分组会被拒绝并保持选中。`} destructive onConfirm={deleteSelected} onOpenChange={setBulkDeleteOpen} open={bulkDeleteOpen} title="批量删除计费分组" />
     </div>
   );
 }

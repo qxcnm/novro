@@ -11,23 +11,25 @@ import (
 )
 
 type fakeStore struct {
-	createdName   string
-	createdPrefix string
-	createdHash   string
-	createdLimit  int
-	listFilter    ListFilter
-	revokedUserID uuid.UUID
-	revokedID     uuid.UUID
-	err           error
-	authHash      string
+	createdName    string
+	createdGroupID uuid.UUID
+	createdPrefix  string
+	createdHash    string
+	createdLimit   int
+	listFilter     ListFilter
+	revokedUserID  uuid.UUID
+	revokedID      uuid.UUID
+	err            error
+	authHash       string
 }
 
-func (f *fakeStore) Create(_ context.Context, userID uuid.UUID, name, prefix, hash string, limit int) (Record, error) {
+func (f *fakeStore) Create(_ context.Context, userID, billingGroupID uuid.UUID, name, prefix, hash string, limit int) (Record, error) {
 	f.createdName, f.createdPrefix, f.createdHash, f.createdLimit = name, prefix, hash, limit
+	f.createdGroupID = billingGroupID
 	if f.err != nil {
 		return Record{}, f.err
 	}
-	return Record{ID: uuid.New(), UserID: userID, Name: name, KeyPrefix: prefix, Status: StatusActive}, nil
+	return Record{ID: uuid.New(), UserID: userID, BillingGroupID: billingGroupID, Name: name, KeyPrefix: prefix, Status: StatusActive}, nil
 }
 
 func (f *fakeStore) ListByUser(context.Context, uuid.UUID) ([]Record, error) { return nil, f.err }
@@ -56,11 +58,12 @@ func TestCreateReturnsSecretOnceAndStoresOnlyHash(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store)
 	service.generateToken = func() (string, error) { return "nvr_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG", nil }
-	result, err := service.Create(context.Background(), uuid.New(), "  Production  ")
+	groupID := uuid.New()
+	result, err := service.Create(context.Background(), uuid.New(), groupID, "  Production  ")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if result.Key == "" || store.createdName != "Production" || store.createdPrefix != result.Key[:12] || store.createdLimit != maxActiveKeysPerUser {
+	if result.Key == "" || store.createdName != "Production" || store.createdGroupID != groupID || store.createdPrefix != result.Key[:12] || store.createdLimit != maxActiveKeysPerUser {
 		t.Fatalf("unexpected create result=%+v store=%+v", result, store)
 	}
 	if store.createdHash == result.Key || len(store.createdHash) != 64 || strings.Contains(store.createdHash, "nvr_") {
@@ -70,11 +73,11 @@ func TestCreateReturnsSecretOnceAndStoresOnlyHash(t *testing.T) {
 
 func TestCreateValidatesNameAndPreservesLimitError(t *testing.T) {
 	service := NewService(&fakeStore{})
-	if _, err := service.Create(context.Background(), uuid.New(), " "); !errors.Is(err, ErrInvalidInput) {
+	if _, err := service.Create(context.Background(), uuid.New(), uuid.New(), " "); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected invalid name, got %v", err)
 	}
 	service = NewService(&fakeStore{err: ErrLimitReached})
-	if _, err := service.Create(context.Background(), uuid.New(), "Test"); !errors.Is(err, ErrLimitReached) {
+	if _, err := service.Create(context.Background(), uuid.New(), uuid.New(), "Test"); !errors.Is(err, ErrLimitReached) {
 		t.Fatalf("expected limit error, got %v", err)
 	}
 }

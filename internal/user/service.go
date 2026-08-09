@@ -24,6 +24,7 @@ type Store interface {
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
 	ResetPassword(context.Context, uuid.UUID, string) error
+	FindByUsername(context.Context, string) (Record, error)
 }
 
 type PasswordHasher interface {
@@ -31,19 +32,18 @@ type PasswordHasher interface {
 }
 
 type CreateParams struct {
-	Username       string
-	Email          string
-	DisplayName    string
-	PasswordHash   string
-	Role           Role
-	BillingGroupID *uuid.UUID
-	ReferralCode   string
+	Username      string
+	Email         string
+	DisplayName   string
+	PasswordHash  string
+	Role          Role
+	ReferralCode  string
+	IsSystemAdmin bool
 }
 
 type UpdateParams struct {
-	DisplayName    *string
-	Role           *Role
-	BillingGroupID *uuid.UUID
+	DisplayName *string
+	Role        *Role
 }
 
 type Service struct {
@@ -117,12 +117,11 @@ func (s *Service) create(ctx context.Context, input CreateInput, save func(conte
 		return Record{}, fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
 	}
 	return save(ctx, CreateParams{
-		Username:       username,
-		Email:          email,
-		DisplayName:    displayName,
-		PasswordHash:   passwordHash,
-		Role:           role,
-		BillingGroupID: input.BillingGroupID,
+		Username:     username,
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: passwordHash,
+		Role:         role,
 	})
 }
 
@@ -149,10 +148,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil && input.BillingGroupID == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil) {
 		return Record{}, ErrInvalidInput
 	}
-	params := UpdateParams{Role: input.Role, BillingGroupID: input.BillingGroupID}
+	params := UpdateParams{Role: input.Role}
 	if input.DisplayName != nil {
 		displayName := strings.TrimSpace(*input.DisplayName)
 		if len([]rune(displayName)) > 128 {
@@ -161,9 +160,6 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 		params.DisplayName = &displayName
 	}
 	if input.Role != nil && *input.Role != RoleAdmin && *input.Role != RoleMember {
-		return Record{}, ErrInvalidInput
-	}
-	if input.BillingGroupID != nil && *input.BillingGroupID == uuid.Nil {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Update(ctx, id, params)
@@ -185,4 +181,8 @@ func (s *Service) ResetPassword(ctx context.Context, id uuid.UUID, plainText str
 		return fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
 	}
 	return s.store.ResetPassword(ctx, id, passwordHash)
+}
+
+func (s *Service) FindByUsername(ctx context.Context, username string) (Record, error) {
+	return s.store.FindByUsername(ctx, strings.ToLower(strings.TrimSpace(username)))
 }

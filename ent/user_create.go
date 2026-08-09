@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
-	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
@@ -27,20 +26,6 @@ type UserCreate struct {
 	config
 	mutation *UserMutation
 	hooks    []Hook
-}
-
-// SetBillingGroupID sets the "billing_group_id" field.
-func (_c *UserCreate) SetBillingGroupID(v uuid.UUID) *UserCreate {
-	_c.mutation.SetBillingGroupID(v)
-	return _c
-}
-
-// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
-func (_c *UserCreate) SetNillableBillingGroupID(v *uuid.UUID) *UserCreate {
-	if v != nil {
-		_c.SetBillingGroupID(*v)
-	}
-	return _c
 }
 
 // SetInviteCode sets the "invite_code" field.
@@ -115,6 +100,20 @@ func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 func (_c *UserCreate) SetNillablePasswordHash(v *string) *UserCreate {
 	if v != nil {
 		_c.SetPasswordHash(*v)
+	}
+	return _c
+}
+
+// SetIsSystemAdmin sets the "is_system_admin" field.
+func (_c *UserCreate) SetIsSystemAdmin(v bool) *UserCreate {
+	_c.mutation.SetIsSystemAdmin(v)
+	return _c
+}
+
+// SetNillableIsSystemAdmin sets the "is_system_admin" field if the given value is not nil.
+func (_c *UserCreate) SetNillableIsSystemAdmin(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetIsSystemAdmin(*v)
 	}
 	return _c
 }
@@ -312,11 +311,6 @@ func (_c *UserCreate) AddAPIUsages(v ...*APIUsage) *UserCreate {
 	return _c.AddAPIUsageIDs(ids...)
 }
 
-// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
-func (_c *UserCreate) SetBillingGroup(v *BillingGroup) *UserCreate {
-	return _c.SetBillingGroupID(v.ID)
-}
-
 // SetReferrerID sets the "referrer" edge to the User entity by ID.
 func (_c *UserCreate) SetReferrerID(id uuid.UUID) *UserCreate {
 	_c.mutation.SetReferrerID(id)
@@ -394,6 +388,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultDisplayName
 		_c.mutation.SetDisplayName(v)
 	}
+	if _, ok := _c.mutation.IsSystemAdmin(); !ok {
+		v := user.DefaultIsSystemAdmin
+		_c.mutation.SetIsSystemAdmin(v)
+	}
 	if _, ok := _c.mutation.Role(); !ok {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
@@ -446,6 +444,9 @@ func (_c *UserCreate) check() error {
 		if err := user.DisplayNameValidator(v); err != nil {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "User.display_name": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.IsSystemAdmin(); !ok {
+		return &ValidationError{Name: "is_system_admin", err: errors.New(`ent: missing required field "User.is_system_admin"`)}
 	}
 	if _, ok := _c.mutation.Role(); !ok {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "User.role"`)}
@@ -523,6 +524,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = &value
+	}
+	if value, ok := _c.mutation.IsSystemAdmin(); ok {
+		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
+		_node.IsSystemAdmin = value
 	}
 	if value, ok := _c.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -654,23 +659,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.BillingGroupIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   user.BillingGroupTable,
-			Columns: []string{user.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.BillingGroupID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ReferrerIDs(); len(nodes) > 0 {

@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
-	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
@@ -40,7 +39,6 @@ type UserQuery struct {
 	withWalletEntries *WalletEntryQuery
 	withTopUpOrders   *TopUpOrderQuery
 	withAPIUsages     *APIUsageQuery
-	withBillingGroup  *BillingGroupQuery
 	withReferrer      *UserQuery
 	withReferrals     *UserQuery
 	modifiers         []func(*sql.Selector)
@@ -227,28 +225,6 @@ func (_q *UserQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryBillingGroup chains the current query on the "billing_group" edge.
-func (_q *UserQuery) QueryBillingGroup() *BillingGroupQuery {
-	query := (&BillingGroupClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, user.BillingGroupTable, user.BillingGroupColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -499,7 +475,6 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withWalletEntries: _q.withWalletEntries.Clone(),
 		withTopUpOrders:   _q.withTopUpOrders.Clone(),
 		withAPIUsages:     _q.withAPIUsages.Clone(),
-		withBillingGroup:  _q.withBillingGroup.Clone(),
 		withReferrer:      _q.withReferrer.Clone(),
 		withReferrals:     _q.withReferrals.Clone(),
 		// clone intermediate query.
@@ -585,17 +560,6 @@ func (_q *UserQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *UserQuery {
 	return _q
 }
 
-// WithBillingGroup tells the query-builder to eager-load the nodes that are connected to
-// the "billing_group" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithBillingGroup(opts ...func(*BillingGroupQuery)) *UserQuery {
-	query := (&BillingGroupClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withBillingGroup = query
-	return _q
-}
-
 // WithReferrer tells the query-builder to eager-load the nodes that are connected to
 // the "referrer" edge. The optional arguments are used to configure the query builder of the edge.
 func (_q *UserQuery) WithReferrer(opts ...func(*UserQuery)) *UserQuery {
@@ -624,12 +588,12 @@ func (_q *UserQuery) WithReferrals(opts ...func(*UserQuery)) *UserQuery {
 // Example:
 //
 //	var v []struct {
-//		BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
+//		InviteCode string `json:"invite_code,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.User.Query().
-//		GroupBy(user.FieldBillingGroupID).
+//		GroupBy(user.FieldInviteCode).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
@@ -647,11 +611,11 @@ func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
 // Example:
 //
 //	var v []struct {
-//		BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
+//		InviteCode string `json:"invite_code,omitempty"`
 //	}
 //
 //	client.User.Query().
-//		Select(user.FieldBillingGroupID).
+//		Select(user.FieldInviteCode).
 //		Scan(ctx, &v)
 func (_q *UserQuery) Select(fields ...string) *UserSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -696,7 +660,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [9]bool{
 			_q.withSessions != nil,
 			_q.withIdentities != nil,
 			_q.withAPIKeys != nil,
@@ -704,7 +668,6 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withWalletEntries != nil,
 			_q.withTopUpOrders != nil,
 			_q.withAPIUsages != nil,
-			_q.withBillingGroup != nil,
 			_q.withReferrer != nil,
 			_q.withReferrals != nil,
 		}
@@ -775,12 +738,6 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *User) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *User, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withBillingGroup; query != nil {
-		if err := _q.loadBillingGroup(ctx, query, nodes, nil,
-			func(n *User, e *BillingGroup) { n.Edges.BillingGroup = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -1010,38 +967,6 @@ func (_q *UserQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, no
 	}
 	return nil
 }
-func (_q *UserQuery) loadBillingGroup(ctx context.Context, query *BillingGroupQuery, nodes []*User, init func(*User), assign func(*User, *BillingGroup)) error {
-	ids := make([]uuid.UUID, 0, len(nodes))
-	nodeids := make(map[uuid.UUID][]*User)
-	for i := range nodes {
-		if nodes[i].BillingGroupID == nil {
-			continue
-		}
-		fk := *nodes[i].BillingGroupID
-		if _, ok := nodeids[fk]; !ok {
-			ids = append(ids, fk)
-		}
-		nodeids[fk] = append(nodeids[fk], nodes[i])
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	query.Where(billinggroup.IDIn(ids...))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		nodes, ok := nodeids[n.ID]
-		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "billing_group_id" returned %v`, n.ID)
-		}
-		for i := range nodes {
-			assign(nodes[i], n)
-		}
-	}
-	return nil
-}
 func (_q *UserQuery) loadReferrer(ctx context.Context, query *UserQuery, nodes []*User, init func(*User), assign func(*User, *User)) error {
 	ids := make([]uuid.UUID, 0, len(nodes))
 	nodeids := make(map[uuid.UUID][]*User)
@@ -1135,9 +1060,6 @@ func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != user.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
-		}
-		if _q.withBillingGroup != nil {
-			_spec.Node.AddColumnOnce(user.FieldBillingGroupID)
 		}
 		if _q.withReferrer != nil {
 			_spec.Node.AddColumnOnce(user.FieldReferredByUserID)

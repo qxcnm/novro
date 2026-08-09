@@ -21,11 +21,9 @@ import { useListSelection } from "@/lib/use-list-selection";
 
 type UserRecord = {
 	id: string;
-  billing_group_id: string | null;
-  billing_group?: { id: string; code: string; display_name: string; multiplier_bps: number };
-  username: string;
-  email: string;
-  display_name: string;
+	username: string;
+	email: string;
+	display_name: string;
   role: "admin" | "member";
   status: "active" | "disabled";
   created_at: string;
@@ -34,7 +32,6 @@ type UserRecord = {
 };
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
-type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
 type WalletEntry = { id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string }; entries: WalletEntry[] };
 type ErrorResponse = { error?: { message?: string } };
@@ -63,10 +60,9 @@ function yuanToMicros(value: string) {
 }
 
 export default function UsersClient() {
-  const router = useRouter();
+	const router = useRouter();
 	const [users, setUsers] = useState<UserRecord[]>([]);
-	const [billingGroups, setBillingGroups] = useState<BillingGroup[]>([]);
-  const [total, setTotal] = useState(0);
+	const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -85,27 +81,26 @@ export default function UsersClient() {
   const [balanceError, setBalanceError] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
-	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member", billing_group_id: "" });
-	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member", billing_group_id: "" });
+	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member" });
+	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member" });
   const [resetPassword, setResetPassword] = useState("");
   const [bulkStatus, setBulkStatus] = useState<"active" | "disabled" | null>(null);
   const selection = useListSelection(users.map((user) => user.id));
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
-    if (search) query.set("search", search);
-    if (status !== "all") query.set("status", status);
-	const [response, groupsResponse] = await Promise.all([fetch(`/api/admin/users?${query}`, { cache: "no-store" }), fetch("/api/admin/billing-groups", { cache: "no-store" })]);
-    if (response.status === 401) { router.replace("/login"); return; }
-    if (response.status === 403) { router.replace("/console"); return; }
-    if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
-	const page = (await response.json()) as UserPage;
-	setUsers(page.users);
-	if (groupsResponse.ok) setBillingGroups(((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups);
-    setTotal(page.total);
-    setLoading(false);
-  }, [offset, router, search, status]);
+	const loadUsers = useCallback(async () => {
+		setLoading(true);
+		const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+		if (search) query.set("search", search);
+		if (status !== "all") query.set("status", status);
+		const response = await fetch(`/api/admin/users?${query}`, { cache: "no-store" });
+		if (response.status === 401) { router.replace("/login"); return; }
+		if (response.status === 403) { router.replace("/console"); return; }
+		if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
+		const page = (await response.json()) as UserPage;
+		setUsers(page.users);
+		setTotal(page.total);
+		setLoading(false);
+	}, [offset, router, search, status]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadUsers(), 0);
@@ -118,19 +113,19 @@ export default function UsersClient() {
     setSearch(searchDraft.trim());
   }
 
-  function openDetails(record: UserRecord) {
-    setDetailUser(record);
-	setEditForm({ display_name: record.display_name, role: record.role, billing_group_id: record.billing_group_id ?? "" });
-  }
+	function openDetails(record: UserRecord) {
+		setDetailUser(record);
+		setEditForm({ display_name: record.display_name, role: record.role });
+	}
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setMessage(""); setFormError("");
     const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     setBusy(false);
-    if (!response.ok) { setFormError(await readError(response)); return; }
-	setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: billingGroups.find((group) => group.is_default)?.id ?? "" });
-    setCreateOpen(false); setOffset(0); setMessage("用户已创建");
+	if (!response.ok) { setFormError(await readError(response)); return; }
+	setForm({ username: "", email: "", display_name: "", password: "", role: "member" });
+	setCreateOpen(false); setOffset(0); setMessage("用户已创建");
     await loadUsers();
   }
 
@@ -229,7 +224,7 @@ export default function UsersClient() {
               <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
             </Select>
             <Button aria-label="刷新用户列表" disabled={loading} onClick={() => void loadUsers()} size="icon" title="刷新用户列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
-			<Button onClick={() => { setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: billingGroups.find((group) => group.is_default)?.id ?? "" }); setCreateOpen(true); }}><Plus />创建用户</Button>
+			<Button onClick={() => { setForm({ username: "", email: "", display_name: "", password: "", role: "member" }); setCreateOpen(true); }}><Plus />创建用户</Button>
           </div>
         </div>
 
@@ -244,17 +239,16 @@ export default function UsersClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-				<TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有用户" checked={selection.checkboxState} disabled={loading || users.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>计费分组</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
-                <TableBody>
-				  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
-				  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>没有符合条件的用户</TableCell></TableRow> : null}
+				<TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有用户" checked={selection.checkboxState} disabled={loading || users.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
+				<TableBody>
+				  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}
+				  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>没有符合条件的用户</TableCell></TableRow> : null}
                   {!loading ? users.map((record) => (
                     <TableRow key={record.id}>
 					  <TableCell><Checkbox aria-label={`选择用户 ${record.username}`} checked={selection.isSelected(record.id)} onCheckedChange={(checked) => selection.toggleOne(record.id, checked === true)} /></TableCell>
                       <TableCell><button className="max-w-64 text-left outline-none focus-visible:underline" onClick={() => openDetails(record)} type="button"><span className="block font-medium">{record.display_name || record.username}</span><span className="block text-xs text-muted-foreground">@{record.username}</span><span className="block truncate text-xs text-muted-foreground">{record.email || "未设置邮箱"}</span></button></TableCell>
 					  <TableCell><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge></TableCell>
-					  <TableCell><p>{record.billing_group?.display_name ?? "未分组"}</p><p className="text-xs text-muted-foreground">{((record.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
-                      <TableCell><Badge variant={record.status === "active" ? "outline" : "destructive"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell>
+					  <TableCell><Badge variant={record.status === "active" ? "outline" : "destructive"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.last_login_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.created_at)}</TableCell>
                       <TableCell><div className="flex justify-end gap-1">
@@ -275,7 +269,7 @@ export default function UsersClient() {
           </CardContent>
         </Card>
 
-		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member", billing_group_id: "" }); }} open={createOpen}>
+		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member" }); }} open={createOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>创建用户</DialogTitle><DialogDescription>创建后用户立即启用。初始密码为 8 到 72 字节，且必须包含英文和数字。</DialogDescription></DialogHeader>
             <form className="space-y-4" id="create-user-form" onSubmit={createUser}>
@@ -284,8 +278,7 @@ export default function UsersClient() {
               <div className="space-y-2"><Label htmlFor="new-display-name">显示名称</Label><Input id="new-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 Alice Chen" value={form.display_name} /></div>
               <div className="space-y-2"><Label htmlFor="new-password">初始密码</Label><Input autoComplete="new-password" id="new-password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.password} /></div>
 			  <div className="space-y-2"><Label htmlFor="new-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setForm({ ...form, role })} value={form.role}><SelectTrigger id="new-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select></div>
-			  <div className="space-y-2"><Label htmlFor="new-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger id="new-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active").map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
-              {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
+			  {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
             </form>
             <DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-user-form" type="submit"><UserRound />{busy ? "正在创建..." : "创建用户"}</Button></DialogFooter>
           </DialogContent>
@@ -299,8 +292,7 @@ export default function UsersClient() {
                 <div className="space-y-2"><Label htmlFor="edit-display-name">显示名称</Label><Input id="edit-display-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} value={editForm.display_name} /></div>
                 <div className="space-y-2"><Label htmlFor="edit-email">邮箱</Label><Input disabled id="edit-email" value={detailUser.email || "未设置邮箱"} /></div>
 				<div className="space-y-2"><Label htmlFor="edit-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setEditForm({ ...editForm, role })} value={editForm.role}><SelectTrigger id="edit-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select><p className="text-xs leading-5 text-muted-foreground">最后一个启用的管理员不能降级为普通成员。</p></div>
-				<div className="space-y-2"><Label htmlFor="edit-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setEditForm({ ...editForm, billing_group_id })} value={editForm.billing_group_id}><SelectTrigger id="edit-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active" || group.id === editForm.billing_group_id).map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div>
-                {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
+				{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
               </form>
               <SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-user-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button><Button onClick={() => { setDetailUser(null); setResetUser(detailUser); }} type="button" variant="outline"><KeyRound />重置密码</Button></SheetFooter></> : null}
           </SheetContent>

@@ -37,8 +37,8 @@ type KeyAuthenticator interface {
 	Authenticate(context.Context, string) (apikey.Actor, error)
 }
 type RouteService interface {
-	ResolveCandidates(context.Context, string) ([]modelroute.Resolved, error)
-	ListActive(context.Context) ([]modelroute.Record, error)
+	ResolveCandidates(context.Context, string, uuid.UUID) ([]modelroute.Resolved, error)
+	ListActive(context.Context, uuid.UUID) ([]modelroute.Record, error)
 }
 type BillingService interface {
 	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
@@ -80,7 +80,7 @@ func New(deps Dependencies) *Handler {
 	return &Handler{
 		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
-		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
+		upstreamRetryDelays: []time.Duration{250 * time.Millisecond},
 		roundRobinCursors:   make(map[string]uint64),
 	}
 }
@@ -134,8 +134,8 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (apikey.A
 	return actor, true
 }
 
-func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, _ apikey.Actor) {
-	routes, err := h.routes.ListActive(r.Context())
+func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, actor apikey.Actor) {
+	routes, err := h.routes.ListActive(r.Context(), actor.APIKey.BillingGroupID)
 	if err != nil {
 		h.logger.Error("list gateway models", "request_id", requestid.FromContext(r.Context()), "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
@@ -181,7 +181,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	publicModel := strings.TrimSpace(model)
-	routes, err := h.routes.ResolveCandidates(r.Context(), publicModel)
+	routes, err := h.routes.ResolveCandidates(r.Context(), publicModel, actor.APIKey.BillingGroupID)
 	if err != nil {
 		if errors.Is(err, modelroute.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "model_not_found", "模型不存在或当前不可用")
@@ -191,7 +191,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 		return
 	}
-	if actor.User.BillingGroup == nil || actor.User.BillingGroupID == nil {
+	if actor.APIKey.BillingGroupID == uuid.Nil || actor.APIKey.BillingGroup.ID == uuid.Nil {
 		h.logger.Error("resolve gateway billing context", "request_id", requestid.FromContext(r.Context()), "model", publicModel)
 		writeError(w, http.StatusInternalServerError, "billing_configuration_error", "模型计费配置暂时不可用")
 		return
@@ -237,7 +237,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			continue
 		}
 		inputEstimate := len(upstreamBody) + 256
-		reservation, err := billing.EstimateReservation(inputEstimate, maximum, rateCardFor(route), actor.User.BillingGroup.MultiplierBPS)
+		reservation, err := billing.EstimateReservation(inputEstimate, maximum, rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 		if err != nil {
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
@@ -303,14 +303,19 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			retryDelays = nil
 		}
 		response, err := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
-		if err != nil && stream && upstreamStream && endpoint == "chat_completions" {
+		streamRetry := stream && upstreamStream && endpoint == "chat_completions" && (err != nil || (response != nil && retryableUpstreamStatus(response.StatusCode)))
+		if streamRetry {
+			if response != nil {
+				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+				_ = response.Body.Close()
+			}
 			fallbackBody, fallbackErr := buildUpstreamBody(payload, route, endpoint, false)
 			if fallbackErr == nil {
 				fallbackRequest, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
 				if requestErr == nil {
 					setUpstreamHeaders(fallbackRequest, r, route)
 					setUpstreamIdempotencyKey(fallbackRequest, r, requestID)
-					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, h.upstreamRetryDelays); fallbackRequestErr == nil {
+					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, nil); fallbackRequestErr == nil {
 						response, err = fallbackResponse, nil
 						h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
 					}
@@ -387,8 +392,13 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
 			attemptRequest.Body = body
 		}
 		response, err := h.client.Do(attemptRequest)
-		if err == nil || !retryableUpstreamConnectionError(err) || attempt >= len(retryDelays) {
+		retryable := retryableUpstreamConnectionError(err) || (err == nil && retryableUpstreamStatus(response.StatusCode))
+		if !retryable || attempt >= len(retryDelays) {
 			return response, err
+		}
+		if response != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+			_ = response.Body.Close()
 		}
 		delay := retryDelays[attempt]
 		if delay <= 0 {
@@ -413,7 +423,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	usage := parseUsage(body)
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.User.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
 		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -500,11 +510,15 @@ func retryableUpstreamConnectionError(err error) bool {
 	return errors.As(err, &networkError)
 }
 
+func retryableUpstreamStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
 	usage := parseUsage(body)
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.User.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
 		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -674,7 +688,7 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	if !completed {
 		usage.Estimated = true
 	}
-	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.User.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
 		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
 		return
@@ -709,9 +723,10 @@ func streamCompleted(endpoint string, data []byte) bool {
 func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID, RequestID: requestID, Endpoint: endpoint,
-		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
-		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
+	billingGroupID := actor.APIKey.BillingGroupID
+	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
+		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 	err, attempts := h.retrySettlement(finalizeCtx, func() error { return h.billing.Finalize(finalizeCtx, input) })
 	if err != nil {
 		h.logger.Error("finalize gateway usage", "request_id", requestID, "attempts", attempts, "error", err)
@@ -720,7 +735,7 @@ func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelr
 }
 
 func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, statusCode int, errorCode, errorMessage, modelName string, startedAt time.Time) {
-	if route.UpstreamModel == nil || route.UpstreamModelID == nil || actor.User.BillingGroup == nil || actor.User.BillingGroupID == nil {
+	if route.UpstreamModel == nil || route.UpstreamModelID == nil || actor.APIKey.BillingGroupID == uuid.Nil || actor.APIKey.BillingGroup.ID == uuid.Nil {
 		return
 	}
 	finishedAt := h.now()
@@ -730,10 +745,11 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(context.Background()), 10*time.Second)
 	defer cancel()
+	billingGroupID := actor.APIKey.BillingGroupID
 	input := billing.FailureInput{
-		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: actor.User.BillingGroupID,
+		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID,
 		RequestID: requestID, Endpoint: endpoint, StatusCode: statusCode, ErrorCode: errorCode, ErrorMessage: errorMessage,
-		MultiplierBPS: actor.User.BillingGroup.MultiplierBPS, ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.User.BillingGroup.Code, BillingGroupName: actor.User.BillingGroup.DisplayName,
+		MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName,
 		CreatedAt: startedAt, FinishedAt: finishedAt, DurationMS: duration.Milliseconds(),
 	}
 	if err := h.billing.RecordFailure(ctx, input); err != nil {

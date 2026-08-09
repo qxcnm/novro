@@ -62,6 +62,9 @@ func (f *fakeStore) ResetPassword(_ context.Context, _ uuid.UUID, hash string) e
 	f.resetHash = hash
 	return nil
 }
+func (f *fakeStore) FindByUsername(context.Context, string) (Record, error) {
+	return Record{}, ErrNotFound
+}
 
 type fakeHasher struct{}
 
@@ -143,6 +146,12 @@ func TestInitializeAdminUsesDedicatedStoreOperation(t *testing.T) {
 	}
 	if created.Role != RoleAdmin || store.initialParams.Role != RoleAdmin || store.initialParams.PasswordHash == "" {
 		t.Fatalf("unexpected administrator initialization: created=%+v params=%+v", created, store.initialParams)
+	}
+}
+
+func TestProtectedAdminErrorIsDistinct(t *testing.T) {
+	if ErrProtectedAdmin == ErrLastActiveAdmin {
+		t.Fatal("protected administrator error must be distinct from last-admin invariant")
 	}
 }
 

@@ -133,6 +133,29 @@ func main() {
 		logger.Info("administrator created", "user_id", created.ID, "username", created.Username)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "reset-admin" {
+		username := envOrDefault("NOVRO_BOOTSTRAP_USERNAME", defaultBootstrapUsername)
+		plainTextPassword := os.Getenv("NOVRO_ADMIN_PASSWORD")
+		if plainTextPassword == "" {
+			logger.Error("reset-admin requires NOVRO_ADMIN_PASSWORD")
+			os.Exit(1)
+		}
+		admin, err := userService.FindByUsername(ctx, username)
+		if err != nil {
+			logger.Error("find administrator for password reset", "error", err)
+			os.Exit(1)
+		}
+		if admin.Role != user.RoleAdmin || !admin.IsSystemAdmin {
+			logger.Error("refusing to reset a non-system administrator", "username", username)
+			os.Exit(1)
+		}
+		if err := userService.ResetPassword(ctx, admin.ID, plainTextPassword); err != nil {
+			logger.Error("administrator password reset failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("administrator password reset", "username", admin.Username)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "reconcile-top-up" {
 		if len(os.Args) != 3 {
 			logger.Error("reconcile-top-up requires exactly one Novro order number")

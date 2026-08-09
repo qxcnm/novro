@@ -28,43 +28,34 @@ var (
 	ErrEmailTaken          = errors.New("email already exists")
 	ErrInvalidReferralCode = errors.New("invalid referral code")
 	ErrLastActiveAdmin     = errors.New("cannot disable the last active administrator")
+	ErrProtectedAdmin      = errors.New("cannot modify the system administrator role or status")
 	ErrAlreadyInitialized  = errors.New("administrator already initialized")
 )
 
 type Record struct {
-	ID             uuid.UUID            `json:"id"`
-	BillingGroupID *uuid.UUID           `json:"billing_group_id"`
-	BillingGroup   *BillingGroupSummary `json:"billing_group,omitempty"`
-	Username       string               `json:"username"`
-	Email          string               `json:"email"`
-	DisplayName    string               `json:"display_name"`
-	Role           Role                 `json:"role"`
-	Status         Status               `json:"status"`
-	LastLoginAt    *time.Time           `json:"last_login_at"`
-	CreatedAt      time.Time            `json:"created_at"`
-	UpdatedAt      time.Time            `json:"updated_at"`
+	ID            uuid.UUID  `json:"id"`
+	Username      string     `json:"username"`
+	Email         string     `json:"email"`
+	DisplayName   string     `json:"display_name"`
+	Role          Role       `json:"role"`
+	Status        Status     `json:"status"`
+	IsSystemAdmin bool       `json:"is_system_admin"`
+	LastLoginAt   *time.Time `json:"last_login_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Username       string     `json:"username"`
-	Email          string     `json:"email"`
-	DisplayName    string     `json:"display_name"`
-	Password       string     `json:"password"`
-	Role           Role       `json:"role"`
-	BillingGroupID *uuid.UUID `json:"billing_group_id"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+	Role        Role   `json:"role"`
 }
 
 type UpdateInput struct {
-	DisplayName    *string    `json:"display_name"`
-	Role           *Role      `json:"role"`
-	BillingGroupID *uuid.UUID `json:"billing_group_id"`
-}
-
-type BillingGroupSummary struct {
-	ID            uuid.UUID `json:"id"`
-	Code          string    `json:"code"`
-	DisplayName   string    `json:"display_name"`
-	MultiplierBPS int64     `json:"multiplier_bps"`
+	DisplayName *string `json:"display_name"`
+	Role        *Role   `json:"role"`
 }
 
 type RegisterInput struct {
