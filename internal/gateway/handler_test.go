@@ -175,6 +175,12 @@ func gatewayActor() apikey.Actor {
 	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New(), BillingGroupID: groupID, BillingGroup: billinggroup.Summary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
 }
 
+func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
+	actor := gatewayActor()
+	actor.APIKey.BillingGroup.MultiplierBPS = multiplierBPS
+	return actor
+}
+
 func openAIRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
 	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
@@ -228,6 +234,49 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	requestID, err := uuid.Parse(response.Header().Get("X-Novro-Request-ID"))
 	if err != nil || biller.usage.RequestID != requestID {
 		t.Fatalf("response and billing request ids differ: header=%q usage=%s err=%v", response.Header().Get("X-Novro-Request-ID"), biller.usage.RequestID, err)
+	}
+}
+
+func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) {
+	actor := gatewayActorWithMultiplier(4_000)
+	route := openAIRoute()
+	biller := &fakeBilling{}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"up-multiplier","usage":{"prompt_tokens":10,"completion_tokens":20}}`)),
+		}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: biller, Client: client})
+	requestBody := `{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"max_tokens":100}`
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(requestBody)))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if biller.reserveCalls != 1 || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+		t.Fatalf("unexpected billing calls: %+v", biller)
+	}
+	if biller.usage.MultiplierBPS != 4_000 || biller.usage.BaseCostMicros != 180 || biller.usage.CostMicros != 72 {
+		t.Fatalf("billing group multiplier was not applied to final charge: %+v", biller.usage)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(requestBody), &payload); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+	upstreamBody, err := buildUpstreamBody(payload, route, "chat_completions", false)
+	if err != nil {
+		t.Fatalf("build upstream body: %v", err)
+	}
+	expectedReservation, err := billing.EstimateReservation(len(upstreamBody)+256, 100, rateCardFor(route), 4_000)
+	if err != nil {
+		t.Fatalf("estimate expected reservation: %v", err)
+	}
+	if biller.reserved != expectedReservation.CostMicros {
+		t.Fatalf("billing group multiplier was not applied to reservation: got=%d want=%d", biller.reserved, expectedReservation.CostMicros)
 	}
 }
 
