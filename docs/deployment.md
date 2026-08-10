@@ -3,7 +3,8 @@
 本文描述单机或同一内网中的生产部署。Novro 仍是一个 Go API 服务和一个 Next.js
 控制台组成的模块化单体，不需要 Redis、消息队列或额外微服务。
 
-如果希望只维护一个对外的 Novro 应用服务，优先使用 [Docker 单应用部署](docker-deployment.md)：
+如果要从一台全新的 Ubuntu/Debian 服务器开始部署，优先按
+[Novro Docker 生产部署手册](docker-deployment.md) 的逐步流程执行：
 Nginx、Go 和 Next.js 在同一个应用容器内运行，MySQL 作为内部数据库容器运行，脚本会
 完成环境安装、迁移、初始化和就绪检查。本文后续章节保留源码进程部署、备份和恢复细节。
 
