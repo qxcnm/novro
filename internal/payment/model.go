@@ -20,7 +20,7 @@ var (
 )
 
 const (
-	MinTopUpMicros int64 = 10_000
+	MinTopUpMicros int64 = 1_000_000
 	MaxTopUpMicros int64 = 50_000_000_000
 )
 

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var providerCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`)
+var providerCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$`)
 
 type Store interface {
 	Create(context.Context, CreateParams) (Record, error)

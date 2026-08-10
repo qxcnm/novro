@@ -1,7 +1,7 @@
 # 开发启动说明
 
-本文只覆盖本地开发。生产变量、构建、反向代理、上线、回滚、备份和恢复流程见
-[部署与恢复](deployment.md)。
+本文只覆盖本地开发。生产变量、自动安装 Docker/MySQL、初始化、反向代理、上线、回滚、
+备份和恢复流程见 [生产部署手册](docker-deployment.md)。
 
 ## 1. 前置条件
 
@@ -36,7 +36,7 @@ pnpm --dir apps/web build
 
 ## 3. 数据库与迁移
 
-数据库名以部署环境为准，当前开发实例使用 `novro-db`。应用运行时不要使用
+数据库名以部署环境为准，当前开发实例使用 `novro`。应用运行时不要使用
 `root`。当前实例直接设置：
 
 ```env
@@ -77,8 +77,8 @@ go run ./cmd/novro
 
 ```powershell
 $env:NOVRO_BOOTSTRAP_USERNAME='novro'
-$env:NOVRO_BOOTSTRAP_EMAIL='novro@novro.local'
-$env:NOVRO_BOOTSTRAP_DISPLAY_NAME='Novro Administrator'
+$env:NOVRO_BOOTSTRAP_EMAIL='novro@example.invalid'
+$env:NOVRO_BOOTSTRAP_DISPLAY_NAME='Novro'
 $env:NOVRO_BOOTSTRAP_PASSWORD='<SET_A_RANDOM_PASSWORD>'
 go run ./cmd/novro bootstrap-admin
 Remove-Item Env:NOVRO_BOOTSTRAP_PASSWORD
@@ -136,7 +136,7 @@ http://localhost:3000/api/auth/oidc/callback
 生产环境应改为 `NOVRO_PUBLIC_URL` 对应的 HTTPS 域名。OIDC 配置示例：
 
 ```env
-NOVRO_PUBLIC_URL=https://novro.example.com
+NOVRO_PUBLIC_URL=https://YOUR_DOMAIN
 NOVRO_OIDC_ISSUER=https://id.example.com
 NOVRO_OIDC_CLIENT_ID=novro
 NOVRO_OIDC_CLIENT_SECRET=<DEPLOYMENT_SECRET>

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { copyText } from "@/lib/clipboard";
 
 type ReferralInvitation = {
   username: string;
@@ -108,11 +109,11 @@ export default function ProfilePage() {
 
   async function copyInviteLink() {
     if (!referral?.invite_url) return;
-    try {
-      await navigator.clipboard.writeText(referral.invite_url);
+    const success = await copyText(referral.invite_url);
+    if (success) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       setCopied(false);
     }
   }

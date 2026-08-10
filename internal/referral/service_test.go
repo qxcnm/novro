@@ -39,12 +39,12 @@ func TestSummaryBuildsPublicInviteLink(t *testing.T) {
 		Invitations: []Invitation{{Username: "member.one", DisplayName: "Member One"}},
 		Rewards:     []Reward{{Username: "member.one", RewardMicros: 750_000}},
 	}}
-	service := NewService(store, 750, "https://novro.example.com/")
+	service := NewService(store, 750, "https://app.example.invalid/")
 	summary, err := service.Summary(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatalf("summary: %v", err)
 	}
-	if summary.InviteURL != "https://novro.example.com/register?ref=ABCD1234EF56" || summary.RewardBPS != 750 || store.rate != 750 {
+	if summary.InviteURL != "https://app.example.invalid/register?ref=ABCD1234EF56" || summary.RewardBPS != 750 || store.rate != 750 {
 		t.Fatalf("unexpected referral summary: %+v rate=%d", summary, store.rate)
 	}
 	if len(summary.Invitations) != 1 || summary.Invitations[0].Username != "member.one" || len(summary.Rewards) != 1 || summary.Rewards[0].RewardMicros != 750_000 {
@@ -54,7 +54,7 @@ func TestSummaryBuildsPublicInviteLink(t *testing.T) {
 
 func TestSummaryUsesDatabaseRewardRate(t *testing.T) {
 	store := &fakeStore{stats: Stats{InviteCode: "ABCD1234EF56"}, config: StoredConfig{RewardBPS: 500, Found: true}}
-	service := NewService(store, 750, "https://novro.example.com")
+	service := NewService(store, 750, "https://app.example.invalid")
 	summary, err := service.Summary(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatalf("summary: %v", err)
@@ -66,7 +66,7 @@ func TestSummaryUsesDatabaseRewardRate(t *testing.T) {
 
 func TestAdminConfigDefaultsAndUpdates(t *testing.T) {
 	store := &fakeStore{}
-	service := NewService(store, 750, "https://novro.example.com")
+	service := NewService(store, 750, "https://app.example.invalid")
 	config, err := service.AdminConfig(context.Background())
 	if err != nil || config.RewardBPS != 750 || config.UpdatedAt != nil {
 		t.Fatalf("unexpected default config: config=%+v err=%v", config, err)
@@ -84,9 +84,9 @@ func TestAdminConfigDefaultsAndUpdates(t *testing.T) {
 
 func TestSummaryValidatesDependenciesAndRate(t *testing.T) {
 	for _, service := range []*Service{
-		NewService(nil, 1_000, "https://novro.example.com"),
-		NewService(&fakeStore{}, -1, "https://novro.example.com"),
-		NewService(&fakeStore{}, 10_001, "https://novro.example.com"),
+		NewService(nil, 1_000, "https://app.example.invalid"),
+		NewService(&fakeStore{}, -1, "https://app.example.invalid"),
+		NewService(&fakeStore{}, 10_001, "https://app.example.invalid"),
 		NewService(&fakeStore{}, 1_000, ""),
 	} {
 		if _, err := service.Summary(context.Background(), uuid.New()); !errors.Is(err, ErrInvalidInput) {

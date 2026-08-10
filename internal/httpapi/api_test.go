@@ -513,7 +513,7 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 func TestReferralSummaryUsesAuthenticatedUser(t *testing.T) {
 	userID := uuid.New()
 	referrals := &fakeReferrals{summary: referral.Summary{
-		InviteCode: "ABCD1234EF56", InviteURL: "https://novro.example.com/register?ref=ABCD1234EF56",
+		InviteCode: "ABCD1234EF56", InviteURL: "https://app.example.invalid/register?ref=ABCD1234EF56",
 		InvitedCount: 4, PendingRewardMicros: 1_000_000, TotalRewardMicros: 2_000_000, RewardBPS: 1_000,
 		Invitations: []referral.Invitation{{Username: "member.one", DisplayName: "Member One"}},
 		Rewards:     []referral.Reward{{Username: "member.one", DisplayName: "Member One", PaidAmountMicros: 10_000_000, RewardMicros: 1_000_000}},

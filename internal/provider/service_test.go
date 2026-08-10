@@ -77,17 +77,32 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 	}
 }
 
+func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
+	store := &fakeStore{}
+	service := testService(t, store)
+	_, err := service.Create(context.Background(), CreateInput{
+		Code: "kimi-0.2", DisplayName: "Kimi", Protocol: ProtocolOpenAI,
+		BaseURL: "https://api.example.com/v1", APIKey: "secret", BillingGroupID: uuid.New(),
+	})
+	if err != nil {
+		t.Fatalf("expected dotted provider code to be accepted: %v", err)
+	}
+	if store.createParams.Code != "kimi-0.2" {
+		t.Fatalf("code=%q", store.createParams.Code)
+	}
+}
+
 func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
 		Code: "self-hosted", DisplayName: "自建网关", Protocol: ProtocolOpenAI,
-		BaseURL: "http://8.134.107.46:3000/v1/", APIKey: "secret", BillingGroupID: uuid.New(),
+		BaseURL: "http://203.0.113.10:3000/v1/", APIKey: "secret", BillingGroupID: uuid.New(),
 	})
 	if err != nil {
 		t.Fatalf("expected HTTP self-hosted provider to be accepted: %v", err)
 	}
-	if store.createParams.BaseURL != "http://8.134.107.46:3000/v1" {
+	if store.createParams.BaseURL != "http://203.0.113.10:3000/v1" {
 		t.Fatalf("base URL=%q", store.createParams.BaseURL)
 	}
 }

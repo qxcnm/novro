@@ -44,7 +44,7 @@ const sections = [
   { href: "#security", label: "安全建议" },
 ];
 
-const curlChat = `curl https://api.novro.example/v1/chat/completions \\
+const curlChat = `curl https://api.example.invalid/v1/chat/completions \\
   -H "Authorization: Bearer $NOVRO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -60,7 +60,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key=os.environ["NOVRO_API_KEY"],
-    base_url="https://api.novro.example/v1",
+    base_url="https://api.example.invalid/v1",
 )
 
 response = client.chat.completions.create(
@@ -77,7 +77,7 @@ const nodeChat = `import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.NOVRO_API_KEY,
-  baseURL: "https://api.novro.example/v1",
+  baseURL: "https://api.example.invalid/v1",
 });
 
 const response = await client.chat.completions.create({
@@ -101,7 +101,7 @@ const anthropicExample = `import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({
   apiKey: process.env.NOVRO_API_KEY,
-  baseURL: "https://api.novro.example",
+  baseURL: "https://api.example.invalid",
 });
 
 const message = await client.messages.create({
@@ -203,7 +203,7 @@ export function ApiDocumentation() {
                 <CircleDashed aria-hidden="true" />
                 <AlertTitle>模型网关已开放</AlertTitle>
                 <AlertDescription>
-                  管理员完成提供商和模型路由配置后，API Key、余额和 <code>/v1</code> 模型请求即可使用。示例域名 <code>api.novro.example</code> 不是生产地址，请替换为部署地址。
+                  管理员完成提供商和模型路由配置后，API Key、余额和 <code>/v1</code> 模型请求即可使用。示例域名 <code>api.example.invalid</code> 不是生产地址，请替换为部署地址。
                 </AlertDescription>
               </Alert>
 
@@ -221,7 +221,7 @@ export function ApiDocumentation() {
                 API Key 只放在服务端环境变量中，并通过 Bearer 认证头发送。不要把 Key 写入浏览器代码、移动端安装包、公开仓库或日志。
               </SectionHeading>
               <div className="mt-7 overflow-hidden rounded-lg border">
-                <InfoRow label="示例 Base URL"><code>https://api.novro.example/v1</code></InfoRow>
+                <InfoRow label="示例 Base URL"><code>https://api.example.invalid/v1</code></InfoRow>
                 <InfoRow label="鉴权"><code>Authorization: Bearer nvr_xxx</code></InfoRow>
                 <InfoRow label="请求格式"><code>Content-Type: application/json</code></InfoRow>
                 <InfoRow label="请求追踪">响应头或错误体中的 <code>request_id</code></InfoRow>

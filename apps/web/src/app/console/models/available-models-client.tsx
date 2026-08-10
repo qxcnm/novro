@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { copyText } from "@/lib/clipboard";
 
 type Prices = {
   input_price_micros: number;
@@ -127,12 +128,12 @@ export default function AvailableModelsClient() {
   }, [models, protocol, provider, query]);
 
   async function copyModelID(id: string) {
-    try {
-      await navigator.clipboard.writeText(id);
+    const success = await copyText(id);
+    if (success) {
       setCopiedID(id);
       setMessage(`已复制模型 ID：${id}`);
       window.setTimeout(() => setCopiedID((current) => current === id ? "" : current), 1600);
-    } catch {
+    } else {
       setMessage("复制失败，请手动选择模型 ID");
     }
   }

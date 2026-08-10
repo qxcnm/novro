@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { copyText } from "@/lib/clipboard";
 
 type PaymentMethod = { code: string; name: string; icon: string; min_micros: number; enabled: boolean };
 type BonusTier = { threshold_micros: number; bonus_bps: number };
@@ -64,6 +65,7 @@ type TopUpOrder = {
 };
 type TopUpPage = { orders: TopUpOrder[]; total: number; offset: number; limit: number };
 
+const defaultMinTopUpMicros = 1_000_000;
 const defaultPresets = [10_000_000, 50_000_000, 100_000_000, 500_000_000];
 const emptyMethod: MethodForm = { code: "", name: "", icon: "wallet", min_amount: "1", enabled: true };
 const emptyBonus: BonusForm = { threshold: "", percent: "" };
@@ -110,7 +112,7 @@ function normalizePaymentConfig(value?: PaymentConfigResponse | null): PaymentCo
     site_name: value?.site_name || "Novro",
     channels: Array.isArray(value?.channels) ? value.channels : [],
     methods: Array.isArray(value?.methods) ? value.methods : [],
-    min_micros: value?.min_micros ?? 10_000,
+    min_micros: value?.min_micros ?? defaultMinTopUpMicros,
     max_micros: value?.max_micros ?? 50_000_000_000,
     preset_amounts_micros: Array.isArray(value?.preset_amounts_micros) && value.preset_amounts_micros.length > 0 ? value.preset_amounts_micros : defaultPresets,
     bonus_tiers: Array.isArray(value?.bonus_tiers) ? value.bonus_tiers : [],
@@ -291,8 +293,12 @@ export default function PaymentsClient() {
 
   async function copyAddress(value: string, label: string) {
     if (!value) return;
-    await navigator.clipboard.writeText(value);
-    setMessage(`${label}已复制`);
+    if (await copyText(value)) {
+      setMessage(`${label}已复制`);
+      setError("");
+    } else {
+      setError(`${label}复制失败，请手动选择并复制`);
+    }
   }
 
   return (

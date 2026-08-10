@@ -36,8 +36,8 @@ import (
 
 const (
 	defaultBootstrapUsername    = "novro"
-	defaultBootstrapEmail       = "novro@novro.local"
-	defaultBootstrapDisplayName = "Novro Administrator"
+	defaultBootstrapEmail       = "novro@example.invalid"
+	defaultBootstrapDisplayName = "Novro"
 )
 
 func main() {

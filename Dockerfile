@@ -23,6 +23,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/web ./apps/web
+RUN pnpm install --frozen-lockfile
 RUN pnpm --dir apps/web build
 
 FROM node:24-bookworm-slim AS runtime
@@ -52,9 +53,7 @@ RUN chmod 0755 /usr/local/bin/novro /usr/local/bin/novro-entrypoint \
 EXPOSE 80 443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:8080/readyz >/dev/null \
-    && curl --fail --silent --show-error --insecure https://127.0.0.1/login >/dev/null \
-    || exit 1
+    CMD /bin/sh -ceu 'curl --fail --silent --show-error http://127.0.0.1:8080/readyz >/dev/null && case "${NOVRO_PUBLIC_URL:-https://localhost}" in http://*) curl --fail --silent --show-error http://127.0.0.1/login >/dev/null ;; https://*) curl --fail --silent --show-error --insecure https://127.0.0.1/login >/dev/null ;; *) exit 1 ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/novro-entrypoint"]
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

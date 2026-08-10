@@ -112,7 +112,7 @@ export default function Home() {
               </Card>
               <Card className="rounded-lg bg-foreground text-background ring-0 dark:bg-card dark:text-card-foreground dark:ring-1 dark:ring-foreground/10">
                 <CardHeader className="border-b border-background/15 dark:border-border"><CardTitle className="text-base">公告</CardTitle><CardDescription className="text-background/60 dark:text-muted-foreground">当前版本已开放模型目录与统一网关</CardDescription></CardHeader>
-                <CardContent><p className="text-sm leading-6 text-background/75 dark:text-muted-foreground">管理员配置启用路由后，客户即可使用自己的 API Key 调用模型。</p><Button asChild className="mt-5" variant="secondary"><Link href="/docs">查看接入步骤 <ArrowRight aria-hidden="true" /></Link></Button></CardContent>
+                <CardContent><p className="text-sm leading-6 text-background/75 dark:text-muted-foreground"></p><Button asChild className="mt-5" variant="secondary"><Link href="/docs">查看接入步骤 <ArrowRight aria-hidden="true" /></Link></Button></CardContent>
               </Card>
             </div>
           </div>

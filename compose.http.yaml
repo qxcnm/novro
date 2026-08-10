@@ -1,0 +1,4 @@
+services:
+  novro:
+    ports: !override
+      - "${NOVRO_BIND_ADDRESS:-0.0.0.0}:${NOVRO_HTTP_PORT:-80}:80"

@@ -54,7 +54,7 @@
 `scripts/mysql-backup.ps1` 对包含真实用户、钱包和初始化标记的测试库生成备份及
 SHA-256 校验文件，并用 `scripts/mysql-restore.ps1` 恢复到全新数据库；11 张表、当时 5 条
 迁移记录和 11 张表的逐表行数比较全部通过。生产部署、上线、回滚和同样的备份恢复
-流程记录在 `docs/deployment.md`。
+流程记录在唯一部署文档 `docs/docker-deployment.md`。
 
 当前迁移文件已按重新部署空库压缩为 `0001_initial_schema.sql`。后续验证以空库初始化、
 显式 `migrate`、服务启动和浏览器关键流程为准；旧增量迁移链的备份恢复记录只代表早期版本。

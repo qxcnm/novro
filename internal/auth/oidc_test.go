@@ -87,7 +87,7 @@ func TestOIDCClientAuthorizationCodeFlow(t *testing.T) {
 	ctx := oidc.ClientContext(context.Background(), provider.Client())
 	client, err := NewOIDCClient(ctx, config.OIDCConfig{
 		Issuer: issuer, ClientID: "novro-test", ClientSecret: "test-client-secret", AutoRegister: true,
-	}, "https://novro.example.com", "01234567890123456789012345678901")
+	}, "https://app.example.invalid", "01234567890123456789012345678901")
 	if err != nil {
 		t.Fatalf("create OIDC client: %v", err)
 	}
@@ -158,7 +158,7 @@ func testOIDCStateClient(t *testing.T) *OIDCClient {
 	return &OIDCClient{
 		issuer: "https://id.example.com", autoRegister: true,
 		oauth: oauth2.Config{
-			ClientID: "novro-test", RedirectURL: "https://novro.example.com/api/auth/oidc/callback",
+			ClientID: "novro-test", RedirectURL: "https://app.example.invalid/api/auth/oidc/callback",
 			Endpoint: oauth2.Endpoint{AuthURL: "https://id.example.com/authorize", TokenURL: "https://id.example.com/token"},
 		},
 		aead: aead,

@@ -2,19 +2,362 @@
 
 本文是从一台全新的 Ubuntu/Debian 服务器部署 Novro 的完整操作手册。推荐使用本文的
 Docker 单应用方案：一个 `novro` 容器内运行 Nginx、Go API/模型网关和 Next.js 控制台，
-另一个只加入内部 Docker 网络的 MySQL 容器运行数据库。部署后公网只暴露 HTTPS，
-不需要 Redis、消息队列或其他微服务。
+另一个只加入内部 Docker 网络的 MySQL 容器运行数据库。部署脚本支持临时 HTTP 和正式
+HTTPS 两种模式，不需要 Redis、消息队列或其他微服务。
 
-源码进程部署、MySQL 备份恢复和灾备切换的补充规则见
-[生产部署、备份与恢复](deployment.md)。本文中的命令以 Linux shell 为例；不要把生产
-密码直接写进命令行参数、Git、镜像或聊天记录。
+本文是仓库唯一的生产部署文档，同时包含首次安装、初始化、验证、升级、备份、恢复和故障
+排查。命令以 Linux shell 为例；不要把生产密码直接写进命令行参数、Git、镜像或聊天记录。
+
+## A. 一键部署
+
+本节使用通用占位符，不包含任何特定服务器地址：
+
+| 项目 | 当前值 |
+| --- | --- |
+| 服务器地址 | `YOUR_SERVER_HOST` |
+| 管理员用户名 | `novro` |
+| 临时模式 | `http://YOUR_SERVER_HOST` |
+| 正式模式 | `https://YOUR_DOMAIN` |
+| Docker | 不要求预装，脚本自动安装 |
+| MySQL | 不要求预装，脚本自动启动 `mysql:8.4` 容器 |
+| 数据库初始化 | 脚本自动执行 `check-db`、`migrate` 和 `bootstrap-admin` |
+| 开机自启 | Docker Compose 使用 `restart: unless-stopped` |
+
+临时测试默认管理员为 `novro`，默认密码为 `novro123`。正式使用前必须立即修改密码，
+并切换到 HTTPS 和可信证书。
+
+### A.1 登录服务器
+
+在本机终端执行：
+
+```bash
+ssh root@YOUR_SERVER_HOST
+```
+
+如果服务器禁止 root SSH，使用实际运维用户登录，然后给需要提权的命令加 `sudo`。
+
+### A.2 安装 Git 并获取 Novro
+
+```bash
+apt-get update
+apt-get install -y git
+install -d -m 0750 /opt/novro
+cd /opt/novro
+git clone https://github.com/qxcnm/novro.git .
+git status --short
+git rev-parse HEAD
+```
+
+仓库是私有仓库时，GitHub 会要求有效凭据。生产服务器建议配置只读 Deploy Key，不要把
+个人访问令牌直接放进 clone URL。`git status --short` 应无输出，并记录 `git rev-parse HEAD`
+返回的发布 SHA。
+
+如果代码已经上传到 `/opt/novro`，不要重复 clone，只执行：
+
+```bash
+cd /opt/novro
+git status --short
+git rev-parse HEAD
+```
+
+### A.3 管理员初始账号
+
+脚本默认使用固定的临时测试账号。也可以通过环境变量覆盖：
+
+```bash
+cd /opt/novro
+export NOVRO_BOOTSTRAP_USERNAME=novro
+export NOVRO_BOOTSTRAP_EMAIL=novro@example.invalid
+export NOVRO_BOOTSTRAP_DISPLAY_NAME='Novro'
+export NOVRO_BOOTSTRAP_PASSWORD=novro123
+```
+
+正式环境不要把这个测试密码保留在 shell 历史或部署文件中。
+
+### A.4 临时 HTTP 部署
+
+```bash
+bash scripts/deploy-docker.sh \
+  --scheme http \
+  --domain YOUR_SERVER_HOST
+```
+
+HTTP 模式适合临时联调，地址为：
+
+```text
+http://YOUR_SERVER_HOST/login
+```
+
+HTTP 模式只发布 80 端口，会关闭 Secure Cookie，并使用开发环境配置。不要在公网长期使用。
+
+### A.5 正式 HTTPS 部署
+
+没有可信证书时，脚本会为地址生成自签名证书；浏览器会提示证书不受信任。已有证书时，
+通过 `--tls-cert` 和 `--tls-key` 传入：
+
+```bash
+bash scripts/deploy-docker.sh \
+  --scheme https \
+  --domain YOUR_DOMAIN \
+  --tls-cert /path/to/fullchain.pem \
+  --tls-key /path/to/privkey.pem
+```
+
+正式地址为：
+
+```text
+https://YOUR_DOMAIN/login
+```
+
+脚本会自动完成 Docker 检查、镜像加载或构建、数据库迁移、管理员初始化、Nginx 配置和
+就绪检查。离线镜像部署时追加：
+
+```bash
+--offline-images ./novro-images.tar
+```
+
+### A.6 清除临时变量并检查服务
+
+```bash
+unset NOVRO_BOOTSTRAP_PASSWORD
+unset NOVRO_BOOTSTRAP_USERNAME
+unset NOVRO_BOOTSTRAP_EMAIL
+unset NOVRO_BOOTSTRAP_DISPLAY_NAME
+
+grep '^NOVRO_BOOTSTRAP_PASSWORD=' /data/novro/.env.docker
+docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker ps
+docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker logs --tail=100 novro
+docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker exec -T novro curl --fail http://127.0.0.1:8080/healthz
+docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker exec -T novro curl --fail http://127.0.0.1:8080/readyz
+```
+
+`grep` 必须只显示：
+
+```text
+NOVRO_BOOTSTRAP_PASSWORD=
+```
+
+`docker compose ps` 应显示 `mysql` 为 `healthy`，`novro` 为 `Up` 或 `healthy`。如果不是，
+先查看日志，不要反复删除容器或数据目录。
+
+### A.7 浏览器登录
+
+打开：
+
+```text
+https://YOUR_SERVER_HOST/login
+```
+
+使用 HTTPS 自签名证书时，浏览器提示证书不受信任是预期现象。确认访问地址正确后，可以
+在高级选项中继续访问。登录用户名是 `novro`，临时密码是 `novro123`。登录后立即重置
+密码，并创建一个用于日常管理的第二管理员账号。
+
+服务器本机可以跳过自签名证书校验做外部链路检查：
+
+```bash
+curl -k --fail https://YOUR_SERVER_HOST/healthz
+curl -k --fail https://YOUR_SERVER_HOST/readyz
+curl -k --fail https://YOUR_SERVER_HOST/login >/dev/null
+```
+
+`-k` 只用于当前自签名证书阶段。绑定域名并换成可信证书后，检查命令不得再使用 `-k`。
+
+### A.8 确认 MySQL 位于 Docker 内部
+
+```bash
+docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker ps mysql
+docker inspect novro-mysql-1 --format '{{json .NetworkSettings.Ports}}'
+```
+
+MySQL 不应映射宿主机 `3306`。应用通过内部 Docker 网络和 TLS 连接 MySQL，宿主机无需安装
+`mysql-server`。不要在云安全组或防火墙中开放公网 `3306`。
+
+### A.9 服务器重启验证
+
+Compose 中两个服务都配置了 `restart: unless-stopped`。完成首次验收后可安排一次重启验证：
+
+```bash
+reboot
+```
+
+重新 SSH 登录后执行：
+
+```bash
+cd /opt/novro
+docker compose --env-file /data/novro/.env.docker ps
+curl -k --fail https://YOUR_SERVER_HOST/readyz
+```
+
+### A.9 后续绑定域名
+
+假设后续域名为 `YOUR_DOMAIN`：
+
+1. 在 DNS 服务商添加 A 记录，将 `YOUR_DOMAIN` 指向 `YOUR_SERVER_HOST`。
+2. 等待 `dig +short YOUR_DOMAIN` 返回 `YOUR_SERVER_HOST`。
+3. 备份 `/data/novro/.env.docker`，并在维护窗口停止 `novro` 容器以释放 80/443。
+4. 使用 Certbot 申请证书。
+5. 修改现有环境文件中的公共 URL，复制证书，然后重建应用容器。
+
+```bash
+apt-get update
+apt-get install -y certbot
+cd /opt/novro
+
+cp /data/novro/.env.docker /data/novro/.env.docker.before-domain
+chmod 600 /data/novro/.env.docker.before-domain
+docker compose --env-file /data/novro/.env.docker stop novro
+
+certbot certonly --standalone \
+  --agree-tos --no-eff-email \
+  -m YOUR_EMAIL \
+  -d YOUR_DOMAIN
+
+sed -i 's|^NOVRO_PUBLIC_URL=.*|NOVRO_PUBLIC_URL=https://YOUR_DOMAIN|' /data/novro/.env.docker
+install -m 0644 /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem /data/novro/tls/fullchain.pem
+install -m 0600 /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem /data/novro/tls/privkey.pem
+
+docker compose --env-file /data/novro/.env.docker config --quiet
+docker compose --env-file /data/novro/.env.docker up -d --no-build --pull never
+docker compose --env-file /data/novro/.env.docker exec -T novro nginx -t
+curl --fail https://YOUR_DOMAIN/readyz
+curl --fail https://YOUR_DOMAIN/login >/dev/null
+```
+
+把示例域名和 `YOUR_EMAIL` 替换成真实值。不要删除或重新生成
+`/data/novro/.env.docker`：其中的数据库密码和 `NOVRO_PROVIDER_ENCRYPTION_SECRET` 必须
+保持不变。域名切换后，支付回调和 OIDC 回调也应改为新域名，并完成真实回调验证。
+
+## B. 本地构建并离线同步镜像
+
+国内服务器不需要从 Docker Hub 拉取 MySQL，也不需要在服务器下载 Go、Node.js、pnpm 或
+Debian 构建依赖。本机一次性生成的离线包包含：
+
+- `novro:offline`：Nginx、Go API/模型网关和 Next.js 控制台的 Linux 运行镜像。
+- `mysql:8.4`：与应用 Compose 配置一致的 MySQL Linux 镜像。
+- `compose.yaml`、`compose.http.yaml`、离线部署脚本、镜像清单和 SHA-256 校验文件。
+
+服务器仍必须预先安装 Docker Engine、Docker Compose v2、`curl` 和 `openssl`。Docker
+Engine 的安装包依赖服务器发行版、版本和 CPU 架构，不能用 Docker 镜像代替；如果服务器
+连 Docker 软件包也无法下载，应先执行 `cat /etc/os-release` 和 `uname -m`，再单独准备对应
+的 `.deb`/`.rpm` 包。
+
+### B.1 确认服务器架构
+
+在服务器执行：
+
+```bash
+uname -m
+docker compose version
+```
+
+`x86_64` 对应 `linux/amd64`，`aarch64` 对应 `linux/arm64`。不要把 amd64 离线包导入 ARM
+服务器后依赖模拟运行；数据库和网关都应使用服务器原生架构镜像。
+
+### B.2 准备本机 Docker Desktop
+
+Docker Desktop 必须切换到 Linux containers，并启用 WSL 2 后端。在项目目录的 PowerShell
+中先检查：
+
+```powershell
+docker info --format 'OS={{.OSType}} Architecture={{.Architecture}}'
+docker buildx version
+```
+
+第一条必须返回 `OS=linux`。如果 Docker Desktop 已安装但命令不存在，重新打开 PowerShell；
+仓库脚本也会自动查找 Docker Desktop 的默认和当前用户安装目录。如果引擎无法启动并提示
+WSL 2 未安装，在管理员 PowerShell 执行以下命令并重启 Windows，然后重新启动 Docker
+Desktop：
+
+```powershell
+wsl --install --no-distribution
+```
+
+还需确保 BIOS/UEFI 中已启用 CPU 虚拟化。
+
+### B.3 在本机生成单文件离线包
+
+对于 `x86_64` 服务器，在仓库根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\export-offline-images.ps1 `
+  -Platform linux/amd64
+```
+
+ARM 服务器把参数改成 `linux/arm64`。脚本会先联网构建应用镜像并拉取 MySQL，然后在
+`dist/` 下生成两个文件：
+
+```text
+novro-offline-amd64-<commit>-<time>.tar.gz
+novro-offline-amd64-<commit>-<time>.tar.gz.sha256
+```
+
+清单会记录 Git 提交和工作区是否有未提交修改。正式发布应先审查 `manifest.txt`；
+`SourceTreeDirty=true` 表示镜像包含当前未提交代码，不能仅用提交 SHA 重现。
+
+### B.4 传输、校验并解包
+
+把 `.tar.gz` 和对应的 `.sha256` 同步到服务器，例如：
+
+```powershell
+scp .\dist\novro-offline-amd64-<commit>-<time>.tar.gz* root@YOUR_SERVER_HOST:/root/
+```
+
+服务器端执行：
+
+```bash
+cd /root
+sha256sum -c novro-offline-amd64-<commit>-<time>.tar.gz.sha256
+install -d -m 0750 /opt/novro-offline
+tar -xzf novro-offline-amd64-<commit>-<time>.tar.gz -C /opt/novro-offline
+cd /opt/novro-offline/novro-offline-amd64-<commit>-<time>
+sha256sum -c SHA256SUMS
+cat manifest.txt
+```
+
+两个 SHA-256 检查都必须返回 `OK`。离线包不含任何数据库密码、会话密钥、提供商密钥、
+TLS 私钥或管理员密码。
+
+### B.5 完全禁止镜像拉取和服务器构建地部署
+
+临时测试可以直接使用默认账号；正式环境应在首次登录后立即修改：
+
+```bash
+export NOVRO_BOOTSTRAP_USERNAME=novro
+export NOVRO_BOOTSTRAP_EMAIL=novro@example.invalid
+export NOVRO_BOOTSTRAP_DISPLAY_NAME='Novro'
+export NOVRO_BOOTSTRAP_PASSWORD=novro123
+```
+
+然后从解包目录运行：
+
+```bash
+# 临时 HTTP
+bash scripts/deploy-docker.sh \
+  --scheme http \
+  --domain YOUR_SERVER_HOST \
+  --offline-images ./novro-images.tar
+
+# 正式 HTTPS
+bash scripts/deploy-docker.sh \
+  --scheme https \
+  --domain YOUR_DOMAIN \
+  --offline-images ./novro-images.tar
+```
+
+离线模式先执行 `docker load`，确认 `novro:offline` 和 `mysql:8.4` 存在，再使用
+`docker compose up --no-build --pull never`。因此服务器不会访问 Docker Hub，也不会执行
+Dockerfile 中的 Go、pnpm 或 `apt-get` 构建步骤。成功后按 A.5--A.8 完成就绪、登录、MySQL
+端口和重启验证。
+
+后续升级重新生成并同步一个新离线包即可。`docker load` 会更新 `novro:offline` 标签，部署
+脚本会重建应用容器；MySQL 数据仍保存在 `/data/novro/mysql`，不得随镜像目录一起删除。
 
 ## 0. 先了解部署结果
 
 部署完成后的请求路径是：
 
 ```text
-浏览器 -- HTTPS :443 --> Nginx
+浏览器 -- HTTP :80 或 HTTPS :443 --> Nginx
                          |-- /api/*、/v1/*、/healthz、/readyz --> Go :8080
                          `-- 其他控制台页面 ------------------> Next.js :3000
 Go :8080 -- 加密 Docker 网络 --> MySQL :3306
@@ -39,10 +382,10 @@ Go :8080 -- 加密 Docker 网络 --> MySQL :3306
 
 - 一台 Ubuntu 22.04/24.04 或 Debian 12/13 的 x86-64 服务器，建议至少 2 vCPU、4 GB RAM、
   40 GB SSD；模型代理的并发量较大时按实际流量扩容。
-- 一个已经解析到服务器公网 IPv4 的域名，例如 `novro.example.com`。若使用 IPv6，必须
+- 一个已经解析到服务器公网 IPv4 的域名，例如 `YOUR_DOMAIN`。若使用 IPv6，必须
   同时确认防火墙和 Docker 的 IPv6 策略；首次部署建议只配 IPv4。
 - DNS 的 A 记录已经生效：在任意机器执行
-  `dig +short novro.example.com`，结果应包含服务器地址。
+  `dig +short YOUR_DOMAIN`，结果应包含服务器地址。
 - 服务器可出站访问 Docker Hub、上游模型、SMTP、OIDC 和支付网关；只开放必要的入站端口。
 - 可信 HTTPS 证书和匹配私钥。可以先用自签名证书验证安装，再换成受信任证书；正式用户流量
   不应长期使用自签名证书。
@@ -115,9 +458,9 @@ SMTP 或支付凭据。
 证书文件应是 PEM 格式，私钥必须与证书匹配。部署前在服务器上确认文件可读：
 
 ```bash
-sudo openssl x509 -in /etc/letsencrypt/live/novro.example.com/fullchain.pem -noout -subject -dates
-sudo openssl x509 -noout -modulus -in /etc/letsencrypt/live/novro.example.com/fullchain.pem | openssl sha256
-sudo openssl rsa  -noout -modulus -in /etc/letsencrypt/live/novro.example.com/privkey.pem   | openssl sha256
+sudo openssl x509 -in /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem -noout -subject -dates
+sudo openssl x509 -noout -modulus -in /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem | openssl sha256
+sudo openssl rsa  -noout -modulus -in /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem   | openssl sha256
 ```
 
 两条 SHA-256 输出必须一致。部署脚本会把它们复制为
@@ -131,16 +474,16 @@ sudo openssl rsa  -noout -modulus -in /etc/letsencrypt/live/novro.example.com/pr
 sudo apt-get install -y certbot
 sudo certbot certonly --standalone \
   --agree-tos --no-eff-email \
-  -m ops@example.com \
-  -d novro.example.com
+  -m YOUR_EMAIL \
+  -d YOUR_DOMAIN
 ```
 
 申请成功后使用 `4.1` 的路径执行部署。证书续期后，必须重新复制证书并重载容器内 Nginx；
 仅更新 `/etc/letsencrypt` 不会自动更新已经复制到 `/data/novro/tls` 的文件：
 
 ```bash
-sudo install -m 0644 /etc/letsencrypt/live/novro.example.com/fullchain.pem /data/novro/tls/fullchain.pem
-sudo install -m 0600 /etc/letsencrypt/live/novro.example.com/privkey.pem /data/novro/tls/privkey.pem
+sudo install -m 0644 /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem /data/novro/tls/fullchain.pem
+sudo install -m 0600 /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem /data/novro/tls/privkey.pem
 cd /opt/novro
 sudo docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker exec -T novro nginx -t
 sudo docker compose --project-directory /opt/novro --env-file /data/novro/.env.docker exec -T novro nginx -s reload
@@ -162,28 +505,27 @@ sudo bash scripts/deploy-docker.sh --domain localhost
 
 ## 5. 首次一键部署（推荐路径）
 
-### 5.1 安全输入引导密码
+### 5.1 引导账号
 
-进入 root 的交互 shell 后再输入密码，避免密码出现在普通用户的 shell 历史或命令参数中：
+临时测试默认使用 `novro` / `novro123`：
 
 ```bash
 sudo -i
 cd /opt/novro
-read -r -s -p 'Novro 初始管理员密码: ' NOVRO_BOOTSTRAP_PASSWORD
-printf '\n'
-export NOVRO_BOOTSTRAP_PASSWORD
+export NOVRO_BOOTSTRAP_USERNAME=novro
+export NOVRO_BOOTSTRAP_PASSWORD=novro123
 ```
 
-脚本会检查密码长度、字符类型，并在管理员创建和第一次容器重建后从
-`/data/novro/.env.docker` 及运行中的容器环境中清空该值。脚本不会打印密码。
+脚本会在管理员初始化和第一次容器重建后清空引导密码。正式环境必须随后修改密码。
 
 ### 5.2 使用可信证书启动
 
 ```bash
 bash scripts/deploy-docker.sh \
-  --domain novro.example.com \
-  --tls-cert /etc/letsencrypt/live/novro.example.com/fullchain.pem \
-  --tls-key /etc/letsencrypt/live/novro.example.com/privkey.pem
+  --scheme https \
+  --domain YOUR_DOMAIN \
+  --tls-cert /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem \
+  --tls-key /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem
 ```
 
 脚本按以下顺序执行：
@@ -226,9 +568,10 @@ export NOVRO_BIND_ADDRESS=127.0.0.1
 export NOVRO_HTTP_PORT=18081
 export NOVRO_HTTPS_PORT=18443
 bash scripts/deploy-docker.sh \
-  --domain novro.example.com \
-  --tls-cert /etc/letsencrypt/live/novro.example.com/fullchain.pem \
-  --tls-key /etc/letsencrypt/live/novro.example.com/privkey.pem
+  --scheme https \
+  --domain YOUR_DOMAIN \
+  --tls-cert /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem \
+  --tls-key /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem
 unset NOVRO_BIND_ADDRESS NOVRO_HTTP_PORT NOVRO_HTTPS_PORT
 ```
 
@@ -238,7 +581,7 @@ unset NOVRO_BIND_ADDRESS NOVRO_HTTP_PORT NOVRO_HTTPS_PORT
 
 ## 6. 首次登录和应用配置
 
-1. 打开 `https://novro.example.com/login`，使用部署时填写的管理员用户名（默认 `novro`）
+1. 打开 `https://YOUR_DOMAIN/login`，使用部署时填写的管理员用户名（默认 `novro`）
    和引导密码登录。
 2. 进入管理员用户页面，为日常操作创建第二个管理员账号并设置独立密码；保留系统管理员
    作为受保护的恢复账号。
@@ -248,12 +591,12 @@ unset NOVRO_BIND_ADDRESS NOVRO_HTTP_PORT NOVRO_HTTPS_PORT
    SMTP 配置时，验证码不会写入日志，注册会返回不可用；不要把 SMTP 密码放到
    `NEXT_PUBLIC_*` 变量。
 6. 如需企业登录，在身份平台登记
-   `https://novro.example.com/api/auth/oidc/callback`，再在部署秘密中同时设置
+   `https://YOUR_DOMAIN/api/auth/oidc/callback`，再在部署秘密中同时设置
    `NOVRO_OIDC_ISSUER`、`NOVRO_OIDC_CLIENT_ID`、`NOVRO_OIDC_CLIENT_SECRET` 并重建容器。
 7. 如需在线充值，在 `/admin/payments` 配置 HTTPS 易支付地址、商户号、密钥、回调渠道和
    金额。平台必须能访问：
-   `https://novro.example.com/api/payments/epay/notify`；同步返回地址是
-   `https://novro.example.com/api/payments/epay/return`。
+   `https://YOUR_DOMAIN/api/payments/epay/notify`；同步返回地址是
+   `https://YOUR_DOMAIN/api/payments/epay/return`。
 8. 在 `/admin/providers` 只添加 HTTPS 上游，保存后同步模型；在模型目录维护单价并启用
    对外路由。提供商 API Key 会在服务端加密保存，不会返回浏览器。
 9. 创建一个普通用户 API Key。Key 只在创建成功时完整展示一次；将它放进受限的客户端秘密
@@ -281,10 +624,10 @@ sudo docker compose --env-file /data/novro/.env.docker exec -T novro nginx -t
 先用域名验证证书、代理和控制台：
 
 ```bash
-curl --fail --silent --show-error https://novro.example.com/healthz
-curl --fail --silent --show-error https://novro.example.com/readyz
-curl --fail --silent --show-error https://novro.example.com/login >/dev/null
-curl --fail --silent --show-error https://novro.example.com/docs >/dev/null
+curl --fail --silent --show-error https://YOUR_DOMAIN/healthz
+curl --fail --silent --show-error https://YOUR_DOMAIN/readyz
+curl --fail --silent --show-error https://YOUR_DOMAIN/login >/dev/null
+curl --fail --silent --show-error https://YOUR_DOMAIN/docs >/dev/null
 ```
 
 然后在浏览器完成登录、控制台导航、管理员页面加载和退出。最后使用刚创建的 API Key 做
@@ -294,7 +637,7 @@ curl --fail --silent --show-error https://novro.example.com/docs >/dev/null
 export NOVRO_API_KEY='在受控终端临时读取的 API Key'
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $NOVRO_API_KEY" \
-  https://novro.example.com/v1/models
+  https://YOUR_DOMAIN/v1/models
 unset NOVRO_API_KEY
 ```
 
@@ -385,7 +728,7 @@ chmod 600 "$OUT" "$OUT.sha256"
    恢复读流量和写流量。
 6. 原生产库保持只读并归档，确认新库稳定后再按审批流程处理旧库。
 
-更完整的 MySQL 权限、行数比较和恢复限制见 [生产部署、备份与恢复](deployment.md) 第 7--9 节。
+恢复演练必须保留日期、备份哈希、迁移版本、表集合、逐表行数比较结果和操作者记录。
 
 ## 10. 升级流程
 

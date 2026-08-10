@@ -2,7 +2,7 @@ name: novro
 
 services:
   mysql:
-    image: mysql:8.4
+    image: ${MYSQL_IMAGE:-mysql:8.4}
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
@@ -26,6 +26,7 @@ services:
       - backend
 
   novro:
+    image: ${NOVRO_IMAGE:-novro:offline}
     build:
       context: .
       dockerfile: Dockerfile
@@ -35,8 +36,8 @@ services:
         condition: service_healthy
     environment:
       NOVRO_ALLOWED_ORIGINS: ${NOVRO_PUBLIC_URL:?NOVRO_PUBLIC_URL is required}
-      NOVRO_BOOTSTRAP_DISPLAY_NAME: ${NOVRO_BOOTSTRAP_DISPLAY_NAME:-Novro Administrator}
-      NOVRO_BOOTSTRAP_EMAIL: ${NOVRO_BOOTSTRAP_EMAIL:-novro@novro.local}
+      NOVRO_BOOTSTRAP_DISPLAY_NAME: ${NOVRO_BOOTSTRAP_DISPLAY_NAME:-Novro}
+      NOVRO_BOOTSTRAP_EMAIL: ${NOVRO_BOOTSTRAP_EMAIL:-novro@example.invalid}
       NOVRO_BOOTSTRAP_PASSWORD: ${NOVRO_BOOTSTRAP_PASSWORD:-}
       NOVRO_BOOTSTRAP_USERNAME: ${NOVRO_BOOTSTRAP_USERNAME:-novro}
       NOVRO_DATABASE_CONN_MAX_LIFETIME: ${NOVRO_DATABASE_CONN_MAX_LIFETIME:-30m}
@@ -55,7 +56,7 @@ services:
       NOVRO_EMAIL_SMTP_PORT: ${NOVRO_EMAIL_SMTP_PORT:-587}
       NOVRO_EMAIL_SMTP_TLS: ${NOVRO_EMAIL_SMTP_TLS:-true}
       NOVRO_EMAIL_SMTP_USERNAME: ${NOVRO_EMAIL_SMTP_USERNAME:-}
-      NOVRO_ENVIRONMENT: production
+      NOVRO_ENVIRONMENT: ${NOVRO_ENVIRONMENT:-production}
       NOVRO_EPAY_API_URL: ${NOVRO_EPAY_API_URL:-}
       NOVRO_EPAY_CHANNELS: ${NOVRO_EPAY_CHANNELS:-alipay,wxpay}
       NOVRO_EPAY_MERCHANT_ID: ${NOVRO_EPAY_MERCHANT_ID:-}
@@ -72,7 +73,7 @@ services:
       NOVRO_REFERRAL_REWARD_BPS: ${NOVRO_REFERRAL_REWARD_BPS:-1000}
       NOVRO_REGISTRATION_ENABLED: ${NOVRO_REGISTRATION_ENABLED:-true}
       NOVRO_SESSION_COOKIE_NAME: ${NOVRO_SESSION_COOKIE_NAME:-novro_session}
-      NOVRO_SESSION_COOKIE_SECURE: "true"
+      NOVRO_SESSION_COOKIE_SECURE: ${NOVRO_SESSION_COOKIE_SECURE:-true}
       NOVRO_SESSION_SECRET: ${NOVRO_SESSION_SECRET:?NOVRO_SESSION_SECRET is required}
       NOVRO_SESSION_TTL: ${NOVRO_SESSION_TTL:-24h}
       NOVRO_SETUP_TOKEN: ${NOVRO_SETUP_TOKEN:-}
@@ -81,6 +82,7 @@ services:
       - "${NOVRO_BIND_ADDRESS:-0.0.0.0}:${NOVRO_HTTP_PORT:-80}:80"
       - "${NOVRO_BIND_ADDRESS:-0.0.0.0}:${NOVRO_HTTPS_PORT:-443}:443"
     volumes:
+      - ${NOVRO_NGINX_CONF:?NOVRO_NGINX_CONF is required}:/etc/nginx/nginx.conf:ro
       - ${NOVRO_DATA_DIR:-./data/novro}/tls:/etc/nginx/tls:ro
     networks:
       - backend

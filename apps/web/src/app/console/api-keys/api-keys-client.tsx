@@ -16,6 +16,7 @@ import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-action
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
+import { copyText } from "@/lib/clipboard";
 import { useListSelection } from "@/lib/use-list-selection";
 
 type APIKeyRecord = { id: string; billing_group_id: string; billing_group: { id: string; code: string; display_name: string; multiplier_bps: number }; name: string; key_prefix: string; status: "active" | "revoked"; last_used_at: string | null; created_at: string; revoked_at: string | null };
@@ -87,11 +88,12 @@ export default function APIKeysClient() {
 
   async function copyKey() {
     if (!created) return;
-    try {
-      await navigator.clipboard.writeText(created.key);
+    const success = await copyText(created.key);
+    if (success) {
       setCopied(true);
       setError("");
-    } catch {
+    } else {
+      setCopied(false);
       setError("复制失败，请手动选择并复制完整密钥");
     }
   }

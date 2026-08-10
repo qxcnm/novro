@@ -350,6 +350,9 @@ func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		if response.StatusCode == http.StatusUnauthorized {
+			return nil, &DiscoveryError{StatusCode: response.StatusCode, Reason: "上游 API Key 无效或已撤销，请在提供商配置中重新填写上游密钥"}
+		}
 		return nil, &DiscoveryError{StatusCode: response.StatusCode, Reason: "请检查模型列表路径和 API 密钥"}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxDiscoveryBody+1))

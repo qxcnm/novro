@@ -93,7 +93,7 @@ func (fakePaymentCipher) Encrypt(value string) (string, error) { return "v1." + 
 func (fakePaymentCipher) Decrypt(value string) (string, error) { return value[len("v1."):], nil }
 
 func paymentTestDefaults() EPayConfig {
-	return EPayConfig{NotifyURL: "https://novro.example.com/api/payments/epay/notify", ReturnURL: "https://novro.example.com/console/billing"}
+	return EPayConfig{NotifyURL: "https://app.example.invalid/api/payments/epay/notify", ReturnURL: "https://app.example.invalid/console/billing"}
 }
 
 func TestServiceReadsLatestStoredPaymentChannels(t *testing.T) {
@@ -121,6 +121,25 @@ func TestServiceAdminConfigReturnsEmptyChannelsAsArray(t *testing.T) {
 	}
 }
 
+func TestServiceRaisesLegacyStoredTopUpMinimum(t *testing.T) {
+	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{
+		Provider: ProviderEPay, SiteName: "Novro", Channels: []string{"alipay"},
+		Methods:            []PaymentMethod{{Code: "alipay", Name: "支付宝", Icon: "smartphone", MinMicros: 10_000, Enabled: true}},
+		MinMicros:          10_000,
+		MaxMicros:          MaxTopUpMicros,
+		PresetAmountMicros: []int64{10_000_000},
+		BonusTiers:         []BonusTier{},
+	}}
+	service := NewService(&fakePaymentStore{}, configStore, fakePaymentCipher{}, paymentTestDefaults())
+	admin, err := service.AdminConfig(context.Background())
+	if err != nil {
+		t.Fatalf("read legacy payment config: %v", err)
+	}
+	if admin.MinMicros != MinTopUpMicros || len(admin.Methods) != 1 || admin.Methods[0].MinMicros != MinTopUpMicros {
+		t.Fatalf("legacy minimum was not raised: %+v", admin)
+	}
+}
+
 func TestServiceUpdateEncryptsMerchantKeyAndReturnsSafeAdminConfig(t *testing.T) {
 	configStore := &fakePaymentConfigStore{}
 	service := NewService(&fakePaymentStore{}, configStore, fakePaymentCipher{}, paymentTestDefaults())
@@ -141,7 +160,7 @@ func TestServiceCreatesCentAlignedTopUp(t *testing.T) {
 	store := &fakePaymentStore{}
 	service := NewService(store, nil, nil, EPayConfig{
 		APIURL: "https://pay.example.com", MerchantID: "1000", MerchantKey: "secret",
-		SiteName: "Novro", Channels: []string{"alipay"}, NotifyURL: "https://novro.example.com/api/payments/epay/notify", ReturnURL: "https://novro.example.com/console/billing",
+		SiteName: "Novro", Channels: []string{"alipay"}, NotifyURL: "https://app.example.invalid/api/payments/epay/notify", ReturnURL: "https://app.example.invalid/console/billing",
 	})
 	userID := uuid.New()
 	result, err := service.Create(context.Background(), userID, MinTopUpMicros, " ALIPAY ")
@@ -151,10 +170,10 @@ func TestServiceCreatesCentAlignedTopUp(t *testing.T) {
 	if store.created.UserID != userID || store.created.AmountMicros != MinTopUpMicros || store.created.CreditedMicros != MinTopUpMicros || store.created.Channel != "alipay" || store.created.OutTradeNo == "" {
 		t.Fatalf("unexpected create params: %+v", store.created)
 	}
-	if result.Checkout.Action == "" || result.Checkout.Fields["money"] != "0.01" || result.Order.Status != StatusPending {
+	if result.Checkout.Action == "" || result.Checkout.Fields["money"] != "1.00" || result.Order.Status != StatusPending {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-	for _, amount := range []int64{9_999, 10_001, MaxTopUpMicros + 10_000} {
+	for _, amount := range []int64{990_000, 1_000_001, MaxTopUpMicros + 10_000} {
 		if _, err := service.Create(context.Background(), userID, amount, "alipay"); err != ErrInvalidInput {
 			t.Fatalf("amount %d error = %v, want %v", amount, err, ErrInvalidInput)
 		}
@@ -213,7 +232,7 @@ func TestServiceCompletesVerifiedNotification(t *testing.T) {
 	store := &fakePaymentStore{}
 	service := NewService(store, nil, nil, EPayConfig{
 		APIURL: "https://pay.example.com", MerchantID: "1000", MerchantKey: "merchant-secret",
-		SiteName: "Novro", Channels: []string{"alipay"}, NotifyURL: "https://novro.example.com/api/payments/epay/notify", ReturnURL: "https://novro.example.com/console/billing",
+		SiteName: "Novro", Channels: []string{"alipay"}, NotifyURL: "https://app.example.invalid/api/payments/epay/notify", ReturnURL: "https://app.example.invalid/console/billing",
 	})
 	values := signedServiceNotification(t)
 	if err := service.HandleNotification(context.Background(), values); err != nil {
@@ -237,8 +256,8 @@ func TestServiceReconcilesProviderPaidOrder(t *testing.T) {
 	service := NewService(store, nil, nil, EPayConfig{
 		APIURL: server.URL, MerchantID: "1000", MerchantKey: "merchant-secret",
 		SiteName: "Novro", Channels: []string{"alipay"},
-		NotifyURL: "https://novro.example.com/api/payments/epay/notify",
-		ReturnURL: "https://novro.example.com/api/payments/epay/return",
+		NotifyURL: "https://app.example.invalid/api/payments/epay/notify",
+		ReturnURL: "https://app.example.invalid/api/payments/epay/return",
 	})
 	order, err := service.Reconcile(context.Background(), "NVR1")
 	if err != nil {

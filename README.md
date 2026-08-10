@@ -33,8 +33,7 @@ Novro 面向需要在企业内部统一使用 Kimi、GLM、DeepSeek 等模型的
 ## 文档
 
 - [开发环境、迁移与启动](docs/getting-started.md)
-- [Docker 单应用部署](docs/docker-deployment.md)
-- [生产部署、备份与恢复](docs/deployment.md)
+- [生产部署、初始化、升级与恢复](docs/docker-deployment.md)
 - [工程规范](docs/engineering.md)
 - [产品概述](docs/product-overview.md)
 - [API 约定](docs/api.md)

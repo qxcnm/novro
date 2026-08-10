@@ -553,8 +553,19 @@ func normalizeStoredConfig(record StoredConfig) StoredConfig {
 	if record.MinMicros == 0 {
 		record.MinMicros = MinTopUpMicros
 	}
+	if record.MinMicros < MinTopUpMicros {
+		record.MinMicros = MinTopUpMicros
+	}
 	if record.MaxMicros == 0 {
 		record.MaxMicros = MaxTopUpMicros
+	}
+	if record.MaxMicros < record.MinMicros {
+		record.MaxMicros = MaxTopUpMicros
+	}
+	for index := range record.Methods {
+		if record.Methods[index].MinMicros < record.MinMicros {
+			record.Methods[index].MinMicros = record.MinMicros
+		}
 	}
 	if len(record.PresetAmountMicros) == 0 {
 		record.PresetAmountMicros = defaultPresetAmounts()

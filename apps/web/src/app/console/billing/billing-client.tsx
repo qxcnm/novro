@@ -22,6 +22,8 @@ type TopUpOrder = { id: string; out_trade_no: string; provider: string; channel:
 type Checkout = { action: string; method: string; fields: Record<string, string> };
 type ErrorResponse = { error?: { message?: string } };
 
+const defaultMinTopUpMicros = 1_000_000;
+
 function formatMoney(micros: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000); }
 function formatDate(value: string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "top_up") return "在线充值"; if (type === "referral_reward") return "邀请返现"; if (type === "usage_reservation") return "调用预占"; if (type === "usage_settlement") return "结算补扣"; return "预占释放"; }
@@ -79,7 +81,7 @@ export default function BillingClient() {
   const [message, setMessage] = useState("");
   const [topUpError, setTopUpError] = useState("");
   const [topUpOpen, setTopUpOpen] = useState(false);
-  const [amount, setAmount] = useState("0.01");
+  const [amount, setAmount] = useState("1");
   const [channel, setChannel] = useState("");
 
   const load = useCallback(async () => {
@@ -102,7 +104,7 @@ export default function BillingClient() {
       provider: rawConfig.provider,
       channels: Array.isArray(rawConfig.channels) ? rawConfig.channels : [],
       methods,
-      min_micros: rawConfig.min_micros ?? 10_000,
+      min_micros: rawConfig.min_micros ?? defaultMinTopUpMicros,
       max_micros: rawConfig.max_micros ?? 50_000_000_000,
       preset_amounts_micros: Array.isArray(rawConfig.preset_amounts_micros) ? rawConfig.preset_amounts_micros : [],
       bonus_tiers: Array.isArray(rawConfig.bonus_tiers) ? rawConfig.bonus_tiers : [],
@@ -156,7 +158,7 @@ export default function BillingClient() {
     event.preventDefault();
     const amountMicros = parseAmountMicros(amount);
     if (!topUpConfig || amountMicros === null || amountMicros < topUpConfig.min_micros || amountMicros > topUpConfig.max_micros) {
-      setTopUpError(`充值金额需在 ${formatMoney(topUpConfig?.min_micros ?? 10_000)} 至 ${formatMoney(topUpConfig?.max_micros ?? 50_000_000_000)} 之间`);
+      setTopUpError(`充值金额需在 ${formatMoney(topUpConfig?.min_micros ?? defaultMinTopUpMicros)} 至 ${formatMoney(topUpConfig?.max_micros ?? 50_000_000_000)} 之间`);
       return;
     }
     const method = topUpConfig.methods.find((item) => item.code === channel);

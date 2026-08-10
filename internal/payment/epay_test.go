@@ -17,8 +17,8 @@ func testEPayGateway(t *testing.T) *EPayGateway {
 	gateway, err := NewEPayGateway(EPayConfig{
 		APIURL: "https://pay.example.com", MerchantID: "1000", MerchantKey: "merchant-secret",
 		SiteName: "Novro", Channels: []string{"alipay", "wxpay"},
-		NotifyURL: "https://novro.example.com/api/payments/epay/notify",
-		ReturnURL: "https://novro.example.com/console/billing?payment=returned",
+		NotifyURL: "https://app.example.invalid/api/payments/epay/notify",
+		ReturnURL: "https://app.example.invalid/console/billing?payment=returned",
 	})
 	if err != nil {
 		t.Fatalf("create EPay gateway: %v", err)
@@ -37,7 +37,7 @@ func TestEPayCheckoutUsesSignedSubmitForm(t *testing.T) {
 	if checkout.Action != "https://pay.example.com/submit.php" || checkout.Method != "POST" {
 		t.Fatalf("unexpected checkout target: %+v", checkout)
 	}
-	if checkout.Fields["money"] != "0.01" || checkout.Fields["pid"] != "1000" || checkout.Fields["sign"] == "" {
+	if checkout.Fields["money"] != "1.00" || checkout.Fields["pid"] != "1000" || checkout.Fields["sign"] == "" {
 		t.Fatalf("unexpected checkout fields: %#v", checkout.Fields)
 	}
 	for key, value := range checkout.Fields {
@@ -101,8 +101,8 @@ func TestEPayQueryReturnsVerifiedPaidOrder(t *testing.T) {
 	gateway, err := NewEPayGateway(EPayConfig{
 		APIURL: server.URL, MerchantID: "1000", MerchantKey: "merchant-secret",
 		SiteName: "Novro", Channels: []string{"alipay"},
-		NotifyURL: "https://novro.example.com/api/payments/epay/notify",
-		ReturnURL: "https://novro.example.com/api/payments/epay/return",
+		NotifyURL: "https://app.example.invalid/api/payments/epay/notify",
+		ReturnURL: "https://app.example.invalid/api/payments/epay/return",
 	})
 	if err != nil {
 		t.Fatalf("create EPay gateway: %v", err)

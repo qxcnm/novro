@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyText } from "@/lib/clipboard";
 
 type APIKeyRecord = { id: string; name: string; key_prefix: string; status: "active" | "revoked"; last_used_at: string | null; created_at: string; revoked_at: string | null };
 type CreateResult = { api_key: APIKeyRecord; key: string };
@@ -30,24 +31,6 @@ function formatMoney(micros: number) {
 function formatDate(value: string | null) {
   if (!value) return "从未使用";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-async function copyText(value: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    const input = document.createElement("textarea");
-    input.value = value;
-    input.setAttribute("readonly", "");
-    input.style.position = "fixed";
-    input.style.opacity = "0";
-    document.body.appendChild(input);
-    input.select();
-    const copied = document.execCommand("copy");
-    document.body.removeChild(input);
-    return copied;
-  }
 }
 
 export default function ConsolePage() {

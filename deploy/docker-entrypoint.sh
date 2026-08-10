@@ -1,10 +1,20 @@
 #!/bin/sh
 set -eu
 
-if [ ! -r /etc/nginx/tls/fullchain.pem ] || [ ! -r /etc/nginx/tls/privkey.pem ]; then
-    echo "TLS certificate files are missing from /etc/nginx/tls" >&2
-    exit 1
-fi
+case "${NOVRO_PUBLIC_URL:-https://localhost}" in
+    https://*)
+        if [ ! -r /etc/nginx/tls/fullchain.pem ] || [ ! -r /etc/nginx/tls/privkey.pem ]; then
+            echo "TLS certificate files are missing from /etc/nginx/tls" >&2
+            exit 1
+        fi
+        ;;
+    http://*)
+        ;;
+    *)
+        echo "NOVRO_PUBLIC_URL must start with http:// or https://" >&2
+        exit 1
+        ;;
+esac
 
 nginx -t
 

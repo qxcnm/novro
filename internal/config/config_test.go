@@ -126,8 +126,8 @@ func TestLoadValidatesOptionalEPayConfiguration(t *testing.T) {
 
 	values["NOVRO_ENVIRONMENT"] = "production"
 	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
-	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
-	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	values["NOVRO_PUBLIC_URL"] = "https://app.example.invalid"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://app.example.invalid"
 	values["NOVRO_SESSION_COOKIE_SECURE"] = "true"
 	values["NOVRO_EPAY_API_URL"] = "http://pay.example.com"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "https NOVRO_EPAY_API_URL") {
@@ -162,8 +162,8 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 	values = testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
 	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
-	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
-	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	values["NOVRO_PUBLIC_URL"] = "https://app.example.invalid"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://app.example.invalid"
 	values["NOVRO_DATABASE_TLS"] = "false"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "production") {
 		t.Fatalf("expected production transport error, got %v", err)
@@ -172,8 +172,8 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 	values = testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
 	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
-	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
-	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	values["NOVRO_PUBLIC_URL"] = "https://app.example.invalid"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://app.example.invalid"
 	delete(values, "NOVRO_PROVIDER_ENCRYPTION_SECRET")
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "PROVIDER_ENCRYPTION_SECRET") {
 		t.Fatalf("expected missing provider encryption secret error, got %v", err)
@@ -200,8 +200,8 @@ func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 		values := testEnv()
 		values["NOVRO_ENVIRONMENT"] = "production"
 		values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
-		values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
-		values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+		values["NOVRO_PUBLIC_URL"] = "https://app.example.invalid"
+		values["NOVRO_ALLOWED_ORIGINS"] = "https://app.example.invalid"
 		values["NOVRO_SESSION_COOKIE_SECURE"] = "true"
 		return values
 	}
@@ -213,16 +213,16 @@ func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 	}
 
 	values = production()
-	values["NOVRO_ALLOWED_ORIGINS"] = "http://novro.example.com"
+	values["NOVRO_ALLOWED_ORIGINS"] = "http://app.example.invalid"
 	if _, err := loadMap(values); err == nil || !strings.Contains(err.Error(), "HTTPS") {
 		t.Fatalf("expected insecure production origin error, got %v", err)
 	}
 
 	for _, origin := range []string{
-		"https://user@novro.example.com",
-		"https://novro.example.com/console",
-		"https://novro.example.com?source=test",
-		"ftp://novro.example.com",
+		"https://user@app.example.invalid",
+		"https://app.example.invalid/console",
+		"https://app.example.invalid?source=test",
+		"ftp://app.example.invalid",
 	} {
 		values = testEnv()
 		values["NOVRO_ALLOWED_ORIGINS"] = origin
@@ -239,10 +239,10 @@ func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 
 func TestLoadRequiresPublicURLOrigin(t *testing.T) {
 	for _, publicURL := range []string{
-		"https://user@novro.example.com",
-		"https://novro.example.com/console",
-		"https://novro.example.com?source=test",
-		"https://novro.example.com#fragment",
+		"https://user@app.example.invalid",
+		"https://app.example.invalid/console",
+		"https://app.example.invalid?source=test",
+		"https://app.example.invalid#fragment",
 	} {
 		values := testEnv()
 		values["NOVRO_PUBLIC_URL"] = publicURL
@@ -256,8 +256,8 @@ func TestLoadAllowsDatabaseManagedSMTPInProduction(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
 	values["NOVRO_HTTP_ADDR"] = "127.0.0.1:8080"
-	values["NOVRO_PUBLIC_URL"] = "https://novro.example.com"
-	values["NOVRO_ALLOWED_ORIGINS"] = "https://novro.example.com"
+	values["NOVRO_PUBLIC_URL"] = "https://app.example.invalid"
+	values["NOVRO_ALLOWED_ORIGINS"] = "https://app.example.invalid"
 	for _, key := range []string{"NOVRO_EMAIL_SMTP_HOST", "NOVRO_EMAIL_SMTP_USERNAME", "NOVRO_EMAIL_SMTP_PASSWORD", "NOVRO_EMAIL_FROM"} {
 		delete(values, key)
 	}

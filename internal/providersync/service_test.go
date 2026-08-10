@@ -74,6 +74,28 @@ func TestDiscoverReportsContextDeadline(t *testing.T) {
 	}
 }
 
+func TestDiscoverReportsUnauthorizedCredential(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_api_key"}}`))
+	}))
+	defer server.Close()
+
+	service := NewService(nil, nil, server.Client())
+	_, err := service.discover(context.Background(), &ent.Provider{
+		DisplayName: "Test",
+		Protocol:    entprovider.ProtocolOpenai,
+		BaseURL:     server.URL,
+	}, "provider-secret")
+	var discoveryError *DiscoveryError
+	if !errors.As(err, &discoveryError) {
+		t.Fatalf("discover error=%v, want DiscoveryError", err)
+	}
+	if discoveryError.StatusCode != http.StatusUnauthorized || discoveryError.Reason != "上游 API Key 无效或已撤销，请在提供商配置中重新填写上游密钥" {
+		t.Fatalf("unexpected unauthorized error: %+v", discoveryError)
+	}
+}
+
 type blockingRoundTripper struct{}
 
 func (blockingRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -91,7 +113,7 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 		{name: "OpenAI root base", baseURL: "https://api.example.com", protocol: provider.ProtocolOpenAI, want: "https://api.example.com/v1/models"},
 		{name: "OpenAI versioned base", baseURL: "https://api.example.com/v1", protocol: provider.ProtocolOpenAI, want: "https://api.example.com/v1/models"},
 		{name: "Anthropic root base", baseURL: "https://api.anthropic.com", protocol: provider.ProtocolAnthropic, want: "https://api.anthropic.com/v1/models"},
-		{name: "HTTP self-hosted base", baseURL: "http://8.134.107.46:3000/v1", protocol: provider.ProtocolOpenAI, want: "http://8.134.107.46:3000/v1/models"},
+		{name: "HTTP self-hosted base", baseURL: "http://203.0.113.10:3000/v1", protocol: provider.ProtocolOpenAI, want: "http://203.0.113.10:3000/v1/models"},
 		{name: "Already models path", baseURL: "https://models.example.com/v1/models", protocol: provider.ProtocolOpenAI, want: "https://models.example.com/v1/models"},
 	}
 	for _, tt := range tests {
