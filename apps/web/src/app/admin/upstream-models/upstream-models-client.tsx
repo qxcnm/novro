@@ -127,6 +127,7 @@ function PriceFields({ form, setForm }: { form: ModelForm; setForm: (form: Model
               placeholder="0"
               required
               step="0.000001"
+              title={`${label}价格必须是非负数字，可保留到 6 位小数`}
               type="number"
               value={form[key]}
             />
@@ -222,7 +223,7 @@ export default function UpstreamModelsClient() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = payload(form);
-    if (!body) { setMessage("价格格式无效"); return; }
+    if (!body) { setMessage("价格必须是非负数字，可保留到 6 位小数"); return; }
     setBusy(true);
     const response = await fetch(editing ? `/api/admin/upstream-models/${editing.id}` : "/api/admin/upstream-models", {
       method: editing ? "PATCH" : "POST",
@@ -364,11 +365,11 @@ export default function UpstreamModelsClient() {
           </SheetHeader>
           <form className="space-y-5 px-6" id="catalog-model-form" onSubmit={submit}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2"><Label htmlFor="catalog-provider-name">厂商标签</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required value={form.providerName} /></div>
-              <div className="space-y-2"><Label htmlFor="catalog-upstream-name">模型 ID</Label><Input id="catalog-upstream-name" maxLength={256} onChange={(event) => setForm({ ...form, upstreamName: event.target.value })} placeholder="例如 deepseek-chat" required value={form.upstreamName} /></div>
+              <div className="space-y-2"><Label htmlFor="catalog-provider-name">厂商标签</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required title="厂商标签不能为空，最长 128 个字符" value={form.providerName} /></div>
+              <div className="space-y-2"><Label htmlFor="catalog-upstream-name">模型 ID</Label><Input id="catalog-upstream-name" maxLength={256} onChange={(event) => setForm({ ...form, upstreamName: event.target.value })} placeholder="例如 deepseek-chat" required title="模型 ID 不能为空，最长 256 个字符；需要与客户端请求或上游返回的模型 ID 保持一致" value={form.upstreamName} /><p className="text-xs text-muted-foreground">填写客户端请求使用的模型 ID 或上游同步返回的模型 ID，最长 256 个字符。</p></div>
             </div>
             <div className="space-y-2"><Label htmlFor="catalog-display-name">显示名称</Label><Input id="catalog-display-name" maxLength={128} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.displayName} /></div>
-            <p className="border-y py-3 text-sm text-muted-foreground">上游同步只发现模型 ID，不会导入上游价格。下面的价格是 Novro 的全局定价，所有提供商关联同一模型 ID 时共用这一份价格。</p>
+            <p className="border-y py-3 text-sm text-muted-foreground">上游同步只发现模型 ID，不会导入上游价格。下面的价格是 Novro 的全局定价，所有提供商关联同一模型 ID 时共用这一份价格；价格需为非负数字，最多保留 6 位小数。</p>
             <PriceFields form={form} setForm={setForm} />
           </form>
           <SheetFooter className="border-t px-6"><Button disabled={busy} form="catalog-model-form" type="submit"><Boxes />{busy ? "正在保存..." : "保存目录模型"}</Button></SheetFooter>

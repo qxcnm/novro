@@ -91,7 +91,7 @@ export default function BillingGroupsClient() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const bps = multiplierBPS(form.multiplier);
-    if (bps === null) { setMessage("倍率必须大于 0 且不超过 100"); return; }
+    if (bps === null) { setMessage("计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数"); return; }
     const body = editing
       ? { display_name: form.display_name, multiplier_bps: bps }
       : { code: form.code, display_name: form.display_name, multiplier_bps: bps };
@@ -167,9 +167,9 @@ export default function BillingGroupsClient() {
   }
 
   const fields = <>
-    <div className="space-y-2"><Label htmlFor="group-code">分组标识</Label><Input disabled={editing !== null} id="group-code" maxLength={64} onChange={(event) => setForm({ ...form, code: event.target.value })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 vip" required value={form.code} /></div>
+    <div className="space-y-2"><Label htmlFor="group-code">分组标识</Label><Input disabled={editing !== null} id="group-code" maxLength={64} onChange={(event) => setForm({ ...form, code: event.target.value })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 vip" required title="分组标识需为 3 到 64 位，只能使用小写字母、数字和连字符，不能包含点号、小数点、下划线或空格，且必须以字母或数字开头和结尾" value={form.code} /><p className="text-xs text-muted-foreground">3 到 64 位；只允许小写字母、数字和连字符，不允许点号、小数点、下划线或空格。</p></div>
     <div className="space-y-2"><Label htmlFor="group-name">显示名称</Label><Input id="group-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} required value={form.display_name} /></div>
-    <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>
+    <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" title="计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">范围 0.0001 到 100；1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>
   </>;
 
   return (
