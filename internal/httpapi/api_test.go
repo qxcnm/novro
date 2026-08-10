@@ -21,6 +21,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/email"
+	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
@@ -149,6 +150,25 @@ type fakeReferrals struct {
 	userID      uuid.UUID
 	updatedRate int64
 	err         error
+}
+
+type fakeGatewaySettings struct {
+	config  gatewaysettings.Config
+	updated gatewaysettings.Config
+	err     error
+}
+
+func (f *fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, error) {
+	return f.config, f.err
+}
+
+func (f *fakeGatewaySettings) Update(_ context.Context, config gatewaysettings.Config) (gatewaysettings.Config, error) {
+	f.updated = config
+	if f.err != nil {
+		return gatewaysettings.Config{}, f.err
+	}
+	f.config = config
+	return config, nil
 }
 
 func (f *fakeReferrals) Summary(_ context.Context, userID uuid.UUID) (referral.Summary, error) {
@@ -558,6 +578,55 @@ func TestAdminReferralConfigRejectsInvalidRate(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_referral_config") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminGatewaySettingsRequiresAdminAndUpdates(t *testing.T) {
+	settings := &fakeGatewaySettings{config: gatewaysettings.DefaultConfig()}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}, Users: &fakeAPIUsers{},
+		GatewaySettings: settings, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/gateway-settings", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"sse_heartbeat_interval_ms":15000`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	body := `{"sse_heartbeat_enabled":false,"sse_heartbeat_interval_ms":30000,"upstream_timeout_ms":120000,"upstream_stream_idle_timeout_ms":45000}`
+	request = httptest.NewRequest(http.MethodPut, "/api/admin/gateway-settings", strings.NewReader(body))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || settings.updated.SSEHeartbeatEnabled || settings.updated.UpstreamTimeoutMS != 120_000 || settings.updated.UpstreamStreamIdleTimeoutMS != 45_000 {
+		t.Fatalf("status=%d settings=%+v body=%s", response.Code, settings.updated, response.Body.String())
+	}
+
+	memberHandler := New(Dependencies{
+		Auth: &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}}, Users: &fakeAPIUsers{},
+		GatewaySettings: settings, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	request = httptest.NewRequest(http.MethodGet, "/api/admin/gateway-settings", nil)
+	response = httptest.NewRecorder()
+	memberHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("member status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminGatewaySettingsRejectsInvalidValues(t *testing.T) {
+	settings := &fakeGatewaySettings{err: gatewaysettings.ErrInvalidConfig}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}, Users: &fakeAPIUsers{},
+		GatewaySettings: settings, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPut, "/api/admin/gateway-settings", strings.NewReader(`{"sse_heartbeat_enabled":true,"sse_heartbeat_interval_ms":0,"upstream_timeout_ms":0,"upstream_stream_idle_timeout_ms":0}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_gateway_settings") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/email"
+	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
@@ -90,6 +91,11 @@ type ReferralService interface {
 	UpdateRewardBPS(context.Context, int64) (referral.AdminConfig, error)
 }
 
+type GatewaySettingsService interface {
+	Config(context.Context) (gatewaysettings.Config, error)
+	Update(context.Context, gatewaysettings.Config) (gatewaysettings.Config, error)
+}
+
 type ModelRouteService interface {
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
@@ -145,6 +151,7 @@ type Dependencies struct {
 	Billing             BillingService
 	Payments            PaymentService
 	Referrals           ReferralService
+	GatewaySettings     GatewaySettingsService
 	ModelRoutes         ModelRouteService
 	UpstreamModels      UpstreamModelService
 	ProviderModels      ProviderModelService
@@ -170,6 +177,7 @@ type apiHandler struct {
 	billing             BillingService
 	payments            PaymentService
 	referrals           ReferralService
+	gatewaySettings     GatewaySettingsService
 	modelRoutes         ModelRouteService
 	upstreamModels      UpstreamModelService
 	providerModels      ProviderModelService
@@ -199,6 +207,7 @@ func New(deps Dependencies) http.Handler {
 		billing:             deps.Billing,
 		payments:            deps.Payments,
 		referrals:           deps.Referrals,
+		gatewaySettings:     deps.GatewaySettings,
 		modelRoutes:         deps.ModelRoutes,
 		upstreamModels:      deps.UpstreamModels,
 		providerModels:      deps.ProviderModels,
@@ -235,6 +244,8 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/account/referral", h.myReferral)
 	mux.HandleFunc("GET /api/admin/referral", h.getReferralConfig)
 	mux.HandleFunc("PUT /api/admin/referral", h.updateReferralConfig)
+	mux.HandleFunc("GET /api/admin/gateway-settings", h.getGatewaySettings)
+	mux.HandleFunc("PUT /api/admin/gateway-settings", h.updateGatewaySettings)
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
@@ -626,6 +637,43 @@ func (h *apiHandler) updateReferralConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"referral_config": config})
+}
+
+func (h *apiHandler) getGatewaySettings(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.gatewaySettings == nil {
+		writeError(w, http.StatusServiceUnavailable, "gateway_settings_unavailable", "请求设置服务暂不可用")
+		return
+	}
+	config, err := h.gatewaySettings.Config(r.Context())
+	if err != nil {
+		h.writeGatewaySettingsError(w, "read gateway request settings", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"gateway_settings": config})
+}
+
+func (h *apiHandler) updateGatewaySettings(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.gatewaySettings == nil {
+		writeError(w, http.StatusServiceUnavailable, "gateway_settings_unavailable", "请求设置服务暂不可用")
+		return
+	}
+	var request gatewaysettings.Config
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "请求设置格式无效")
+		return
+	}
+	config, err := h.gatewaySettings.Update(r.Context(), request)
+	if err != nil {
+		h.writeGatewaySettingsError(w, "update gateway request settings", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"gateway_settings": config})
 }
 
 func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -1871,6 +1919,14 @@ func (h *apiHandler) writeEmailConfigError(w http.ResponseWriter, operation stri
 func (h *apiHandler) writeReferralConfigError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, referral.ErrInvalidInput) {
 		writeError(w, http.StatusBadRequest, "invalid_referral_config", "返现比例必须在 0% 到 100% 之间")
+		return
+	}
+	h.internalError(w, operation, err)
+}
+
+func (h *apiHandler) writeGatewaySettingsError(w http.ResponseWriter, operation string, err error) {
+	if errors.Is(err, gatewaysettings.ErrInvalidConfig) {
+		writeError(w, http.StatusBadRequest, "invalid_gateway_settings", "请求设置无效，请检查时间范围")
 		return
 	}
 	h.internalError(w, operation, err)

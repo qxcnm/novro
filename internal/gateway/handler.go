@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/requestid"
@@ -46,19 +47,24 @@ type BillingService interface {
 	Finalize(context.Context, billing.UsageInput) error
 	RecordFailure(context.Context, billing.FailureInput) error
 }
+type SettingsService interface {
+	Config(context.Context) (gatewaysettings.Config, error)
+}
 
 type Dependencies struct {
-	APIKeys KeyAuthenticator
-	Routes  RouteService
-	Billing BillingService
-	Client  *http.Client
-	Logger  *slog.Logger
+	APIKeys  KeyAuthenticator
+	Routes   RouteService
+	Billing  BillingService
+	Settings SettingsService
+	Client   *http.Client
+	Logger   *slog.Logger
 }
 
 type Handler struct {
 	apiKeys               KeyAuthenticator
 	routes                RouteService
 	billing               BillingService
+	settings              SettingsService
 	client                *http.Client
 	logger                *slog.Logger
 	now                   func() time.Time
@@ -78,7 +84,7 @@ func New(deps Dependencies) *Handler {
 		logger = slog.Default()
 	}
 	return &Handler{
-		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, client: client, logger: logger,
+		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
 		upstreamRetryDelays: []time.Duration{250 * time.Millisecond},
 		roundRobinCursors:   make(map[string]uint64),
@@ -197,6 +203,15 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	stream, _ := payload["stream"].(bool)
+	requestSettings := gatewaysettings.DefaultConfig()
+	if h.settings != nil {
+		requestSettings, err = h.settings.Config(r.Context())
+		if err != nil {
+			h.logger.Error("read gateway request settings", "request_id", requestid.FromContext(r.Context()), "error", err)
+			writeError(w, http.StatusInternalServerError, "gateway_settings_unavailable", "请求设置暂时不可用")
+			return
+		}
+	}
 	maximum, ok := readMaxOutput(payload, endpoint)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_request", "最大输出 token 参数无效")
@@ -264,6 +279,12 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			return
 		}
 	}
+	upstreamContext := r.Context()
+	cancelUpstreamContext := func() {}
+	if timeout := requestSettings.UpstreamTimeout(); timeout > 0 {
+		upstreamContext, cancelUpstreamContext = context.WithTimeout(r.Context(), timeout)
+	}
+	defer cancelUpstreamContext()
 	lastRoute := modelroute.Resolved{}
 	failureCode := "upstream_unavailable"
 	failureMessage := "所有上游渠道均暂时不可用"
@@ -289,8 +310,10 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Warn("gateway route points back to this gateway", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
 			continue
 		}
-		upstreamRequest, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
+		attemptContext, cancelAttempt := context.WithCancel(upstreamContext)
+		upstreamRequest, err := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
 		if err != nil {
+			cancelAttempt()
 			h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
@@ -311,7 +334,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			}
 			fallbackBody, fallbackErr := buildUpstreamBody(payload, route, endpoint, false)
 			if fallbackErr == nil {
-				fallbackRequest, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
+				fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
 				if requestErr == nil {
 					setUpstreamHeaders(fallbackRequest, r, route)
 					setUpstreamIdempotencyKey(fallbackRequest, r, requestID)
@@ -323,8 +346,14 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			}
 		}
 		if err != nil {
+			cancelAttempt()
 			failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
 			h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
+			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+				failureStatus = http.StatusGatewayTimeout
+				failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
+				break
+			}
 			if r.Context().Err() != nil {
 				failureStatus = 499
 				failureCode, failureMessage = "client_canceled", "客户端取消请求"
@@ -337,12 +366,19 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			failureMessage = fmt.Sprintf("上游返回 HTTP %d", response.StatusCode)
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 			_ = response.Body.Close()
+			cancelAttempt()
 			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
 			continue
 		}
 		if stream && !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 			responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
 			_ = response.Body.Close()
+			cancelAttempt()
+			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+				failureStatus = http.StatusGatewayTimeout
+				failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
+				break
+			}
 			if readErr != nil {
 				failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
 				h.logger.Warn("read buffered stream fallback", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
@@ -352,12 +388,18 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			return
 		}
 		if stream || strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
-			h.streamResponse(w, r, response, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
+			h.streamResponse(w, r, response, attemptContext, cancelAttempt, requestSettings, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
 			_ = response.Body.Close()
 			return
 		}
 		responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
 		_ = response.Body.Close()
+		cancelAttempt()
+		if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+			failureStatus = http.StatusGatewayTimeout
+			failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
+			break
+		}
 		if readErr != nil {
 			failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
 			h.logger.Warn("read gateway upstream response", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
@@ -435,6 +477,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
 	flusher, _ := w.(http.Flusher)
@@ -612,21 +655,124 @@ func setUpstreamIdempotencyKey(upstreamRequest, inboundRequest *http.Request, re
 	upstreamRequest.Header.Set("Idempotency-Key", "novro-"+requestID.String())
 }
 
-func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
+type streamReadResult struct {
+	fragment []byte
+	isPrefix bool
+	readErr  error
+}
+
+type streamActivityReader struct {
+	reader   io.Reader
+	activity chan<- struct{}
+}
+
+func (r streamActivityReader) Read(target []byte) (int, error) {
+	read, err := r.reader.Read(target)
+	if read > 0 {
+		select {
+		case r.activity <- struct{}{}:
+		default:
+		}
+	}
+	return read, err
+}
+
+func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, upstreamContext context.Context, cancelUpstream context.CancelFunc, settings gatewaysettings.Config, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
+	defer cancelUpstream()
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
 	flusher, _ := w.(http.Flusher)
 	usage := tokenUsage{}
 	completed := false
-	reader := bufio.NewReaderSize(response.Body, 64<<10)
 	line := make([]byte, 0, 64<<10)
 	lineTooLarge := false
+	atEventBoundary := true
 	var relayErr error
+	var heartbeatTicker *time.Ticker
+	var heartbeatC <-chan time.Time
+	if settings.SSEHeartbeatEnabled {
+		heartbeatTicker = time.NewTicker(settings.HeartbeatInterval())
+		heartbeatC = heartbeatTicker.C
+		defer heartbeatTicker.Stop()
+	}
+	var idleTimer *time.Timer
+	var idleC <-chan time.Time
+	var activityC chan struct{}
+	if idleTimeout := settings.UpstreamStreamIdleTimeout(); idleTimeout > 0 {
+		idleTimer = time.NewTimer(idleTimeout)
+		idleC = idleTimer.C
+		activityC = make(chan struct{}, 1)
+		defer idleTimer.Stop()
+	}
+	streamReader := io.Reader(response.Body)
+	if activityC != nil {
+		streamReader = streamActivityReader{reader: response.Body, activity: activityC}
+	}
+	reader := bufio.NewReaderSize(streamReader, 64<<10)
+	readResults := make(chan streamReadResult)
+	go func() {
+		for {
+			fragment, isPrefix, readErr := reader.ReadLine()
+			result := streamReadResult{fragment: bytes.Clone(fragment), isPrefix: isPrefix, readErr: readErr}
+			select {
+			case readResults <- result:
+			case <-upstreamContext.Done():
+				return
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+	resetIdleTimer := func() {
+		if idleTimer == nil {
+			return
+		}
+		if !idleTimer.Stop() {
+			select {
+			case <-idleTimer.C:
+			default:
+			}
+		}
+		idleTimer.Reset(settings.UpstreamStreamIdleTimeout())
+	}
+streamLoop:
 	for {
-		fragment, isPrefix, readErr := reader.ReadLine()
+		var result streamReadResult
+		select {
+		case result = <-readResults:
+		case <-activityC:
+			resetIdleTimer()
+			continue
+		case <-heartbeatC:
+			if atEventBoundary && len(line) == 0 && !lineTooLarge {
+				if _, writeErr := io.WriteString(w, ": novro-keepalive\n\n"); writeErr != nil {
+					relayErr = writeErr
+					cancelUpstream()
+					break streamLoop
+				}
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			continue
+		case <-idleC:
+			relayErr = fmt.Errorf("upstream stream idle timeout after %s", settings.UpstreamStreamIdleTimeout())
+			cancelUpstream()
+			_ = response.Body.Close()
+			break streamLoop
+		case <-upstreamContext.Done():
+			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+				relayErr = fmt.Errorf("upstream total timeout after %s", settings.UpstreamTimeout())
+			}
+			_ = response.Body.Close()
+			break streamLoop
+		}
+		fragment, isPrefix, readErr := result.fragment, result.isPrefix, result.readErr
 		if len(fragment) == 0 && readErr != nil && len(line) == 0 && !lineTooLarge {
 			if readErr != io.EOF {
 				relayErr = readErr
@@ -668,6 +814,7 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 				relayErr = writeErr
 				break
 			}
+			atEventBoundary = len(line) == 0
 			line = line[:0]
 			lineTooLarge = false
 		}

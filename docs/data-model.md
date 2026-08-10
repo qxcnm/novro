@@ -88,7 +88,8 @@ EmailVerificationCode
 ## 5. system_settings
 
 保存 `initial_admin_created` 安装标记和不含秘密的应用设置。`referral_reward_bps` 记录管理员
-设置的全局邀请返现基点；该表不保存初始化令牌、密码、连接信息或其他部署密钥。初始化标记
+设置的全局邀请返现基点；`gateway_request_settings` 以 JSON 原子保存 SSE 心跳开关、心跳间隔、
+上游总超时和流式空闲超时。该表不保存初始化令牌、密码、连接信息或其他部署密钥。初始化标记
 与第一个管理员在同一数据库事务中创建，保证初始化只能完成一次。
 
 ## 6. 当前迁移状态

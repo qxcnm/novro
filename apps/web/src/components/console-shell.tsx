@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Bot, Boxes, ChartNoAxesCombined, CreditCard, House, KeyRound, LayoutDashboard, LogOut, Mail, Menu, Network, Percent, RefreshCw, ScrollText, ShieldCheck, UserRound, Users, UsersRound, WalletCards } from "lucide-react";
+import { BookOpen, Bot, Boxes, ChartNoAxesCombined, CreditCard, House, KeyRound, LayoutDashboard, LogOut, Mail, Menu, Network, Percent, Radio, RefreshCw, ScrollText, ShieldCheck, UserRound, Users, UsersRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
@@ -32,6 +32,7 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/admin/billing-groups": { title: "计费分组", description: "API Key、供应商与结算倍率" },
   "/admin/payments": { title: "支付配置", description: "易支付商户信息与充值渠道" },
   "/admin/referral": { title: "推荐设置", description: "邀请返现比例与生效规则" },
+  "/admin/gateway": { title: "请求设置", description: "SSE 保活与上游请求生命周期" },
   "/admin/email": { title: "邮件设置", description: "注册验证码的 SMTP 发送配置" },
 };
 
@@ -71,6 +72,7 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
       { href: "/admin/upstream-models", label: "模型目录", icon: Network },
       { href: "/admin/billing-groups", label: "计费分组", icon: UsersRound },
       { href: "/admin/referral", label: "推荐设置", icon: Percent },
+      { href: "/admin/gateway", label: "请求设置", icon: Radio },
       { href: "/admin/payments", label: "支付配置", icon: CreditCard },
       { href: "/admin/email", label: "邮件设置", icon: Mail },
     ] : [] },

@@ -23,6 +23,7 @@ import (
 	"github.com/novro-gateway/novro/internal/database"
 	"github.com/novro-gateway/novro/internal/email"
 	"github.com/novro-gateway/novro/internal/gateway"
+	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/httpapi"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
@@ -98,6 +99,7 @@ func main() {
 	providerModelService := providersync.NewService(application.Ent, providerCipher, nil)
 	billingGroupService := billinggroup.NewService(billinggroup.NewEntStore(application.Ent))
 	referralService := referral.NewService(referral.NewEntStore(application.Ent), cfg.Referral.RewardBPS, cfg.Auth.PublicURL)
+	gatewaySettingsService := gatewaysettings.NewService(gatewaysettings.NewEntStore(application.Ent))
 	paymentService := payment.NewService(
 		payment.NewEntStore(application.Ent, cfg.Referral.RewardBPS), payment.NewConfigEntStore(application.Ent), providerCipher,
 		payment.EPayConfig{
@@ -223,7 +225,8 @@ func main() {
 			UpstreamModels:      upstreamModelService,
 			ProviderModels:      providerModelService,
 			BillingGroups:       billingGroupService,
-			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Logger: logger}),
+			GatewaySettings:     gatewaySettingsService,
+			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,
 			CookieSecure:        cfg.Session.CookieSecure,

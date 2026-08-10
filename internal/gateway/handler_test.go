@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,6 +23,7 @@ import (
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
+	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
@@ -31,6 +33,18 @@ import (
 type fakeKeys struct {
 	actor apikey.Actor
 	err   error
+}
+
+type fakeGatewaySettings struct {
+	config gatewaysettings.Config
+	err    error
+}
+
+func (f fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, error) {
+	if f.err != nil {
+		return gatewaysettings.Config{}, f.err
+	}
+	return f.config, nil
 }
 
 func (f fakeKeys) Authenticate(context.Context, string) (apikey.Actor, error) { return f.actor, f.err }
@@ -113,6 +127,29 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
+type blockingBody struct {
+	reader  *strings.Reader
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingBody(prefix string) *blockingBody {
+	return &blockingBody{reader: strings.NewReader(prefix), release: make(chan struct{})}
+}
+
+func (b *blockingBody) Read(target []byte) (int, error) {
+	if b.reader.Len() > 0 {
+		return b.reader.Read(target)
+	}
+	<-b.release
+	return 0, io.EOF
+}
+
+func (b *blockingBody) Close() error {
+	b.once.Do(func() { close(b.release) })
+	return nil
+}
+
 type noopBilling struct{}
 
 func (noopBilling) Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error { return nil }
@@ -191,6 +228,121 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	requestID, err := uuid.Parse(response.Header().Get("X-Novro-Request-ID"))
 	if err != nil || biller.usage.RequestID != requestID {
 		t.Fatalf("response and billing request ids differ: header=%q usage=%s err=%v", response.Header().Get("X-Novro-Request-ID"), biller.usage.RequestID, err)
+	}
+}
+
+func TestProxySSEHeartbeatKeepsEstablishedStreamActive(t *testing.T) {
+	body := newBlockingBody("data: {\"id\":\"heartbeat\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: body}, nil
+	})}
+	settings := gatewaysettings.DefaultConfig()
+	settings.SSEHeartbeatIntervalMS = 20
+	settings.UpstreamStreamIdleTimeoutMS = 0
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: &fakeBilling{}, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	defer body.Close()
+
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","stream":true,"messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	if response.Header.Get("X-Accel-Buffering") != "no" {
+		t.Fatalf("X-Accel-Buffering = %q, want no", response.Header.Get("X-Accel-Buffering"))
+	}
+	reader := bufio.NewReader(response.Body)
+	first, err := reader.ReadString('\n')
+	if err != nil || !strings.Contains(first, `data: {"id":"heartbeat"`) {
+		t.Fatalf("initial event = %q, err = %v", first, err)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("initial event separator error = %v", err)
+	}
+	heartbeat, err := reader.ReadString('\n')
+	if err != nil || heartbeat != ": novro-keepalive\n" {
+		t.Fatalf("heartbeat = %q, err = %v", heartbeat, err)
+	}
+	response.Body.Close()
+}
+
+func TestProxyStopsIdleStream(t *testing.T) {
+	body := newBlockingBody("data: {\"id\":\"idle\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: body}, nil
+	})}
+	settings := gatewaysettings.DefaultConfig()
+	settings.SSEHeartbeatEnabled = false
+	settings.UpstreamStreamIdleTimeoutMS = 20
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: &fakeBilling{}, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	defer body.Close()
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","stream":true,"messages":[{"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	start := time.Now()
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	data, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatalf("read response error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("idle stream took too long: %s", elapsed)
+	}
+	if !strings.Contains(string(data), "data: {\"id\":\"idle\"") {
+		t.Fatalf("response lost initial event: %q", data)
+	}
+}
+
+func TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})}
+	settings := gatewaysettings.DefaultConfig()
+	settings.SSEHeartbeatEnabled = false
+	settings.UpstreamTimeoutMS = 20
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: &fakeBilling{}, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`))
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s, want 504", response.Code, response.Body.String())
+	}
+}
+
+func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testing.T) {
+	body := newBlockingBody("")
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		go func() {
+			<-request.Context().Done()
+			_ = body.Close()
+		}()
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: body}, nil
+	})}
+	settings := gatewaysettings.DefaultConfig()
+	settings.SSEHeartbeatEnabled = false
+	settings.UpstreamTimeoutMS = 20
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: &fakeBilling{}, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`))
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s, want 504", response.Code, response.Body.String())
 	}
 }
 
