@@ -3,14 +3,19 @@ name: Publish GHCR image
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Image tag to publish, for example v0.1.0"
+      version:
+        description: "Release version tag, for example v0.1.0"
         required: true
-        default: "manual"
+        default: "v0.1.0"
+      push_stable:
+        description: "Also publish/update the stable tag"
+        required: true
+        default: true
+        type: boolean
       push_latest:
         description: "Also publish/update the latest tag"
         required: true
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -48,8 +53,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ inputs.image_tag }}
-            type=sha,prefix=sha-
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=stable,enable=${{ inputs.push_stable }}
             type=raw,value=latest,enable=${{ inputs.push_latest }}
 
       - name: Build and push image
@@ -57,9 +62,11 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
