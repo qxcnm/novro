@@ -8770,6 +8770,8 @@ type ProviderMutation struct {
 	protocol             *provider.Protocol
 	base_url             *string
 	model_list_path      *string
+	weight               *int
+	addweight            *int
 	encrypted_api_key    *string
 	api_key_hint         *string
 	status               *provider.Status
@@ -9105,6 +9107,62 @@ func (m *ProviderMutation) OldModelListPath(ctx context.Context) (v string, err 
 // ResetModelListPath resets all changes to the "model_list_path" field.
 func (m *ProviderMutation) ResetModelListPath() {
 	m.model_list_path = nil
+}
+
+// SetWeight sets the "weight" field.
+func (m *ProviderMutation) SetWeight(i int) {
+	m.weight = &i
+	m.addweight = nil
+}
+
+// Weight returns the value of the "weight" field in the mutation.
+func (m *ProviderMutation) Weight() (r int, exists bool) {
+	v := m.weight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeight returns the old "weight" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldWeight(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeight is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeight requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeight: %w", err)
+	}
+	return oldValue.Weight, nil
+}
+
+// AddWeight adds i to the "weight" field.
+func (m *ProviderMutation) AddWeight(i int) {
+	if m.addweight != nil {
+		*m.addweight += i
+	} else {
+		m.addweight = &i
+	}
+}
+
+// AddedWeight returns the value that was added to the "weight" field in this mutation.
+func (m *ProviderMutation) AddedWeight() (r int, exists bool) {
+	v := m.addweight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeight resets all changes to the "weight" field.
+func (m *ProviderMutation) ResetWeight() {
+	m.weight = nil
+	m.addweight = nil
 }
 
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
@@ -9451,7 +9509,7 @@ func (m *ProviderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProviderMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.billing_group != nil {
 		fields = append(fields, provider.FieldBillingGroupID)
 	}
@@ -9469,6 +9527,9 @@ func (m *ProviderMutation) Fields() []string {
 	}
 	if m.model_list_path != nil {
 		fields = append(fields, provider.FieldModelListPath)
+	}
+	if m.weight != nil {
+		fields = append(fields, provider.FieldWeight)
 	}
 	if m.encrypted_api_key != nil {
 		fields = append(fields, provider.FieldEncryptedAPIKey)
@@ -9508,6 +9569,8 @@ func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 		return m.BaseURL()
 	case provider.FieldModelListPath:
 		return m.ModelListPath()
+	case provider.FieldWeight:
+		return m.Weight()
 	case provider.FieldEncryptedAPIKey:
 		return m.EncryptedAPIKey()
 	case provider.FieldAPIKeyHint:
@@ -9541,6 +9604,8 @@ func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldBaseURL(ctx)
 	case provider.FieldModelListPath:
 		return m.OldModelListPath(ctx)
+	case provider.FieldWeight:
+		return m.OldWeight(ctx)
 	case provider.FieldEncryptedAPIKey:
 		return m.OldEncryptedAPIKey(ctx)
 	case provider.FieldAPIKeyHint:
@@ -9604,6 +9669,13 @@ func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetModelListPath(v)
 		return nil
+	case provider.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeight(v)
+		return nil
 	case provider.FieldEncryptedAPIKey:
 		v, ok := value.(string)
 		if !ok {
@@ -9653,13 +9725,21 @@ func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *ProviderMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addweight != nil {
+		fields = append(fields, provider.FieldWeight)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *ProviderMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case provider.FieldWeight:
+		return m.AddedWeight()
+	}
 	return nil, false
 }
 
@@ -9668,6 +9748,13 @@ func (m *ProviderMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *ProviderMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case provider.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeight(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Provider numeric field %s", name)
 }
@@ -9721,6 +9808,9 @@ func (m *ProviderMutation) ResetField(name string) error {
 		return nil
 	case provider.FieldModelListPath:
 		m.ResetModelListPath()
+		return nil
+	case provider.FieldWeight:
+		m.ResetWeight()
 		return nil
 	case provider.FieldEncryptedAPIKey:
 		m.ResetEncryptedAPIKey()

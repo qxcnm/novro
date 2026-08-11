@@ -30,6 +30,7 @@ func (Provider) Fields() []ent.Field {
 		field.Enum("protocol").Values("openai", "anthropic"),
 		field.String("base_url").NotEmpty().MaxLen(512),
 		field.String("model_list_path").Default("").MaxLen(512),
+		field.Int("weight").Positive().Max(1_000_000).Default(100),
 		field.String("encrypted_api_key").NotEmpty().MaxLen(2048).Sensitive(),
 		field.String("api_key_hint").NotEmpty().MaxLen(8),
 		field.Enum("status").Values("active", "disabled").Default("active"),

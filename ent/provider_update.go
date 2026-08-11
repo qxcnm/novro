@@ -101,6 +101,27 @@ func (_u *ProviderUpdate) SetNillableModelListPath(v *string) *ProviderUpdate {
 	return _u
 }
 
+// SetWeight sets the "weight" field.
+func (_u *ProviderUpdate) SetWeight(v int) *ProviderUpdate {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *ProviderUpdate) SetNillableWeight(v *int) *ProviderUpdate {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *ProviderUpdate) AddWeight(v int) *ProviderUpdate {
+	_u.mutation.AddWeight(v)
+	return _u
+}
+
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
 func (_u *ProviderUpdate) SetEncryptedAPIKey(v string) *ProviderUpdate {
 	_u.mutation.SetEncryptedAPIKey(v)
@@ -279,6 +300,11 @@ func (_u *ProviderUpdate) check() error {
 			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := provider.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "Provider.weight": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.EncryptedAPIKey(); ok {
 		if err := provider.EncryptedAPIKeyValidator(v); err != nil {
 			return &ValidationError{Name: "encrypted_api_key", err: fmt.Errorf(`ent: validator failed for field "Provider.encrypted_api_key": %w`, err)}
@@ -323,6 +349,12 @@ func (_u *ProviderUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.ModelListPath(); ok {
 		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(provider.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(provider.FieldWeight, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)
@@ -503,6 +535,27 @@ func (_u *ProviderUpdateOne) SetNillableModelListPath(v *string) *ProviderUpdate
 	if v != nil {
 		_u.SetModelListPath(*v)
 	}
+	return _u
+}
+
+// SetWeight sets the "weight" field.
+func (_u *ProviderUpdateOne) SetWeight(v int) *ProviderUpdateOne {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *ProviderUpdateOne) SetNillableWeight(v *int) *ProviderUpdateOne {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *ProviderUpdateOne) AddWeight(v int) *ProviderUpdateOne {
+	_u.mutation.AddWeight(v)
 	return _u
 }
 
@@ -697,6 +750,11 @@ func (_u *ProviderUpdateOne) check() error {
 			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := provider.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "Provider.weight": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.EncryptedAPIKey(); ok {
 		if err := provider.EncryptedAPIKeyValidator(v); err != nil {
 			return &ValidationError{Name: "encrypted_api_key", err: fmt.Errorf(`ent: validator failed for field "Provider.encrypted_api_key": %w`, err)}
@@ -758,6 +816,12 @@ func (_u *ProviderUpdateOne) sqlSave(ctx context.Context) (_node *Provider, err 
 	}
 	if value, ok := _u.mutation.ModelListPath(); ok {
 		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(provider.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(provider.FieldWeight, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)

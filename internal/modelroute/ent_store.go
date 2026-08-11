@@ -214,7 +214,7 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	p, _ := entity.Edges.ProviderOrErr()
 	summary := ProviderSummary{}
 	if p != nil {
-		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Protocol: provider.Protocol(p.Protocol), Status: provider.Status(p.Status)}
+		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Weight: p.Weight, Protocol: provider.Protocol(p.Protocol), Status: provider.Status(p.Status)}
 	}
 	var upstreamRecord *upstreammodel.Record
 	upstreamName, inputPrice, outputPrice := entity.UpstreamName, entity.InputPriceMicros, entity.OutputPriceMicros

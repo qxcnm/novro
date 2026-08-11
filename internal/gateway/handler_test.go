@@ -183,7 +183,7 @@ func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
 
 func openAIRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
-	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
+	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Weight: 100, Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
 }
 
 func anthropicRoute() modelroute.Resolved {
@@ -472,15 +472,17 @@ func TestProxyAcceptsBufferedResponseAboveFormerLimit(t *testing.T) {
 	}
 }
 
-func TestProxyRoundRobinsStartingChannelAcrossRequests(t *testing.T) {
+func TestProxyAlwaysStartsWithHighestWeightProvider(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
+	first.Provider.Weight = 200
+	second.Provider.Weight = 100
 	hosts := make([]string, 0, 4)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		hosts = append(hosts, request.URL.Host)
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":1,"completion_tokens":1}}`))}, nil
 	})}
-	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: &fakeBilling{}, Client: client})
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{second, first}}, Billing: &fakeBilling{}, Client: client})
 	for range 4 {
 		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`))
 		response := httptest.NewRecorder()
@@ -489,15 +491,17 @@ func TestProxyRoundRobinsStartingChannelAcrossRequests(t *testing.T) {
 			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 		}
 	}
-	want := []string{"first.example.com", "second.example.com", "first.example.com", "second.example.com"}
+	want := []string{"first.example.com", "first.example.com", "first.example.com", "first.example.com"}
 	if strings.Join(hosts, ",") != strings.Join(want, ",") {
-		t.Fatalf("round-robin hosts=%v want=%v", hosts, want)
+		t.Fatalf("weighted hosts=%v want=%v", hosts, want)
 	}
 }
 
-func TestProxyRoundRobinIsSafeUnderConcurrentRequests(t *testing.T) {
+func TestProxyWeightPriorityIsStableUnderConcurrentRequests(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
+	first.Provider.Weight = 200
+	second.Provider.Weight = 100
 	for _, route := range []*modelroute.Resolved{&first, &second} {
 		route.UpstreamModel.Prices = upstreammodel.Prices{}
 	}
@@ -529,8 +533,8 @@ func TestProxyRoundRobinIsSafeUnderConcurrentRequests(t *testing.T) {
 		}()
 	}
 	group.Wait()
-	if firstCalls.Load() != 50 || secondCalls.Load() != 50 {
-		t.Fatalf("concurrent distribution first=%d second=%d", firstCalls.Load(), secondCalls.Load())
+	if firstCalls.Load() != 100 || secondCalls.Load() != 0 {
+		t.Fatalf("concurrent priority first=%d second=%d", firstCalls.Load(), secondCalls.Load())
 	}
 }
 
@@ -603,10 +607,10 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"limited"}`))}, nil
 	})}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
-	handler.upstreamRetryDelays = []time.Duration{0}
+	handler.upstreamRetryDelays = []time.Duration{0, 0}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusBadGateway || calls != 4 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
+	if response.Code != http.StatusBadGateway || calls != 6 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "upstream_unavailable") {
@@ -614,6 +618,32 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	}
 	if failure := biller.failures[0]; failure.StatusCode != http.StatusBadGateway || failure.ErrorCode != "upstream_http_error" || failure.ErrorMessage != "上游返回 HTTP 429" || failure.MultiplierBPS != 10_000 || failure.ModelName != "deepseek-chat" {
 		t.Fatalf("unexpected failure log: %+v", failure)
+	}
+}
+
+func TestProxyUsesProviderWeightAndRetriesBeforeFailover(t *testing.T) {
+	low := openAIChannel("low", "low.example.com", "low-upstream")
+	high := openAIChannel("high", "high.example.com", "high-upstream")
+	low.Provider.Weight = 10
+	high.Provider.Weight = 20
+	hosts := make([]string, 0, 4)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		if request.URL.Host == "high.example.com" {
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"temporary"}`))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":1,"completion_tokens":1}}`))}, nil
+	})}
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{low, high}}, Billing: biller, Client: client})
+	handler.upstreamRetryDelays = []time.Duration{0, 0}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "high.example.com,high.example.com,high.example.com,low.example.com" {
+		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
+	}
+	if biller.finalizeCalls != 1 || biller.usage.ModelRouteID != low.ID || biller.refundCalls != 0 {
+		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
 
@@ -667,11 +697,11 @@ func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	}
 }
 
-func TestProxyStreamRetriesOnceThenFailsOverToNextChannel(t *testing.T) {
+func TestProxyStreamRetriesTwiceThenFailsOverToNextChannel(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
-	hosts := make([]string, 0, 3)
-	streamModes := make([]bool, 0, 3)
+	hosts := make([]string, 0, 4)
+	streamModes := make([]bool, 0, 4)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		hosts = append(hosts, request.URL.Host)
 		body, _ := io.ReadAll(request.Body)
@@ -685,10 +715,10 @@ func TestProxyStreamRetriesOnceThenFailsOverToNextChannel(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
-	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,first.example.com,second.example.com" {
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,first.example.com,first.example.com,second.example.com" {
 		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
 	}
-	if len(streamModes) != 3 || !streamModes[0] || streamModes[1] || !streamModes[2] {
+	if len(streamModes) != 4 || !streamModes[0] || streamModes[1] || streamModes[2] || !streamModes[3] {
 		t.Fatalf("unexpected upstream stream modes: %v", streamModes)
 	}
 	if biller.finalizeCalls != 1 || biller.usage.ModelRouteID != second.ID || biller.refundCalls != 0 {

@@ -49,12 +49,12 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
 		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocol: ProtocolOpenAI,
-		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", APIKey: "provider-secret-1234", BillingGroupID: uuid.New(),
+		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234", BillingGroupID: uuid.New(),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.APIKeyHint != "1234" {
+	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.Weight != 250 || store.createParams.APIKeyHint != "1234" {
 		t.Fatalf("unexpected provider: record=%+v params=%+v", record, store.createParams)
 	}
 	if store.createParams.EncryptedAPIKey == "provider-secret-1234" || strings.Contains(store.createParams.EncryptedAPIKey, "provider-secret") {
@@ -123,6 +123,21 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 	}
 	if store.updateParams.EncryptedAPIKey == nil || store.updateParams.APIKeyHint == nil || *store.updateParams.APIKeyHint != "5678" {
 		t.Fatalf("credential was not replaced safely: %+v", store.updateParams)
+	}
+}
+
+func TestProviderValidationRejectsNonPositiveWeight(t *testing.T) {
+	service := testService(t, &fakeStore{})
+	for _, weight := range []int{-1, MaxWeight + 1} {
+		_, err := service.Create(context.Background(), CreateInput{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret", Weight: weight, BillingGroupID: uuid.New()})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("weight=%d err=%v", weight, err)
+		}
+	}
+	weight := 300
+	store := &fakeStore{}
+	if _, err := testService(t, store).Update(context.Background(), uuid.New(), UpdateInput{Weight: &weight}); err != nil || store.updateParams.Weight == nil || *store.updateParams.Weight != weight {
+		t.Fatalf("weight update=%+v err=%v", store.updateParams, err)
 	}
 }
 

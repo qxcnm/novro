@@ -24,13 +24,13 @@ func TestReadMigrationsSortsAndHashesFiles(t *testing.T) {
 	}
 }
 
-func TestVersionedSQLContainsOnlyInitialMigration(t *testing.T) {
+func TestVersionedSQLContainsInitialAndProviderWeightMigrations(t *testing.T) {
 	entries, err := fs.ReadDir(VersionedSQL, "migrations")
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	if len(entries) != 1 || entries[0].IsDir() || entries[0].Name() != "0001_initial_schema.sql" {
-		t.Fatalf("expected one squashed initial migration, got %+v", entries)
+	if len(entries) != 2 || entries[0].IsDir() || entries[0].Name() != "0001_initial_schema.sql" || entries[1].IsDir() || entries[1].Name() != "0002_provider_weight.sql" {
+		t.Fatalf("expected initial and provider weight migrations, got %+v", entries)
 	}
 }
 

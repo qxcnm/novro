@@ -28,6 +28,8 @@ const (
 	FieldBaseURL = "base_url"
 	// FieldModelListPath holds the string denoting the model_list_path field in the database.
 	FieldModelListPath = "model_list_path"
+	// FieldWeight holds the string denoting the weight field in the database.
+	FieldWeight = "weight"
 	// FieldEncryptedAPIKey holds the string denoting the encrypted_api_key field in the database.
 	FieldEncryptedAPIKey = "encrypted_api_key"
 	// FieldAPIKeyHint holds the string denoting the api_key_hint field in the database.
@@ -71,6 +73,7 @@ var Columns = []string{
 	FieldProtocol,
 	FieldBaseURL,
 	FieldModelListPath,
+	FieldWeight,
 	FieldEncryptedAPIKey,
 	FieldAPIKeyHint,
 	FieldStatus,
@@ -100,6 +103,10 @@ var (
 	DefaultModelListPath string
 	// ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
 	ModelListPathValidator func(string) error
+	// DefaultWeight holds the default value on creation for the "weight" field.
+	DefaultWeight int
+	// WeightValidator is a validator for the "weight" field. It is called by the builders before save.
+	WeightValidator func(int) error
 	// EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	EncryptedAPIKeyValidator func(string) error
 	// APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
@@ -199,6 +206,11 @@ func ByBaseURL(opts ...sql.OrderTermOption) OrderOption {
 // ByModelListPath orders the results by the model_list_path field.
 func ByModelListPath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldModelListPath, opts...).ToFunc()
+}
+
+// ByWeight orders the results by the weight field.
+func ByWeight(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeight, opts...).ToFunc()
 }
 
 // ByEncryptedAPIKey orders the results by the encrypted_api_key field.

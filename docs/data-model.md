@@ -196,6 +196,7 @@ EmailVerificationCode
 - `protocol`，`openai` 或 `anthropic`
 - `base_url`
 - `model_list_path`，可选的模型获取路径覆盖值
+- `weight`，1 到 1000000 的请求优先级，默认 100，数值越大越优先
 - `encrypted_api_key`，AES-256-GCM 密文，仅服务端读取
 - `api_key_hint`，只用于显示末尾提示
 - `status`、`created_at`、`updated_at`
@@ -205,7 +206,7 @@ EmailVerificationCode
 明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
 上游重定向。
 新增和修改供应商时只能选择启用中的计费分组。网关解析候选路由时只会使用与当前 API Key
-同一计费分组的供应商。
+同一计费分组的供应商，并按 `weight` 降序请求；同权重保留稳定路由顺序。
 
 ## 12. model_routes
 

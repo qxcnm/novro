@@ -1341,11 +1341,11 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","api_key":"upstream-secret","billing_group_id":"`+groupID.String()+`"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret","billing_group_id":"`+groupID.String()+`"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || providers.createInput.BillingGroupID != groupID || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || strings.Contains(response.Body.String(), "upstream-secret") {
+	if response.Code != http.StatusCreated || providers.createInput.BillingGroupID != groupID || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || strings.Contains(response.Body.String(), "upstream-secret") {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.createInput)
 	}
 

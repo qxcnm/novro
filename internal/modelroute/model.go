@@ -27,6 +27,7 @@ type ProviderSummary struct {
 	ID          uuid.UUID         `json:"id"`
 	Code        string            `json:"code"`
 	DisplayName string            `json:"display_name"`
+	Weight      int               `json:"weight"`
 	Protocol    provider.Protocol `json:"protocol"`
 	Status      provider.Status   `json:"status"`
 }

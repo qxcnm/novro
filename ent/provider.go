@@ -31,6 +31,8 @@ type Provider struct {
 	BaseURL string `json:"base_url,omitempty"`
 	// ModelListPath holds the value of the "model_list_path" field.
 	ModelListPath string `json:"model_list_path,omitempty"`
+	// Weight holds the value of the "weight" field.
+	Weight int `json:"weight,omitempty"`
 	// EncryptedAPIKey holds the value of the "encrypted_api_key" field.
 	EncryptedAPIKey string `json:"-"`
 	// APIKeyHint holds the value of the "api_key_hint" field.
@@ -85,6 +87,8 @@ func (*Provider) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case provider.FieldWeight:
+			values[i] = new(sql.NullInt64)
 		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldBaseURL, provider.FieldModelListPath, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
 			values[i] = new(sql.NullString)
 		case provider.FieldCreatedAt, provider.FieldUpdatedAt, provider.FieldDeletedAt:
@@ -147,6 +151,12 @@ func (_m *Provider) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field model_list_path", values[i])
 			} else if value.Valid {
 				_m.ModelListPath = value.String
+			}
+		case provider.FieldWeight:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field weight", values[i])
+			} else if value.Valid {
+				_m.Weight = int(value.Int64)
 			}
 		case provider.FieldEncryptedAPIKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -248,6 +258,9 @@ func (_m *Provider) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("model_list_path=")
 	builder.WriteString(_m.ModelListPath)
+	builder.WriteString(", ")
+	builder.WriteString("weight=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Weight))
 	builder.WriteString(", ")
 	builder.WriteString("encrypted_api_key=<sensitive>")
 	builder.WriteString(", ")

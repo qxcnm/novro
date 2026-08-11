@@ -332,6 +332,7 @@ var (
 		{Name: "protocol", Type: field.TypeEnum, Enums: []string{"openai", "anthropic"}},
 		{Name: "base_url", Type: field.TypeString, Size: 512},
 		{Name: "model_list_path", Type: field.TypeString, Size: 512, Default: ""},
+		{Name: "weight", Type: field.TypeInt, Default: 100},
 		{Name: "encrypted_api_key", Type: field.TypeString, Size: 2048},
 		{Name: "api_key_hint", Type: field.TypeString, Size: 8},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
@@ -348,7 +349,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "providers_billing_groups_providers",
-				Columns:    []*schema.Column{ProvidersColumns[12]},
+				Columns:    []*schema.Column{ProvidersColumns[13]},
 				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -357,17 +358,17 @@ var (
 			{
 				Name:    "provider_billing_group_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[12], ProvidersColumns[8]},
+				Columns: []*schema.Column{ProvidersColumns[13], ProvidersColumns[9]},
 			},
 			{
 				Name:    "provider_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[8], ProvidersColumns[9]},
+				Columns: []*schema.Column{ProvidersColumns[9], ProvidersColumns[10]},
 			},
 			{
 				Name:    "provider_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[11]},
+				Columns: []*schema.Column{ProvidersColumns[12]},
 			},
 		},
 	}

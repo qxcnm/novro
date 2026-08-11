@@ -27,6 +27,7 @@ type CreateParams struct {
 	Protocol        Protocol
 	BaseURL         string
 	ModelListPath   string
+	Weight          int
 	EncryptedAPIKey string
 	APIKeyHint      string
 }
@@ -46,7 +47,11 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	baseURL, ok := normalizeBaseURL(input.BaseURL)
 	modelListPath, pathOK := normalizeModelListPath(input.ModelListPath)
 	apiKey := strings.TrimSpace(input.APIKey)
-	if !providerCodePattern.MatchString(code) || input.BillingGroupID == uuid.Nil || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 {
+	weight := input.Weight
+	if weight == 0 {
+		weight = DefaultWeight
+	}
+	if !providerCodePattern.MatchString(code) || input.BillingGroupID == uuid.Nil || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 || weight <= 0 || weight > MaxWeight {
 		return Record{}, ErrInvalidInput
 	}
 	encrypted, err := s.cipher.Encrypt(apiKey)
@@ -54,7 +59,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 		return Record{}, err
 	}
 	return s.store.Create(ctx, CreateParams{
-		Code: code, BillingGroupID: input.BillingGroupID, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath,
+		Code: code, BillingGroupID: input.BillingGroupID, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
 		EncryptedAPIKey: encrypted, APIKeyHint: secretHint(apiKey),
 	})
 }
@@ -68,7 +73,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.APIKey == nil && input.BillingGroupID == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil && input.BillingGroupID == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	params := UpdateParams{Protocol: input.Protocol}
@@ -101,6 +106,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 			return Record{}, ErrInvalidInput
 		}
 		params.ModelListPath = &value
+	}
+	if input.Weight != nil {
+		if *input.Weight <= 0 || *input.Weight > MaxWeight {
+			return Record{}, ErrInvalidInput
+		}
+		params.Weight = input.Weight
 	}
 	if input.APIKey != nil {
 		value := strings.TrimSpace(*input.APIKey)

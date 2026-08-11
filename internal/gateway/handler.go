@@ -13,9 +13,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,8 +70,6 @@ type Handler struct {
 	now                   func() time.Time
 	settlementRetryDelays []time.Duration
 	upstreamRetryDelays   []time.Duration
-	roundRobinMu          sync.Mutex
-	roundRobinCursors     map[string]uint64
 }
 
 func New(deps Dependencies) *Handler {
@@ -86,8 +84,7 @@ func New(deps Dependencies) *Handler {
 	return &Handler{
 		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
-		upstreamRetryDelays: []time.Duration{250 * time.Millisecond},
-		roundRobinCursors:   make(map[string]uint64),
+		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
 	}
 }
 
@@ -238,7 +235,9 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		}
 		return
 	}
-	compatible = h.rotateRoutes(publicModel, endpoint, compatible)
+	sort.SliceStable(compatible, func(i, j int) bool {
+		return compatible[i].Provider.Weight > compatible[j].Provider.Weight
+	})
 	type upstreamAttempt struct {
 		route         modelroute.Resolved
 		inputEstimate int
@@ -338,7 +337,11 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 				if requestErr == nil {
 					setUpstreamHeaders(fallbackRequest, r, route)
 					setUpstreamIdempotencyKey(fallbackRequest, r, requestID)
-					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, nil); fallbackRequestErr == nil {
+					fallbackRetryDelays := h.upstreamRetryDelays
+					if len(fallbackRetryDelays) > 0 {
+						fallbackRetryDelays = fallbackRetryDelays[:len(fallbackRetryDelays)-1]
+					}
+					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, fallbackRetryDelays); fallbackRequestErr == nil {
 						response, err = fallbackResponse, nil
 						h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
 					}
@@ -434,7 +437,7 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
 			attemptRequest.Body = body
 		}
 		response, err := h.client.Do(attemptRequest)
-		retryable := retryableUpstreamConnectionError(err) || (err == nil && retryableUpstreamStatus(response.StatusCode))
+		retryable := retryableUpstreamConnectionError(err) || (err == nil && response != nil && retryableUpstreamStatus(response.StatusCode))
 		if !retryable || attempt >= len(retryDelays) {
 			return response, err
 		}
@@ -553,8 +556,9 @@ func retryableUpstreamConnectionError(err error) bool {
 	return errors.As(err, &networkError)
 }
 
+// Any response outside the success range counts as a failed provider attempt.
 func retryableUpstreamStatus(status int) bool {
-	return status == http.StatusRequestTimeout || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	return status < http.StatusOK || status >= http.StatusMultipleChoices
 }
 
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
@@ -577,21 +581,6 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(body)
-}
-
-func (h *Handler) rotateRoutes(publicModel, endpoint string, routes []modelroute.Resolved) []modelroute.Resolved {
-	if len(routes) < 2 {
-		return routes
-	}
-	key := publicModel + "\x00" + endpoint
-	h.roundRobinMu.Lock()
-	start := int(h.roundRobinCursors[key] % uint64(len(routes)))
-	h.roundRobinCursors[key]++
-	h.roundRobinMu.Unlock()
-	rotated := make([]modelroute.Resolved, 0, len(routes))
-	rotated = append(rotated, routes[start:]...)
-	rotated = append(rotated, routes[:start]...)
-	return rotated
 }
 
 func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoint string, stream bool) ([]byte, error) {

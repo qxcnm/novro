@@ -81,6 +81,11 @@ func ModelListPath(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldModelListPath, v))
 }
 
+// Weight applies equality check predicate on the "weight" field. It's identical to WeightEQ.
+func Weight(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldWeight, v))
+}
+
 // EncryptedAPIKey applies equality check predicate on the "encrypted_api_key" field. It's identical to EncryptedAPIKeyEQ.
 func EncryptedAPIKey(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldEncryptedAPIKey, v))
@@ -404,6 +409,46 @@ func ModelListPathEqualFold(v string) predicate.Provider {
 // ModelListPathContainsFold applies the ContainsFold predicate on the "model_list_path" field.
 func ModelListPathContainsFold(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldContainsFold(FieldModelListPath, v))
+}
+
+// WeightEQ applies the EQ predicate on the "weight" field.
+func WeightEQ(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldWeight, v))
+}
+
+// WeightNEQ applies the NEQ predicate on the "weight" field.
+func WeightNEQ(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldNEQ(FieldWeight, v))
+}
+
+// WeightIn applies the In predicate on the "weight" field.
+func WeightIn(vs ...int) predicate.Provider {
+	return predicate.Provider(sql.FieldIn(FieldWeight, vs...))
+}
+
+// WeightNotIn applies the NotIn predicate on the "weight" field.
+func WeightNotIn(vs ...int) predicate.Provider {
+	return predicate.Provider(sql.FieldNotIn(FieldWeight, vs...))
+}
+
+// WeightGT applies the GT predicate on the "weight" field.
+func WeightGT(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldGT(FieldWeight, v))
+}
+
+// WeightGTE applies the GTE predicate on the "weight" field.
+func WeightGTE(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldGTE(FieldWeight, v))
+}
+
+// WeightLT applies the LT predicate on the "weight" field.
+func WeightLT(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldLT(FieldWeight, v))
+}
+
+// WeightLTE applies the LTE predicate on the "weight" field.
+func WeightLTE(v int) predicate.Provider {
+	return predicate.Provider(sql.FieldLTE(FieldWeight, v))
 }
 
 // EncryptedAPIKeyEQ applies the EQ predicate on the "encrypted_api_key" field.

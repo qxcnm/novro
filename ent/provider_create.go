@@ -67,6 +67,20 @@ func (_c *ProviderCreate) SetNillableModelListPath(v *string) *ProviderCreate {
 	return _c
 }
 
+// SetWeight sets the "weight" field.
+func (_c *ProviderCreate) SetWeight(v int) *ProviderCreate {
+	_c.mutation.SetWeight(v)
+	return _c
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_c *ProviderCreate) SetNillableWeight(v *int) *ProviderCreate {
+	if v != nil {
+		_c.SetWeight(*v)
+	}
+	return _c
+}
+
 // SetEncryptedAPIKey sets the "encrypted_api_key" field.
 func (_c *ProviderCreate) SetEncryptedAPIKey(v string) *ProviderCreate {
 	_c.mutation.SetEncryptedAPIKey(v)
@@ -208,6 +222,10 @@ func (_c *ProviderCreate) defaults() {
 		v := provider.DefaultModelListPath
 		_c.mutation.SetModelListPath(v)
 	}
+	if _, ok := _c.mutation.Weight(); !ok {
+		v := provider.DefaultWeight
+		_c.mutation.SetWeight(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := provider.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -269,6 +287,14 @@ func (_c *ProviderCreate) check() error {
 	if v, ok := _c.mutation.ModelListPath(); ok {
 		if err := provider.ModelListPathValidator(v); err != nil {
 			return &ValidationError{Name: "model_list_path", err: fmt.Errorf(`ent: validator failed for field "Provider.model_list_path": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Weight(); !ok {
+		return &ValidationError{Name: "weight", err: errors.New(`ent: missing required field "Provider.weight"`)}
+	}
+	if v, ok := _c.mutation.Weight(); ok {
+		if err := provider.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "Provider.weight": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.EncryptedAPIKey(); !ok {
@@ -358,6 +384,10 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ModelListPath(); ok {
 		_spec.SetField(provider.FieldModelListPath, field.TypeString, value)
 		_node.ModelListPath = value
+	}
+	if value, ok := _c.mutation.Weight(); ok {
+		_spec.SetField(provider.FieldWeight, field.TypeInt, value)
+		_node.Weight = value
 	}
 	if value, ok := _c.mutation.EncryptedAPIKey(); ok {
 		_spec.SetField(provider.FieldEncryptedAPIKey, field.TypeString, value)

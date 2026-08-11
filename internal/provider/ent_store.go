@@ -41,6 +41,7 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		SetProtocol(entprovider.Protocol(params.Protocol)).
 		SetBaseURL(params.BaseURL).
 		SetModelListPath(params.ModelListPath).
+		SetWeight(params.Weight).
 		SetEncryptedAPIKey(params.EncryptedAPIKey).
 		SetAPIKeyHint(params.APIKeyHint).
 		SetStatus(entprovider.StatusActive).
@@ -110,6 +111,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	if params.ModelListPath != nil {
 		update.SetModelListPath(*params.ModelListPath)
 	}
+	if params.Weight != nil {
+		update.SetWeight(*params.Weight)
+	}
 	if params.EncryptedAPIKey != nil {
 		update.SetEncryptedAPIKey(*params.EncryptedAPIKey)
 	}
@@ -172,6 +176,7 @@ func fromEnt(entity *ent.Provider) Record {
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
 		BillingGroupID: entity.BillingGroupID,
 		Protocol:       Protocol(entity.Protocol), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
+		Weight:     entity.Weight,
 		APIKeyHint: entity.APIKeyHint, HasAPIKey: entity.EncryptedAPIKey != "",
 		Status: Status(entity.Status), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt,
 	}

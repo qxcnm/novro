@@ -16,6 +16,8 @@ const (
 	ProtocolAnthropic Protocol = "anthropic"
 	StatusActive      Status   = "active"
 	StatusDisabled    Status   = "disabled"
+	DefaultWeight              = 100
+	MaxWeight                  = 1_000_000
 )
 
 var (
@@ -34,6 +36,7 @@ type Record struct {
 	Protocol       Protocol             `json:"protocol"`
 	BaseURL        string               `json:"base_url"`
 	ModelListPath  string               `json:"model_list_path"`
+	Weight         int                  `json:"weight"`
 	APIKeyHint     string               `json:"api_key_hint"`
 	HasAPIKey      bool                 `json:"has_api_key"`
 	Status         Status               `json:"status"`
@@ -47,6 +50,7 @@ type CreateInput struct {
 	Protocol       Protocol  `json:"protocol"`
 	BaseURL        string    `json:"base_url"`
 	ModelListPath  string    `json:"model_list_path"`
+	Weight         int       `json:"weight"`
 	APIKey         string    `json:"api_key"`
 	BillingGroupID uuid.UUID `json:"billing_group_id"`
 }
@@ -56,6 +60,7 @@ type UpdateInput struct {
 	Protocol       *Protocol  `json:"protocol"`
 	BaseURL        *string    `json:"base_url"`
 	ModelListPath  *string    `json:"model_list_path"`
+	Weight         *int       `json:"weight"`
 	APIKey         *string    `json:"api_key"`
 	BillingGroupID *uuid.UUID `json:"billing_group_id"`
 }
@@ -65,6 +70,7 @@ type UpdateParams struct {
 	Protocol        *Protocol
 	BaseURL         *string
 	ModelListPath   *string
+	Weight          *int
 	EncryptedAPIKey *string
 	APIKeyHint      *string
 	BillingGroupID  *uuid.UUID

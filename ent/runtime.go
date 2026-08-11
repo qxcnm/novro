@@ -667,8 +667,28 @@ func init() {
 	provider.DefaultModelListPath = providerDescModelListPath.Default.(string)
 	// provider.ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
 	provider.ModelListPathValidator = providerDescModelListPath.Validators[0].(func(string) error)
+	// providerDescWeight is the schema descriptor for weight field.
+	providerDescWeight := providerFields[7].Descriptor()
+	// provider.DefaultWeight holds the default value on creation for the weight field.
+	provider.DefaultWeight = providerDescWeight.Default.(int)
+	// provider.WeightValidator is a validator for the "weight" field. It is called by the builders before save.
+	provider.WeightValidator = func() func(int) error {
+		validators := providerDescWeight.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(weight int) error {
+			for _, fn := range fns {
+				if err := fn(weight); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	// providerDescEncryptedAPIKey is the schema descriptor for encrypted_api_key field.
-	providerDescEncryptedAPIKey := providerFields[7].Descriptor()
+	providerDescEncryptedAPIKey := providerFields[8].Descriptor()
 	// provider.EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	provider.EncryptedAPIKeyValidator = func() func(string) error {
 		validators := providerDescEncryptedAPIKey.Validators
@@ -686,7 +706,7 @@ func init() {
 		}
 	}()
 	// providerDescAPIKeyHint is the schema descriptor for api_key_hint field.
-	providerDescAPIKeyHint := providerFields[8].Descriptor()
+	providerDescAPIKeyHint := providerFields[9].Descriptor()
 	// provider.APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
 	provider.APIKeyHintValidator = func() func(string) error {
 		validators := providerDescAPIKeyHint.Validators
@@ -704,11 +724,11 @@ func init() {
 		}
 	}()
 	// providerDescCreatedAt is the schema descriptor for created_at field.
-	providerDescCreatedAt := providerFields[10].Descriptor()
+	providerDescCreatedAt := providerFields[11].Descriptor()
 	// provider.DefaultCreatedAt holds the default value on creation for the created_at field.
 	provider.DefaultCreatedAt = providerDescCreatedAt.Default.(func() time.Time)
 	// providerDescUpdatedAt is the schema descriptor for updated_at field.
-	providerDescUpdatedAt := providerFields[11].Descriptor()
+	providerDescUpdatedAt := providerFields[12].Descriptor()
 	// provider.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	provider.DefaultUpdatedAt = providerDescUpdatedAt.Default.(func() time.Time)
 	// provider.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
