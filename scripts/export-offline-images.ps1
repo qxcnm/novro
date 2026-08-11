@@ -5,7 +5,9 @@ param(
 
     [string]$OutputDirectory = '',
 
-    [string]$DockerPath = ''
+    [string]$DockerPath = '',
+
+    [switch]$ReuseExistingImages
 )
 
 Set-StrictMode -Version Latest
@@ -100,16 +102,23 @@ New-Item -ItemType Directory -Path (Join-Path $bundleDirectory 'scripts') -Force
 New-Item -ItemType Directory -Path (Join-Path $bundleDirectory 'deploy') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $bundleDirectory 'docs') -Force | Out-Null
 
-Write-Host "Building $novroImage for $Platform..."
-Invoke-Docker buildx build `
-    --platform $Platform `
-    --load `
-    --tag $novroImage `
-    --file (Join-Path $repositoryDirectory 'Dockerfile') `
-    $repositoryDirectory
+if ($ReuseExistingImages) {
+    Write-Host "Reusing existing local images for $Platform..."
+    foreach ($image in @($novroImage, $mysqlImage)) {
+        Invoke-Docker image inspect $image | Out-Null
+    }
+} else {
+    Write-Host "Building $novroImage for $Platform..."
+    Invoke-Docker buildx build `
+        --platform $Platform `
+        --load `
+        --tag $novroImage `
+        --file (Join-Path $repositoryDirectory 'Dockerfile') `
+        $repositoryDirectory
 
-Write-Host "Pulling $mysqlImage for $Platform..."
-Invoke-Docker pull --platform $Platform $mysqlImage
+    Write-Host "Pulling $mysqlImage for $Platform..."
+    Invoke-Docker pull --platform $Platform $mysqlImage
+}
 
 foreach ($image in @($novroImage, $mysqlImage)) {
     $imagePlatform = Convert-ToTrimmedText (& $docker image inspect --format '{{.Os}}/{{.Architecture}}' $image)

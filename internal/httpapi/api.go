@@ -55,6 +55,7 @@ type UserService interface {
 type APIKeyService interface {
 	Create(context.Context, uuid.UUID, uuid.UUID, string) (apikey.CreateResult, error)
 	ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error)
+	RevealForUser(context.Context, uuid.UUID, uuid.UUID) (string, error)
 	RevokeForUser(context.Context, uuid.UUID, uuid.UUID) error
 	ListAll(context.Context, apikey.ListFilter) (apikey.Page, error)
 	Revoke(context.Context, uuid.UUID) error
@@ -248,6 +249,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("PUT /api/admin/gateway-settings", h.updateGatewaySettings)
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
+	mux.HandleFunc("GET /api/account/api-keys/{id}/secret", h.revealMyAPIKeySecret)
 	mux.HandleFunc("DELETE /api/account/api-keys/{id}", h.revokeMyAPIKey)
 	mux.HandleFunc("GET /api/account/billing-groups", h.listMyBillingGroups)
 	mux.HandleFunc("GET /api/account/models", h.listAvailableModels)
@@ -708,6 +710,24 @@ func (h *apiHandler) createMyAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *apiHandler) revealMyAPIKeySecret(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "API Key ID 无效")
+		return
+	}
+	key, err := h.apiKeys.RevealForUser(r.Context(), record.ID, id)
+	if err != nil {
+		h.writeAPIKeyError(w, "reveal user API key secret", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"key": key})
 }
 
 func (h *apiHandler) revokeMyAPIKey(w http.ResponseWriter, r *http.Request) {
@@ -1942,6 +1962,8 @@ func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, e
 		writeError(w, http.StatusConflict, "api_key_limit_reached", "启用的 API Key 已达到上限")
 	case errors.Is(err, apikey.ErrGroupUnavailable):
 		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
+	case errors.Is(err, apikey.ErrSecretUnavailable):
+		writeError(w, http.StatusGone, "api_key_secret_unavailable", "该 API Key 没有可重新复制的副本，请重新创建")
 	default:
 		h.internalError(w, operation, err)
 	}

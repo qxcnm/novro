@@ -112,6 +112,8 @@ type fakeAPIKeys struct {
 	createdUserID  uuid.UUID
 	createdGroupID uuid.UUID
 	createdName    string
+	secretUserID   uuid.UUID
+	secretID       uuid.UUID
 	revokedUserID  uuid.UUID
 	revokedID      uuid.UUID
 	listFilter     apikey.ListFilter
@@ -370,13 +372,21 @@ func (f *fakeAPIKeys) Create(_ context.Context, userID, billingGroupID uuid.UUID
 		return apikey.CreateResult{}, f.err
 	}
 	return apikey.CreateResult{
-		APIKey: apikey.Record{ID: uuid.New(), UserID: userID, BillingGroupID: billingGroupID, BillingGroup: billinggroup.Summary{ID: billingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Name: name, KeyPrefix: "nvr_example", Status: apikey.StatusActive},
+		APIKey: apikey.Record{ID: uuid.New(), UserID: userID, BillingGroupID: billingGroupID, BillingGroup: billinggroup.Summary{ID: billingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Name: name, KeyPrefix: "nvr_example", CanCopySecret: true, Status: apikey.StatusActive},
 		Key:    "nvr_full-secret-returned-once",
 	}, nil
 }
 
 func (f *fakeAPIKeys) ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error) {
 	return []apikey.Record{}, f.err
+}
+
+func (f *fakeAPIKeys) RevealForUser(_ context.Context, userID, id uuid.UUID) (string, error) {
+	f.secretUserID, f.secretID = userID, id
+	if f.err != nil {
+		return "", f.err
+	}
+	return "nvr_full-secret-returned-once", nil
 }
 
 func (f *fakeAPIKeys) RevokeForUser(_ context.Context, userID, id uuid.UUID) error {
@@ -1185,6 +1195,21 @@ func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent || keys.revokedUserID != currentID || keys.revokedID != keyID {
+		t.Fatalf("status=%d body=%s keys=%+v", response.Code, response.Body.String(), keys)
+	}
+}
+
+func TestUserCanReCopyCreatedAPIKeySecret(t *testing.T) {
+	currentID := uuid.New()
+	keyID := uuid.New()
+	authService := &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}}
+	keys := &fakeAPIKeys{}
+	handler := testAPIWithKeys(authService, &fakeAPIUsers{}, keys)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/account/api-keys/"+keyID.String()+"/secret", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || keys.secretUserID != currentID || keys.secretID != keyID || !strings.Contains(response.Body.String(), "nvr_full-secret-returned-once") {
 		t.Fatalf("status=%d body=%s keys=%+v", response.Code, response.Body.String(), keys)
 	}
 }

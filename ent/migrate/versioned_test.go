@@ -24,13 +24,13 @@ func TestReadMigrationsSortsAndHashesFiles(t *testing.T) {
 	}
 }
 
-func TestVersionedSQLContainsInitialAndProviderWeightMigrations(t *testing.T) {
+func TestVersionedSQLContainsInitialProviderWeightAndApiKeySecretMigrations(t *testing.T) {
 	entries, err := fs.ReadDir(VersionedSQL, "migrations")
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	if len(entries) != 2 || entries[0].IsDir() || entries[0].Name() != "0001_initial_schema.sql" || entries[1].IsDir() || entries[1].Name() != "0002_provider_weight.sql" {
-		t.Fatalf("expected initial and provider weight migrations, got %+v", entries)
+	if len(entries) != 3 || entries[0].IsDir() || entries[0].Name() != "0001_initial_schema.sql" || entries[1].IsDir() || entries[1].Name() != "0002_provider_weight.sql" || entries[2].IsDir() || entries[2].Name() != "0006_api_keys_secret_ciphertext.sql" {
+		t.Fatalf("expected initial, provider weight, and API key secret migrations, got %+v", entries)
 	}
 }
 

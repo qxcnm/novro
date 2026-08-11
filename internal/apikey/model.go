@@ -17,24 +17,27 @@ const (
 )
 
 var (
-	ErrInvalidInput     = errors.New("invalid API key input")
-	ErrNotFound         = errors.New("API key not found")
-	ErrLimitReached     = errors.New("active API key limit reached")
-	ErrUnauthenticated  = errors.New("invalid API key")
-	ErrGroupUnavailable = errors.New("billing group is unavailable")
+	ErrInvalidInput      = errors.New("invalid API key input")
+	ErrNotFound          = errors.New("API key not found")
+	ErrLimitReached      = errors.New("active API key limit reached")
+	ErrSecretUnavailable = errors.New("API key secret unavailable")
+	ErrUnauthenticated   = errors.New("invalid API key")
+	ErrGroupUnavailable  = errors.New("billing group is unavailable")
 )
 
 type Record struct {
-	ID             uuid.UUID            `json:"id"`
-	UserID         uuid.UUID            `json:"user_id"`
-	BillingGroupID uuid.UUID            `json:"billing_group_id"`
-	BillingGroup   billinggroup.Summary `json:"billing_group"`
-	Name           string               `json:"name"`
-	KeyPrefix      string               `json:"key_prefix"`
-	Status         Status               `json:"status"`
-	LastUsedAt     *time.Time           `json:"last_used_at"`
-	CreatedAt      time.Time            `json:"created_at"`
-	RevokedAt      *time.Time           `json:"revoked_at"`
+	ID                  uuid.UUID            `json:"id"`
+	UserID              uuid.UUID            `json:"user_id"`
+	BillingGroupID      uuid.UUID            `json:"billing_group_id"`
+	BillingGroup        billinggroup.Summary `json:"billing_group"`
+	Name                string               `json:"name"`
+	KeyPrefix           string               `json:"key_prefix"`
+	CanCopySecret       bool                 `json:"can_copy_secret"`
+	Status              Status               `json:"status"`
+	LastUsedAt          *time.Time           `json:"last_used_at"`
+	CreatedAt           time.Time            `json:"created_at"`
+	RevokedAt           *time.Time           `json:"revoked_at"`
+	KeySecretCiphertext string               `json:"-"`
 }
 
 type Actor struct {

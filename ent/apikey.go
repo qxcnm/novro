@@ -30,6 +30,8 @@ type APIKey struct {
 	KeyPrefix string `json:"key_prefix,omitempty"`
 	// KeyHash holds the value of the "key_hash" field.
 	KeyHash string `json:"-"`
+	// KeySecretCiphertext holds the value of the "key_secret_ciphertext" field.
+	KeySecretCiphertext string `json:"-"`
 	// Status holds the value of the "status" field.
 	Status apikey.Status `json:"status,omitempty"`
 	// LastUsedAt holds the value of the "last_used_at" field.
@@ -93,7 +95,7 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case apikey.FieldName, apikey.FieldKeyPrefix, apikey.FieldKeyHash, apikey.FieldStatus:
+		case apikey.FieldName, apikey.FieldKeyPrefix, apikey.FieldKeyHash, apikey.FieldKeySecretCiphertext, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case apikey.FieldLastUsedAt, apikey.FieldCreatedAt, apikey.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
@@ -149,6 +151,12 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field key_hash", values[i])
 			} else if value.Valid {
 				_m.KeyHash = value.String
+			}
+		case apikey.FieldKeySecretCiphertext:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field key_secret_ciphertext", values[i])
+			} else if value.Valid {
+				_m.KeySecretCiphertext = value.String
 			}
 		case apikey.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -240,6 +248,8 @@ func (_m *APIKey) String() string {
 	builder.WriteString(_m.KeyPrefix)
 	builder.WriteString(", ")
 	builder.WriteString("key_hash=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("key_secret_ciphertext=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))

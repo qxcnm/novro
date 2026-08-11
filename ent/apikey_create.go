@@ -54,6 +54,20 @@ func (_c *APIKeyCreate) SetKeyHash(v string) *APIKeyCreate {
 	return _c
 }
 
+// SetKeySecretCiphertext sets the "key_secret_ciphertext" field.
+func (_c *APIKeyCreate) SetKeySecretCiphertext(v string) *APIKeyCreate {
+	_c.mutation.SetKeySecretCiphertext(v)
+	return _c
+}
+
+// SetNillableKeySecretCiphertext sets the "key_secret_ciphertext" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableKeySecretCiphertext(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetKeySecretCiphertext(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *APIKeyCreate) SetStatus(v apikey.Status) *APIKeyCreate {
 	_c.mutation.SetStatus(v)
@@ -184,6 +198,10 @@ func (_c *APIKeyCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *APIKeyCreate) defaults() {
+	if _, ok := _c.mutation.KeySecretCiphertext(); !ok {
+		v := apikey.DefaultKeySecretCiphertext
+		_c.mutation.SetKeySecretCiphertext(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -228,6 +246,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.KeyHash(); ok {
 		if err := apikey.KeyHashValidator(v); err != nil {
 			return &ValidationError{Name: "key_hash", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_hash": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.KeySecretCiphertext(); !ok {
+		return &ValidationError{Name: "key_secret_ciphertext", err: errors.New(`ent: missing required field "APIKey.key_secret_ciphertext"`)}
+	}
+	if v, ok := _c.mutation.KeySecretCiphertext(); ok {
+		if err := apikey.KeySecretCiphertextValidator(v); err != nil {
+			return &ValidationError{Name: "key_secret_ciphertext", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_secret_ciphertext": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -293,6 +319,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.KeyHash(); ok {
 		_spec.SetField(apikey.FieldKeyHash, field.TypeString, value)
 		_node.KeyHash = value
+	}
+	if value, ok := _c.mutation.KeySecretCiphertext(); ok {
+		_spec.SetField(apikey.FieldKeySecretCiphertext, field.TypeString, value)
+		_node.KeySecretCiphertext = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeEnum, value)

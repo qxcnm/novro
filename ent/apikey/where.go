@@ -81,6 +81,11 @@ func KeyHash(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldKeyHash, v))
 }
 
+// KeySecretCiphertext applies equality check predicate on the "key_secret_ciphertext" field. It's identical to KeySecretCiphertextEQ.
+func KeySecretCiphertext(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldKeySecretCiphertext, v))
+}
+
 // LastUsedAt applies equality check predicate on the "last_used_at" field. It's identical to LastUsedAtEQ.
 func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
@@ -329,6 +334,71 @@ func KeyHashEqualFold(v string) predicate.APIKey {
 // KeyHashContainsFold applies the ContainsFold predicate on the "key_hash" field.
 func KeyHashContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldKeyHash, v))
+}
+
+// KeySecretCiphertextEQ applies the EQ predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextNEQ applies the NEQ predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextIn applies the In predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldKeySecretCiphertext, vs...))
+}
+
+// KeySecretCiphertextNotIn applies the NotIn predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldKeySecretCiphertext, vs...))
+}
+
+// KeySecretCiphertextGT applies the GT predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextGTE applies the GTE predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextLT applies the LT predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextLTE applies the LTE predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextContains applies the Contains predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextHasPrefix applies the HasPrefix predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextHasSuffix applies the HasSuffix predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextEqualFold applies the EqualFold predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldKeySecretCiphertext, v))
+}
+
+// KeySecretCiphertextContainsFold applies the ContainsFold predicate on the "key_secret_ciphertext" field.
+func KeySecretCiphertextContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldKeySecretCiphertext, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

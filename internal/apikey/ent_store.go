@@ -43,7 +43,7 @@ func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
-func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name, prefix, hash string, maxActive int) (Record, error) {
+func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name, prefix, hash, encryptedSecret string, maxActive int) (Record, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return Record{}, fmt.Errorf("begin API key creation: %w", err)
@@ -75,6 +75,7 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 		SetName(name).
 		SetKeyPrefix(prefix).
 		SetKeyHash(hash).
+		SetKeySecretCiphertext(encryptedSecret).
 		SetStatus(entapikey.StatusActive).
 		Save(ctx)
 	if err != nil {
@@ -101,6 +102,20 @@ func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, 
 		records = append(records, fromEnt(entity))
 	}
 	return records, nil
+}
+
+func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record, error) {
+	entity, err := s.client.APIKey.Query().
+		Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive)).
+		WithBillingGroup().
+		Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrNotFound
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("find user API key: %w", err)
+	}
+	return fromEnt(entity), nil
 }
 
 func (s *EntStore) RevokeByUser(ctx context.Context, userID, id uuid.UUID, now time.Time) error {
@@ -178,15 +193,17 @@ func (s *EntStore) revoke(ctx context.Context, entity *ent.APIKey, now time.Time
 
 func fromEnt(entity *ent.APIKey) Record {
 	record := Record{
-		ID:             entity.ID,
-		UserID:         entity.UserID,
-		BillingGroupID: entity.BillingGroupID,
-		Name:           entity.Name,
-		KeyPrefix:      entity.KeyPrefix,
-		Status:         Status(entity.Status),
-		LastUsedAt:     entity.LastUsedAt,
-		CreatedAt:      entity.CreatedAt,
-		RevokedAt:      entity.RevokedAt,
+		ID:                  entity.ID,
+		UserID:              entity.UserID,
+		BillingGroupID:      entity.BillingGroupID,
+		Name:                entity.Name,
+		KeyPrefix:           entity.KeyPrefix,
+		CanCopySecret:       entity.KeySecretCiphertext != "" && entity.Status == entapikey.StatusActive,
+		Status:              Status(entity.Status),
+		LastUsedAt:          entity.LastUsedAt,
+		CreatedAt:           entity.CreatedAt,
+		RevokedAt:           entity.RevokedAt,
+		KeySecretCiphertext: entity.KeySecretCiphertext,
 	}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
 		record.BillingGroup = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}

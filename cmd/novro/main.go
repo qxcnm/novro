@@ -86,12 +86,12 @@ func main() {
 	}
 	passwordHasher := password.Hasher{}
 	userService := user.NewService(user.NewEntStore(application.Ent), passwordHasher)
-	apiKeyService := apikey.NewService(apikey.NewEntStore(application.Ent))
 	providerCipher, err := provider.NewCipher(cfg.Provider.EncryptionSecret)
 	if err != nil {
 		logger.Error("provider encryption initialization failed", "error", err)
 		os.Exit(1)
 	}
+	apiKeyService := apikey.NewService(apikey.NewEntStore(application.Ent), providerCipher)
 	providerService := provider.NewService(provider.NewEntStore(application.Ent), providerCipher)
 	billingService := billing.NewService(billing.NewEntStore(application.Ent))
 	modelRouteService := modelroute.NewService(modelroute.NewEntStore(application.Ent), providerCipher)

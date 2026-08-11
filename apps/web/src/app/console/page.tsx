@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { copyText } from "@/lib/clipboard";
 
-type APIKeyRecord = { id: string; name: string; key_prefix: string; status: "active" | "revoked"; last_used_at: string | null; created_at: string; revoked_at: string | null };
+type APIKeyRecord = { id: string; name: string; key_prefix: string; can_copy_secret: boolean; status: "active" | "revoked"; last_used_at: string | null; created_at: string; revoked_at: string | null };
 type CreateResult = { api_key: APIKeyRecord; key: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string } };
 type ErrorResponse = { error?: { message?: string } };
@@ -45,6 +45,7 @@ export default function ConsolePage() {
   const [name, setName] = useState("");
   const [created, setCreated] = useState<CreateResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedKeyID, setCopiedKeyID] = useState<string | null>(null);
   const [revokeKey, setRevokeKey] = useState<APIKeyRecord | null>(null);
 
   const load = useCallback(async () => {
@@ -72,6 +73,12 @@ export default function ConsolePage() {
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
+  useEffect(() => {
+    if (!copiedKeyID) return;
+    const timer = window.setTimeout(() => setCopiedKeyID(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copiedKeyID]);
+
   async function createKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -96,6 +103,38 @@ export default function ConsolePage() {
     const success = await copyText(created.key);
     setCopied(success);
     if (!success) setMessage("复制失败，请手动选择完整密钥");
+  }
+
+  async function copyStoredKey(key: APIKeyRecord) {
+    if (!key.can_copy_secret) {
+      setMessage("该 API Key 没有可重新复制的副本，请重新创建");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/account/api-keys/${key.id}/secret`, { cache: "no-store" });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!response.ok) {
+        setMessage(await readError(response));
+        return;
+      }
+      const body = (await response.json()) as { key?: string };
+      if (!body.key) {
+        setMessage("该 API Key 没有可重新复制的副本，请重新创建");
+        return;
+      }
+      const success = await copyText(body.key);
+      if (success) {
+        setCopiedKeyID(key.id);
+        setMessage("");
+      } else {
+        setMessage("复制失败，请手动选择并复制完整密钥");
+      }
+    } catch {
+      setMessage("复制失败，请稍后重试");
+    }
   }
 
   async function revoke() {
@@ -151,7 +190,7 @@ export default function ConsolePage() {
 
       <section className="overflow-hidden rounded-lg border bg-background">
         <div className="flex items-center justify-between gap-4 border-b px-4 py-4 sm:px-5">
-          <div><h2 className="text-sm font-semibold">我的 API Keys</h2><p className="mt-1 text-xs text-muted-foreground">完整密钥仅在创建时显示一次</p></div>
+          <div><h2 className="text-sm font-semibold">我的 API Keys</h2><p className="mt-1 text-xs text-muted-foreground">完整密钥创建时只显示一次，之后可在列表中重新复制</p></div>
           <Badge variant="secondary">{activeCount} 个启用</Badge>
         </div>
         <div className="divide-y">
@@ -161,6 +200,7 @@ export default function ConsolePage() {
             <div className="flex min-h-[88px] items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5" key={key.id}>
               <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary"><KeyRound aria-hidden="true" className="size-4" /></span>
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-medium">{key.name}</p><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></div><p className="mt-1 truncate font-mono text-xs text-muted-foreground">{key.key_prefix}•••••••• · {key.last_used_at ? `最近使用 ${formatDate(key.last_used_at)}` : `创建于 ${formatDate(key.created_at)}`}</p></div>
+              {key.status === "active" ? <Button aria-label={`重新复制 ${key.name} 的 API Key`} disabled={!key.can_copy_secret} onClick={() => void copyStoredKey(key)} size="icon" title={key.can_copy_secret ? "重新复制 API Key" : "该 Key 没有可重新复制的副本"} variant="ghost">{copiedKeyID === key.id ? <Check /> : <Clipboard />}</Button> : null}
               {key.status === "active" ? <Button aria-label={`撤销 ${key.name}`} onClick={() => setRevokeKey(key)} size="icon" title="撤销 API Key" variant="ghost"><ShieldX /></Button> : null}
             </div>
           ))}
@@ -168,7 +208,7 @@ export default function ConsolePage() {
       </section>
 
       <Dialog onOpenChange={(open) => { setCreateOpen(open); setMessage(""); if (!open) { setCreated(null); setCopied(false); setName(""); } }} open={createOpen}>
-        <DialogContent>{created ? <><DialogHeader><DialogTitle>保存你的 API Key</DialogTitle><DialogDescription>完整密钥关闭后无法再次查看。</DialogDescription></DialogHeader><div className="space-y-3"><Label htmlFor="created-api-key">API Key</Label><div className="flex gap-2"><Input className="font-mono text-xs" id="created-api-key" readOnly value={created.key} /><Button aria-label="复制 API Key" onClick={() => void copyCreatedKey()} size="icon" title="复制 API Key" variant="outline">{copied ? <Check /> : <Clipboard />}</Button></div>{copied ? <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">已复制到剪贴板</p> : null}</div><DialogFooter><Button onClick={() => setCreateOpen(false)}>{copied ? "已保存，关闭" : "关闭"}</Button></DialogFooter></> : <><DialogHeader><DialogTitle>创建 API Key</DialogTitle><DialogDescription>为不同设备或环境使用容易识别的名称。</DialogDescription></DialogHeader><form className="space-y-2" id="create-key-form" onSubmit={createKey}><Label htmlFor="key-name">名称</Label><Input autoFocus id="key-name" maxLength={64} onChange={(event) => setName(event.target.value)} placeholder="例如 Production" required value={name} /></form><DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-key-form" type="submit"><KeyRound />{busy ? "正在创建..." : "创建"}</Button></DialogFooter></>}</DialogContent>
+        <DialogContent>{created ? <><DialogHeader><DialogTitle>保存你的 API Key</DialogTitle><DialogDescription>完整密钥只显示这一次。关闭后仍可在下方列表中重新复制。</DialogDescription></DialogHeader><div className="space-y-3"><Label htmlFor="created-api-key">API Key</Label><div className="flex gap-2"><Input className="font-mono text-xs" id="created-api-key" readOnly value={created.key} /><Button aria-label="复制 API Key" onClick={() => void copyCreatedKey()} size="icon" title="复制 API Key" variant="outline">{copied ? <Check /> : <Clipboard />}</Button></div>{copied ? <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">已复制到剪贴板</p> : null}</div><DialogFooter><Button onClick={() => setCreateOpen(false)}>{copied ? "已保存，关闭" : "关闭"}</Button></DialogFooter></> : <><DialogHeader><DialogTitle>创建 API Key</DialogTitle><DialogDescription>为不同设备或环境使用容易识别的名称。</DialogDescription></DialogHeader><form className="space-y-2" id="create-key-form" onSubmit={createKey}><Label htmlFor="key-name">名称</Label><Input autoFocus id="key-name" maxLength={64} onChange={(event) => setName(event.target.value)} placeholder="例如 Production" required value={name} /></form><DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-key-form" type="submit"><KeyRound />{busy ? "正在创建..." : "创建"}</Button></DialogFooter></>}</DialogContent>
       </Dialog>
 
       <AlertDialog onOpenChange={(open) => { if (!open) setRevokeKey(null); }} open={revokeKey !== null}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>撤销 API Key</AlertDialogTitle><AlertDialogDescription>撤销 {revokeKey?.name} 后无法恢复，使用该 Key 的客户端将立即失去访问权限。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void revoke(); }} variant="destructive">确认撤销</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>

@@ -22,6 +22,7 @@ func (APIKey) Fields() []ent.Field {
 		field.String("name").NotEmpty().MaxLen(64),
 		field.String("key_prefix").NotEmpty().MaxLen(16),
 		field.String("key_hash").NotEmpty().MaxLen(64).Unique().Sensitive(),
+		field.String("key_secret_ciphertext").Default("").MaxLen(256).Sensitive(),
 		field.Enum("status").Values("active", "revoked").Default("active"),
 		field.Time("last_used_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),

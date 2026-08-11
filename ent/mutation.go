@@ -61,27 +61,28 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *uuid.UUID
-	name                 *string
-	key_prefix           *string
-	key_hash             *string
-	status               *apikey.Status
-	last_used_at         *time.Time
-	created_at           *time.Time
-	revoked_at           *time.Time
-	clearedFields        map[string]struct{}
-	user                 *uuid.UUID
-	cleareduser          bool
-	billing_group        *uuid.UUID
-	clearedbilling_group bool
-	api_usages           map[uuid.UUID]struct{}
-	removedapi_usages    map[uuid.UUID]struct{}
-	clearedapi_usages    bool
-	done                 bool
-	oldValue             func(context.Context) (*APIKey, error)
-	predicates           []predicate.APIKey
+	op                    Op
+	typ                   string
+	id                    *uuid.UUID
+	name                  *string
+	key_prefix            *string
+	key_hash              *string
+	key_secret_ciphertext *string
+	status                *apikey.Status
+	last_used_at          *time.Time
+	created_at            *time.Time
+	revoked_at            *time.Time
+	clearedFields         map[string]struct{}
+	user                  *uuid.UUID
+	cleareduser           bool
+	billing_group         *uuid.UUID
+	clearedbilling_group  bool
+	api_usages            map[uuid.UUID]struct{}
+	removedapi_usages     map[uuid.UUID]struct{}
+	clearedapi_usages     bool
+	done                  bool
+	oldValue              func(context.Context) (*APIKey, error)
+	predicates            []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -366,6 +367,42 @@ func (m *APIKeyMutation) OldKeyHash(ctx context.Context) (v string, err error) {
 // ResetKeyHash resets all changes to the "key_hash" field.
 func (m *APIKeyMutation) ResetKeyHash() {
 	m.key_hash = nil
+}
+
+// SetKeySecretCiphertext sets the "key_secret_ciphertext" field.
+func (m *APIKeyMutation) SetKeySecretCiphertext(s string) {
+	m.key_secret_ciphertext = &s
+}
+
+// KeySecretCiphertext returns the value of the "key_secret_ciphertext" field in the mutation.
+func (m *APIKeyMutation) KeySecretCiphertext() (r string, exists bool) {
+	v := m.key_secret_ciphertext
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeySecretCiphertext returns the old "key_secret_ciphertext" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldKeySecretCiphertext(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeySecretCiphertext is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeySecretCiphertext requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeySecretCiphertext: %w", err)
+	}
+	return oldValue.KeySecretCiphertext, nil
+}
+
+// ResetKeySecretCiphertext resets all changes to the "key_secret_ciphertext" field.
+func (m *APIKeyMutation) ResetKeySecretCiphertext() {
+	m.key_secret_ciphertext = nil
 }
 
 // SetStatus sets the "status" field.
@@ -680,7 +717,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.user != nil {
 		fields = append(fields, apikey.FieldUserID)
 	}
@@ -695,6 +732,9 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.key_hash != nil {
 		fields = append(fields, apikey.FieldKeyHash)
+	}
+	if m.key_secret_ciphertext != nil {
+		fields = append(fields, apikey.FieldKeySecretCiphertext)
 	}
 	if m.status != nil {
 		fields = append(fields, apikey.FieldStatus)
@@ -726,6 +766,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.KeyPrefix()
 	case apikey.FieldKeyHash:
 		return m.KeyHash()
+	case apikey.FieldKeySecretCiphertext:
+		return m.KeySecretCiphertext()
 	case apikey.FieldStatus:
 		return m.Status()
 	case apikey.FieldLastUsedAt:
@@ -753,6 +795,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldKeyPrefix(ctx)
 	case apikey.FieldKeyHash:
 		return m.OldKeyHash(ctx)
+	case apikey.FieldKeySecretCiphertext:
+		return m.OldKeySecretCiphertext(ctx)
 	case apikey.FieldStatus:
 		return m.OldStatus(ctx)
 	case apikey.FieldLastUsedAt:
@@ -804,6 +848,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetKeyHash(v)
+		return nil
+	case apikey.FieldKeySecretCiphertext:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeySecretCiphertext(v)
 		return nil
 	case apikey.FieldStatus:
 		v, ok := value.(apikey.Status)
@@ -911,6 +962,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldKeyHash:
 		m.ResetKeyHash()
+		return nil
+	case apikey.FieldKeySecretCiphertext:
+		m.ResetKeySecretCiphertext()
 		return nil
 	case apikey.FieldStatus:
 		m.ResetStatus()

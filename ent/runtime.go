@@ -85,8 +85,14 @@ func init() {
 			return nil
 		}
 	}()
+	// apikeyDescKeySecretCiphertext is the schema descriptor for key_secret_ciphertext field.
+	apikeyDescKeySecretCiphertext := apikeyFields[6].Descriptor()
+	// apikey.DefaultKeySecretCiphertext holds the default value on creation for the key_secret_ciphertext field.
+	apikey.DefaultKeySecretCiphertext = apikeyDescKeySecretCiphertext.Default.(string)
+	// apikey.KeySecretCiphertextValidator is a validator for the "key_secret_ciphertext" field. It is called by the builders before save.
+	apikey.KeySecretCiphertextValidator = apikeyDescKeySecretCiphertext.Validators[0].(func(string) error)
 	// apikeyDescCreatedAt is the schema descriptor for created_at field.
-	apikeyDescCreatedAt := apikeyFields[8].Descriptor()
+	apikeyDescCreatedAt := apikeyFields[9].Descriptor()
 	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
 	// apikeyDescID is the schema descriptor for id field.

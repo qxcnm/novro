@@ -102,6 +102,20 @@ func (_u *APIKeyUpdate) SetNillableKeyHash(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetKeySecretCiphertext sets the "key_secret_ciphertext" field.
+func (_u *APIKeyUpdate) SetKeySecretCiphertext(v string) *APIKeyUpdate {
+	_u.mutation.SetKeySecretCiphertext(v)
+	return _u
+}
+
+// SetNillableKeySecretCiphertext sets the "key_secret_ciphertext" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableKeySecretCiphertext(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetKeySecretCiphertext(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdate) SetStatus(v apikey.Status) *APIKeyUpdate {
 	_u.mutation.SetStatus(v)
@@ -263,6 +277,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "key_hash", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.KeySecretCiphertext(); ok {
+		if err := apikey.KeySecretCiphertextValidator(v); err != nil {
+			return &ValidationError{Name: "key_secret_ciphertext", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_secret_ciphertext": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -297,6 +316,9 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(apikey.FieldKeyHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.KeySecretCiphertext(); ok {
+		_spec.SetField(apikey.FieldKeySecretCiphertext, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeEnum, value)
@@ -506,6 +528,20 @@ func (_u *APIKeyUpdateOne) SetNillableKeyHash(v *string) *APIKeyUpdateOne {
 	return _u
 }
 
+// SetKeySecretCiphertext sets the "key_secret_ciphertext" field.
+func (_u *APIKeyUpdateOne) SetKeySecretCiphertext(v string) *APIKeyUpdateOne {
+	_u.mutation.SetKeySecretCiphertext(v)
+	return _u
+}
+
+// SetNillableKeySecretCiphertext sets the "key_secret_ciphertext" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableKeySecretCiphertext(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetKeySecretCiphertext(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdateOne) SetStatus(v apikey.Status) *APIKeyUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -680,6 +716,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "key_hash", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.KeySecretCiphertext(); ok {
+		if err := apikey.KeySecretCiphertextValidator(v); err != nil {
+			return &ValidationError{Name: "key_secret_ciphertext", err: fmt.Errorf(`ent: validator failed for field "APIKey.key_secret_ciphertext": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -731,6 +772,9 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.KeyHash(); ok {
 		_spec.SetField(apikey.FieldKeyHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.KeySecretCiphertext(); ok {
+		_spec.SetField(apikey.FieldKeySecretCiphertext, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeEnum, value)

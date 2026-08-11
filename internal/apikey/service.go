@@ -17,12 +17,18 @@ import (
 const maxActiveKeysPerUser = 10
 
 type Store interface {
-	Create(context.Context, uuid.UUID, uuid.UUID, string, string, string, int) (Record, error)
+	Create(context.Context, uuid.UUID, uuid.UUID, string, string, string, string, int) (Record, error)
 	ListByUser(context.Context, uuid.UUID) ([]Record, error)
+	GetByUser(context.Context, uuid.UUID, uuid.UUID) (Record, error)
 	RevokeByUser(context.Context, uuid.UUID, uuid.UUID, time.Time) error
 	ListAll(context.Context, ListFilter) (Page, error)
 	Revoke(context.Context, uuid.UUID, time.Time) error
 	AuthenticateHash(context.Context, string, time.Time) (Actor, error)
+}
+
+type SecretCipher interface {
+	Encrypt(string) (string, error)
+	Decrypt(string) (string, error)
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (Actor, error) {
@@ -36,6 +42,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Actor, error)
 
 type Service struct {
 	store         Store
+	cipher        SecretCipher
 	now           func() time.Time
 	generateToken func() (string, error)
 }
@@ -45,8 +52,8 @@ type CreateResult struct {
 	Key    string `json:"key"`
 }
 
-func NewService(store Store) *Service {
-	return &Service{store: store, now: func() time.Time { return time.Now().UTC() }, generateToken: newToken}
+func NewService(store Store, cipher SecretCipher) *Service {
+	return &Service{store: store, cipher: cipher, now: func() time.Time { return time.Now().UTC() }, generateToken: newToken}
 }
 
 func (s *Service) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name string) (CreateResult, error) {
@@ -58,13 +65,41 @@ func (s *Service) Create(ctx context.Context, userID, billingGroupID uuid.UUID, 
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("generate API key: %w", err)
 	}
+	if s.cipher == nil {
+		return CreateResult{}, fmt.Errorf("API key cipher is not configured")
+	}
+	encryptedSecret, err := s.cipher.Encrypt(token)
+	if err != nil {
+		return CreateResult{}, fmt.Errorf("encrypt API key secret: %w", err)
+	}
 	digest := sha256.Sum256([]byte(token))
 	prefix := token[:12]
-	record, err := s.store.Create(ctx, userID, billingGroupID, name, prefix, hex.EncodeToString(digest[:]), maxActiveKeysPerUser)
+	record, err := s.store.Create(ctx, userID, billingGroupID, name, prefix, hex.EncodeToString(digest[:]), encryptedSecret, maxActiveKeysPerUser)
 	if err != nil {
 		return CreateResult{}, err
 	}
 	return CreateResult{APIKey: record, Key: token}, nil
+}
+
+func (s *Service) RevealForUser(ctx context.Context, userID, id uuid.UUID) (string, error) {
+	if userID == uuid.Nil || id == uuid.Nil {
+		return "", ErrInvalidInput
+	}
+	if s.cipher == nil {
+		return "", fmt.Errorf("API key cipher is not configured")
+	}
+	record, err := s.store.GetByUser(ctx, userID, id)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(record.KeySecretCiphertext) == "" {
+		return "", ErrSecretUnavailable
+	}
+	secret, err := s.cipher.Decrypt(record.KeySecretCiphertext)
+	if err != nil {
+		return "", fmt.Errorf("decrypt API key secret: %w", err)
+	}
+	return secret, nil
 }
 
 func (s *Service) ListForUser(ctx context.Context, userID uuid.UUID) ([]Record, error) {

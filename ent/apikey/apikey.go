@@ -26,6 +26,8 @@ const (
 	FieldKeyPrefix = "key_prefix"
 	// FieldKeyHash holds the string denoting the key_hash field in the database.
 	FieldKeyHash = "key_hash"
+	// FieldKeySecretCiphertext holds the string denoting the key_secret_ciphertext field in the database.
+	FieldKeySecretCiphertext = "key_secret_ciphertext"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -73,6 +75,7 @@ var Columns = []string{
 	FieldName,
 	FieldKeyPrefix,
 	FieldKeyHash,
+	FieldKeySecretCiphertext,
 	FieldStatus,
 	FieldLastUsedAt,
 	FieldCreatedAt,
@@ -96,6 +99,10 @@ var (
 	KeyPrefixValidator func(string) error
 	// KeyHashValidator is a validator for the "key_hash" field. It is called by the builders before save.
 	KeyHashValidator func(string) error
+	// DefaultKeySecretCiphertext holds the default value on creation for the "key_secret_ciphertext" field.
+	DefaultKeySecretCiphertext string
+	// KeySecretCiphertextValidator is a validator for the "key_secret_ciphertext" field. It is called by the builders before save.
+	KeySecretCiphertextValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultID holds the default value on creation for the "id" field.
@@ -159,6 +166,11 @@ func ByKeyPrefix(opts ...sql.OrderTermOption) OrderOption {
 // ByKeyHash orders the results by the key_hash field.
 func ByKeyHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldKeyHash, opts...).ToFunc()
+}
+
+// ByKeySecretCiphertext orders the results by the key_secret_ciphertext field.
+func ByKeySecretCiphertext(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKeySecretCiphertext, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

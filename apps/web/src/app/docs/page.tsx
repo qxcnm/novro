@@ -208,7 +208,7 @@ export function ApiDocumentation() {
               </Alert>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                <Step icon={KeyRound} number="01" title="创建 API Key">上线后在控制台创建，并只在安全位置保存一次。</Step>
+                <Step icon={KeyRound} number="01" title="创建 API Key">上线后在控制台创建；密钥首次展示后仍可在 Key 列表中重新复制。</Step>
                 <Step icon={Braces} number="02" title="选择协议">按现有客户端选择 Chat、Responses 或 Messages。</Step>
                 <Step icon={ArrowRight} number="03" title="发送请求">替换 Base URL 和模型 ID，保留熟悉的 SDK。</Step>
               </div>

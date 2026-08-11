@@ -14,6 +14,7 @@ var (
 		{Name: "name", Type: field.TypeString, Size: 64},
 		{Name: "key_prefix", Type: field.TypeString, Size: 16},
 		{Name: "key_hash", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "key_secret_ciphertext", Type: field.TypeString, Size: 256, Default: ""},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "revoked"}, Default: "active"},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -29,13 +30,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "api_keys_billing_groups_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[8]},
+				Columns:    []*schema.Column{APIKeysColumns[9]},
 				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "api_keys_users_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[9]},
+				Columns:    []*schema.Column{APIKeysColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -44,17 +45,17 @@ var (
 			{
 				Name:    "apikey_user_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[9], APIKeysColumns[4]},
+				Columns: []*schema.Column{APIKeysColumns[10], APIKeysColumns[5]},
 			},
 			{
 				Name:    "apikey_billing_group_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[8], APIKeysColumns[4]},
+				Columns: []*schema.Column{APIKeysColumns[9], APIKeysColumns[5]},
 			},
 			{
 				Name:    "apikey_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[4], APIKeysColumns[6]},
+				Columns: []*schema.Column{APIKeysColumns[5], APIKeysColumns[7]},
 			},
 		},
 	}
