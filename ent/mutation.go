@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/predicate"
@@ -45,6 +46,7 @@ const (
 	TypeBillingGroup          = "BillingGroup"
 	TypeEmailSMTPConfig       = "EmailSMTPConfig"
 	TypeEmailVerificationCode = "EmailVerificationCode"
+	TypeGatewayOperation      = "GatewayOperation"
 	TypeModelRoute            = "ModelRoute"
 	TypePaymentConfig         = "PaymentConfig"
 	TypeProvider              = "Provider"
@@ -61,28 +63,31 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *uuid.UUID
-	name                  *string
-	key_prefix            *string
-	key_hash              *string
-	key_secret_ciphertext *string
-	status                *apikey.Status
-	last_used_at          *time.Time
-	created_at            *time.Time
-	revoked_at            *time.Time
-	clearedFields         map[string]struct{}
-	user                  *uuid.UUID
-	cleareduser           bool
-	billing_group         *uuid.UUID
-	clearedbilling_group  bool
-	api_usages            map[uuid.UUID]struct{}
-	removedapi_usages     map[uuid.UUID]struct{}
-	clearedapi_usages     bool
-	done                  bool
-	oldValue              func(context.Context) (*APIKey, error)
-	predicates            []predicate.APIKey
+	op                        Op
+	typ                       string
+	id                        *uuid.UUID
+	name                      *string
+	key_prefix                *string
+	key_hash                  *string
+	key_secret_ciphertext     *string
+	status                    *apikey.Status
+	last_used_at              *time.Time
+	created_at                *time.Time
+	revoked_at                *time.Time
+	clearedFields             map[string]struct{}
+	user                      *uuid.UUID
+	cleareduser               bool
+	billing_group             *uuid.UUID
+	clearedbilling_group      bool
+	api_usages                map[uuid.UUID]struct{}
+	removedapi_usages         map[uuid.UUID]struct{}
+	clearedapi_usages         bool
+	gateway_operations        map[uuid.UUID]struct{}
+	removedgateway_operations map[uuid.UUID]struct{}
+	clearedgateway_operations bool
+	done                      bool
+	oldValue                  func(context.Context) (*APIKey, error)
+	predicates                []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -683,6 +688,60 @@ func (m *APIKeyMutation) ResetAPIUsages() {
 	m.removedapi_usages = nil
 }
 
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by ids.
+func (m *APIKeyMutation) AddGatewayOperationIDs(ids ...uuid.UUID) {
+	if m.gateway_operations == nil {
+		m.gateway_operations = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.gateway_operations[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGatewayOperations clears the "gateway_operations" edge to the GatewayOperation entity.
+func (m *APIKeyMutation) ClearGatewayOperations() {
+	m.clearedgateway_operations = true
+}
+
+// GatewayOperationsCleared reports if the "gateway_operations" edge to the GatewayOperation entity was cleared.
+func (m *APIKeyMutation) GatewayOperationsCleared() bool {
+	return m.clearedgateway_operations
+}
+
+// RemoveGatewayOperationIDs removes the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (m *APIKeyMutation) RemoveGatewayOperationIDs(ids ...uuid.UUID) {
+	if m.removedgateway_operations == nil {
+		m.removedgateway_operations = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.gateway_operations, ids[i])
+		m.removedgateway_operations[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGatewayOperations returns the removed IDs of the "gateway_operations" edge to the GatewayOperation entity.
+func (m *APIKeyMutation) RemovedGatewayOperationsIDs() (ids []uuid.UUID) {
+	for id := range m.removedgateway_operations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GatewayOperationsIDs returns the "gateway_operations" edge IDs in the mutation.
+func (m *APIKeyMutation) GatewayOperationsIDs() (ids []uuid.UUID) {
+	for id := range m.gateway_operations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGatewayOperations resets all changes to the "gateway_operations" edge.
+func (m *APIKeyMutation) ResetGatewayOperations() {
+	m.gateway_operations = nil
+	m.clearedgateway_operations = false
+	m.removedgateway_operations = nil
+}
+
 // Where appends a list predicates to the APIKeyMutation builder.
 func (m *APIKeyMutation) Where(ps ...predicate.APIKey) {
 	m.predicates = append(m.predicates, ps...)
@@ -984,7 +1043,7 @@ func (m *APIKeyMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *APIKeyMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.user != nil {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -993,6 +1052,9 @@ func (m *APIKeyMutation) AddedEdges() []string {
 	}
 	if m.api_usages != nil {
 		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	if m.gateway_operations != nil {
+		edges = append(edges, apikey.EdgeGatewayOperations)
 	}
 	return edges
 }
@@ -1015,15 +1077,24 @@ func (m *APIKeyMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeGatewayOperations:
+		ids := make([]ent.Value, 0, len(m.gateway_operations))
+		for id := range m.gateway_operations {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *APIKeyMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedapi_usages != nil {
 		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	if m.removedgateway_operations != nil {
+		edges = append(edges, apikey.EdgeGatewayOperations)
 	}
 	return edges
 }
@@ -1038,13 +1109,19 @@ func (m *APIKeyMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeGatewayOperations:
+		ids := make([]ent.Value, 0, len(m.removedgateway_operations))
+		for id := range m.removedgateway_operations {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *APIKeyMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.cleareduser {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -1053,6 +1130,9 @@ func (m *APIKeyMutation) ClearedEdges() []string {
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, apikey.EdgeAPIUsages)
+	}
+	if m.clearedgateway_operations {
+		edges = append(edges, apikey.EdgeGatewayOperations)
 	}
 	return edges
 }
@@ -1067,6 +1147,8 @@ func (m *APIKeyMutation) EdgeCleared(name string) bool {
 		return m.clearedbilling_group
 	case apikey.EdgeAPIUsages:
 		return m.clearedapi_usages
+	case apikey.EdgeGatewayOperations:
+		return m.clearedgateway_operations
 	}
 	return false
 }
@@ -1097,6 +1179,9 @@ func (m *APIKeyMutation) ResetEdge(name string) error {
 		return nil
 	case apikey.EdgeAPIUsages:
 		m.ResetAPIUsages()
+		return nil
+	case apikey.EdgeGatewayOperations:
+		m.ResetGatewayOperations()
 		return nil
 	}
 	return fmt.Errorf("unknown APIKey edge %s", name)
@@ -6649,6 +6734,1014 @@ func (m *EmailVerificationCodeMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *EmailVerificationCodeMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown EmailVerificationCode edge %s", name)
+}
+
+// GatewayOperationMutation represents an operation that mutates the GatewayOperation nodes in the graph.
+type GatewayOperationMutation struct {
+	config
+	op                   Op
+	typ                  string
+	id                   *uuid.UUID
+	idempotency_key_hash *string
+	request_hash         *string
+	endpoint             *gatewayoperation.Endpoint
+	status               *gatewayoperation.Status
+	reserved_micros      *int64
+	addreserved_micros   *int64
+	settlement_json      *string
+	failure_code         *string
+	created_at           *time.Time
+	updated_at           *time.Time
+	clearedFields        map[string]struct{}
+	user                 *uuid.UUID
+	cleareduser          bool
+	api_key              *uuid.UUID
+	clearedapi_key       bool
+	done                 bool
+	oldValue             func(context.Context) (*GatewayOperation, error)
+	predicates           []predicate.GatewayOperation
+}
+
+var _ ent.Mutation = (*GatewayOperationMutation)(nil)
+
+// gatewayoperationOption allows management of the mutation configuration using functional options.
+type gatewayoperationOption func(*GatewayOperationMutation)
+
+// newGatewayOperationMutation creates new mutation for the GatewayOperation entity.
+func newGatewayOperationMutation(c config, op Op, opts ...gatewayoperationOption) *GatewayOperationMutation {
+	m := &GatewayOperationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGatewayOperation,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGatewayOperationID sets the ID field of the mutation.
+func withGatewayOperationID(id uuid.UUID) gatewayoperationOption {
+	return func(m *GatewayOperationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GatewayOperation
+		)
+		m.oldValue = func(ctx context.Context) (*GatewayOperation, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GatewayOperation.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGatewayOperation sets the old GatewayOperation of the mutation.
+func withGatewayOperation(node *GatewayOperation) gatewayoperationOption {
+	return func(m *GatewayOperationMutation) {
+		m.oldValue = func(context.Context) (*GatewayOperation, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GatewayOperationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GatewayOperationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of GatewayOperation entities.
+func (m *GatewayOperationMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GatewayOperationMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GatewayOperationMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GatewayOperation.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *GatewayOperationMutation) SetUserID(u uuid.UUID) {
+	m.user = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *GatewayOperationMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldUserID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *GatewayOperationMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *GatewayOperationMutation) SetAPIKeyID(u uuid.UUID) {
+	m.api_key = &u
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *GatewayOperationMutation) APIKeyID() (r uuid.UUID, exists bool) {
+	v := m.api_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldAPIKeyID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *GatewayOperationMutation) ResetAPIKeyID() {
+	m.api_key = nil
+}
+
+// SetIdempotencyKeyHash sets the "idempotency_key_hash" field.
+func (m *GatewayOperationMutation) SetIdempotencyKeyHash(s string) {
+	m.idempotency_key_hash = &s
+}
+
+// IdempotencyKeyHash returns the value of the "idempotency_key_hash" field in the mutation.
+func (m *GatewayOperationMutation) IdempotencyKeyHash() (r string, exists bool) {
+	v := m.idempotency_key_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKeyHash returns the old "idempotency_key_hash" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldIdempotencyKeyHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKeyHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKeyHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKeyHash: %w", err)
+	}
+	return oldValue.IdempotencyKeyHash, nil
+}
+
+// ResetIdempotencyKeyHash resets all changes to the "idempotency_key_hash" field.
+func (m *GatewayOperationMutation) ResetIdempotencyKeyHash() {
+	m.idempotency_key_hash = nil
+}
+
+// SetRequestHash sets the "request_hash" field.
+func (m *GatewayOperationMutation) SetRequestHash(s string) {
+	m.request_hash = &s
+}
+
+// RequestHash returns the value of the "request_hash" field in the mutation.
+func (m *GatewayOperationMutation) RequestHash() (r string, exists bool) {
+	v := m.request_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestHash returns the old "request_hash" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldRequestHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestHash: %w", err)
+	}
+	return oldValue.RequestHash, nil
+}
+
+// ResetRequestHash resets all changes to the "request_hash" field.
+func (m *GatewayOperationMutation) ResetRequestHash() {
+	m.request_hash = nil
+}
+
+// SetEndpoint sets the "endpoint" field.
+func (m *GatewayOperationMutation) SetEndpoint(ga gatewayoperation.Endpoint) {
+	m.endpoint = &ga
+}
+
+// Endpoint returns the value of the "endpoint" field in the mutation.
+func (m *GatewayOperationMutation) Endpoint() (r gatewayoperation.Endpoint, exists bool) {
+	v := m.endpoint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpoint returns the old "endpoint" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldEndpoint(ctx context.Context) (v gatewayoperation.Endpoint, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpoint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpoint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpoint: %w", err)
+	}
+	return oldValue.Endpoint, nil
+}
+
+// ResetEndpoint resets all changes to the "endpoint" field.
+func (m *GatewayOperationMutation) ResetEndpoint() {
+	m.endpoint = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *GatewayOperationMutation) SetStatus(ga gatewayoperation.Status) {
+	m.status = &ga
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *GatewayOperationMutation) Status() (r gatewayoperation.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldStatus(ctx context.Context) (v gatewayoperation.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *GatewayOperationMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetReservedMicros sets the "reserved_micros" field.
+func (m *GatewayOperationMutation) SetReservedMicros(i int64) {
+	m.reserved_micros = &i
+	m.addreserved_micros = nil
+}
+
+// ReservedMicros returns the value of the "reserved_micros" field in the mutation.
+func (m *GatewayOperationMutation) ReservedMicros() (r int64, exists bool) {
+	v := m.reserved_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReservedMicros returns the old "reserved_micros" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldReservedMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReservedMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReservedMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReservedMicros: %w", err)
+	}
+	return oldValue.ReservedMicros, nil
+}
+
+// AddReservedMicros adds i to the "reserved_micros" field.
+func (m *GatewayOperationMutation) AddReservedMicros(i int64) {
+	if m.addreserved_micros != nil {
+		*m.addreserved_micros += i
+	} else {
+		m.addreserved_micros = &i
+	}
+}
+
+// AddedReservedMicros returns the value that was added to the "reserved_micros" field in this mutation.
+func (m *GatewayOperationMutation) AddedReservedMicros() (r int64, exists bool) {
+	v := m.addreserved_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetReservedMicros resets all changes to the "reserved_micros" field.
+func (m *GatewayOperationMutation) ResetReservedMicros() {
+	m.reserved_micros = nil
+	m.addreserved_micros = nil
+}
+
+// SetSettlementJSON sets the "settlement_json" field.
+func (m *GatewayOperationMutation) SetSettlementJSON(s string) {
+	m.settlement_json = &s
+}
+
+// SettlementJSON returns the value of the "settlement_json" field in the mutation.
+func (m *GatewayOperationMutation) SettlementJSON() (r string, exists bool) {
+	v := m.settlement_json
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSettlementJSON returns the old "settlement_json" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldSettlementJSON(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSettlementJSON is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSettlementJSON requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSettlementJSON: %w", err)
+	}
+	return oldValue.SettlementJSON, nil
+}
+
+// ResetSettlementJSON resets all changes to the "settlement_json" field.
+func (m *GatewayOperationMutation) ResetSettlementJSON() {
+	m.settlement_json = nil
+}
+
+// SetFailureCode sets the "failure_code" field.
+func (m *GatewayOperationMutation) SetFailureCode(s string) {
+	m.failure_code = &s
+}
+
+// FailureCode returns the value of the "failure_code" field in the mutation.
+func (m *GatewayOperationMutation) FailureCode() (r string, exists bool) {
+	v := m.failure_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureCode returns the old "failure_code" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldFailureCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureCode: %w", err)
+	}
+	return oldValue.FailureCode, nil
+}
+
+// ResetFailureCode resets all changes to the "failure_code" field.
+func (m *GatewayOperationMutation) ResetFailureCode() {
+	m.failure_code = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GatewayOperationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GatewayOperationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GatewayOperationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GatewayOperationMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GatewayOperationMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GatewayOperation entity.
+// If the GatewayOperation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GatewayOperationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GatewayOperationMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *GatewayOperationMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[gatewayoperation.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *GatewayOperationMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *GatewayOperationMutation) UserIDs() (ids []uuid.UUID) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *GatewayOperationMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearAPIKey clears the "api_key" edge to the APIKey entity.
+func (m *GatewayOperationMutation) ClearAPIKey() {
+	m.clearedapi_key = true
+	m.clearedFields[gatewayoperation.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyCleared reports if the "api_key" edge to the APIKey entity was cleared.
+func (m *GatewayOperationMutation) APIKeyCleared() bool {
+	return m.clearedapi_key
+}
+
+// APIKeyIDs returns the "api_key" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// APIKeyID instead. It exists only for internal usage by the builders.
+func (m *GatewayOperationMutation) APIKeyIDs() (ids []uuid.UUID) {
+	if id := m.api_key; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetAPIKey resets all changes to the "api_key" edge.
+func (m *GatewayOperationMutation) ResetAPIKey() {
+	m.api_key = nil
+	m.clearedapi_key = false
+}
+
+// Where appends a list predicates to the GatewayOperationMutation builder.
+func (m *GatewayOperationMutation) Where(ps ...predicate.GatewayOperation) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GatewayOperationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GatewayOperationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GatewayOperation, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GatewayOperationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GatewayOperationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GatewayOperation).
+func (m *GatewayOperationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GatewayOperationMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.user != nil {
+		fields = append(fields, gatewayoperation.FieldUserID)
+	}
+	if m.api_key != nil {
+		fields = append(fields, gatewayoperation.FieldAPIKeyID)
+	}
+	if m.idempotency_key_hash != nil {
+		fields = append(fields, gatewayoperation.FieldIdempotencyKeyHash)
+	}
+	if m.request_hash != nil {
+		fields = append(fields, gatewayoperation.FieldRequestHash)
+	}
+	if m.endpoint != nil {
+		fields = append(fields, gatewayoperation.FieldEndpoint)
+	}
+	if m.status != nil {
+		fields = append(fields, gatewayoperation.FieldStatus)
+	}
+	if m.reserved_micros != nil {
+		fields = append(fields, gatewayoperation.FieldReservedMicros)
+	}
+	if m.settlement_json != nil {
+		fields = append(fields, gatewayoperation.FieldSettlementJSON)
+	}
+	if m.failure_code != nil {
+		fields = append(fields, gatewayoperation.FieldFailureCode)
+	}
+	if m.created_at != nil {
+		fields = append(fields, gatewayoperation.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, gatewayoperation.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GatewayOperationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case gatewayoperation.FieldUserID:
+		return m.UserID()
+	case gatewayoperation.FieldAPIKeyID:
+		return m.APIKeyID()
+	case gatewayoperation.FieldIdempotencyKeyHash:
+		return m.IdempotencyKeyHash()
+	case gatewayoperation.FieldRequestHash:
+		return m.RequestHash()
+	case gatewayoperation.FieldEndpoint:
+		return m.Endpoint()
+	case gatewayoperation.FieldStatus:
+		return m.Status()
+	case gatewayoperation.FieldReservedMicros:
+		return m.ReservedMicros()
+	case gatewayoperation.FieldSettlementJSON:
+		return m.SettlementJSON()
+	case gatewayoperation.FieldFailureCode:
+		return m.FailureCode()
+	case gatewayoperation.FieldCreatedAt:
+		return m.CreatedAt()
+	case gatewayoperation.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GatewayOperationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case gatewayoperation.FieldUserID:
+		return m.OldUserID(ctx)
+	case gatewayoperation.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case gatewayoperation.FieldIdempotencyKeyHash:
+		return m.OldIdempotencyKeyHash(ctx)
+	case gatewayoperation.FieldRequestHash:
+		return m.OldRequestHash(ctx)
+	case gatewayoperation.FieldEndpoint:
+		return m.OldEndpoint(ctx)
+	case gatewayoperation.FieldStatus:
+		return m.OldStatus(ctx)
+	case gatewayoperation.FieldReservedMicros:
+		return m.OldReservedMicros(ctx)
+	case gatewayoperation.FieldSettlementJSON:
+		return m.OldSettlementJSON(ctx)
+	case gatewayoperation.FieldFailureCode:
+		return m.OldFailureCode(ctx)
+	case gatewayoperation.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case gatewayoperation.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown GatewayOperation field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GatewayOperationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case gatewayoperation.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case gatewayoperation.FieldAPIKeyID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case gatewayoperation.FieldIdempotencyKeyHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKeyHash(v)
+		return nil
+	case gatewayoperation.FieldRequestHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestHash(v)
+		return nil
+	case gatewayoperation.FieldEndpoint:
+		v, ok := value.(gatewayoperation.Endpoint)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpoint(v)
+		return nil
+	case gatewayoperation.FieldStatus:
+		v, ok := value.(gatewayoperation.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case gatewayoperation.FieldReservedMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReservedMicros(v)
+		return nil
+	case gatewayoperation.FieldSettlementJSON:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSettlementJSON(v)
+		return nil
+	case gatewayoperation.FieldFailureCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureCode(v)
+		return nil
+	case gatewayoperation.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case gatewayoperation.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GatewayOperation field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GatewayOperationMutation) AddedFields() []string {
+	var fields []string
+	if m.addreserved_micros != nil {
+		fields = append(fields, gatewayoperation.FieldReservedMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GatewayOperationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case gatewayoperation.FieldReservedMicros:
+		return m.AddedReservedMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GatewayOperationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case gatewayoperation.FieldReservedMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddReservedMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GatewayOperation numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GatewayOperationMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GatewayOperationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GatewayOperationMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown GatewayOperation nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GatewayOperationMutation) ResetField(name string) error {
+	switch name {
+	case gatewayoperation.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case gatewayoperation.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case gatewayoperation.FieldIdempotencyKeyHash:
+		m.ResetIdempotencyKeyHash()
+		return nil
+	case gatewayoperation.FieldRequestHash:
+		m.ResetRequestHash()
+		return nil
+	case gatewayoperation.FieldEndpoint:
+		m.ResetEndpoint()
+		return nil
+	case gatewayoperation.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case gatewayoperation.FieldReservedMicros:
+		m.ResetReservedMicros()
+		return nil
+	case gatewayoperation.FieldSettlementJSON:
+		m.ResetSettlementJSON()
+		return nil
+	case gatewayoperation.FieldFailureCode:
+		m.ResetFailureCode()
+		return nil
+	case gatewayoperation.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case gatewayoperation.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GatewayOperation field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GatewayOperationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, gatewayoperation.EdgeUser)
+	}
+	if m.api_key != nil {
+		edges = append(edges, gatewayoperation.EdgeAPIKey)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GatewayOperationMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case gatewayoperation.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case gatewayoperation.EdgeAPIKey:
+		if id := m.api_key; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GatewayOperationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GatewayOperationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GatewayOperationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, gatewayoperation.EdgeUser)
+	}
+	if m.clearedapi_key {
+		edges = append(edges, gatewayoperation.EdgeAPIKey)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GatewayOperationMutation) EdgeCleared(name string) bool {
+	switch name {
+	case gatewayoperation.EdgeUser:
+		return m.cleareduser
+	case gatewayoperation.EdgeAPIKey:
+		return m.clearedapi_key
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GatewayOperationMutation) ClearEdge(name string) error {
+	switch name {
+	case gatewayoperation.EdgeUser:
+		m.ClearUser()
+		return nil
+	case gatewayoperation.EdgeAPIKey:
+		m.ClearAPIKey()
+		return nil
+	}
+	return fmt.Errorf("unknown GatewayOperation unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GatewayOperationMutation) ResetEdge(name string) error {
+	switch name {
+	case gatewayoperation.EdgeUser:
+		m.ResetUser()
+		return nil
+	case gatewayoperation.EdgeAPIKey:
+		m.ResetAPIKey()
+		return nil
+	}
+	return fmt.Errorf("unknown GatewayOperation edge %s", name)
 }
 
 // ModelRouteMutation represents an operation that mutates the ModelRoute nodes in the graph.
@@ -12956,50 +14049,53 @@ func (m *UpstreamModelMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *uuid.UUID
-	invite_code              *string
-	username                 *string
-	email                    *string
-	display_name             *string
-	password_hash            *string
-	is_system_admin          *bool
-	can_access_hidden_groups *bool
-	role                     *user.Role
-	status                   *user.Status
-	last_login_at            *time.Time
-	created_at               *time.Time
-	updated_at               *time.Time
-	clearedFields            map[string]struct{}
-	sessions                 map[uuid.UUID]struct{}
-	removedsessions          map[uuid.UUID]struct{}
-	clearedsessions          bool
-	identities               map[uuid.UUID]struct{}
-	removedidentities        map[uuid.UUID]struct{}
-	clearedidentities        bool
-	api_keys                 map[uuid.UUID]struct{}
-	removedapi_keys          map[uuid.UUID]struct{}
-	clearedapi_keys          bool
-	wallet                   *uuid.UUID
-	clearedwallet            bool
-	wallet_entries           map[uuid.UUID]struct{}
-	removedwallet_entries    map[uuid.UUID]struct{}
-	clearedwallet_entries    bool
-	top_up_orders            map[uuid.UUID]struct{}
-	removedtop_up_orders     map[uuid.UUID]struct{}
-	clearedtop_up_orders     bool
-	api_usages               map[uuid.UUID]struct{}
-	removedapi_usages        map[uuid.UUID]struct{}
-	clearedapi_usages        bool
-	referrer                 *uuid.UUID
-	clearedreferrer          bool
-	referrals                map[uuid.UUID]struct{}
-	removedreferrals         map[uuid.UUID]struct{}
-	clearedreferrals         bool
-	done                     bool
-	oldValue                 func(context.Context) (*User, error)
-	predicates               []predicate.User
+	op                        Op
+	typ                       string
+	id                        *uuid.UUID
+	invite_code               *string
+	username                  *string
+	email                     *string
+	display_name              *string
+	password_hash             *string
+	is_system_admin           *bool
+	can_access_hidden_groups  *bool
+	role                      *user.Role
+	status                    *user.Status
+	last_login_at             *time.Time
+	created_at                *time.Time
+	updated_at                *time.Time
+	clearedFields             map[string]struct{}
+	sessions                  map[uuid.UUID]struct{}
+	removedsessions           map[uuid.UUID]struct{}
+	clearedsessions           bool
+	identities                map[uuid.UUID]struct{}
+	removedidentities         map[uuid.UUID]struct{}
+	clearedidentities         bool
+	api_keys                  map[uuid.UUID]struct{}
+	removedapi_keys           map[uuid.UUID]struct{}
+	clearedapi_keys           bool
+	wallet                    *uuid.UUID
+	clearedwallet             bool
+	wallet_entries            map[uuid.UUID]struct{}
+	removedwallet_entries     map[uuid.UUID]struct{}
+	clearedwallet_entries     bool
+	top_up_orders             map[uuid.UUID]struct{}
+	removedtop_up_orders      map[uuid.UUID]struct{}
+	clearedtop_up_orders      bool
+	api_usages                map[uuid.UUID]struct{}
+	removedapi_usages         map[uuid.UUID]struct{}
+	clearedapi_usages         bool
+	gateway_operations        map[uuid.UUID]struct{}
+	removedgateway_operations map[uuid.UUID]struct{}
+	clearedgateway_operations bool
+	referrer                  *uuid.UUID
+	clearedreferrer           bool
+	referrals                 map[uuid.UUID]struct{}
+	removedreferrals          map[uuid.UUID]struct{}
+	clearedreferrals          bool
+	done                      bool
+	oldValue                  func(context.Context) (*User, error)
+	predicates                []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -13989,6 +15085,60 @@ func (m *UserMutation) ResetAPIUsages() {
 	m.removedapi_usages = nil
 }
 
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by ids.
+func (m *UserMutation) AddGatewayOperationIDs(ids ...uuid.UUID) {
+	if m.gateway_operations == nil {
+		m.gateway_operations = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.gateway_operations[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGatewayOperations clears the "gateway_operations" edge to the GatewayOperation entity.
+func (m *UserMutation) ClearGatewayOperations() {
+	m.clearedgateway_operations = true
+}
+
+// GatewayOperationsCleared reports if the "gateway_operations" edge to the GatewayOperation entity was cleared.
+func (m *UserMutation) GatewayOperationsCleared() bool {
+	return m.clearedgateway_operations
+}
+
+// RemoveGatewayOperationIDs removes the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (m *UserMutation) RemoveGatewayOperationIDs(ids ...uuid.UUID) {
+	if m.removedgateway_operations == nil {
+		m.removedgateway_operations = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.gateway_operations, ids[i])
+		m.removedgateway_operations[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGatewayOperations returns the removed IDs of the "gateway_operations" edge to the GatewayOperation entity.
+func (m *UserMutation) RemovedGatewayOperationsIDs() (ids []uuid.UUID) {
+	for id := range m.removedgateway_operations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GatewayOperationsIDs returns the "gateway_operations" edge IDs in the mutation.
+func (m *UserMutation) GatewayOperationsIDs() (ids []uuid.UUID) {
+	for id := range m.gateway_operations {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGatewayOperations resets all changes to the "gateway_operations" edge.
+func (m *UserMutation) ResetGatewayOperations() {
+	m.gateway_operations = nil
+	m.clearedgateway_operations = false
+	m.removedgateway_operations = nil
+}
+
 // SetReferrerID sets the "referrer" edge to the User entity by id.
 func (m *UserMutation) SetReferrerID(id uuid.UUID) {
 	m.referrer = &id
@@ -14447,7 +15597,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.sessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -14468,6 +15618,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.api_usages != nil {
 		edges = append(edges, user.EdgeAPIUsages)
+	}
+	if m.gateway_operations != nil {
+		edges = append(edges, user.EdgeGatewayOperations)
 	}
 	if m.referrer != nil {
 		edges = append(edges, user.EdgeReferrer)
@@ -14522,6 +15675,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGatewayOperations:
+		ids := make([]ent.Value, 0, len(m.gateway_operations))
+		for id := range m.gateway_operations {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeReferrer:
 		if id := m.referrer; id != nil {
 			return []ent.Value{*id}
@@ -14538,7 +15697,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.removedsessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -14556,6 +15715,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedapi_usages != nil {
 		edges = append(edges, user.EdgeAPIUsages)
+	}
+	if m.removedgateway_operations != nil {
+		edges = append(edges, user.EdgeGatewayOperations)
 	}
 	if m.removedreferrals != nil {
 		edges = append(edges, user.EdgeReferrals)
@@ -14603,6 +15765,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGatewayOperations:
+		ids := make([]ent.Value, 0, len(m.removedgateway_operations))
+		for id := range m.removedgateway_operations {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeReferrals:
 		ids := make([]ent.Value, 0, len(m.removedreferrals))
 		for id := range m.removedreferrals {
@@ -14615,7 +15783,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.clearedsessions {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -14636,6 +15804,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, user.EdgeAPIUsages)
+	}
+	if m.clearedgateway_operations {
+		edges = append(edges, user.EdgeGatewayOperations)
 	}
 	if m.clearedreferrer {
 		edges = append(edges, user.EdgeReferrer)
@@ -14664,6 +15835,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedtop_up_orders
 	case user.EdgeAPIUsages:
 		return m.clearedapi_usages
+	case user.EdgeGatewayOperations:
+		return m.clearedgateway_operations
 	case user.EdgeReferrer:
 		return m.clearedreferrer
 	case user.EdgeReferrals:
@@ -14710,6 +15883,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeAPIUsages:
 		m.ResetAPIUsages()
+		return nil
+	case user.EdgeGatewayOperations:
+		m.ResetGatewayOperations()
 		return nil
 	case user.EdgeReferrer:
 		m.ResetReferrer()

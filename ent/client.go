@@ -21,6 +21,7 @@ import (
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -49,6 +50,8 @@ type Client struct {
 	EmailSMTPConfig *EmailSMTPConfigClient
 	// EmailVerificationCode is the client for interacting with the EmailVerificationCode builders.
 	EmailVerificationCode *EmailVerificationCodeClient
+	// GatewayOperation is the client for interacting with the GatewayOperation builders.
+	GatewayOperation *GatewayOperationClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
 	// PaymentConfig is the client for interacting with the PaymentConfig builders.
@@ -87,6 +90,7 @@ func (c *Client) init() {
 	c.BillingGroup = NewBillingGroupClient(c.config)
 	c.EmailSMTPConfig = NewEmailSMTPConfigClient(c.config)
 	c.EmailVerificationCode = NewEmailVerificationCodeClient(c.config)
+	c.GatewayOperation = NewGatewayOperationClient(c.config)
 	c.ModelRoute = NewModelRouteClient(c.config)
 	c.PaymentConfig = NewPaymentConfigClient(c.config)
 	c.Provider = NewProviderClient(c.config)
@@ -195,6 +199,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		BillingGroup:          NewBillingGroupClient(cfg),
 		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
 		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
+		GatewayOperation:      NewGatewayOperationClient(cfg),
 		ModelRoute:            NewModelRouteClient(cfg),
 		PaymentConfig:         NewPaymentConfigClient(cfg),
 		Provider:              NewProviderClient(cfg),
@@ -230,6 +235,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		BillingGroup:          NewBillingGroupClient(cfg),
 		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
 		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
+		GatewayOperation:      NewGatewayOperationClient(cfg),
 		ModelRoute:            NewModelRouteClient(cfg),
 		PaymentConfig:         NewPaymentConfigClient(cfg),
 		Provider:              NewProviderClient(cfg),
@@ -271,9 +277,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.ModelRoute, c.PaymentConfig, c.Provider,
-		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
-		c.UserSession, c.Wallet, c.WalletEntry,
+		c.EmailVerificationCode, c.GatewayOperation, c.ModelRoute, c.PaymentConfig,
+		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Use(hooks...)
 	}
@@ -284,9 +290,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.ModelRoute, c.PaymentConfig, c.Provider,
-		c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity,
-		c.UserSession, c.Wallet, c.WalletEntry,
+		c.EmailVerificationCode, c.GatewayOperation, c.ModelRoute, c.PaymentConfig,
+		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -305,6 +311,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.EmailSMTPConfig.mutate(ctx, m)
 	case *EmailVerificationCodeMutation:
 		return c.EmailVerificationCode.mutate(ctx, m)
+	case *GatewayOperationMutation:
+		return c.GatewayOperation.mutate(ctx, m)
 	case *ModelRouteMutation:
 		return c.ModelRoute.mutate(ctx, m)
 	case *PaymentConfigMutation:
@@ -481,6 +489,22 @@ func (c *APIKeyClient) QueryAPIUsages(_m *APIKey) *APIUsageQuery {
 			sqlgraph.From(apikey.Table, apikey.FieldID, id),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, apikey.APIUsagesTable, apikey.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryGatewayOperations queries the gateway_operations edge of a APIKey.
+func (c *APIKeyClient) QueryGatewayOperations(_m *APIKey) *GatewayOperationQuery {
+	query := (&GatewayOperationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.GatewayOperationsTable, apikey.GatewayOperationsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1170,6 +1194,171 @@ func (c *EmailVerificationCodeClient) mutate(ctx context.Context, m *EmailVerifi
 		return (&EmailVerificationCodeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown EmailVerificationCode mutation op: %q", m.Op())
+	}
+}
+
+// GatewayOperationClient is a client for the GatewayOperation schema.
+type GatewayOperationClient struct {
+	config
+}
+
+// NewGatewayOperationClient returns a client for the GatewayOperation from the given config.
+func NewGatewayOperationClient(c config) *GatewayOperationClient {
+	return &GatewayOperationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gatewayoperation.Hooks(f(g(h())))`.
+func (c *GatewayOperationClient) Use(hooks ...Hook) {
+	c.hooks.GatewayOperation = append(c.hooks.GatewayOperation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gatewayoperation.Intercept(f(g(h())))`.
+func (c *GatewayOperationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GatewayOperation = append(c.inters.GatewayOperation, interceptors...)
+}
+
+// Create returns a builder for creating a GatewayOperation entity.
+func (c *GatewayOperationClient) Create() *GatewayOperationCreate {
+	mutation := newGatewayOperationMutation(c.config, OpCreate)
+	return &GatewayOperationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GatewayOperation entities.
+func (c *GatewayOperationClient) CreateBulk(builders ...*GatewayOperationCreate) *GatewayOperationCreateBulk {
+	return &GatewayOperationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GatewayOperationClient) MapCreateBulk(slice any, setFunc func(*GatewayOperationCreate, int)) *GatewayOperationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GatewayOperationCreateBulk{err: fmt.Errorf("calling to GatewayOperationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GatewayOperationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GatewayOperationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GatewayOperation.
+func (c *GatewayOperationClient) Update() *GatewayOperationUpdate {
+	mutation := newGatewayOperationMutation(c.config, OpUpdate)
+	return &GatewayOperationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GatewayOperationClient) UpdateOne(_m *GatewayOperation) *GatewayOperationUpdateOne {
+	mutation := newGatewayOperationMutation(c.config, OpUpdateOne, withGatewayOperation(_m))
+	return &GatewayOperationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GatewayOperationClient) UpdateOneID(id uuid.UUID) *GatewayOperationUpdateOne {
+	mutation := newGatewayOperationMutation(c.config, OpUpdateOne, withGatewayOperationID(id))
+	return &GatewayOperationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GatewayOperation.
+func (c *GatewayOperationClient) Delete() *GatewayOperationDelete {
+	mutation := newGatewayOperationMutation(c.config, OpDelete)
+	return &GatewayOperationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GatewayOperationClient) DeleteOne(_m *GatewayOperation) *GatewayOperationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GatewayOperationClient) DeleteOneID(id uuid.UUID) *GatewayOperationDeleteOne {
+	builder := c.Delete().Where(gatewayoperation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GatewayOperationDeleteOne{builder}
+}
+
+// Query returns a query builder for GatewayOperation.
+func (c *GatewayOperationClient) Query() *GatewayOperationQuery {
+	return &GatewayOperationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGatewayOperation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GatewayOperation entity by its id.
+func (c *GatewayOperationClient) Get(ctx context.Context, id uuid.UUID) (*GatewayOperation, error) {
+	return c.Query().Where(gatewayoperation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GatewayOperationClient) GetX(ctx context.Context, id uuid.UUID) *GatewayOperation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a GatewayOperation.
+func (c *GatewayOperationClient) QueryUser(_m *GatewayOperation) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(gatewayoperation.Table, gatewayoperation.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, gatewayoperation.UserTable, gatewayoperation.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAPIKey queries the api_key edge of a GatewayOperation.
+func (c *GatewayOperationClient) QueryAPIKey(_m *GatewayOperation) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(gatewayoperation.Table, gatewayoperation.FieldID, id),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, gatewayoperation.APIKeyTable, gatewayoperation.APIKeyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *GatewayOperationClient) Hooks() []Hook {
+	return c.hooks.GatewayOperation
+}
+
+// Interceptors returns the client interceptors.
+func (c *GatewayOperationClient) Interceptors() []Interceptor {
+	return c.inters.GatewayOperation
+}
+
+func (c *GatewayOperationClient) mutate(ctx context.Context, m *GatewayOperationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GatewayOperationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GatewayOperationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GatewayOperationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GatewayOperationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GatewayOperation mutation op: %q", m.Op())
 	}
 }
 
@@ -2319,6 +2508,22 @@ func (c *UserClient) QueryAPIUsages(_m *User) *APIUsageQuery {
 	return query
 }
 
+// QueryGatewayOperations queries the gateway_operations edge of a User.
+func (c *UserClient) QueryGatewayOperations(_m *User) *GatewayOperationQuery {
+	query := (&GatewayOperationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.GatewayOperationsTable, user.GatewayOperationsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryReferrer queries the referrer edge of a User.
 func (c *UserClient) QueryReferrer(_m *User) *UserQuery {
 	query := (&UserClient{config: c.config}).Query()
@@ -3008,12 +3213,14 @@ func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) 
 type (
 	hooks struct {
 		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
-		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Hook
+		GatewayOperation, ModelRoute, PaymentConfig, Provider, SystemSetting,
+		TopUpOrder, UpstreamModel, User, UserIdentity, UserSession, Wallet,
+		WalletEntry []ent.Hook
 	}
 	inters struct {
 		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
-		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Interceptor
+		GatewayOperation, ModelRoute, PaymentConfig, Provider, SystemSetting,
+		TopUpOrder, UpstreamModel, User, UserIdentity, UserSession, Wallet,
+		WalletEntry []ent.Interceptor
 	}
 )

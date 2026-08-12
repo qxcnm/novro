@@ -17,12 +17,13 @@ var (
 type EntryType string
 
 const (
-	EntryManualAdjustment EntryType = "manual_adjustment"
-	EntryTopUp            EntryType = "top_up"
-	EntryReferralReward   EntryType = "referral_reward"
-	EntryUsageReservation EntryType = "usage_reservation"
-	EntryUsageRefund      EntryType = "usage_refund"
-	EntryUsageSettlement  EntryType = "usage_settlement"
+	EntryManualAdjustment  EntryType = "manual_adjustment"
+	EntryTopUp             EntryType = "top_up"
+	EntryReferralReward    EntryType = "referral_reward"
+	EntryUsageReservation  EntryType = "usage_reservation"
+	EntryUsageRefund       EntryType = "usage_refund"
+	EntryUsageSettlement   EntryType = "usage_settlement"
+	EntryUsageCompensation EntryType = "usage_compensation"
 )
 
 type Wallet struct {
@@ -82,6 +83,17 @@ type UsagePage struct {
 	Limit           int      `json:"limit"`
 	TotalTokens     int64    `json:"total_tokens"`
 	TotalCostMicros int64    `json:"total_cost_micros"`
+}
+
+type UsageRate struct {
+	WindowSeconds int       `json:"window_seconds"`
+	Requests      int       `json:"requests"`
+	InputTokens   int64     `json:"input_tokens"`
+	OutputTokens  int64     `json:"output_tokens"`
+	TotalTokens   int64     `json:"total_tokens"`
+	RPM           int       `json:"rpm"`
+	TPM           int64     `json:"tpm"`
+	CalculatedAt  time.Time `json:"calculated_at"`
 }
 
 type Usage struct {
@@ -163,4 +175,47 @@ type FailureInput struct {
 	CreatedAt         time.Time
 	FinishedAt        time.Time
 	DurationMS        int64
+}
+
+type OperationStatus string
+
+const (
+	OperationProcessing        OperationStatus = "processing"
+	OperationPendingSettlement OperationStatus = "pending_settlement"
+	OperationPendingUnknown    OperationStatus = "pending_unknown"
+	OperationCompleted         OperationStatus = "completed"
+	OperationFailed            OperationStatus = "failed"
+)
+
+type OperationStartInput struct {
+	RequestID          uuid.UUID
+	UserID             uuid.UUID
+	APIKeyID           uuid.UUID
+	IdempotencyKeyHash string
+	RequestHash        string
+	Endpoint           string
+	ReservedMicros     int64
+}
+
+type Operation struct {
+	RequestID          uuid.UUID
+	UserID             uuid.UUID
+	APIKeyID           uuid.UUID
+	IdempotencyKeyHash string
+	RequestHash        string
+	Endpoint           string
+	Status             OperationStatus
+	ReservedMicros     int64
+	FailureCode        string
+	UpdatedAt          time.Time
+}
+
+type OperationStartResult struct {
+	Operation Operation
+	Created   bool
+}
+
+type PendingSettlement struct {
+	Operation Operation
+	Usage     UsageInput
 }

@@ -16,6 +16,8 @@ type GatewaySettings = {
   sse_heartbeat_interval_ms: number;
   upstream_timeout_ms: number;
   upstream_stream_idle_timeout_ms: number;
+  reservation_input_token_cap: number;
+  reservation_output_token_cap: number;
   updated_at?: string;
 };
 
@@ -24,6 +26,8 @@ const defaults: GatewaySettings = {
   sse_heartbeat_interval_ms: 15_000,
   upstream_timeout_ms: 0,
   upstream_stream_idle_timeout_ms: 0,
+  reservation_input_token_cap: 16_384,
+  reservation_output_token_cap: 1024,
 };
 
 async function readError(response: Response) {
@@ -84,6 +88,10 @@ export default function GatewaySettingsClient() {
       setError("上游超时必须为 0（关闭）或 1000 到 86400000 毫秒之间");
       return;
     }
+    if (!Number.isInteger(form.reservation_input_token_cap) || form.reservation_input_token_cap < 1 || form.reservation_input_token_cap > 1_000_000 || !Number.isInteger(form.reservation_output_token_cap) || form.reservation_output_token_cap < 1 || form.reservation_output_token_cap > 1_000_000) {
+	  setError("输入和输出预占上限必须在 1 到 1000000 Token 之间");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/admin/gateway-settings", {
@@ -124,6 +132,14 @@ export default function GatewaySettingsClient() {
       {error ? <p className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">{error}</p> : null}
 
       <Card>
+		<CardHeader><CardTitle className="flex items-center gap-2"><Activity className="size-4 text-muted-foreground" />余额预占</CardTitle><CardDescription>预占只用于调用前的余额保护，最终费用始终按上游明确返回的 usage 结算。</CardDescription></CardHeader>
+		<CardContent className="space-y-5">
+		  <div className="space-y-2"><Label htmlFor="reservation-input-cap">输入预占上限 (Token)</Label><Input id="reservation-input-cap" inputMode="numeric" max={1_000_000} min={1} onChange={(event) => setForm((current) => ({ ...current, reservation_input_token_cap: Number(event.target.value) }))} type="number" value={form.reservation_input_token_cap} /><p className="text-xs text-muted-foreground">请求体估算输入高于此值时，仅按此上限预占，不限制实际上下文；默认 16384。</p></div>
+		  <div className="space-y-2"><Label htmlFor="reservation-output-cap">输出预占上限 (Token)</Label><Input id="reservation-output-cap" inputMode="numeric" max={1_000_000} min={1} onChange={(event) => setForm((current) => ({ ...current, reservation_output_token_cap: Number(event.target.value) }))} type="number" value={form.reservation_output_token_cap} /><p className="text-xs text-muted-foreground">请求声明的最大输出高于此值时，仅按此上限预占。实际输出超过预占后，系统依据最终 usage 幂等补扣；默认 1024。</p></div>
+		</CardContent>
+	  </Card>
+
+	  <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Radio className="size-4 text-muted-foreground" />保持连接心跳</CardTitle><CardDescription>开启后，Novro 会按间隔向已建立的 SSE 客户端发送注释心跳，减少代理或网络设备因长时间无数据而断开。</CardDescription></CardHeader>
         <CardContent className="space-y-5">
           <div className="flex items-center justify-between gap-4 rounded-md border p-4"><div><Label className="cursor-pointer" htmlFor="sse-heartbeat-enabled">启用 SSE 保活</Label><p className="mt-1 text-xs text-muted-foreground">只影响流式响应，不会修改上游模型返回的数据。</p></div><Switch aria-label="启用 SSE 保活" checked={form.sse_heartbeat_enabled} disabled={loading || saving} id="sse-heartbeat-enabled" onCheckedChange={(checked) => setForm((current) => ({ ...current, sse_heartbeat_enabled: checked }))} /></div>

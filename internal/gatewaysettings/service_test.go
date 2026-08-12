@@ -40,12 +40,12 @@ func TestConfigReturnsDefaultsWhenNotStored(t *testing.T) {
 
 func TestUpdatePersistsValidatedConfig(t *testing.T) {
 	store := &memoryStore{}
-	want := Config{SSEHeartbeatEnabled: false, SSEHeartbeatIntervalMS: 30_000, UpstreamTimeoutMS: 120_000, UpstreamStreamIdleTimeoutMS: 45_000}
+	want := Config{SSEHeartbeatEnabled: false, SSEHeartbeatIntervalMS: 30_000, UpstreamTimeoutMS: 120_000, UpstreamStreamIdleTimeoutMS: 45_000, ReservationInputTokenCap: 32_768, ReservationOutputTokenCap: 2048}
 	got, err := NewService(store).Update(context.Background(), want)
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
-	if got.SSEHeartbeatEnabled != want.SSEHeartbeatEnabled || got.SSEHeartbeatIntervalMS != want.SSEHeartbeatIntervalMS || got.UpstreamTimeoutMS != want.UpstreamTimeoutMS || got.UpstreamStreamIdleTimeoutMS != want.UpstreamStreamIdleTimeoutMS || got.UpdatedAt == nil {
+	if got.SSEHeartbeatEnabled != want.SSEHeartbeatEnabled || got.SSEHeartbeatIntervalMS != want.SSEHeartbeatIntervalMS || got.UpstreamTimeoutMS != want.UpstreamTimeoutMS || got.UpstreamStreamIdleTimeoutMS != want.UpstreamStreamIdleTimeoutMS || got.ReservationInputTokenCap != want.ReservationInputTokenCap || got.ReservationOutputTokenCap != want.ReservationOutputTokenCap || got.UpdatedAt == nil {
 		t.Fatalf("Update() = %+v", got)
 	}
 }

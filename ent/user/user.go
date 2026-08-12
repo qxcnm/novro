@@ -56,6 +56,8 @@ const (
 	EdgeTopUpOrders = "top_up_orders"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgeGatewayOperations holds the string denoting the gateway_operations edge name in mutations.
+	EdgeGatewayOperations = "gateway_operations"
 	// EdgeReferrer holds the string denoting the referrer edge name in mutations.
 	EdgeReferrer = "referrer"
 	// EdgeReferrals holds the string denoting the referrals edge name in mutations.
@@ -111,6 +113,13 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "user_id"
+	// GatewayOperationsTable is the table that holds the gateway_operations relation/edge.
+	GatewayOperationsTable = "gateway_operations"
+	// GatewayOperationsInverseTable is the table name for the GatewayOperation entity.
+	// It exists in this package in order to avoid circular dependency with the "gatewayoperation" package.
+	GatewayOperationsInverseTable = "gateway_operations"
+	// GatewayOperationsColumn is the table column denoting the gateway_operations relation/edge.
+	GatewayOperationsColumn = "user_id"
 	// ReferrerTable is the table that holds the referrer relation/edge.
 	ReferrerTable = "users"
 	// ReferrerColumn is the table column denoting the referrer relation/edge.
@@ -392,6 +401,20 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByGatewayOperationsCount orders the results by gateway_operations count.
+func ByGatewayOperationsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGatewayOperationsStep(), opts...)
+	}
+}
+
+// ByGatewayOperations orders the results by gateway_operations terms.
+func ByGatewayOperations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGatewayOperationsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByReferrerField orders the results by referrer field.
 func ByReferrerField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -459,6 +482,13 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newGatewayOperationsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GatewayOperationsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GatewayOperationsTable, GatewayOperationsColumn),
 	)
 }
 func newReferrerStep() *sqlgraph.Step {

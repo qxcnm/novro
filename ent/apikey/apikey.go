@@ -42,6 +42,8 @@ const (
 	EdgeBillingGroup = "billing_group"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgeGatewayOperations holds the string denoting the gateway_operations edge name in mutations.
+	EdgeGatewayOperations = "gateway_operations"
 	// Table holds the table name of the apikey in the database.
 	Table = "api_keys"
 	// UserTable is the table that holds the user relation/edge.
@@ -65,6 +67,13 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "api_key_id"
+	// GatewayOperationsTable is the table that holds the gateway_operations relation/edge.
+	GatewayOperationsTable = "gateway_operations"
+	// GatewayOperationsInverseTable is the table name for the GatewayOperation entity.
+	// It exists in this package in order to avoid circular dependency with the "gatewayoperation" package.
+	GatewayOperationsInverseTable = "gateway_operations"
+	// GatewayOperationsColumn is the table column denoting the gateway_operations relation/edge.
+	GatewayOperationsColumn = "api_key_id"
 )
 
 // Columns holds all SQL columns for apikey fields.
@@ -220,6 +229,20 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newAPIUsagesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByGatewayOperationsCount orders the results by gateway_operations count.
+func ByGatewayOperationsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGatewayOperationsStep(), opts...)
+	}
+}
+
+// ByGatewayOperations orders the results by gateway_operations terms.
+func ByGatewayOperations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGatewayOperationsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -239,5 +262,12 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newGatewayOperationsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GatewayOperationsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GatewayOperationsTable, GatewayOperationsColumn),
 	)
 }

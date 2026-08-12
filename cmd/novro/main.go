@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/migrate"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/app"
@@ -175,6 +176,25 @@ func main() {
 		logger.Info("top-up reconciliation complete", "out_trade_no", order.OutTradeNo, "status", order.Status)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "compensate-usage" {
+		if len(os.Args) != 4 {
+			logger.Error("compensate-usage requires a legacy usage request ID and actor user ID")
+			os.Exit(2)
+		}
+		requestID, requestErr := uuid.Parse(os.Args[2])
+		actorID, actorErr := uuid.Parse(os.Args[3])
+		if requestErr != nil || actorErr != nil {
+			logger.Error("compensate-usage IDs must be valid UUIDs")
+			os.Exit(2)
+		}
+		_, amount, err := billingService.CompensateLegacyUsage(ctx, requestID, actorID)
+		if err != nil {
+			logger.Error("legacy usage compensation failed", "request_id", requestID, "error", err)
+			os.Exit(1)
+		}
+		logger.Info("legacy usage compensation complete", "request_id", requestID, "amount_micros", amount)
+		return
+	}
 	if len(os.Args) > 1 {
 		logger.Error("unknown command", "command", os.Args[1])
 		os.Exit(2)
@@ -243,6 +263,7 @@ func main() {
 		WriteTimeout:      0,
 		IdleTimeout:       0,
 	}
+	go recoverPendingBilling(ctx, billingService, logger)
 
 	serverErrors := make(chan error, 1)
 	go func() {
@@ -261,6 +282,36 @@ func main() {
 		if !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("HTTP server failed", "error", err)
 			os.Exit(1)
+		}
+	}
+}
+
+type pendingBillingRecoverer interface {
+	RecoverPendingSettlements(context.Context, int) (int, error)
+}
+
+func recoverPendingBilling(ctx context.Context, recoverer pendingBillingRecoverer, logger *slog.Logger) {
+	recoverOnce := func() {
+		recoveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		recovered, err := recoverer.RecoverPendingSettlements(recoveryCtx, 100)
+		if err != nil {
+			logger.Error("recover pending gateway settlements", "recovered", recovered, "error", err)
+			return
+		}
+		if recovered > 0 {
+			logger.Info("recovered pending gateway settlements", "count", recovered)
+		}
+	}
+	recoverOnce()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			recoverOnce()
 		}
 	}
 }

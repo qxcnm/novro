@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
+	"github.com/novro-gateway/novro/internal/requestid"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
 	"github.com/novro-gateway/novro/internal/user"
 )
@@ -77,16 +79,68 @@ func (f fakeRoutes) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]m
 }
 
 type fakeBilling struct {
-	reserveErr     error
-	refundErrors   []error
-	finalizeErrors []error
-	reserved       int64
-	reserveCalls   int
-	refunded       int64
-	refundCalls    int
-	finalizeCalls  int
-	usage          billing.UsageInput
-	failures       []billing.FailureInput
+	reserveErr       error
+	refundErrors     []error
+	finalizeErrors   []error
+	reserved         int64
+	reserveCalls     int
+	refunded         int64
+	refundCalls      int
+	finalizeCalls    int
+	usage            billing.UsageInput
+	failures         []billing.FailureInput
+	operation        billing.Operation
+	operationCreated bool
+	pendingCalls     int
+	pendingErrors    []error
+	completeCalls    int
+	failCalls        int
+	unknownCalls     int
+	replayOperation  *billing.Operation
+}
+
+func (f *fakeBilling) StartOperation(_ context.Context, input billing.OperationStartInput) (billing.OperationStartResult, error) {
+	if f.reserveErr != nil {
+		return billing.OperationStartResult{}, f.reserveErr
+	}
+	if f.replayOperation != nil {
+		return billing.OperationStartResult{Operation: *f.replayOperation}, nil
+	}
+	f.reserveCalls++
+	f.reserved = input.ReservedMicros
+	f.operation = billing.Operation{RequestID: input.RequestID, UserID: input.UserID, APIKeyID: input.APIKeyID, IdempotencyKeyHash: input.IdempotencyKeyHash, RequestHash: input.RequestHash, Endpoint: input.Endpoint, Status: billing.OperationProcessing, ReservedMicros: input.ReservedMicros}
+	f.operationCreated = true
+	return billing.OperationStartResult{Operation: f.operation, Created: true}, nil
+}
+func (f *fakeBilling) MarkOperationPendingSettlement(_ context.Context, _ uuid.UUID, input billing.UsageInput) error {
+	f.pendingCalls++
+	if len(f.pendingErrors) > 0 {
+		err := f.pendingErrors[0]
+		f.pendingErrors = f.pendingErrors[1:]
+		if err != nil {
+			return err
+		}
+	}
+	f.operation.Status = billing.OperationPendingSettlement
+	f.usage = input
+	return nil
+}
+func (f *fakeBilling) MarkOperationPendingUnknown(_ context.Context, _ uuid.UUID, _ string) error {
+	f.unknownCalls++
+	f.operation.Status = billing.OperationPendingUnknown
+	return nil
+}
+func (f *fakeBilling) CompleteOperation(context.Context, uuid.UUID) error {
+	f.completeCalls++
+	f.operation.Status = billing.OperationCompleted
+	return nil
+}
+func (f *fakeBilling) FailOperation(context.Context, uuid.UUID, string) error {
+	f.failCalls++
+	f.refundCalls++
+	f.refunded += f.reserved
+	f.operation.Status = billing.OperationFailed
+	return nil
 }
 
 func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
@@ -157,13 +211,17 @@ func (b *blockingBody) Close() error {
 
 type noopBilling struct{}
 
-func (noopBilling) Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error { return nil }
-func (noopBilling) Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error  { return nil }
-func (noopBilling) ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error {
-	return nil
-}
 func (noopBilling) Finalize(context.Context, billing.UsageInput) error        { return nil }
 func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error { return nil }
+func (noopBilling) StartOperation(_ context.Context, input billing.OperationStartInput) (billing.OperationStartResult, error) {
+	return billing.OperationStartResult{Created: true, Operation: billing.Operation{RequestID: input.RequestID, UserID: input.UserID, APIKeyID: input.APIKeyID, RequestHash: input.RequestHash, Endpoint: input.Endpoint, Status: billing.OperationProcessing, ReservedMicros: input.ReservedMicros}}, nil
+}
+func (noopBilling) MarkOperationPendingSettlement(context.Context, uuid.UUID, billing.UsageInput) error {
+	return nil
+}
+func (noopBilling) MarkOperationPendingUnknown(context.Context, uuid.UUID, string) error { return nil }
+func (noopBilling) CompleteOperation(context.Context, uuid.UUID) error                   { return nil }
+func (noopBilling) FailOperation(context.Context, uuid.UUID, string) error               { return nil }
 
 type terminalErrorReader struct {
 	reader *strings.Reader
@@ -245,6 +303,50 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	}
 }
 
+func TestProxyUsesConfiguredInputAndOutputReservationCaps(t *testing.T) {
+	biller := &fakeBilling{}
+	route := openAIRoute()
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	settings := gatewaysettings.DefaultConfig()
+	settings.ReservationInputTokenCap = 96
+	settings.ReservationOutputTokenCap = 128
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	body := `{"model":"deepseek-chat","messages":[{"role":"user","content":"` + strings.Repeat("long input ", 256) + `"}],"max_tokens":4096}`
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatal(err)
+	}
+	upstreamBody, _ := buildUpstreamBody(payload, route, "chat_completions", false)
+	if estimateInputTokens(upstreamBody) <= settings.ReservationInputTokenCap {
+		t.Fatalf("test request estimate=%d must exceed cap=%d", estimateInputTokens(upstreamBody), settings.ReservationInputTokenCap)
+	}
+	want, _ := billing.EstimateReservation(96, 128, rateCardFor(route), 10_000)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusOK || biller.reserved != want.CostMicros || biller.completeCalls != 1 {
+		t.Fatalf("status=%d reserved=%d want=%d billing=%+v", response.Code, biller.reserved, want.CostMicros, biller)
+	}
+}
+
+func TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain(t *testing.T) {
+	actor := gatewayActor()
+	requestID := uuid.New()
+	replay := billing.Operation{RequestID: requestID, UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, Endpoint: "chat_completions", Status: billing.OperationCompleted, ReservedMicros: 1}
+	biller := &fakeBilling{replayOperation: &replay}
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("must not call upstream") })}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`))
+	request.Header.Set("Idempotency-Key", "same-operation")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || calls != 0 || biller.reserveCalls != 0 || response.Header().Get(requestid.Header) != requestID.String() {
+		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
+	}
+}
+
 func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) {
 	actor := gatewayActorWithMultiplier(4_000)
 	route := openAIRoute()
@@ -279,7 +381,7 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 	if err != nil {
 		t.Fatalf("build upstream body: %v", err)
 	}
-	expectedReservation, err := billing.EstimateReservation(len(upstreamBody)+256, 100, rateCardFor(route), 4_000)
+	expectedReservation, err := billing.EstimateReservation(estimateInputTokens(upstreamBody), 100, rateCardFor(route), 4_000)
 	if err != nil {
 		t.Fatalf("estimate expected reservation: %v", err)
 	}
@@ -383,6 +485,7 @@ func TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout(t *testing.T) {
 
 func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testing.T) {
 	body := newBlockingBody("")
+	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		go func() {
 			<-request.Context().Done()
@@ -393,13 +496,16 @@ func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testin
 	settings := gatewaysettings.DefaultConfig()
 	settings.SSEHeartbeatEnabled = false
 	settings.UpstreamTimeoutMS = 20
-	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: &fakeBilling{}, Client: client, Settings: fakeGatewaySettings{config: settings}})
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client, Settings: fakeGatewaySettings{config: settings}})
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`))
 	request.Header.Set("Authorization", "Bearer nvr_test")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status=%d body=%s, want 504", response.Code, response.Body.String())
+	}
+	if biller.unknownCalls != 1 || biller.failCalls != 0 || biller.refundCalls != 0 || biller.finalizeCalls != 0 {
+		t.Fatalf("buffered response timeout was refunded or settled: %+v", biller)
 	}
 }
 
@@ -421,7 +527,7 @@ func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			usage := applyUsageFallback(parseUsage([]byte(tt.body)), 100, 50, rates)
+			usage := applyUsageFallback(parseUsage([]byte(tt.body), usageSemanticsOpenAITotal), 100, 50, rates)
 			if usage.Input != tt.wantInput || usage.Output != tt.wantOutput || usage.Estimated != tt.wantEstimate {
 				t.Fatalf("usage=%+v want input=%d output=%d estimated=%v", usage, tt.wantInput, tt.wantOutput, tt.wantEstimate)
 			}
@@ -493,6 +599,7 @@ func TestProxyAlwaysStartsWithHighestWeightProvider(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{second, first}}, Billing: &fakeBilling{}, Client: client})
 	for range 4 {
 		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`))
+		request.Header.Set("Idempotency-Key", uuid.NewString())
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
@@ -546,7 +653,7 @@ func TestProxyWeightPriorityIsStableUnderConcurrentRequests(t *testing.T) {
 	}
 }
 
-func TestProxyFailsOverAndBillsOnlySuccessfulChannel(t *testing.T) {
+func TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
 	second.UpstreamModel.Prices.OutputMicros = 20_000_000
@@ -571,18 +678,15 @@ func TestProxyFailsOverAndBillsOnlySuccessfulChannel(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "first.example.com,first.example.com,second.example.com" {
+	if response.Code != http.StatusBadGateway || strings.Join(hosts, ",") != "first.example.com" {
 		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
 	}
-	if biller.reserveCalls != 1 || biller.finalizeCalls != 1 || biller.refundCalls != 0 || biller.usage.ModelRouteID != second.ID || biller.usage.UpstreamRequestID != "second-request" {
+	if biller.reserveCalls != 1 || biller.finalizeCalls != 0 || biller.failCalls != 1 || biller.refundCalls != 1 {
 		t.Fatalf("unexpected billing state: %+v", biller)
-	}
-	if biller.reserved != biller.usage.ReservedMicros || biller.reserved <= biller.usage.CostMicros {
-		t.Fatalf("reservation did not cover the more expensive fallback: reserved=%d usage=%+v", biller.reserved, biller.usage)
 	}
 }
 
-func TestProxyFailsOverAfterBufferedResponseReadError(t *testing.T) {
+func TestProxyDoesNotReplayAfterSuccessfulResponseStarts(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
 	calls := 0
@@ -597,7 +701,7 @@ func TestProxyFailsOverAfterBufferedResponseReadError(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusOK || calls != 2 || biller.usage.ModelRouteID != second.ID || biller.refundCalls != 0 {
+	if response.Code != http.StatusBadGateway || calls != 1 || biller.finalizeCalls != 0 || biller.refundCalls != 0 || biller.unknownCalls != 1 || !strings.Contains(response.Body.String(), "upstream_result_unknown") {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 }
@@ -618,7 +722,7 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	handler.upstreamRetryDelays = []time.Duration{0, 0}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusBadGateway || calls != 6 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
+	if response.Code != http.StatusBadGateway || calls != 4 || biller.reserveCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved || biller.finalizeCalls != 0 || len(biller.failures) != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "upstream_unavailable") {
@@ -629,7 +733,7 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	}
 }
 
-func TestProxyUsesProviderWeightAndRetriesBeforeFailover(t *testing.T) {
+func TestProxyUsesHighestWeightWithoutReplayingHTTPFailure(t *testing.T) {
 	low := openAIChannel("low", "low.example.com", "low-upstream")
 	high := openAIChannel("high", "high.example.com", "high-upstream")
 	low.Provider.Weight = 10
@@ -647,10 +751,10 @@ func TestProxyUsesProviderWeightAndRetriesBeforeFailover(t *testing.T) {
 	handler.upstreamRetryDelays = []time.Duration{0, 0}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
-	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "high.example.com,high.example.com,high.example.com,low.example.com" {
+	if response.Code != http.StatusBadGateway || strings.Join(hosts, ",") != "high.example.com" {
 		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
 	}
-	if biller.finalizeCalls != 1 || biller.usage.ModelRouteID != low.ID || biller.refundCalls != 0 {
+	if biller.finalizeCalls != 0 || biller.failCalls != 1 || biller.refundCalls != 1 {
 		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
@@ -686,6 +790,49 @@ func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 	}
 }
 
+func TestProxyDoesNotRetryAfterConnectionWasAcquired(t *testing.T) {
+	first := openAIChannel("first", "first.example.com", "first-upstream")
+	second := openAIChannel("second", "second.example.com", "second-upstream")
+	biller := &fakeBilling{}
+	hosts := make([]string, 0, 2)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		trace := httptrace.ContextClientTrace(request.Context())
+		if trace == nil || trace.GotConn == nil {
+			t.Fatal("connection trace is missing")
+		}
+		trace.GotConn(httptrace.GotConnInfo{})
+		return nil, &net.OpError{Op: "write", Net: "tcp", Err: errors.New("connection lost before write completion")}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
+	handler.upstreamRetryDelays = []time.Duration{0, 0}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
+	if response.Code != http.StatusBadGateway || strings.Join(hosts, ",") != "first.example.com" || biller.unknownCalls != 1 || biller.failCalls != 0 || biller.refundCalls != 0 {
+		t.Fatalf("status=%d hosts=%v billing=%+v body=%s", response.Code, hosts, biller, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "upstream_result_unknown") {
+		t.Fatalf("unexpected response: %s", response.Body.String())
+	}
+}
+
+func TestProxyDoesNotForwardRawClientIdempotencyKey(t *testing.T) {
+	biller := &fakeBilling{}
+	var upstreamKey string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		upstreamKey = request.Header.Get("Idempotency-Key")
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":1,"completion_tokens":1}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`))
+	request.Header.Set("Idempotency-Key", "shared-client-value")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || upstreamKey != "novro-"+biller.operation.RequestID.String() || upstreamKey == "shared-client-value" {
+		t.Fatalf("status=%d upstream_key=%q operation=%+v body=%s", response.Code, upstreamKey, biller.operation, response.Body.String())
+	}
+}
+
 func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	biller := &fakeBilling{}
 	calls := 0
@@ -702,6 +849,36 @@ func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
 	if response.Code != http.StatusOK || calls != 2 || !strings.Contains(response.Body.String(), "buffered stream ok") || !strings.Contains(response.Body.String(), "data: [DONE]") || biller.finalizeCalls != 1 {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
+	}
+}
+
+func TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten(t *testing.T) {
+	first := openAIChannel("first", "first.example.com", "first-upstream")
+	second := openAIChannel("second", "second.example.com", "second-upstream")
+	biller := &fakeBilling{}
+	hosts := make([]string, 0, 3)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		body, _ := io.ReadAll(request.Body)
+		if bytes.Contains(body, []byte(`"stream":true`)) {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("stream connection failed")}
+		}
+		trace := httptrace.ContextClientTrace(request.Context())
+		if trace == nil || trace.WroteRequest == nil {
+			t.Fatal("request write trace is missing")
+		}
+		trace.WroteRequest(httptrace.WroteRequestInfo{})
+		return nil, &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection lost after write")}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{candidates: []modelroute.Resolved{first, second}}, Billing: biller, Client: client})
+	handler.upstreamRetryDelays = nil
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
+	if response.Code != http.StatusBadGateway || strings.Join(hosts, ",") != "first.example.com,first.example.com" || biller.unknownCalls != 1 || biller.failCalls != 0 || biller.refundCalls != 0 {
+		t.Fatalf("status=%d hosts=%v billing=%+v body=%s", response.Code, hosts, biller, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "upstream_result_unknown") {
+		t.Fatalf("unexpected response: %s", response.Body.String())
 	}
 }
 
@@ -734,7 +911,7 @@ func TestProxyStreamRetriesTwiceThenFailsOverToNextChannel(t *testing.T) {
 	}
 }
 
-func TestProxyStreamRetriesTemporaryHTTPFailureAsBufferedRequest(t *testing.T) {
+func TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest(t *testing.T) {
 	calls := 0
 	streamModes := make([]bool, 0, 2)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -750,10 +927,10 @@ func TestProxyStreamRetriesTemporaryHTTPFailureAsBufferedRequest(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10,"stream":true}`)))
-	if response.Code != http.StatusOK || calls != 2 || len(streamModes) != 2 || !streamModes[0] || streamModes[1] {
+	if response.Code != http.StatusBadGateway || calls != 1 || len(streamModes) != 1 || !streamModes[0] {
 		t.Fatalf("status=%d calls=%d stream_modes=%v body=%s", response.Code, calls, streamModes, response.Body.String())
 	}
-	if biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+	if biller.finalizeCalls != 0 || biller.failCalls != 1 || biller.refundCalls != 1 {
 		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
@@ -832,11 +1009,38 @@ func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != body || biller.finalizeCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
+	if response.Code != http.StatusOK || response.Body.String() != body || biller.finalizeCalls != 1 || biller.refundCalls != 0 || biller.pendingCalls != 1 || biller.completeCalls != 0 {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d body=%s", response.Code, biller.finalizeCalls, biller.refundCalls, response.Body.String())
 	}
 	if !strings.Contains(logs.String(), "forward successful response after usage finalization failure") {
 		t.Fatalf("successful response after finalization failure was not logged: %s", logs.String())
+	}
+}
+
+func TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists(t *testing.T) {
+	biller := &fakeBilling{pendingErrors: []error{billing.ErrRequestConflict}}
+	upstreamBody := `{"id":"up-1","choices":[{"message":{"content":"must not be returned"}}],"usage":{"prompt_tokens":10,"completion_tokens":20}}`
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(upstreamBody))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`)))
+	if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), "must not be returned") || biller.finalizeCalls != 0 || biller.completeCalls != 0 || biller.refundCalls != 0 || biller.unknownCalls != 1 {
+		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
+	}
+}
+
+func TestBufferedHTTP200FailureIsNotBilled(t *testing.T) {
+	biller := &fakeBilling{}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"message":"failed"}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`)))
+	if response.Code != http.StatusBadGateway || biller.finalizeCalls != 0 || biller.failCalls != 1 || biller.refundCalls != 1 || len(biller.failures) != 1 {
+		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
 	}
 }
 
@@ -974,11 +1178,35 @@ func TestStreamingFinalizationFailureKeepsSuccessfulResponse(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
+	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 1 || biller.refundCalls != 0 || biller.pendingCalls != 1 || biller.completeCalls != 0 {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d body=%s", response.Code, biller.finalizeCalls, biller.refundCalls, response.Body.String())
 	}
 	if !strings.Contains(logs.String(), "stream usage finalization unavailable") {
 		t.Fatalf("stream finalization failure was not logged: %s", logs.String())
+	}
+}
+
+func TestStreamingSettlementIntentFailureKeepsReservationForReconciliation(t *testing.T) {
+	biller := &fakeBilling{pendingErrors: []error{billing.ErrRequestConflict}}
+	stream := "data: {\"id\":\"stream-1\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
+	calls := 0
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	var logs bytes.Buffer
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client, Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != stream || calls != 1 || biller.pendingCalls != 1 || biller.finalizeCalls != 0 || biller.completeCalls != 0 || biller.unknownCalls != 1 || biller.refundCalls != 0 {
+		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
+	}
+	if biller.operation.Status != billing.OperationPendingUnknown {
+		t.Fatalf("operation status=%s want=%s", biller.operation.Status, billing.OperationPendingUnknown)
+	}
+	if !strings.Contains(logs.String(), "stream usage finalization unavailable") {
+		t.Fatalf("stream settlement intent failure was not logged: %s", logs.String())
 	}
 }
 
@@ -1001,7 +1229,7 @@ func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
 	}
 }
 
-func TestInvalidStreamedUsageReleasesReservation(t *testing.T) {
+func TestInvalidStreamedUsageKeepsReservationForReconciliation(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-invalid\",\"usage\":{\"prompt_tokens\":2147483648,\"completion_tokens\":1}}\n\ndata: [DONE]\n\n"
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -1011,7 +1239,7 @@ func TestInvalidStreamedUsageReleasesReservation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 0 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
+	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 0 || biller.refundCalls != 0 || biller.unknownCalls != 1 {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d refunded=%d reserved=%d", response.Code, biller.finalizeCalls, biller.refundCalls, biller.refunded, biller.reserved)
 	}
 }
@@ -1066,7 +1294,66 @@ func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 	}
 }
 
-func TestInterruptedStreamingUsageIsMarkedEstimated(t *testing.T) {
+func TestResponsesIncompleteIsBillableTerminalState(t *testing.T) {
+	biller := &fakeBilling{}
+	stream := "event: response.incomplete\n" +
+		"data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp-incomplete\",\"status\":\"incomplete\",\"usage\":{\"input_tokens\":100,\"input_tokens_details\":{\"cached_tokens\":40},\"output_tokens\":9}}}\n\n"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","max_output_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
+	}
+	if biller.usage.Estimated || biller.usage.InputTokens != 100 || biller.usage.Tokens.UncachedInput != 60 || biller.usage.Tokens.CacheRead != 40 || biller.usage.OutputTokens != 9 {
+		t.Fatalf("unexpected incomplete response usage: %+v", biller.usage)
+	}
+}
+
+func TestFailedStreamingTerminalStateReleasesReservation(t *testing.T) {
+	for _, endpoint := range []struct {
+		name, path, body, stream string
+		route                    modelroute.Resolved
+	}{
+		{name: "responses", path: "/v1/responses", body: `{"model":"deepseek-chat","input":"hello","max_output_tokens":20,"stream":true}`, stream: "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\n", route: openAIRoute()},
+		{name: "messages", path: "/v1/messages", body: `{"model":"kimi-k3","messages":[],"max_tokens":20,"stream":true}`, stream: "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}\n\n", route: anthropicRoute()},
+	} {
+		t.Run(endpoint.name, func(t *testing.T) {
+			biller := &fakeBilling{}
+			client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(endpoint.stream))}, nil
+			})}
+			handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: endpoint.route}, Billing: biller, Client: client})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, endpoint.path, strings.NewReader(endpoint.body)))
+			if response.Code != http.StatusOK || biller.finalizeCalls != 0 || biller.refundCalls != 1 || biller.refunded != biller.reserved || len(biller.failures) != 1 {
+				t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
+			}
+			if biller.failures[0].StatusCode != http.StatusBadGateway || biller.failures[0].ErrorCode != "upstream_stream_failed" {
+				t.Fatalf("failure=%+v", biller.failures[0])
+			}
+		})
+	}
+}
+
+func TestFailedStreamingTerminalStateCannotBeOverriddenByDone(t *testing.T) {
+	biller := &fakeBilling{}
+	stream := "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\ndata: [DONE]\n\n"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","stream":true}`)))
+	if response.Code != http.StatusOK || biller.finalizeCalls != 0 || biller.failCalls != 1 || biller.refundCalls != 1 {
+		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
+	}
+}
+
+func TestInterruptedStreamingUsageKeepsReservationForReconciliation(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-partial\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n"
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -1079,8 +1366,8 @@ func TestInterruptedStreamingUsageIsMarkedEstimated(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 2 || !biller.usage.Estimated {
-		t.Fatalf("interrupted stream usage was not marked estimated: %+v", biller.usage)
+	if biller.finalizeCalls != 0 || biller.pendingCalls != 0 || biller.unknownCalls != 1 || biller.refundCalls != 0 {
+		t.Fatalf("interrupted stream was automatically settled: %+v", biller)
 	}
 }
 
@@ -1237,7 +1524,7 @@ func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
 }
 
 func TestUpstreamFailureRefundsReservation(t *testing.T) {
-	biller := &fakeBilling{refundErrors: []error{errors.New("temporary database failure"), nil}}
+	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("timeout") })}
 	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
 	handler.settlementRetryDelays = []time.Duration{0, 0}
@@ -1245,7 +1532,7 @@ func TestUpstreamFailureRefundsReservation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusBadGateway || biller.refundCalls != 2 || biller.refunded != biller.reserved {
+	if response.Code != http.StatusBadGateway || biller.failCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
 		t.Fatalf("status=%d refund_calls=%d reserved=%d refunded=%d", response.Code, biller.refundCalls, biller.reserved, biller.refunded)
 	}
 }
@@ -1253,18 +1540,20 @@ func TestUpstreamFailureRefundsReservation(t *testing.T) {
 func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 	tests := []struct {
 		name, body string
+		semantics  usageSemantics
 		want       tokenUsage
 	}{
-		{name: "glm cached details", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_tokens_details":{"cached_tokens":1200}}}`, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
-		{name: "deepseek hit and miss", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_cache_hit_tokens":1200,"prompt_cache_miss_tokens":800}}`, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
-		{name: "kimi top level cached", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":10}}`, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
-		{name: "openai cache read field is prompt subset", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cache_read_input_tokens":10}}`, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
-		{name: "anthropic cache read is additional input", body: `{"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":10}}`, want: tokenUsage{Input: 110, UncachedInput: 100, CacheRead: 10, Output: 20}},
-		{name: "anthropic cache creation", body: `{"usage":{"input_tokens":800,"output_tokens":500,"cache_read_input_tokens":1200,"cache_creation_input_tokens":300,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":100}}}`, want: tokenUsage{Input: 2300, UncachedInput: 800, CacheRead: 1200, CacheWrite: 200, CacheWrite1h: 100, Output: 500}},
+		{name: "glm cached details", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_tokens_details":{"cached_tokens":1200}}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
+		{name: "deepseek hit and miss", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_cache_hit_tokens":1200,"prompt_cache_miss_tokens":800}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 2000, UncachedInput: 800, CacheRead: 1200, Output: 500}},
+		{name: "kimi top level cached", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":10}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
+		{name: "openai cache read field is prompt subset", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cache_read_input_tokens":10}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
+		{name: "responses cached details are input subset", body: `{"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 60, CacheRead: 40, Output: 20}},
+		{name: "anthropic cache read is additional input", body: `{"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":10}}`, semantics: usageSemanticsAnthropicAdditional, want: tokenUsage{Input: 110, UncachedInput: 100, CacheRead: 10, Output: 20}},
+		{name: "anthropic cache creation", body: `{"usage":{"input_tokens":800,"output_tokens":500,"cache_read_input_tokens":1200,"cache_creation_input_tokens":300,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":100}}}`, semantics: usageSemanticsAnthropicAdditional, want: tokenUsage{Input: 2300, UncachedInput: 800, CacheRead: 1200, CacheWrite: 200, CacheWrite1h: 100, Output: 500}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseUsage([]byte(tt.body))
+			got := parseUsage([]byte(tt.body), tt.semantics)
 			if got.Input != tt.want.Input || got.UncachedInput != tt.want.UncachedInput || got.CacheRead != tt.want.CacheRead || got.CacheWrite != tt.want.CacheWrite || got.CacheWrite1h != tt.want.CacheWrite1h || got.Output != tt.want.Output {
 				t.Fatalf("got=%+v want=%+v", got, tt.want)
 			}
@@ -1275,18 +1564,99 @@ func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 func TestUsageFallbackNeverChargesUnreportedDimensions(t *testing.T) {
 	rates := billing.RateCard{InputMicros: 1, CacheReadMicros: 2, CacheWriteMicros: 3, CacheWrite1hMicros: 4, OutputMicros: 5}
 
-	usage := applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10,"completion_tokens":0}}`)), 100, 20, rates)
+	usage := applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10,"completion_tokens":0}}`), usageSemanticsOpenAITotal), 100, 20, rates)
 	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 0 || usage.Estimated {
 		t.Fatalf("reported zero output must remain exact: %+v", usage)
 	}
 
-	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"completion_tokens":7}}`)), 100, 20, rates)
+	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"completion_tokens":7}}`), usageSemanticsOpenAITotal), 100, 20, rates)
 	if usage.Input != 0 || usage.UncachedInput != 0 || usage.CacheRead != 0 || usage.CacheWrite != 0 || usage.CacheWrite1h != 0 || usage.Output != 7 || !usage.Estimated {
 		t.Fatalf("missing input was charged: %+v", usage)
 	}
 
-	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10}}`)), 100, 20, rates)
+	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10}}`), usageSemanticsOpenAITotal), 100, 20, rates)
 	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 0 || !usage.Estimated {
 		t.Fatalf("missing output was charged: %+v", usage)
+	}
+}
+
+func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want tokenUsage
+	}{
+		{
+			name: "conflicting input aliases",
+			body: `{"usage":{"prompt_tokens":100,"input_tokens":100000,"completion_tokens":2,"output_tokens":2}}`,
+			want: tokenUsage{Output: 2, OutputReported: true, Estimated: true},
+		},
+		{
+			name: "conflicting output aliases",
+			body: `{"usage":{"prompt_tokens":100,"input_tokens":100,"completion_tokens":2,"output_tokens":100000}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 100, InputReported: true, Estimated: true},
+		},
+		{
+			name: "conflicting output aliases reverse order",
+			body: `{"usage":{"prompt_tokens":100,"input_tokens":100,"completion_tokens":100000,"output_tokens":2}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 100, InputReported: true, Estimated: true},
+		},
+		{
+			name: "matching aliases",
+			body: `{"usage":{"prompt_tokens":100,"input_tokens":100,"completion_tokens":2,"output_tokens":2}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 100, Output: 2, InputReported: true, OutputReported: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := applyUsageFallback(parseUsage([]byte(tt.body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
+			if usage.Input != tt.want.Input || usage.UncachedInput != tt.want.UncachedInput || usage.Output != tt.want.Output || usage.InputReported != tt.want.InputReported || usage.OutputReported != tt.want.OutputReported || usage.Estimated != tt.want.Estimated {
+				t.Fatalf("usage=%+v want=%+v", usage, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenAIUsageRejectsCacheBreakdownAboveTotal(t *testing.T) {
+	for _, body := range []string{
+		`{"usage":{"input_tokens":100,"output_tokens":2,"input_tokens_details":{"cached_tokens":101}}}`,
+		`{"usage":{"prompt_tokens":100,"completion_tokens":2,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":30}}`,
+	} {
+		usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
+		if usage.Input != 0 || usage.UncachedInput != 0 || usage.CacheRead != 0 || usage.InputReported || !usage.Estimated {
+			t.Fatalf("invalid cache breakdown increased billing usage: %+v", usage)
+		}
+		if usage.Output != 2 || !usage.OutputReported {
+			t.Fatalf("valid output dimension was discarded: %+v", usage)
+		}
+	}
+}
+
+func TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown(t *testing.T) {
+	body := `{"usage":{"input_tokens":10,"output_tokens":2,"cache_creation_input_tokens":100,"cache_creation":{"ephemeral_5m_input_tokens":80,"ephemeral_1h_input_tokens":30}}}`
+	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsAnthropicAdditional), 500, 50, billing.RateCard{})
+	if usage.Input != 0 || usage.UncachedInput != 0 || usage.CacheWrite != 0 || usage.CacheWrite1h != 0 || usage.InputReported || !usage.Estimated || usage.Output != 2 {
+		t.Fatalf("inconsistent Anthropic cache breakdown was charged: %+v", usage)
+	}
+}
+
+func TestUsageMergeReplacesInputSnapshotAtomically(t *testing.T) {
+	usage := tokenUsage{}
+	usage.merge(parseUsage([]byte(`{"usage":{"prompt_tokens":100,"completion_tokens":1}}`), usageSemanticsOpenAITotal))
+	usage.merge(parseUsage([]byte(`{"usage":{"prompt_tokens":100,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":80}}}`), usageSemanticsOpenAITotal))
+	if usage.Input != 100 || usage.UncachedInput != 20 || usage.CacheRead != 80 || usage.Output != 2 {
+		t.Fatalf("usage snapshots were combined across categories: %+v", usage)
+	}
+	if usage.breakdown().InputTotal() != usage.Input {
+		t.Fatalf("input total=%d breakdown=%+v", usage.Input, usage.breakdown())
+	}
+}
+
+func TestEstimateInputTokensDoesNotTreatEveryByteAsToken(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 200_000)
+	got := estimateInputTokens(body)
+	want := 50_064
+	if got != want || got >= len(body) {
+		t.Fatalf("estimate=%d want=%d bytes=%d", got, want, len(body))
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,10 +13,12 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,10 +32,13 @@ import (
 )
 
 const (
-	maxGatewayBodyBytes    int64 = 0
-	maxUpstreamBodyBytes   int64 = 0
-	defaultMaxOutputTokens       = 4096
+	maxGatewayBodyBytes          int64 = 0
+	maxUpstreamBodyBytes         int64 = 0
+	defaultMaxOutputTokens             = 4096
+	streamSettlementDrainTimeout       = 30 * time.Second
 )
+
+var errSettlementIntentNotPersisted = errors.New("billing settlement intent was not persisted")
 
 type KeyAuthenticator interface {
 	Authenticate(context.Context, string) (apikey.Actor, error)
@@ -42,11 +48,13 @@ type RouteService interface {
 	ListActive(context.Context, uuid.UUID) ([]modelroute.Record, error)
 }
 type BillingService interface {
-	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
-	Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error
-	ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Finalize(context.Context, billing.UsageInput) error
 	RecordFailure(context.Context, billing.FailureInput) error
+	StartOperation(context.Context, billing.OperationStartInput) (billing.OperationStartResult, error)
+	MarkOperationPendingSettlement(context.Context, uuid.UUID, billing.UsageInput) error
+	MarkOperationPendingUnknown(context.Context, uuid.UUID, string) error
+	CompleteOperation(context.Context, uuid.UUID) error
+	FailOperation(context.Context, uuid.UUID, string) error
 }
 type SettingsService interface {
 	Config(context.Context) (gatewaysettings.Config, error)
@@ -245,14 +253,22 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	}
 	attempts := make([]upstreamAttempt, 0, len(compatible))
 	reserved := int64(0)
+	reservationInputCap := requestSettings.ReservationInputTokenCap
+	if reservationInputCap <= 0 {
+		reservationInputCap = gatewaysettings.DefaultReservationInputTokenCap
+	}
+	reservationOutputCap := requestSettings.ReservationOutputTokenCap
+	if reservationOutputCap <= 0 {
+		reservationOutputCap = gatewaysettings.DefaultReservationOutputTokenCap
+	}
 	for _, route := range compatible {
 		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, stream)
 		if err != nil {
 			h.logger.Error("build gateway upstream payload", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
 		}
-		inputEstimate := len(upstreamBody) + 256
-		reservation, err := billing.EstimateReservation(inputEstimate, maximum, rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
+		inputEstimate := estimateInputTokens(upstreamBody)
+		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 		if err != nil {
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
@@ -268,21 +284,41 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	if requestID == uuid.Nil {
 		requestID = requestid.New()
 	}
-	if reserved > 0 {
-		if err := h.billing.Reserve(r.Context(), actor.User.ID, requestID, reserved, "调用 "+publicModel); err != nil {
-			if errors.Is(err, billing.ErrInsufficientBalance) {
-				writeError(w, http.StatusPaymentRequired, "insufficient_balance", "余额不足")
-				return
-			}
-			h.logger.Error("reserve gateway balance", "request_id", requestID, "error", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if len(idempotencyKey) > 255 {
+		writeError(w, http.StatusBadRequest, "invalid_idempotency_key", "Idempotency-Key 不能超过 255 个字符")
+		return
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = requestID.String()
+	}
+	operation, err := h.billing.StartOperation(r.Context(), billing.OperationStartInput{
+		RequestID: requestID, UserID: actor.User.ID, APIKeyID: actor.APIKey.ID,
+		IdempotencyKeyHash: sha256String(idempotencyKey), RequestHash: gatewayRequestHash(endpoint, body), Endpoint: endpoint, ReservedMicros: reserved,
+	})
+	if err != nil {
+		if errors.Is(err, billing.ErrInsufficientBalance) {
+			writeError(w, http.StatusPaymentRequired, "insufficient_balance", "余额不足")
 			return
 		}
+		if errors.Is(err, billing.ErrRequestConflict) {
+			writeError(w, http.StatusConflict, "idempotency_conflict", "同一 Idempotency-Key 已用于不同请求")
+			return
+		}
+		h.logger.Error("start gateway billing operation", "request_id", requestID, "error", err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
+		return
 	}
-	upstreamContext := r.Context()
+	requestID = operation.Operation.RequestID
+	w.Header().Set(requestid.Header, requestID.String())
+	if !operation.Created {
+		writeOperationReplay(w, operation.Operation)
+		return
+	}
+	upstreamContext := context.WithoutCancel(r.Context())
 	cancelUpstreamContext := func() {}
 	if timeout := requestSettings.UpstreamTimeout(); timeout > 0 {
-		upstreamContext, cancelUpstreamContext = context.WithTimeout(r.Context(), timeout)
+		upstreamContext, cancelUpstreamContext = context.WithTimeout(upstreamContext, timeout)
 	}
 	defer cancelUpstreamContext()
 	lastRoute := modelroute.Resolved{}
@@ -318,16 +354,16 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			continue
 		}
 		setUpstreamHeaders(upstreamRequest, r, route)
-		setUpstreamIdempotencyKey(upstreamRequest, r, requestID)
+		setUpstreamIdempotencyKey(upstreamRequest, requestID)
 		retryDelays := h.upstreamRetryDelays
 		if stream && upstreamStream {
 			// A failed upstream stream can be safely retried as a buffered chat
 			// completion below, without waiting through several long header timeouts.
 			retryDelays = nil
 		}
-		response, err := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
-		streamRetry := stream && upstreamStream && endpoint == "chat_completions" && (err != nil || (response != nil && retryableUpstreamStatus(response.StatusCode)))
-		if streamRetry {
+		response, err, requestWritten := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
+		streamRetry := stream && upstreamStream && endpoint == "chat_completions" && err != nil
+		if streamRetry && !requestWritten {
 			if response != nil {
 				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 				_ = response.Body.Close()
@@ -337,13 +373,14 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 				fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
 				if requestErr == nil {
 					setUpstreamHeaders(fallbackRequest, r, route)
-					setUpstreamIdempotencyKey(fallbackRequest, r, requestID)
+					setUpstreamIdempotencyKey(fallbackRequest, requestID)
 					fallbackRetryDelays := h.upstreamRetryDelays
 					if len(fallbackRetryDelays) > 0 {
 						fallbackRetryDelays = fallbackRetryDelays[:len(fallbackRetryDelays)-1]
 					}
-					if fallbackResponse, fallbackRequestErr := h.doUpstreamWithRetries(fallbackRequest, fallbackRetryDelays); fallbackRequestErr == nil {
-						response, err = fallbackResponse, nil
+					fallbackResponse, fallbackRequestErr, fallbackWritten := h.doUpstreamWithRetries(fallbackRequest, fallbackRetryDelays)
+					response, err, requestWritten = fallbackResponse, fallbackRequestErr, fallbackWritten
+					if fallbackRequestErr == nil {
 						h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
 					}
 				}
@@ -351,16 +388,16 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		}
 		if err != nil {
 			cancelAttempt()
+			if requestWritten {
+				h.markOperationPendingUnknown(requestID, "upstream_result_unknown")
+				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游请求结果无法确认；预占已保留，系统不会自动重放请求")
+				return
+			}
 			failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
 			h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
 				failureStatus = http.StatusGatewayTimeout
 				failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
-				break
-			}
-			if r.Context().Err() != nil {
-				failureStatus = 499
-				failureCode, failureMessage = "client_canceled", "客户端取消请求"
 				break
 			}
 			continue
@@ -372,21 +409,25 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			_ = response.Body.Close()
 			cancelAttempt()
 			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
-			continue
+			h.failOperation(requestID, failureCode)
+			h.recordFailure(actor, route, requestID, endpoint, failureStatus, failureCode, failureMessage, publicModel, startedAt)
+			writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("上游渠道返回失败：%s（%s）", failureMessage, failureCode))
+			return
 		}
 		if stream && !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 			responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
 			_ = response.Body.Close()
 			cancelAttempt()
 			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
-				failureStatus = http.StatusGatewayTimeout
-				failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
-				break
+				h.markOperationPendingUnknown(requestID, "upstream_response_timeout")
+				writeError(w, http.StatusGatewayTimeout, "upstream_result_unknown", "上游响应读取超时；预占已保留，系统不会自动重放请求")
+				return
 			}
 			if readErr != nil {
-				failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
 				h.logger.Warn("read buffered stream fallback", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
-				continue
+				h.markOperationPendingUnknown(requestID, "upstream_response_incomplete")
+				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
+				return
 			}
 			h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
 			return
@@ -400,47 +441,53 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		_ = response.Body.Close()
 		cancelAttempt()
 		if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
-			failureStatus = http.StatusGatewayTimeout
-			failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
-			break
+			h.markOperationPendingUnknown(requestID, "upstream_response_timeout")
+			writeError(w, http.StatusGatewayTimeout, "upstream_result_unknown", "上游响应读取超时；预占已保留，系统不会自动重放请求")
+			return
 		}
 		if readErr != nil {
-			failureCode, failureMessage = "upstream_response_error", "读取上游响应失败"
 			h.logger.Warn("read gateway upstream response", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
-			continue
+			h.markOperationPendingUnknown(requestID, "upstream_response_incomplete")
+			writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
+			return
 		}
 		h.bufferedResponse(w, r, response, responseBody, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
 		return
 	}
-	h.refund(actor.User.ID, requestID, reserved, "所有上游渠道均失败")
+	h.failOperation(requestID, failureCode)
 	if lastRoute.ID != uuid.Nil {
 		h.recordFailure(actor, lastRoute, requestID, endpoint, failureStatus, failureCode, failureMessage, publicModel, startedAt)
-	}
-	if failureStatus == 499 {
-		return
 	}
 	writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("所有上游渠道均暂时不可用：%s（%s）", failureMessage, failureCode))
 }
 
 func (h *Handler) doUpstream(request *http.Request) (*http.Response, error) {
-	return h.doUpstreamWithRetries(request, h.upstreamRetryDelays)
+	response, err, _ := h.doUpstreamWithRetries(request, h.upstreamRetryDelays)
+	return response, err
 }
 
-func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []time.Duration) (*http.Response, error) {
+func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []time.Duration) (*http.Response, error, bool) {
 	for attempt := 0; ; attempt++ {
 		attemptRequest := request
 		if attempt > 0 {
 			body, err := request.GetBody()
 			if err != nil {
-				return nil, fmt.Errorf("reopen upstream request body: %w", err)
+				return nil, fmt.Errorf("reopen upstream request body: %w", err), false
 			}
 			attemptRequest = request.Clone(request.Context())
 			attemptRequest.Body = body
 		}
+		var connected, written atomic.Bool
+		trace := &httptrace.ClientTrace{
+			GotConn:      func(httptrace.GotConnInfo) { connected.Store(true) },
+			WroteRequest: func(httptrace.WroteRequestInfo) { written.Store(true) },
+		}
+		attemptRequest = attemptRequest.WithContext(httptrace.WithClientTrace(attemptRequest.Context(), trace))
 		response, err := h.client.Do(attemptRequest)
-		retryable := retryableUpstreamConnectionError(err) || (err == nil && response != nil && retryableUpstreamStatus(response.StatusCode))
+		requestMayHaveBeenSent := connected.Load() || written.Load() || response != nil
+		retryable := !requestMayHaveBeenSent && retryableUpstreamConnectionError(err)
 		if !retryable || attempt >= len(retryDelays) {
-			return response, err
+			return response, err, requestMayHaveBeenSent
 		}
 		if response != nil {
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
@@ -460,24 +507,31 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
 				default:
 				}
 			}
-			return nil, request.Context().Err()
+			return nil, request.Context().Err(), requestMayHaveBeenSent
 		}
 	}
 }
 
 func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
-	usage := parseUsage(body)
+	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
+		return
+	}
+	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
-		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
+		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
 		return
 	}
-	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
+	if err := h.settle(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		h.logger.Error("forward buffered stream after usage finalization failure", "request_id", requestID, "error", err)
-		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
+		if errors.Is(err, errSettlementIntentNotPersisted) {
+			h.markOperationPendingUnknown(requestID, "settlement_intent_unavailable")
+			writeError(w, http.StatusInternalServerError, "billing_settlement_pending", "调用已完成但结算状态未能持久化；预占已保留，请使用请求 ID 联系管理员核对")
+			return
+		}
 	}
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -564,26 +618,69 @@ func retryableUpstreamStatus(status int) bool {
 }
 
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
-	usage := parseUsage(body)
+	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
+		return
+	}
+	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
-		h.refund(actor.User.ID, requestID, reserved, "计费配置无效")
+		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
 		return
 	}
-	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
-		// The reservation was already deducted before the upstream call. Keep the
-		// successful upstream response visible, but safely release an unfinalized
-		// reservation so a storage failure cannot become a permanent overcharge.
+	if err := h.settle(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
+		// The pending settlement was persisted before the successful response is
+		// returned. Keep the hold until the recovery loop commits the same usage.
 		h.logger.Error("forward successful response after usage finalization failure", "request_id", requestID, "error", err)
-		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
+		if errors.Is(err, errSettlementIntentNotPersisted) {
+			h.markOperationPendingUnknown(requestID, "settlement_intent_unavailable")
+			writeError(w, http.StatusInternalServerError, "billing_settlement_pending", "调用已完成但结算状态未能持久化；预占已保留，请使用请求 ID 联系管理员核对")
+			return
+		}
 	}
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(body)
+}
+
+func (h *Handler) acceptBufferedOutcome(w http.ResponseWriter, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, body []byte, startedAt time.Time) bool {
+	switch classifyBufferedOutcome(endpoint, body) {
+	case streamOutcomeBillable:
+		return true
+	case streamOutcomeFailed:
+		h.failOperation(requestID, "upstream_response_failed")
+		h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, "upstream_response_failed", "上游调用失败", route.PublicName, startedAt)
+		writeError(w, http.StatusBadGateway, "upstream_response_failed", "上游调用失败")
+	default:
+		h.markOperationPendingUnknown(requestID, "upstream_response_unknown")
+		writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应状态无法确认；预占已保留，系统不会自动重放请求")
+	}
+	return false
+}
+
+func classifyBufferedOutcome(endpoint string, body []byte) streamOutcome {
+	var root map[string]any
+	if json.Unmarshal(body, &root) != nil || root == nil {
+		return streamOutcomeOpen
+	}
+	if errorValue, exists := root["error"]; exists && errorValue != nil {
+		return streamOutcomeFailed
+	}
+	if endpoint == "responses" {
+		switch strings.ToLower(strings.TrimSpace(stringValue(root["status"]))) {
+		case "failed", "cancelled":
+			return streamOutcomeFailed
+		case "queued", "in_progress":
+			return streamOutcomeOpen
+		}
+	}
+	if endpoint == "messages" && strings.EqualFold(stringValue(root["type"]), "error") {
+		return streamOutcomeFailed
+	}
+	return streamOutcomeBillable
 }
 
 func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoint string, stream bool) ([]byte, error) {
@@ -639,11 +736,7 @@ func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route mod
 	upstreamRequest.Header.Set("Authorization", "Bearer "+route.APIKey)
 }
 
-func setUpstreamIdempotencyKey(upstreamRequest, inboundRequest *http.Request, requestID uuid.UUID) {
-	if value := strings.TrimSpace(inboundRequest.Header.Get("Idempotency-Key")); value != "" {
-		upstreamRequest.Header.Set("Idempotency-Key", value)
-		return
-	}
+func setUpstreamIdempotencyKey(upstreamRequest *http.Request, requestID uuid.UUID) {
 	upstreamRequest.Header.Set("Idempotency-Key", "novro-"+requestID.String())
 }
 
@@ -657,6 +750,14 @@ type streamActivityReader struct {
 	reader   io.Reader
 	activity chan<- struct{}
 }
+
+type streamOutcome uint8
+
+const (
+	streamOutcomeOpen streamOutcome = iota
+	streamOutcomeBillable
+	streamOutcomeFailed
+)
 
 func (r streamActivityReader) Read(target []byte) (int, error) {
 	read, err := r.reader.Read(target)
@@ -679,11 +780,21 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	w.WriteHeader(response.StatusCode)
 	flusher, _ := w.(http.Flusher)
 	usage := tokenUsage{}
-	completed := false
+	outcome := streamOutcomeOpen
+	failureCode, failureMessage := "", ""
 	line := make([]byte, 0, 64<<10)
 	lineTooLarge := false
 	atEventBoundary := true
 	var relayErr error
+	clientConnected := true
+	clientDone := r.Context().Done()
+	var drainTimer *time.Timer
+	var drainC <-chan time.Time
+	defer func() {
+		if drainTimer != nil {
+			drainTimer.Stop()
+		}
+	}()
 	var heartbeatTicker *time.Ticker
 	var heartbeatC <-chan time.Time
 	if settings.SSEHeartbeatEnabled {
@@ -737,15 +848,30 @@ streamLoop:
 		var result streamReadResult
 		select {
 		case result = <-readResults:
+		case <-clientDone:
+			clientConnected = false
+			clientDone = nil
+			drainTimer = time.NewTimer(streamSettlementDrainTimeout)
+			drainC = drainTimer.C
+			continue
+		case <-drainC:
+			relayErr = fmt.Errorf("settlement drain timeout after %s", streamSettlementDrainTimeout)
+			cancelUpstream()
+			_ = response.Body.Close()
+			break streamLoop
 		case <-activityC:
 			resetIdleTimer()
 			continue
 		case <-heartbeatC:
-			if atEventBoundary && len(line) == 0 && !lineTooLarge {
+			if clientConnected && atEventBoundary && len(line) == 0 && !lineTooLarge {
 				if _, writeErr := io.WriteString(w, ": novro-keepalive\n\n"); writeErr != nil {
 					relayErr = writeErr
-					cancelUpstream()
-					break streamLoop
+					clientConnected = false
+					clientDone = nil
+					if drainTimer == nil {
+						drainTimer = time.NewTimer(streamSettlementDrainTimeout)
+						drainC = drainTimer.C
+					}
 				}
 				if flusher != nil {
 					flusher.Flush()
@@ -784,33 +910,50 @@ streamLoop:
 		}
 		if !isPrefix && !lineTooLarge && bytes.HasPrefix(line, []byte("data:")) {
 			data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-			if streamCompleted(endpoint, data) {
-				completed = true
+			eventOutcome, eventCode, eventMessage := classifyStreamEvent(endpoint, data)
+			if eventOutcome == streamOutcomeFailed || (eventOutcome != streamOutcomeOpen && outcome == streamOutcomeOpen) {
+				outcome = eventOutcome
+			}
+			if eventCode != "" {
+				failureCode, failureMessage = eventCode, eventMessage
 			}
 			if !bytes.Equal(data, []byte("[DONE]")) {
-				usage.merge(parseUsage(data))
+				usage.merge(parseUsage(data, usageSemanticsFor(endpoint, route.Provider.Protocol)))
 			}
 		}
-		if len(fragment) > 0 {
+		if clientConnected && len(fragment) > 0 {
 			written, writeErr := w.Write(fragment)
 			if writeErr == nil && written != len(fragment) {
 				writeErr = io.ErrShortWrite
 			}
 			if writeErr != nil {
 				relayErr = writeErr
-				break
+				clientConnected = false
+				clientDone = nil
+				if drainTimer == nil {
+					drainTimer = time.NewTimer(streamSettlementDrainTimeout)
+					drainC = drainTimer.C
+				}
 			}
 		}
 		if !isPrefix {
-			if _, writeErr := w.Write([]byte{'\n'}); writeErr != nil {
-				relayErr = writeErr
-				break
+			if clientConnected {
+				_, writeErr := w.Write([]byte{'\n'})
+				if writeErr != nil {
+					relayErr = writeErr
+					clientConnected = false
+					clientDone = nil
+					if drainTimer == nil {
+						drainTimer = time.NewTimer(streamSettlementDrainTimeout)
+						drainC = drainTimer.C
+					}
+				}
 			}
 			atEventBoundary = len(line) == 0
 			line = line[:0]
 			lineTooLarge = false
 		}
-		if flusher != nil {
+		if clientConnected && flusher != nil {
 			flusher.Flush()
 		}
 		if readErr != nil {
@@ -823,54 +966,102 @@ streamLoop:
 	if relayErr != nil {
 		h.logger.Warn("relay gateway stream", "request_id", requestID, "provider", route.Provider.Code, "error", relayErr)
 	}
-	usage = applyUsageFallback(usage, inputEstimate, outputMaximum, rateCardFor(route))
-	if !completed {
-		usage.Estimated = true
+	if outcome == streamOutcomeFailed {
+		h.failOperation(requestID, "upstream_stream_failed")
+		if failureCode == "" {
+			failureCode, failureMessage = "upstream_stream_failed", "上游流式调用失败"
+		}
+		h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, failureCode, failureMessage, route.PublicName, startedAt)
+		return
 	}
+	if outcome != streamOutcomeBillable {
+		h.markOperationPendingUnknown(requestID, "upstream_stream_incomplete")
+		return
+	}
+	usage = applyUsageFallback(usage, inputEstimate, outputMaximum, rateCardFor(route))
 	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
 		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
-		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费计算失败，释放调用预占")
+		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		return
 	}
-	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
+	if err := h.settle(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		// A successful stream is billable even when the client disconnects or the
 		// usage row cannot be persisted after the response has started.
 		h.logger.Error("stream usage finalization unavailable", "request_id", requestID, "error", err)
-		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
+		if errors.Is(err, errSettlementIntentNotPersisted) {
+			h.markOperationPendingUnknown(requestID, "settlement_intent_unavailable")
+		}
 	}
 }
 
-func streamCompleted(endpoint string, data []byte) bool {
+func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
+	input := h.usageInput(actor, route, requestID, endpoint, reserved, quote, usage, startedAt)
+	persistCtx, persistCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer persistCancel()
+	if err, _ := h.retrySettlement(persistCtx, func() error { return h.billing.MarkOperationPendingSettlement(persistCtx, requestID, input) }); err != nil {
+		return fmt.Errorf("%w: %v", errSettlementIntentNotPersisted, err)
+	}
+	if err := h.finalizeInput(ctx, input); err != nil {
+		return err
+	}
+	completeCtx, completeCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer completeCancel()
+	if err, _ := h.retrySettlement(completeCtx, func() error { return h.billing.CompleteOperation(completeCtx, requestID) }); err != nil {
+		return fmt.Errorf("complete gateway operation: %w", err)
+	}
+	return nil
+}
+
+func (h *Handler) usageInput(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) billing.UsageInput {
+	billingGroupID := actor.APIKey.BillingGroupID
+	return billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
+		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
+}
+
+func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, string) {
 	if bytes.Equal(data, []byte("[DONE]")) {
-		return true
+		return streamOutcomeBillable, "", ""
 	}
 	var event struct {
-		Type string `json:"type"`
+		Type     string `json:"type"`
+		Error    any    `json:"error"`
+		Response struct {
+			Status string `json:"status"`
+		} `json:"response"`
 	}
 	if json.Unmarshal(data, &event) != nil {
-		return false
+		return streamOutcomeOpen, "", ""
 	}
 	switch endpoint {
 	case "responses":
-		return event.Type == "response.completed"
+		switch event.Type {
+		case "response.completed", "response.incomplete":
+			return streamOutcomeBillable, "", ""
+		case "response.failed", "response.cancelled", "error":
+			return streamOutcomeFailed, "upstream_stream_failed", "上游流式调用失败"
+		}
+		if event.Response.Status == "failed" || event.Response.Status == "cancelled" {
+			return streamOutcomeFailed, "upstream_stream_failed", "上游流式调用失败"
+		}
 	case "messages":
-		return event.Type == "message_stop"
-	default:
-		return false
+		switch event.Type {
+		case "message_stop":
+			return streamOutcomeBillable, "", ""
+		case "error":
+			return streamOutcomeFailed, "upstream_stream_failed", "上游流式调用失败"
+		}
 	}
+	return streamOutcomeOpen, "", ""
 }
 
-func (h *Handler) finalize(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
+func (h *Handler) finalizeInput(ctx context.Context, input billing.UsageInput) error {
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	billingGroupID := actor.APIKey.BillingGroupID
-	input := billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
-		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
-		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 	err, attempts := h.retrySettlement(finalizeCtx, func() error { return h.billing.Finalize(finalizeCtx, input) })
 	if err != nil {
-		h.logger.Error("finalize gateway usage", "request_id", requestID, "attempts", attempts, "error", err)
+		h.logger.Error("finalize gateway usage", "request_id", input.RequestID, "attempts", attempts, "error", err)
 	}
 	return err
 }
@@ -898,25 +1089,19 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	}
 }
 
-func (h *Handler) refund(userID, requestID uuid.UUID, amount int64, description string) {
-	if amount <= 0 {
-		return
-	}
+func (h *Handler) failOperation(requestID uuid.UUID, code string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.Refund(ctx, userID, requestID, amount, description) }); err != nil {
-		h.logger.Error("refund gateway reservation", "request_id", requestID, "attempts", attempts, "error", err)
+	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.FailOperation(ctx, requestID, code) }); err != nil {
+		h.logger.Error("fail gateway operation", "request_id", requestID, "attempts", attempts, "error", err)
 	}
 }
 
-func (h *Handler) releaseUnfinalized(userID, requestID uuid.UUID, amount int64, description string) {
-	if amount <= 0 {
-		return
-	}
+func (h *Handler) markOperationPendingUnknown(requestID uuid.UUID, reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.ReleaseReservation(ctx, userID, requestID, amount, description) }); err != nil {
-		h.logger.Error("release unfinalized gateway reservation", "request_id", requestID, "attempts", attempts, "error", err)
+	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.MarkOperationPendingUnknown(ctx, requestID, reason) }); err != nil {
+		h.logger.Error("mark gateway operation result unknown", "request_id", requestID, "attempts", attempts, "error", err)
 	}
 }
 
@@ -955,38 +1140,60 @@ func retryableSettlementError(err error) bool {
 type tokenUsage struct {
 	Input, UncachedInput, CacheRead, CacheWrite, CacheWrite1h, Output int
 	InputReported, OutputReported                                     bool
+	InputInvalid, OutputInvalid                                       bool
 	Estimated                                                         bool
 	UpstreamID                                                        string
 }
 
 func (u *tokenUsage) merge(other tokenUsage) {
-	if other.Input > u.Input {
+	if other.InputInvalid {
+		u.Input, u.UncachedInput, u.CacheRead, u.CacheWrite, u.CacheWrite1h = 0, 0, 0, 0, 0
+		u.InputReported = false
+		u.InputInvalid = true
+		u.Estimated = true
+	} else if other.InputReported {
+		// Usage events are cumulative snapshots. Replace the complete input
+		// breakdown atomically so cache details from a later event cannot be
+		// combined with uncached input from an earlier event.
 		u.Input = other.Input
-	}
-	if other.UncachedInput > u.UncachedInput {
 		u.UncachedInput = other.UncachedInput
-	}
-	if other.CacheRead > u.CacheRead {
 		u.CacheRead = other.CacheRead
-	}
-	if other.CacheWrite > u.CacheWrite {
 		u.CacheWrite = other.CacheWrite
-	}
-	if other.CacheWrite1h > u.CacheWrite1h {
 		u.CacheWrite1h = other.CacheWrite1h
+		u.InputReported = true
+		u.InputInvalid = false
 	}
-	if other.Output > u.Output {
+	if other.OutputInvalid {
+		u.Output = 0
+		u.OutputReported = false
+		u.OutputInvalid = true
+		u.Estimated = true
+	} else if other.OutputReported {
 		u.Output = other.Output
+		u.OutputReported = true
+		u.OutputInvalid = false
 	}
-	u.InputReported = u.InputReported || other.InputReported
-	u.OutputReported = u.OutputReported || other.OutputReported
 	if other.UpstreamID != "" {
 		u.UpstreamID = other.UpstreamID
 	}
 	u.Estimated = u.Estimated || other.Estimated
 }
 
-func parseUsage(body []byte) tokenUsage {
+type usageSemantics uint8
+
+const (
+	usageSemanticsOpenAITotal usageSemantics = iota
+	usageSemanticsAnthropicAdditional
+)
+
+func usageSemanticsFor(endpoint string, protocol provider.Protocol) usageSemantics {
+	if endpoint == "messages" && protocol == provider.ProtocolAnthropic {
+		return usageSemanticsAnthropicAdditional
+	}
+	return usageSemanticsOpenAITotal
+}
+
+func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 	var root map[string]any
 	if json.Unmarshal(body, &root) != nil {
 		return tokenUsage{}
@@ -996,7 +1203,7 @@ func parseUsage(body []byte) tokenUsage {
 		if candidate == nil {
 			continue
 		}
-		usage.merge(parseUsageCandidate(candidate))
+		usage.merge(parseUsageCandidate(candidate, semantics))
 	}
 	if response := mapValue(root["response"]); response != nil && usage.UpstreamID == "" {
 		usage.UpstreamID = stringValue(response["id"])
@@ -1007,11 +1214,17 @@ func parseUsage(body []byte) tokenUsage {
 	return usage
 }
 
-func parseUsageCandidate(candidate map[string]any) tokenUsage {
+func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tokenUsage {
 	promptTokens, hasPromptTokens := intField(candidate, "prompt_tokens")
 	inputTokens, hasInputTokens := intField(candidate, "input_tokens")
 	completionTokens, hasCompletionTokens := intField(candidate, "completion_tokens")
 	outputTokens, hasOutputTokens := intField(candidate, "output_tokens")
+	inputFieldPresent := mapHasAny(candidate, "prompt_tokens", "input_tokens")
+	outputFieldPresent := mapHasAny(candidate, "completion_tokens", "output_tokens")
+	invalidInputTotal := hasInvalidIntField(candidate, "prompt_tokens") || hasInvalidIntField(candidate, "input_tokens") ||
+		(hasPromptTokens && hasInputTokens && promptTokens != inputTokens)
+	invalidOutput := hasInvalidIntField(candidate, "completion_tokens") || hasInvalidIntField(candidate, "output_tokens") ||
+		(hasCompletionTokens && hasOutputTokens && completionTokens != outputTokens)
 	outputTokens = max(completionTokens, outputTokens)
 	details := mapValue(candidate["prompt_tokens_details"])
 	if details == nil {
@@ -1032,45 +1245,57 @@ func parseUsageCandidate(candidate map[string]any) tokenUsage {
 		hasInvalidIntField(mapValue(candidate["cache_creation"]), "ephemeral_5m_input_tokens")
 	cacheRead := max(intValue(candidate["prompt_cache_hit_tokens"]), intValue(candidate["cached_tokens"]), intValue(details["cached_tokens"]), intValue(candidate["cache_read_input_tokens"]))
 	cacheMiss := intValue(candidate["prompt_cache_miss_tokens"])
-	cacheWriteTotal := intValue(candidate["cache_creation_input_tokens"])
+	cacheWriteTotal, hasCacheWriteTotal := intField(candidate, "cache_creation_input_tokens")
 	cacheCreation := mapValue(candidate["cache_creation"])
 	cacheWrite1h := max(intValue(candidate["cache_creation_1h_input_tokens"]), intValue(cacheCreation["ephemeral_1h_input_tokens"]))
 	cacheWrite5m := max(intValue(candidate["cache_creation_5m_input_tokens"]), intValue(cacheCreation["ephemeral_5m_input_tokens"]))
 	cacheWrite := cacheWriteTotal
-	if cacheWrite5m+cacheWrite1h > 0 {
-		cacheWrite = max(cacheWrite5m, cacheWriteTotal-cacheWrite1h)
+	hasCacheWriteBreakdown := mapHasAny(candidate, "cache_creation_1h_input_tokens", "cache_creation_5m_input_tokens") || mapHasAny(cacheCreation, "ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens")
+	if hasCacheWriteBreakdown {
+		if hasCacheWriteTotal && cacheWriteTotal != cacheWrite5m+cacheWrite1h {
+			invalidCacheField = true
+		}
+		cacheWrite = cacheWrite5m
 	}
 
-	// OpenAI-compatible providers use prompt_tokens as a total and expose cached
-	// tokens as a subset. Anthropic uses input_tokens for regular input and reports
-	// cache reads and cache creation as additional, mutually exclusive dimensions.
+	// OpenAI Chat and Responses report cache dimensions as subsets of the total
+	// prompt/input count. Anthropic reports uncached input and cache dimensions as
+	// additional, mutually exclusive counts.
 	uncached := 0
 	inputTotal := 0
-	if hasPromptTokens {
-		if cacheMiss > 0 {
-			uncached = cacheMiss
-		} else {
-			uncached = max(0, promptTokens-cacheRead)
-		}
-		inputTotal = uncached + cacheRead
-		if inputTotal < promptTokens {
-			uncached += promptTokens - inputTotal
-			inputTotal = promptTokens
-		}
-		if inputTotal > promptTokens {
-			promptTokens = inputTotal
-		}
-		// Cache creation is not part of any currently supported OpenAI-compatible
-		// prompt total. Preserve it if a provider returns the fields explicitly.
-		inputTotal = promptTokens + cacheWrite + cacheWrite1h
-	} else if hasInputTokens {
+	inputReported := false
+	inputInvalid := invalidInputTotal || invalidCacheField
+	if semantics == usageSemanticsAnthropicAdditional && hasInputTokens && !inputInvalid {
 		uncached = inputTokens
 		inputTotal = uncached + cacheRead + cacheWrite + cacheWrite1h
-	} else {
-		uncached = cacheMiss
-		inputTotal = uncached + cacheRead + cacheWrite + cacheWrite1h
+		inputReported = true
+	} else if semantics == usageSemanticsOpenAITotal && !inputInvalid {
+		total := 0
+		switch {
+		case hasPromptTokens:
+			total = promptTokens
+		case hasInputTokens:
+			total = inputTokens
+		default:
+			inputInvalid = inputFieldPresent
+		}
+		categorized := cacheRead + cacheWrite + cacheWrite1h
+		if categorized > total || cacheMiss > total-categorized {
+			inputInvalid = true
+		} else if hasPromptTokens || hasInputTokens {
+			uncached = total - categorized
+			inputTotal = total
+			inputReported = true
+		}
 	}
-	return tokenUsage{Input: inputTotal, UncachedInput: uncached, CacheRead: cacheRead, CacheWrite: cacheWrite, CacheWrite1h: cacheWrite1h, Output: outputTokens, InputReported: (hasPromptTokens || hasInputTokens) && !invalidCacheField, OutputReported: hasCompletionTokens || hasOutputTokens}
+	if inputInvalid {
+		inputTotal, uncached, cacheRead, cacheWrite, cacheWrite1h, inputReported = 0, 0, 0, 0, 0, false
+	}
+	return tokenUsage{
+		Input: inputTotal, UncachedInput: uncached, CacheRead: cacheRead, CacheWrite: cacheWrite, CacheWrite1h: cacheWrite1h, Output: outputTokens,
+		InputReported: inputReported, OutputReported: (hasCompletionTokens || hasOutputTokens) && !invalidOutput,
+		InputInvalid: inputInvalid && inputFieldPresent, OutputInvalid: invalidOutput && outputFieldPresent,
+	}
 }
 
 func (u tokenUsage) breakdown() billing.TokenBreakdown {
@@ -1091,6 +1316,43 @@ func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsa
 		usage.Estimated = true
 	}
 	return usage
+}
+
+func estimateInputTokens(body []byte) int {
+	// JSON request bytes are a materially closer provisional estimate than the
+	// previous one-byte-per-token hold. Four bytes per token is intentionally a
+	// simple model-neutral estimate; final settlement always uses provider usage
+	// and can debit an idempotent overage when the estimate is low.
+	const protocolOverheadTokens = 64
+	return max(1, (len(body)+3)/4+protocolOverheadTokens)
+}
+
+func sha256String(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", digest)
+}
+
+func gatewayRequestHash(endpoint string, body []byte) string {
+	digest := sha256.New()
+	_, _ = io.WriteString(digest, endpoint)
+	_, _ = digest.Write([]byte{0})
+	_, _ = digest.Write(body)
+	return fmt.Sprintf("%x", digest.Sum(nil))
+}
+
+func writeOperationReplay(w http.ResponseWriter, operation billing.Operation) {
+	w.Header().Set(requestid.Header, operation.RequestID.String())
+	switch operation.Status {
+	case billing.OperationCompleted:
+		writeJSON(w, http.StatusOK, map[string]any{"id": operation.RequestID.String(), "object": "novro.operation", "status": "completed"})
+	case billing.OperationFailed:
+		writeError(w, http.StatusBadGateway, "operation_failed", "该幂等请求此前已失败，不会重复调用上游")
+	case billing.OperationPendingUnknown:
+		writeError(w, http.StatusConflict, "operation_result_unknown", "该幂等请求的上游结果仍无法确认，不会重复调用上游")
+	default:
+		w.Header().Set("Retry-After", "2")
+		writeError(w, http.StatusConflict, "operation_in_progress", "该幂等请求正在处理或等待结算，不会重复调用上游")
+	}
 }
 
 func rateCardFor(route modelroute.Resolved) billing.RateCard {
@@ -1250,6 +1512,15 @@ func hasInvalidMapField(values map[string]any, key string) bool {
 	}
 	_, valid := value.(map[string]any)
 	return !valid
+}
+
+func mapHasAny(values map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		if _, exists := values[key]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

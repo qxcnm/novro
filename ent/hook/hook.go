@@ -69,6 +69,18 @@ func (f EmailVerificationCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EmailVerificationCodeMutation", m)
 }
 
+// The GatewayOperationFunc type is an adapter to allow the use of ordinary
+// function as GatewayOperation mutator.
+type GatewayOperationFunc func(context.Context, *ent.GatewayOperationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GatewayOperationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GatewayOperationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GatewayOperationMutation", m)
+}
+
 // The ModelRouteFunc type is an adapter to allow the use of ordinary
 // function as ModelRoute mutator.
 type ModelRouteFunc func(context.Context, *ent.ModelRouteMutation) (ent.Value, error)

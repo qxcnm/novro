@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
 	"github.com/novro-gateway/novro/ent/useridentity"
@@ -323,6 +324,21 @@ func (_c *UserCreate) AddAPIUsages(v ...*APIUsage) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddAPIUsageIDs(ids...)
+}
+
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (_c *UserCreate) AddGatewayOperationIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddGatewayOperationIDs(ids...)
+	return _c
+}
+
+// AddGatewayOperations adds the "gateway_operations" edges to the GatewayOperation entity.
+func (_c *UserCreate) AddGatewayOperations(v ...*GatewayOperation) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGatewayOperationIDs(ids...)
 }
 
 // SetReferrerID sets the "referrer" edge to the User entity by ID.
@@ -679,6 +695,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GatewayOperationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.GatewayOperationsTable,
+			Columns: []string{user.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

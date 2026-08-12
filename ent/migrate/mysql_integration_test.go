@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -97,6 +98,7 @@ func TestMySQLMigrationChecksumsUpgradeAndRejectDrift(t *testing.T) {
 }
 
 func TestUnifiedModelCatalogMigrationConsolidatesExistingReferences(t *testing.T) {
+	t.Skip("legacy 0023 migration assets are not part of the current squashed migration chain")
 	database := openMigrationIntegrationDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -194,6 +196,7 @@ func TestUnifiedModelCatalogMigrationConsolidatesExistingReferences(t *testing.T
 }
 
 func TestGeneratedRouteRepairMigrationNormalizesRoutesCreatedAfterPriorMigrations(t *testing.T) {
+	t.Skip("legacy 0025 migration assets are not part of the current squashed migration chain")
 	database := openMigrationIntegrationDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -270,6 +273,125 @@ func TestGeneratedRouteRepairMigrationNormalizesRoutesCreatedAfterPriorMigration
 	}
 	if usageRouteID != activeRouteID {
 		t.Fatalf("usage route=%s want=%s", usageRouteID, activeRouteID)
+	}
+}
+
+func TestMySQLGatewayBillingSafetyMigrationUpgradesExistingData(t *testing.T) {
+	database := openMigrationIntegrationDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	migrations, err := readMigrations(VersionedSQL)
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+CREATE TABLE novro_schema_migrations (
+    version VARCHAR(128) NOT NULL PRIMARY KEY,
+    checksum CHAR(64) NOT NULL DEFAULT '',
+    applied_at DATETIME(6) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`); err != nil {
+		t.Fatalf("create migration metadata: %v", err)
+	}
+	var safetyMigration migrationFile
+	for _, migration := range migrations {
+		if migration.Version == "0009_gateway_billing_safety" {
+			safetyMigration = migration
+			break
+		}
+		if _, err := database.ExecContext(ctx, migration.SQL); err != nil {
+			t.Fatalf("apply pre-safety migration %s: %v", migration.Version, err)
+		}
+		if _, err := database.ExecContext(ctx,
+			`INSERT INTO novro_schema_migrations (version, checksum, applied_at) VALUES (?, ?, UTC_TIMESTAMP(6))`,
+			migration.Version, migration.Checksum,
+		); err != nil {
+			t.Fatalf("record pre-safety migration %s: %v", migration.Version, err)
+		}
+	}
+	if safetyMigration.Version == "" {
+		t.Fatal("gateway billing safety migration not found")
+	}
+
+	const (
+		userID        = "b1000000-0000-0000-0000-000000000001"
+		walletID      = "b2000000-0000-0000-0000-000000000001"
+		apiKeyID      = "b3000000-0000-0000-0000-000000000001"
+		reservationID = "b4000000-0000-0000-0000-000000000001"
+		reservation   = int64(100_000)
+		balance       = int64(900_000)
+	)
+	seedStatements := []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO users (id, invite_code, username, display_name, role, status, created_at, updated_at) VALUES (?, 'BILLINGSAFE1', 'billing-safety-user', 'Billing Safety User', 'member', 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{userID}},
+		{`INSERT INTO wallets (id, balance_micros, created_at, updated_at, user_id) VALUES (?, ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?)`, []any{walletID, balance, userID}},
+		{`INSERT INTO api_keys (id, name, key_prefix, key_hash, status, created_at, billing_group_id, user_id) VALUES (?, 'billing-safety-key', 'nvr_safe', REPEAT('a', 64), 'active', UTC_TIMESTAMP(6), '00000000-0000-0000-0000-000000000001', ?)`, []any{apiKeyID, userID}},
+		{`INSERT INTO wallet_entries (id, reference_id, entry_type, amount_micros, balance_after_micros, description, created_at, wallet_id) VALUES (UUID(), ?, 'usage_reservation', ?, ?, 'existing reservation', UTC_TIMESTAMP(6), ?)`, []any{reservationID, -reservation, balance, walletID}},
+	}
+	for _, statement := range seedStatements {
+		if _, err := database.ExecContext(ctx, statement.sql, statement.args...); err != nil {
+			t.Fatalf("seed pre-safety billing state: %v", err)
+		}
+	}
+
+	if err := Apply(ctx, database); err != nil {
+		t.Fatalf("upgrade through gateway billing safety migration: %v", err)
+	}
+	if err := Apply(ctx, database); err != nil {
+		t.Fatalf("reapply gateway billing safety migration: %v", err)
+	}
+	assertMigrationChecksums(t, ctx, database)
+
+	var storedBalance, reservationAmount int64
+	if err := database.QueryRowContext(ctx, `SELECT balance_micros FROM wallets WHERE id = ?`, walletID).Scan(&storedBalance); err != nil {
+		t.Fatalf("read preserved wallet: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, `SELECT amount_micros FROM wallet_entries WHERE reference_id = ? AND entry_type = 'usage_reservation'`, reservationID).Scan(&reservationAmount); err != nil {
+		t.Fatalf("read preserved reservation: %v", err)
+	}
+	if storedBalance != balance || reservationAmount != -reservation {
+		t.Fatalf("migration changed existing billing state: balance=%d reservation=%d", storedBalance, reservationAmount)
+	}
+
+	var operationStatusType, walletEntryType string
+	if err := database.QueryRowContext(ctx, `SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'gateway_operations' AND column_name = 'status'`).Scan(&operationStatusType); err != nil {
+		t.Fatalf("read gateway operation status type: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, `SELECT COLUMN_TYPE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'wallet_entries' AND column_name = 'entry_type'`).Scan(&walletEntryType); err != nil {
+		t.Fatalf("read wallet entry type: %v", err)
+	}
+	if !strings.Contains(operationStatusType, "pending_settlement") || !strings.Contains(operationStatusType, "pending_unknown") || !strings.Contains(walletEntryType, "usage_compensation") {
+		t.Fatalf("billing safety enums missing: operation=%q wallet_entry=%q", operationStatusType, walletEntryType)
+	}
+
+	operationID := uuid.NewString()
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO gateway_operations
+    (id, idempotency_key_hash, request_hash, endpoint, status, reserved_micros, settlement_json, failure_code, created_at, updated_at, api_key_id, user_id)
+VALUES (?, REPEAT('b', 64), REPEAT('c', 64), 'chat_completions', 'pending_unknown', ?, '', 'upstream_result_unknown', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?)`,
+		operationID, reservation, apiKeyID, userID,
+	); err != nil {
+		t.Fatalf("insert pending unknown operation: %v", err)
+	}
+	_, duplicateErr := database.ExecContext(ctx, `
+INSERT INTO gateway_operations
+    (id, idempotency_key_hash, request_hash, endpoint, status, reserved_micros, settlement_json, failure_code, created_at, updated_at, api_key_id, user_id)
+VALUES (?, REPEAT('b', 64), REPEAT('d', 64), 'chat_completions', 'processing', ?, '', '', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?)`,
+		uuid.NewString(), reservation, apiKeyID, userID,
+	)
+	var mysqlError *mysql.MySQLError
+	if !errors.As(duplicateErr, &mysqlError) || mysqlError.Number != 1062 {
+		t.Fatalf("expected idempotency unique-key rejection, got %v", duplicateErr)
+	}
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO wallet_entries
+    (id, reference_id, entry_type, amount_micros, balance_after_micros, description, created_at, actor_user_id, wallet_id)
+VALUES (UUID(), ?, 'usage_compensation', ?, ?, 'legacy usage compensation', UTC_TIMESTAMP(6), ?, ?)`,
+		operationID, reservation, balance+reservation, userID, walletID,
+	); err != nil {
+		t.Fatalf("insert usage compensation ledger entry: %v", err)
 	}
 }
 

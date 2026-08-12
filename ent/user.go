@@ -67,13 +67,15 @@ type UserEdges struct {
 	TopUpOrders []*TopUpOrder `json:"top_up_orders,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// GatewayOperations holds the value of the gateway_operations edge.
+	GatewayOperations []*GatewayOperation `json:"gateway_operations,omitempty"`
 	// Referrer holds the value of the referrer edge.
 	Referrer *User `json:"referrer,omitempty"`
 	// Referrals holds the value of the referrals edge.
 	Referrals []*User `json:"referrals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [10]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -141,12 +143,21 @@ func (e UserEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 	return nil, &NotLoadedError{edge: "api_usages"}
 }
 
+// GatewayOperationsOrErr returns the GatewayOperations value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) GatewayOperationsOrErr() ([]*GatewayOperation, error) {
+	if e.loadedTypes[7] {
+		return e.GatewayOperations, nil
+	}
+	return nil, &NotLoadedError{edge: "gateway_operations"}
+}
+
 // ReferrerOrErr returns the Referrer value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ReferrerOrErr() (*User, error) {
 	if e.Referrer != nil {
 		return e.Referrer, nil
-	} else if e.loadedTypes[7] {
+	} else if e.loadedTypes[8] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "referrer"}
@@ -155,7 +166,7 @@ func (e UserEdges) ReferrerOrErr() (*User, error) {
 // ReferralsOrErr returns the Referrals value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ReferralsOrErr() ([]*User, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[9] {
 		return e.Referrals, nil
 	}
 	return nil, &NotLoadedError{edge: "referrals"}
@@ -325,6 +336,11 @@ func (_m *User) QueryTopUpOrders() *TopUpOrderQuery {
 // QueryAPIUsages queries the "api_usages" edge of the User entity.
 func (_m *User) QueryAPIUsages() *APIUsageQuery {
 	return NewUserClient(_m.config).QueryAPIUsages(_m)
+}
+
+// QueryGatewayOperations queries the "gateway_operations" edge of the User entity.
+func (_m *User) QueryGatewayOperations() *GatewayOperationQuery {
+	return NewUserClient(_m.config).QueryGatewayOperations(_m)
 }
 
 // QueryReferrer queries the "referrer" edge of the User entity.

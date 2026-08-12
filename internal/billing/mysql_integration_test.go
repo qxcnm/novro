@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/novro-gateway/novro/ent"
 	entapiusage "github.com/novro-gateway/novro/ent/apiusage"
 	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
+	entgatewayoperation "github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/migrate"
 	entuser "github.com/novro-gateway/novro/ent/user"
 	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
@@ -154,22 +156,31 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 
 	service := NewService(NewEntStore(client))
 	requestID := uuid.New()
-	if err := service.Reserve(ctx, createdUser.ID, requestID, 400_000, "idempotent request"); err != nil {
-		t.Fatalf("reserve balance: %v", err)
+	operationInput := OperationStartInput{RequestID: requestID, UserID: createdUser.ID, APIKeyID: apiKey.ID, IdempotencyKeyHash: strings.Repeat("b", 64), RequestHash: strings.Repeat("c", 64), Endpoint: "chat_completions", ReservedMicros: 400_000}
+	started, err := service.StartOperation(ctx, operationInput)
+	if err != nil || !started.Created {
+		t.Fatalf("start operation: result=%+v err=%v", started, err)
 	}
-	if err := service.Reserve(ctx, createdUser.ID, requestID, 400_000, "idempotent retry"); err != nil {
-		t.Fatalf("retry reservation: %v", err)
+	retry, err := service.StartOperation(ctx, operationInput)
+	if err != nil || retry.Created || retry.Operation.RequestID != requestID {
+		t.Fatalf("retry operation: result=%+v err=%v", retry, err)
 	}
-	if err := service.Reserve(ctx, createdUser.ID, requestID, 300_000, "conflicting retry"); !errors.Is(err, ErrRequestConflict) {
-		t.Fatalf("conflicting reservation err=%v", err)
-	}
-	if err := service.Refund(ctx, createdUser.ID, requestID, 100_000, "partial refund"); !errors.Is(err, ErrRequestConflict) {
-		t.Fatalf("partial refund err=%v", err)
+	conflictingStart := operationInput
+	conflictingStart.RequestID = uuid.New()
+	conflictingStart.RequestHash = strings.Repeat("d", 64)
+	if _, err := service.StartOperation(ctx, conflictingStart); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("conflicting operation err=%v", err)
 	}
 
 	usage := UsageInput{UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, UpstreamModelID: &upstream.ID, BillingGroupID: &group.ID, RequestID: requestID, Endpoint: "chat_completions", InputTokens: 10, Tokens: TokenBreakdown{UncachedInput: 10, Output: 20}, OutputTokens: 20, Rates: RateCard{RequestMicros: 300_000}, BaseCostMicros: 300_000, MultiplierBPS: 10_000, CostMicros: 300_000, ReservedMicros: 400_000, ModelName: "integration-model", UpstreamModelName: "upstream-model", BillingGroupCode: group.Code, BillingGroupName: group.DisplayName, CalculationVersion: CalculationVersion, CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC()}
+	if err := service.MarkOperationPendingSettlement(ctx, requestID, usage); err != nil {
+		t.Fatalf("persist pending usage: %v", err)
+	}
 	if err := service.Finalize(ctx, usage); err != nil {
 		t.Fatalf("finalize usage: %v", err)
+	}
+	if err := service.CompleteOperation(ctx, requestID); err != nil {
+		t.Fatalf("complete operation: %v", err)
 	}
 	if err := service.Finalize(ctx, usage); err != nil {
 		t.Fatalf("retry finalization: %v", err)
@@ -221,8 +232,9 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 
 	orphanedRequestID := uuid.New()
-	if err := service.Reserve(ctx, createdUser.ID, orphanedRequestID, 50_000, "orphaned request"); err != nil {
-		t.Fatalf("reserve orphaned request: %v", err)
+	orphanedStart := OperationStartInput{RequestID: orphanedRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID, IdempotencyKeyHash: strings.Repeat("e", 64), RequestHash: strings.Repeat("f", 64), Endpoint: "chat_completions", ReservedMicros: 50_000}
+	if _, err := service.StartOperation(ctx, orphanedStart); err != nil {
+		t.Fatalf("start orphaned request: %v", err)
 	}
 	reservedSummary, err := service.Summary(ctx, createdUser.ID)
 	if err != nil {
@@ -231,11 +243,11 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if reservedSummary.ReservedMicros != 50_000 {
 		t.Fatalf("active reservation=%d want=50000", reservedSummary.ReservedMicros)
 	}
-	if err := service.ReleaseReservation(ctx, createdUser.ID, orphanedRequestID, 50_000, "release orphaned request"); err != nil {
-		t.Fatalf("release orphaned request: %v", err)
+	if err := service.FailOperation(ctx, orphanedRequestID, "upstream_failed"); err != nil {
+		t.Fatalf("fail orphaned request: %v", err)
 	}
-	if err := service.ReleaseReservation(ctx, createdUser.ID, orphanedRequestID, 50_000, "retry orphaned release"); err != nil {
-		t.Fatalf("retry orphaned release: %v", err)
+	if err := service.FailOperation(ctx, orphanedRequestID, "upstream_failed"); err != nil {
+		t.Fatalf("retry failed request: %v", err)
 	}
 	releasedSummary, err := service.Summary(ctx, createdUser.ID)
 	if err != nil {
@@ -259,6 +271,394 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 	if usageCount != 0 {
 		t.Fatalf("usage after incompatible refund=%d want=0", usageCount)
+	}
+
+	missingReservationUsage := usage
+	missingReservationUsage.RequestID = uuid.New()
+	if err := service.Finalize(ctx, missingReservationUsage); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("finalize without reservation err=%v", err)
+	}
+
+	mismatchedReservationRequestID := uuid.New()
+	mismatchedStart := OperationStartInput{RequestID: mismatchedReservationRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID, IdempotencyKeyHash: strings.Repeat("1", 64), RequestHash: strings.Repeat("2", 64), Endpoint: "chat_completions", ReservedMicros: 60_000}
+	if _, err := service.StartOperation(ctx, mismatchedStart); err != nil {
+		t.Fatalf("start mismatched request: %v", err)
+	}
+	mismatchedReservationUsage := usage
+	mismatchedReservationUsage.RequestID = mismatchedReservationRequestID
+	mismatchedReservationUsage.ReservedMicros = 50_000
+	if err := service.Finalize(ctx, mismatchedReservationUsage); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("finalize with mismatched reservation err=%v", err)
+	}
+	if err := service.FailOperation(ctx, mismatchedReservationRequestID, "test_cleanup"); err != nil {
+		t.Fatalf("cleanup mismatched operation: %v", err)
+	}
+
+	overageRequestID := uuid.New()
+	overageStart := OperationStartInput{RequestID: overageRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID, IdempotencyKeyHash: strings.Repeat("3", 64), RequestHash: strings.Repeat("4", 64), Endpoint: "chat_completions", ReservedMicros: 50_000}
+	if _, err := service.StartOperation(ctx, overageStart); err != nil {
+		t.Fatalf("start overage: %v", err)
+	}
+	overageUsage := usage
+	overageUsage.RequestID = overageRequestID
+	overageUsage.Rates.RequestMicros = 75_000
+	overageUsage.BaseCostMicros = 75_000
+	overageUsage.CostMicros = 75_000
+	overageUsage.ReservedMicros = 50_000
+	if err := service.MarkOperationPendingSettlement(ctx, overageRequestID, overageUsage); err != nil {
+		t.Fatalf("persist overage settlement: %v", err)
+	}
+	if err := service.Finalize(ctx, overageUsage); err != nil {
+		t.Fatalf("finalize overage: %v", err)
+	}
+	if err := service.Finalize(ctx, overageUsage); err != nil {
+		t.Fatalf("retry overage finalization: %v", err)
+	}
+	if err := service.CompleteOperation(ctx, overageRequestID); err != nil {
+		t.Fatalf("complete overage: %v", err)
+	}
+	settlementEntries, err := client.WalletEntry.Query().Where(
+		entwalletentry.ReferenceIDEQ(overageRequestID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageSettlement),
+	).All(ctx)
+	if err != nil {
+		t.Fatalf("list overage settlements: %v", err)
+	}
+	if len(settlementEntries) != 1 || settlementEntries[0].AmountMicros != -25_000 {
+		t.Fatalf("overage settlements=%+v", settlementEntries)
+	}
+	overageSummary, err := service.Summary(ctx, createdUser.ID)
+	if err != nil {
+		t.Fatalf("summarize overage request: %v", err)
+	}
+	if overageSummary.Wallet.BalanceMicros != initialBalance-375_000 {
+		t.Fatalf("overage balance=%d want=%d", overageSummary.Wallet.BalanceMicros, initialBalance-375_000)
+	}
+	completed, err := client.GatewayOperation.Query().Where(entgatewayoperation.IDEQ(overageRequestID), entgatewayoperation.StatusEQ(entgatewayoperation.StatusCompleted)).Count(ctx)
+	if err != nil || completed != 1 {
+		t.Fatalf("completed overage operation=%d err=%v", completed, err)
+	}
+}
+
+func TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent(t *testing.T) {
+	client := openMySQLIntegrationClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	createdUser, err := client.User.Create().
+		SetUsername("gateway-races-" + strings.ReplaceAll(uuid.NewString(), "-", "")).
+		SetDisplayName("Gateway Race Test").SetRole(entuser.RoleMember).SetStatus(entuser.StatusActive).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race user: %v", err)
+	}
+	const initialBalance int64 = 5_000_000
+	wallet, err := client.Wallet.Create().SetUserID(createdUser.ID).SetBalanceMicros(initialBalance).Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race wallet: %v", err)
+	}
+	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
+	if err != nil {
+		t.Fatalf("read gateway race billing group: %v", err)
+	}
+	apiKey, err := client.APIKey.Create().SetUserID(createdUser.ID).SetBillingGroupID(group.ID).SetName("gateway-race").SetKeyPrefix("nvr_race").SetKeyHash(strings.Repeat("6", 64)).Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race API key: %v", err)
+	}
+	providerEntity, err := client.Provider.Create().SetBillingGroupID(group.ID).SetCode("gateway-race-provider").SetDisplayName("Gateway Race Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race provider: %v", err)
+	}
+	upstream, err := client.UpstreamModel.Create().SetProviderName("Gateway Race Provider").SetUpstreamName("gateway-race-model").SetDisplayName("Gateway Race Model").SetRequestPriceMicros(50_000).Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race upstream model: %v", err)
+	}
+	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetPublicName("gateway-race-model").SetDisplayName("Gateway Race Model").SetUpstreamName("gateway-race-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
+	if err != nil {
+		t.Fatalf("create gateway race route: %v", err)
+	}
+	service := NewService(NewEntStore(client))
+
+	startInput := OperationStartInput{
+		RequestID: uuid.New(), UserID: createdUser.ID, APIKeyID: apiKey.ID,
+		IdempotencyKeyHash: strings.Repeat("7", 64), RequestHash: strings.Repeat("8", 64), Endpoint: "chat_completions", ReservedMicros: 100_000,
+	}
+	type startResult struct {
+		result OperationStartResult
+		err    error
+	}
+	startGate := make(chan struct{})
+	startResults := make(chan startResult, 8)
+	for range 8 {
+		go func() {
+			<-startGate
+			concurrentInput := startInput
+			concurrentInput.RequestID = uuid.New()
+			result, startErr := service.StartOperation(context.Background(), concurrentInput)
+			startResults <- startResult{result: result, err: startErr}
+		}()
+	}
+	close(startGate)
+	createdCount := 0
+	returnedRequestIDs := make(map[uuid.UUID]struct{})
+	for range 8 {
+		result := <-startResults
+		if result.err != nil {
+			t.Fatalf("concurrent start operation: %v", result.err)
+		}
+		returnedRequestIDs[result.result.Operation.RequestID] = struct{}{}
+		if result.result.Created {
+			createdCount++
+		}
+	}
+	if createdCount != 1 || len(returnedRequestIDs) != 1 {
+		t.Fatalf("concurrent start created=%d request_ids=%v", createdCount, returnedRequestIDs)
+	}
+	var winningRequestID uuid.UUID
+	for requestID := range returnedRequestIDs {
+		winningRequestID = requestID
+	}
+	reservationCount, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(wallet.ID),
+		entwalletentry.ReferenceIDEQ(winningRequestID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageReservation),
+	).Count(ctx)
+	if err != nil || reservationCount != 1 {
+		t.Fatalf("concurrent start reservations=%d err=%v", reservationCount, err)
+	}
+	if err := service.FailOperation(ctx, winningRequestID, "test_cleanup"); err != nil {
+		t.Fatalf("release concurrent start reservation: %v", err)
+	}
+
+	transitionRequestID := uuid.New()
+	transitionStart := OperationStartInput{
+		RequestID: transitionRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID,
+		IdempotencyKeyHash: strings.Repeat("9", 64), RequestHash: strings.Repeat("a", 64), Endpoint: "chat_completions", ReservedMicros: 100_000,
+	}
+	if _, err := service.StartOperation(ctx, transitionStart); err != nil {
+		t.Fatalf("start competing transition: %v", err)
+	}
+	transitionUsage := UsageInput{
+		UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, UpstreamModelID: &upstream.ID, BillingGroupID: &group.ID,
+		RequestID: transitionRequestID, Endpoint: "chat_completions", InputTokens: 1, Tokens: TokenBreakdown{UncachedInput: 1}, Rates: RateCard{RequestMicros: 50_000},
+		BaseCostMicros: 50_000, MultiplierBPS: 10_000, CostMicros: 50_000, ReservedMicros: 100_000, ModelName: route.PublicName,
+		UpstreamModelName: upstream.UpstreamName, BillingGroupCode: group.Code, BillingGroupName: group.DisplayName, CalculationVersion: CalculationVersion,
+		CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC(),
+	}
+	transitionGate := make(chan struct{})
+	transitionResults := make(chan error, 2)
+	go func() {
+		<-transitionGate
+		transitionResults <- service.MarkOperationPendingSettlement(context.Background(), transitionRequestID, transitionUsage)
+	}()
+	go func() {
+		<-transitionGate
+		transitionResults <- service.FailOperation(context.Background(), transitionRequestID, "upstream_failed")
+	}()
+	close(transitionGate)
+	assertOneSuccessOneConflict(t, <-transitionResults, <-transitionResults)
+	transitionOperation, err := client.GatewayOperation.Get(ctx, transitionRequestID)
+	if err != nil {
+		t.Fatalf("read competing transition: %v", err)
+	}
+	switch transitionOperation.Status {
+	case entgatewayoperation.StatusPendingSettlement:
+		if err := service.Finalize(ctx, transitionUsage); err != nil {
+			t.Fatalf("finalize winning settlement: %v", err)
+		}
+		if err := service.CompleteOperation(ctx, transitionRequestID); err != nil {
+			t.Fatalf("complete winning settlement: %v", err)
+		}
+	case entgatewayoperation.StatusFailed:
+		if err := service.Finalize(ctx, transitionUsage); !errors.Is(err, ErrRequestConflict) {
+			t.Fatalf("finalize after winning failure err=%v", err)
+		}
+	default:
+		t.Fatalf("competing transition status=%s", transitionOperation.Status)
+	}
+
+	unknownRequestID := uuid.New()
+	unknownStart := OperationStartInput{
+		RequestID: unknownRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID,
+		IdempotencyKeyHash: strings.Repeat("b", 64), RequestHash: strings.Repeat("c", 64), Endpoint: "chat_completions", ReservedMicros: 100_000,
+	}
+	if _, err := service.StartOperation(ctx, unknownStart); err != nil {
+		t.Fatalf("start uncertain transition: %v", err)
+	}
+	unknownUsage := transitionUsage
+	unknownUsage.RequestID = unknownRequestID
+	unknownGate := make(chan struct{})
+	unknownResults := make(chan error, 2)
+	go func() {
+		<-unknownGate
+		unknownResults <- service.MarkOperationPendingSettlement(context.Background(), unknownRequestID, unknownUsage)
+	}()
+	go func() {
+		<-unknownGate
+		unknownResults <- service.MarkOperationPendingUnknown(context.Background(), unknownRequestID, "upstream_result_unknown")
+	}()
+	close(unknownGate)
+	assertOneSuccessOneConflict(t, <-unknownResults, <-unknownResults)
+	unknownOperation, err := client.GatewayOperation.Get(ctx, unknownRequestID)
+	if err != nil {
+		t.Fatalf("read uncertain transition: %v", err)
+	}
+	switch unknownOperation.Status {
+	case entgatewayoperation.StatusPendingSettlement:
+		if err := service.Finalize(ctx, unknownUsage); err != nil {
+			t.Fatalf("finalize settlement after unknown race: %v", err)
+		}
+		if err := service.CompleteOperation(ctx, unknownRequestID); err != nil {
+			t.Fatalf("complete settlement after unknown race: %v", err)
+		}
+	case entgatewayoperation.StatusPendingUnknown:
+		if unknownOperation.FailureCode != "upstream_result_unknown" {
+			t.Fatalf("pending unknown reason=%q", unknownOperation.FailureCode)
+		}
+	default:
+		t.Fatalf("uncertain transition status=%s", unknownOperation.Status)
+	}
+
+	recoveryRequestID := uuid.New()
+	recoveryStart := OperationStartInput{
+		RequestID: recoveryRequestID, UserID: createdUser.ID, APIKeyID: apiKey.ID,
+		IdempotencyKeyHash: strings.Repeat("d", 64), RequestHash: strings.Repeat("e", 64), Endpoint: "chat_completions", ReservedMicros: 50_000,
+	}
+	if _, err := service.StartOperation(ctx, recoveryStart); err != nil {
+		t.Fatalf("start recovery operation: %v", err)
+	}
+	recoveryUsage := transitionUsage
+	recoveryUsage.RequestID = recoveryRequestID
+	recoveryUsage.ReservedMicros = 50_000
+	recoveryUsage.Rates.RequestMicros = 75_000
+	recoveryUsage.BaseCostMicros = 75_000
+	recoveryUsage.CostMicros = 75_000
+	if err := service.MarkOperationPendingSettlement(ctx, recoveryRequestID, recoveryUsage); err != nil {
+		t.Fatalf("persist recovery settlement: %v", err)
+	}
+	recoveryGate := make(chan struct{})
+	recoveryResults := make(chan error, 4)
+	for range 4 {
+		go func() {
+			<-recoveryGate
+			_, recoveryErr := service.RecoverPendingSettlements(context.Background(), 100)
+			recoveryResults <- recoveryErr
+		}()
+	}
+	close(recoveryGate)
+	for range 4 {
+		if err := <-recoveryResults; err != nil {
+			t.Fatalf("concurrent settlement recovery: %v", err)
+		}
+	}
+	recoveredOperation, err := client.GatewayOperation.Get(ctx, recoveryRequestID)
+	if err != nil || recoveredOperation.Status != entgatewayoperation.StatusCompleted {
+		t.Fatalf("recovered operation status=%v err=%v", recoveredOperation, err)
+	}
+	settlementCount, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(wallet.ID),
+		entwalletentry.ReferenceIDEQ(recoveryRequestID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageSettlement),
+	).Count(ctx)
+	if err != nil || settlementCount != 1 {
+		t.Fatalf("recovery settlement entries=%d err=%v", settlementCount, err)
+	}
+	usageCount, err := client.APIUsage.Query().Where(entapiusage.RequestIDEQ(recoveryRequestID)).Count(ctx)
+	if err != nil || usageCount != 1 {
+		t.Fatalf("recovered usage rows=%d err=%v", usageCount, err)
+	}
+
+	adjustmentReferenceID := uuid.New()
+	adjustmentGate := make(chan struct{})
+	adjustmentResults := make(chan error, 8)
+	beforeAdjustment, err := client.Wallet.Get(ctx, wallet.ID)
+	if err != nil {
+		t.Fatalf("read wallet before concurrent adjustment: %v", err)
+	}
+	for range 8 {
+		go func() {
+			<-adjustmentGate
+			_, adjustmentErr := service.Adjust(context.Background(), createdUser.ID, createdUser.ID, adjustmentReferenceID, 25_000, "并发幂等调整")
+			adjustmentResults <- adjustmentErr
+		}()
+	}
+	close(adjustmentGate)
+	for range 8 {
+		if err := <-adjustmentResults; err != nil {
+			t.Fatalf("concurrent balance adjustment: %v", err)
+		}
+	}
+	afterAdjustment, err := client.Wallet.Get(ctx, wallet.ID)
+	if err != nil || afterAdjustment.BalanceMicros != beforeAdjustment.BalanceMicros+25_000 {
+		t.Fatalf("adjusted balance=%v before=%v err=%v", afterAdjustment, beforeAdjustment, err)
+	}
+	adjustmentCount, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(wallet.ID),
+		entwalletentry.ReferenceIDEQ(adjustmentReferenceID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeManualAdjustment),
+	).Count(ctx)
+	if err != nil || adjustmentCount != 1 {
+		t.Fatalf("manual adjustment entries=%d err=%v", adjustmentCount, err)
+	}
+
+	legacyRequestID := uuid.New()
+	if _, err := client.APIUsage.Create().SetUserID(createdUser.ID).SetAPIKeyID(apiKey.ID).SetModelRouteID(route.ID).SetUpstreamModelID(upstream.ID).SetBillingGroupID(group.ID).
+		SetRequestID(legacyRequestID).SetEndpoint(entapiusage.EndpointChatCompletions).SetStatusCode(http.StatusOK).SetInputTokens(1).SetUncachedInputTokens(1).
+		SetCostMicros(30_000).SetReservedMicros(30_000).SetEstimated(true).SetModelName(route.PublicName).SetUpstreamModelName(upstream.UpstreamName).
+		SetBillingGroupCode(group.Code).SetBillingGroupName(group.DisplayName).SetCalculationVersion("token-v2").Save(ctx); err != nil {
+		t.Fatalf("create legacy usage for compensation: %v", err)
+	}
+	beforeCompensation, err := client.Wallet.Get(ctx, wallet.ID)
+	if err != nil {
+		t.Fatalf("read wallet before compensation: %v", err)
+	}
+	compensationGate := make(chan struct{})
+	compensationResults := make(chan error, 8)
+	for range 8 {
+		go func() {
+			<-compensationGate
+			_, amount, compensationErr := service.CompensateLegacyUsage(context.Background(), legacyRequestID, createdUser.ID)
+			if compensationErr == nil && amount != 30_000 {
+				compensationErr = fmt.Errorf("compensation amount=%d want=30000", amount)
+			}
+			compensationResults <- compensationErr
+		}()
+	}
+	close(compensationGate)
+	for range 8 {
+		if err := <-compensationResults; err != nil {
+			t.Fatalf("concurrent legacy compensation: %v", err)
+		}
+	}
+	afterCompensation, err := client.Wallet.Get(ctx, wallet.ID)
+	if err != nil || afterCompensation.BalanceMicros != beforeCompensation.BalanceMicros+30_000 {
+		t.Fatalf("compensated balance=%v before=%v err=%v", afterCompensation, beforeCompensation, err)
+	}
+	compensationCount, err := client.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(wallet.ID),
+		entwalletentry.ReferenceIDEQ(legacyRequestID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageCompensation),
+	).Count(ctx)
+	if err != nil || compensationCount != 1 {
+		t.Fatalf("usage compensation entries=%d err=%v", compensationCount, err)
+	}
+}
+
+func assertOneSuccessOneConflict(t *testing.T, first, second error) {
+	t.Helper()
+	successes, conflicts := 0, 0
+	for _, err := range []error{first, second} {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, ErrRequestConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected competing transition error: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("competing transition successes=%d conflicts=%d", successes, conflicts)
 	}
 }
 

@@ -45,6 +45,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("wallet_entries", WalletEntry.Type),
 		edge.To("top_up_orders", TopUpOrder.Type),
 		edge.To("api_usages", APIUsage.Type),
+		edge.To("gateway_operations", GatewayOperation.Type),
 		edge.To("referrals", User.Type).From("referrer").Unique().Field("referred_by_user_id").Immutable(),
 	}
 }

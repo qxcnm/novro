@@ -11,6 +11,7 @@ import (
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -453,6 +454,74 @@ func init() {
 	emailverificationcodeDescID := emailverificationcodeFields[0].Descriptor()
 	// emailverificationcode.DefaultID holds the default value on creation for the id field.
 	emailverificationcode.DefaultID = emailverificationcodeDescID.Default.(func() uuid.UUID)
+	gatewayoperationFields := schema.GatewayOperation{}.Fields()
+	_ = gatewayoperationFields
+	// gatewayoperationDescIdempotencyKeyHash is the schema descriptor for idempotency_key_hash field.
+	gatewayoperationDescIdempotencyKeyHash := gatewayoperationFields[3].Descriptor()
+	// gatewayoperation.IdempotencyKeyHashValidator is a validator for the "idempotency_key_hash" field. It is called by the builders before save.
+	gatewayoperation.IdempotencyKeyHashValidator = func() func(string) error {
+		validators := gatewayoperationDescIdempotencyKeyHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(idempotency_key_hash string) error {
+			for _, fn := range fns {
+				if err := fn(idempotency_key_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// gatewayoperationDescRequestHash is the schema descriptor for request_hash field.
+	gatewayoperationDescRequestHash := gatewayoperationFields[4].Descriptor()
+	// gatewayoperation.RequestHashValidator is a validator for the "request_hash" field. It is called by the builders before save.
+	gatewayoperation.RequestHashValidator = func() func(string) error {
+		validators := gatewayoperationDescRequestHash.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(request_hash string) error {
+			for _, fn := range fns {
+				if err := fn(request_hash); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// gatewayoperationDescReservedMicros is the schema descriptor for reserved_micros field.
+	gatewayoperationDescReservedMicros := gatewayoperationFields[7].Descriptor()
+	// gatewayoperation.DefaultReservedMicros holds the default value on creation for the reserved_micros field.
+	gatewayoperation.DefaultReservedMicros = gatewayoperationDescReservedMicros.Default.(int64)
+	// gatewayoperation.ReservedMicrosValidator is a validator for the "reserved_micros" field. It is called by the builders before save.
+	gatewayoperation.ReservedMicrosValidator = gatewayoperationDescReservedMicros.Validators[0].(func(int64) error)
+	// gatewayoperationDescSettlementJSON is the schema descriptor for settlement_json field.
+	gatewayoperationDescSettlementJSON := gatewayoperationFields[8].Descriptor()
+	// gatewayoperation.DefaultSettlementJSON holds the default value on creation for the settlement_json field.
+	gatewayoperation.DefaultSettlementJSON = gatewayoperationDescSettlementJSON.Default.(string)
+	// gatewayoperationDescFailureCode is the schema descriptor for failure_code field.
+	gatewayoperationDescFailureCode := gatewayoperationFields[9].Descriptor()
+	// gatewayoperation.DefaultFailureCode holds the default value on creation for the failure_code field.
+	gatewayoperation.DefaultFailureCode = gatewayoperationDescFailureCode.Default.(string)
+	// gatewayoperation.FailureCodeValidator is a validator for the "failure_code" field. It is called by the builders before save.
+	gatewayoperation.FailureCodeValidator = gatewayoperationDescFailureCode.Validators[0].(func(string) error)
+	// gatewayoperationDescCreatedAt is the schema descriptor for created_at field.
+	gatewayoperationDescCreatedAt := gatewayoperationFields[10].Descriptor()
+	// gatewayoperation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gatewayoperation.DefaultCreatedAt = gatewayoperationDescCreatedAt.Default.(func() time.Time)
+	// gatewayoperationDescUpdatedAt is the schema descriptor for updated_at field.
+	gatewayoperationDescUpdatedAt := gatewayoperationFields[11].Descriptor()
+	// gatewayoperation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gatewayoperation.DefaultUpdatedAt = gatewayoperationDescUpdatedAt.Default.(func() time.Time)
+	// gatewayoperation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gatewayoperation.UpdateDefaultUpdatedAt = gatewayoperationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gatewayoperationDescID is the schema descriptor for id field.
+	gatewayoperationDescID := gatewayoperationFields[0].Descriptor()
+	// gatewayoperation.DefaultID holds the default value on creation for the id field.
+	gatewayoperation.DefaultID = gatewayoperationDescID.Default.(func() uuid.UUID)
 	modelrouteFields := schema.ModelRoute{}.Fields()
 	_ = modelrouteFields
 	// modelrouteDescPublicName is the schema descriptor for public_name field.

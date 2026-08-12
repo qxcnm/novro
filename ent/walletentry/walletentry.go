@@ -93,12 +93,13 @@ type EntryType string
 
 // EntryType values.
 const (
-	EntryTypeManualAdjustment EntryType = "manual_adjustment"
-	EntryTypeTopUp            EntryType = "top_up"
-	EntryTypeReferralReward   EntryType = "referral_reward"
-	EntryTypeUsageReservation EntryType = "usage_reservation"
-	EntryTypeUsageRefund      EntryType = "usage_refund"
-	EntryTypeUsageSettlement  EntryType = "usage_settlement"
+	EntryTypeManualAdjustment  EntryType = "manual_adjustment"
+	EntryTypeTopUp             EntryType = "top_up"
+	EntryTypeReferralReward    EntryType = "referral_reward"
+	EntryTypeUsageReservation  EntryType = "usage_reservation"
+	EntryTypeUsageRefund       EntryType = "usage_refund"
+	EntryTypeUsageSettlement   EntryType = "usage_settlement"
+	EntryTypeUsageCompensation EntryType = "usage_compensation"
 )
 
 func (et EntryType) String() string {
@@ -108,7 +109,7 @@ func (et EntryType) String() string {
 // EntryTypeValidator is a validator for the "entry_type" field enum values. It is called by the builders before save.
 func EntryTypeValidator(et EntryType) error {
 	switch et {
-	case EntryTypeManualAdjustment, EntryTypeTopUp, EntryTypeReferralReward, EntryTypeUsageReservation, EntryTypeUsageRefund, EntryTypeUsageSettlement:
+	case EntryTypeManualAdjustment, EntryTypeTopUp, EntryTypeReferralReward, EntryTypeUsageReservation, EntryTypeUsageRefund, EntryTypeUsageSettlement, EntryTypeUsageCompensation:
 		return nil
 	default:
 		return fmt.Errorf("walletentry: invalid enum value for entry_type field: %q", et)

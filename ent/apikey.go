@@ -54,9 +54,11 @@ type APIKeyEdges struct {
 	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// GatewayOperations holds the value of the gateway_operations edge.
+	GatewayOperations []*GatewayOperation `json:"gateway_operations,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -88,6 +90,15 @@ func (e APIKeyEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
+}
+
+// GatewayOperationsOrErr returns the GatewayOperations value or an error if the edge
+// was not loaded in eager-loading.
+func (e APIKeyEdges) GatewayOperationsOrErr() ([]*GatewayOperation, error) {
+	if e.loadedTypes[3] {
+		return e.GatewayOperations, nil
+	}
+	return nil, &NotLoadedError{edge: "gateway_operations"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -210,6 +221,11 @@ func (_m *APIKey) QueryBillingGroup() *BillingGroupQuery {
 // QueryAPIUsages queries the "api_usages" edge of the APIKey entity.
 func (_m *APIKey) QueryAPIUsages() *APIUsageQuery {
 	return NewAPIKeyClient(_m.config).QueryAPIUsages(_m)
+}
+
+// QueryGatewayOperations queries the "gateway_operations" edge of the APIKey entity.
+func (_m *APIKey) QueryGatewayOperations() *GatewayOperationQuery {
+	return NewAPIKeyClient(_m.config).QueryGatewayOperations(_m)
 }
 
 // Update returns a builder for updating this APIKey.

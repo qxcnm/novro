@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type WalletEntry = { id: string; reference_id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
+type WalletEntry = { id: string; reference_id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement" | "usage_compensation"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { id: string; user_id: string; balance_micros: number; updated_at: string }; entries: WalletEntry[]; entries_total: number; entries_offset: number; entries_limit: number; reserved_micros: number };
 type Usage = { id: string; request_id: string; model: string; endpoint: string; input_tokens: number; uncached_input_tokens: number; cache_read_input_tokens: number; cache_write_input_tokens: number; cache_write_1h_input_tokens: number; output_tokens: number; multiplier_bps: number; billing_group_name: string; cost_micros: number; reserved_micros: number; estimated: boolean; created_at: string };
 type UsagePage = { usage: Usage[]; total: number; offset: number; limit: number; total_tokens: number; total_cost_micros: number };
@@ -33,7 +33,7 @@ const emptyTopUpPage: TopUpPage = { orders: [], total: 0, offset: 0, limit: PAGE
 
 function formatMoney(micros: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000); }
 function formatDate(value: string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "top_up") return "在线充值"; if (type === "referral_reward") return "邀请返现"; if (type === "usage_reservation") return "调用预占"; if (type === "usage_settlement") return "结算补扣"; return "预占释放"; }
+function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "top_up") return "在线充值"; if (type === "referral_reward") return "邀请返现"; if (type === "usage_reservation") return "调用预占"; if (type === "usage_settlement") return "结算补扣"; if (type === "usage_compensation") return "异常补偿"; return "预占释放"; }
 function moneyInput(micros: number) { return String(micros / 1_000_000); }
 function topUpStatus(status: TopUpOrder["status"]) { return status === "paid" ? "已到账" : "待支付"; }
 async function readError(response: Response) { const body = (await response.json().catch(() => ({}))) as ErrorResponse; return body.error?.message ?? "加载失败，请稍后重试"; }

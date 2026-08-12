@@ -251,6 +251,58 @@ var (
 			},
 		},
 	}
+	// GatewayOperationsColumns holds the columns for the "gateway_operations" table.
+	GatewayOperationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "idempotency_key_hash", Type: field.TypeString, Size: 64},
+		{Name: "request_hash", Type: field.TypeString, Size: 64},
+		{Name: "endpoint", Type: field.TypeEnum, Enums: []string{"chat_completions", "responses", "messages"}},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"processing", "pending_settlement", "pending_unknown", "completed", "failed"}, Default: "processing"},
+		{Name: "reserved_micros", Type: field.TypeInt64, Default: 0},
+		{Name: "settlement_json", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "failure_code", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "api_key_id", Type: field.TypeUUID},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// GatewayOperationsTable holds the schema information for the "gateway_operations" table.
+	GatewayOperationsTable = &schema.Table{
+		Name:       "gateway_operations",
+		Columns:    GatewayOperationsColumns,
+		PrimaryKey: []*schema.Column{GatewayOperationsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "gateway_operations_api_keys_gateway_operations",
+				Columns:    []*schema.Column{GatewayOperationsColumns[10]},
+				RefColumns: []*schema.Column{APIKeysColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "gateway_operations_users_gateway_operations",
+				Columns:    []*schema.Column{GatewayOperationsColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gatewayoperation_api_key_id_idempotency_key_hash",
+				Unique:  true,
+				Columns: []*schema.Column{GatewayOperationsColumns[10], GatewayOperationsColumns[1]},
+			},
+			{
+				Name:    "gatewayoperation_status_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{GatewayOperationsColumns[4], GatewayOperationsColumns[9]},
+			},
+			{
+				Name:    "gatewayoperation_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{GatewayOperationsColumns[11], GatewayOperationsColumns[8]},
+			},
+		},
+	}
 	// ModelRoutesColumns holds the columns for the "model_routes" table.
 	ModelRoutesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -613,7 +665,7 @@ var (
 	WalletEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "reference_id", Type: field.TypeUUID},
-		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "top_up", "referral_reward", "usage_reservation", "usage_refund", "usage_settlement"}},
+		{Name: "entry_type", Type: field.TypeEnum, Enums: []string{"manual_adjustment", "top_up", "referral_reward", "usage_reservation", "usage_refund", "usage_settlement", "usage_compensation"}},
 		{Name: "amount_micros", Type: field.TypeInt64},
 		{Name: "balance_after_micros", Type: field.TypeInt64},
 		{Name: "description", Type: field.TypeString, Size: 255, Default: ""},
@@ -670,6 +722,7 @@ var (
 		BillingGroupsTable,
 		EmailSMTPConfigsTable,
 		EmailVerificationCodesTable,
+		GatewayOperationsTable,
 		ModelRoutesTable,
 		PaymentConfigsTable,
 		ProvidersTable,
@@ -692,6 +745,8 @@ func init() {
 	APIUsagesTable.ForeignKeys[2].RefTable = ModelRoutesTable
 	APIUsagesTable.ForeignKeys[3].RefTable = UpstreamModelsTable
 	APIUsagesTable.ForeignKeys[4].RefTable = UsersTable
+	GatewayOperationsTable.ForeignKeys[0].RefTable = APIKeysTable
+	GatewayOperationsTable.ForeignKeys[1].RefTable = UsersTable
 	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
 	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
 	ProvidersTable.ForeignKeys[0].RefTable = BillingGroupsTable

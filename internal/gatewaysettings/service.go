@@ -26,6 +26,7 @@ func (s *Service) Config(ctx context.Context) (Config, error) {
 	if !stored.Found {
 		return DefaultConfig(), nil
 	}
+	stored.Config = stored.Config.withDefaults()
 	if !stored.Config.Validate() {
 		return Config{}, ErrInvalidConfig
 	}
@@ -35,6 +36,7 @@ func (s *Service) Config(ctx context.Context) (Config, error) {
 }
 
 func (s *Service) Update(ctx context.Context, config Config) (Config, error) {
+	config = config.withDefaults()
 	if s == nil || s.store == nil || !config.Validate() {
 		return Config{}, ErrInvalidConfig
 	}

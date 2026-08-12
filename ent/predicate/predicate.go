@@ -21,6 +21,9 @@ type EmailSMTPConfig func(*sql.Selector)
 // EmailVerificationCode is the predicate function for emailverificationcode builders.
 type EmailVerificationCode func(*sql.Selector)
 
+// GatewayOperation is the predicate function for gatewayoperation builders.
+type GatewayOperation func(*sql.Selector)
+
 // ModelRoute is the predicate function for modelroute builders.
 type ModelRoute func(*sql.Selector)
 

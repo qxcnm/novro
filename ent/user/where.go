@@ -837,6 +837,29 @@ func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.User {
 	})
 }
 
+// HasGatewayOperations applies the HasEdge predicate on the "gateway_operations" edge.
+func HasGatewayOperations() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, GatewayOperationsTable, GatewayOperationsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGatewayOperationsWith applies the HasEdge predicate on the "gateway_operations" edge with a given conditions (other predicates).
+func HasGatewayOperationsWith(preds ...predicate.GatewayOperation) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newGatewayOperationsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasReferrer applies the HasEdge predicate on the "referrer" edge.
 func HasReferrer() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

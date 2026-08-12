@@ -29,10 +29,12 @@ func (s *EntStore) GatewayRequestConfig(ctx context.Context) (StoredConfig, erro
 	if err := json.Unmarshal([]byte(entity.Value), &config); err != nil {
 		return StoredConfig{}, fmt.Errorf("read gateway request settings: invalid stored value: %w", err)
 	}
+	config = config.withDefaults()
 	return StoredConfig{Config: config, UpdatedAt: entity.UpdatedAt, Found: true}, nil
 }
 
 func (s *EntStore) SaveGatewayRequestConfig(ctx context.Context, config Config) (StoredConfig, error) {
+	config = config.withDefaults()
 	if !config.Validate() {
 		return StoredConfig{}, ErrInvalidConfig
 	}
@@ -41,6 +43,8 @@ func (s *EntStore) SaveGatewayRequestConfig(ctx context.Context, config Config) 
 		SSEHeartbeatIntervalMS:      config.SSEHeartbeatIntervalMS,
 		UpstreamTimeoutMS:           config.UpstreamTimeoutMS,
 		UpstreamStreamIdleTimeoutMS: config.UpstreamStreamIdleTimeoutMS,
+		ReservationInputTokenCap:    config.ReservationInputTokenCap,
+		ReservationOutputTokenCap:   config.ReservationOutputTokenCap,
 	}
 	encoded, err := json.Marshal(value)
 	if err != nil {

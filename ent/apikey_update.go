@@ -15,6 +15,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
 )
@@ -195,6 +196,21 @@ func (_u *APIKeyUpdate) AddAPIUsages(v ...*APIUsage) *APIKeyUpdate {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (_u *APIKeyUpdate) AddGatewayOperationIDs(ids ...uuid.UUID) *APIKeyUpdate {
+	_u.mutation.AddGatewayOperationIDs(ids...)
+	return _u
+}
+
+// AddGatewayOperations adds the "gateway_operations" edges to the GatewayOperation entity.
+func (_u *APIKeyUpdate) AddGatewayOperations(v ...*GatewayOperation) *APIKeyUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGatewayOperationIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdate) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -231,6 +247,27 @@ func (_u *APIKeyUpdate) RemoveAPIUsages(v ...*APIUsage) *APIKeyUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearGatewayOperations clears all "gateway_operations" edges to the GatewayOperation entity.
+func (_u *APIKeyUpdate) ClearGatewayOperations() *APIKeyUpdate {
+	_u.mutation.ClearGatewayOperations()
+	return _u
+}
+
+// RemoveGatewayOperationIDs removes the "gateway_operations" edge to GatewayOperation entities by IDs.
+func (_u *APIKeyUpdate) RemoveGatewayOperationIDs(ids ...uuid.UUID) *APIKeyUpdate {
+	_u.mutation.RemoveGatewayOperationIDs(ids...)
+	return _u
+}
+
+// RemoveGatewayOperations removes "gateway_operations" edges to GatewayOperation entities.
+func (_u *APIKeyUpdate) RemoveGatewayOperations(v ...*GatewayOperation) *APIKeyUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGatewayOperationIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -438,6 +475,51 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.GatewayOperationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGatewayOperationsIDs(); len(nodes) > 0 && !_u.mutation.GatewayOperationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GatewayOperationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{apikey.Label}
@@ -621,6 +703,21 @@ func (_u *APIKeyUpdateOne) AddAPIUsages(v ...*APIUsage) *APIKeyUpdateOne {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (_u *APIKeyUpdateOne) AddGatewayOperationIDs(ids ...uuid.UUID) *APIKeyUpdateOne {
+	_u.mutation.AddGatewayOperationIDs(ids...)
+	return _u
+}
+
+// AddGatewayOperations adds the "gateway_operations" edges to the GatewayOperation entity.
+func (_u *APIKeyUpdateOne) AddGatewayOperations(v ...*GatewayOperation) *APIKeyUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGatewayOperationIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdateOne) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -657,6 +754,27 @@ func (_u *APIKeyUpdateOne) RemoveAPIUsages(v ...*APIUsage) *APIKeyUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearGatewayOperations clears all "gateway_operations" edges to the GatewayOperation entity.
+func (_u *APIKeyUpdateOne) ClearGatewayOperations() *APIKeyUpdateOne {
+	_u.mutation.ClearGatewayOperations()
+	return _u
+}
+
+// RemoveGatewayOperationIDs removes the "gateway_operations" edge to GatewayOperation entities by IDs.
+func (_u *APIKeyUpdateOne) RemoveGatewayOperationIDs(ids ...uuid.UUID) *APIKeyUpdateOne {
+	_u.mutation.RemoveGatewayOperationIDs(ids...)
+	return _u
+}
+
+// RemoveGatewayOperations removes "gateway_operations" edges to GatewayOperation entities.
+func (_u *APIKeyUpdateOne) RemoveGatewayOperations(v ...*GatewayOperation) *APIKeyUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGatewayOperationIDs(ids...)
 }
 
 // Where appends a list predicates to the APIKeyUpdate builder.
@@ -887,6 +1005,51 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GatewayOperationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGatewayOperationsIDs(); len(nodes) > 0 && !_u.mutation.GatewayOperationsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GatewayOperationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

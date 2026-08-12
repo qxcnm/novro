@@ -161,6 +161,36 @@ type fakeGatewaySettings struct {
 	err     error
 }
 
+type fakeAPIBilling struct {
+	rate            billing.UsageRate
+	rateUserID      uuid.UUID
+	adjustReference uuid.UUID
+	adjustAmount    int64
+	err             error
+}
+
+func (f *fakeAPIBilling) Summary(context.Context, uuid.UUID) (billing.Summary, error) {
+	return billing.Summary{}, f.err
+}
+
+func (f *fakeAPIBilling) SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error) {
+	return billing.Summary{}, f.err
+}
+
+func (f *fakeAPIBilling) Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error) {
+	return billing.UsagePage{}, f.err
+}
+
+func (f *fakeAPIBilling) UsageRate(_ context.Context, userID uuid.UUID) (billing.UsageRate, error) {
+	f.rateUserID = userID
+	return f.rate, f.err
+}
+
+func (f *fakeAPIBilling) Adjust(_ context.Context, _, _, referenceID uuid.UUID, amount int64, _ string) (billing.Summary, error) {
+	f.adjustReference, f.adjustAmount = referenceID, amount
+	return billing.Summary{}, f.err
+}
+
 func (f *fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, error) {
 	return f.config, f.err
 }
@@ -543,6 +573,26 @@ func TestReferralSummaryUsesAuthenticatedUser(t *testing.T) {
 	}
 }
 
+func TestUsageRateUsesAuthenticatedUser(t *testing.T) {
+	userID := uuid.New()
+	billingService := &fakeAPIBilling{rate: billing.UsageRate{
+		WindowSeconds: 60, Requests: 4, InputTokens: 800, OutputTokens: 200,
+		TotalTokens: 1000, RPM: 4, TPM: 1000, CalculatedAt: time.Date(2026, time.August, 12, 7, 2, 0, 0, time.UTC),
+	}}
+	handler := New(Dependencies{
+		Auth:    &fakeAPIAuth{current: user.Record{ID: userID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users:   &fakeAPIUsers{},
+		Billing: billingService,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/usage/rate", nil))
+
+	if response.Code != http.StatusOK || billingService.rateUserID != userID || !strings.Contains(response.Body.String(), `"rpm":4`) || !strings.Contains(response.Body.String(), `"tpm":1000`) || !strings.Contains(response.Body.String(), `"window_seconds":60`) {
+		t.Fatalf("status=%d user=%s body=%s", response.Code, billingService.rateUserID, response.Body.String())
+	}
+}
+
 func TestAdminReferralConfigRequiresAdminAndUpdates(t *testing.T) {
 	referrals := &fakeReferrals{config: referral.AdminConfig{RewardBPS: 1_000}}
 	handler := New(Dependencies{
@@ -607,12 +657,12 @@ func TestAdminGatewaySettingsRequiresAdminAndUpdates(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	body := `{"sse_heartbeat_enabled":false,"sse_heartbeat_interval_ms":30000,"upstream_timeout_ms":120000,"upstream_stream_idle_timeout_ms":45000}`
+	body := `{"sse_heartbeat_enabled":false,"sse_heartbeat_interval_ms":30000,"upstream_timeout_ms":120000,"upstream_stream_idle_timeout_ms":45000,"reservation_input_token_cap":32768,"reservation_output_token_cap":2048}`
 	request = httptest.NewRequest(http.MethodPut, "/api/admin/gateway-settings", strings.NewReader(body))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || settings.updated.SSEHeartbeatEnabled || settings.updated.UpstreamTimeoutMS != 120_000 || settings.updated.UpstreamStreamIdleTimeoutMS != 45_000 {
+	if response.Code != http.StatusOK || settings.updated.SSEHeartbeatEnabled || settings.updated.UpstreamTimeoutMS != 120_000 || settings.updated.UpstreamStreamIdleTimeoutMS != 45_000 || settings.updated.ReservationInputTokenCap != 32_768 || settings.updated.ReservationOutputTokenCap != 2048 {
 		t.Fatalf("status=%d settings=%+v body=%s", response.Code, settings.updated, response.Body.String())
 	}
 
@@ -639,6 +689,46 @@ func TestAdminGatewaySettingsRejectsInvalidValues(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_gateway_settings") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminBalanceAdjustmentRequiresAndStabilizesIdempotencyKey(t *testing.T) {
+	admin := user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}
+	billingService := &fakeAPIBilling{}
+	handler := New(Dependencies{Auth: &fakeAPIAuth{current: admin}, Users: &fakeAPIUsers{}, Billing: billingService, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session", AllowedOrigins: []string{"http://localhost:3000"}})
+	userID := uuid.New()
+	makeRequest := func(key string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/api/admin/users/"+userID.String()+"/balance-adjustments", strings.NewReader(`{"amount_micros":1000000,"note":"test"}`))
+		request.Header.Set("Origin", "http://localhost:3000")
+		if key != "" {
+			request.Header.Set("Idempotency-Key", key)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	if response := makeRequest(""); response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_idempotency_key") {
+		t.Fatalf("missing key status=%d body=%s", response.Code, response.Body.String())
+	}
+	first := makeRequest("adjust-once")
+	firstReference := billingService.adjustReference
+	second := makeRequest("adjust-once")
+	if first.Code != http.StatusOK || second.Code != http.StatusOK || firstReference == uuid.Nil || billingService.adjustReference != firstReference || billingService.adjustAmount != 1_000_000 {
+		t.Fatalf("first=%d second=%d reference=%s amount=%d", first.Code, second.Code, billingService.adjustReference, billingService.adjustAmount)
+	}
+}
+
+func TestAdminBalanceAdjustmentReturnsConflictForChangedIdempotentRequest(t *testing.T) {
+	admin := user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}
+	billingService := &fakeAPIBilling{err: billing.ErrRequestConflict}
+	handler := New(Dependencies{Auth: &fakeAPIAuth{current: admin}, Users: &fakeAPIUsers{}, Billing: billingService, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"}})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/users/"+uuid.NewString()+"/balance-adjustments", strings.NewReader(`{"amount_micros":1000000,"note":"test"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Idempotency-Key", "reused-adjustment")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"idempotency_conflict"`) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

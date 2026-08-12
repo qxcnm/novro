@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -93,6 +94,7 @@ func checkColumn(t, c string) error {
 			billinggroup.Table:          billinggroup.ValidColumn,
 			emailsmtpconfig.Table:       emailsmtpconfig.ValidColumn,
 			emailverificationcode.Table: emailverificationcode.ValidColumn,
+			gatewayoperation.Table:      gatewayoperation.ValidColumn,
 			modelroute.Table:            modelroute.ValidColumn,
 			paymentconfig.Table:         paymentconfig.ValidColumn,
 			provider.Table:              provider.ValidColumn,

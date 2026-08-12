@@ -14,6 +14,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -161,6 +162,21 @@ func (_c *APIKeyCreate) AddAPIUsages(v ...*APIUsage) *APIKeyCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddAPIUsageIDs(ids...)
+}
+
+// AddGatewayOperationIDs adds the "gateway_operations" edge to the GatewayOperation entity by IDs.
+func (_c *APIKeyCreate) AddGatewayOperationIDs(ids ...uuid.UUID) *APIKeyCreate {
+	_c.mutation.AddGatewayOperationIDs(ids...)
+	return _c
+}
+
+// AddGatewayOperations adds the "gateway_operations" edges to the GatewayOperation entity.
+func (_c *APIKeyCreate) AddGatewayOperations(v ...*GatewayOperation) *APIKeyCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGatewayOperationIDs(ids...)
 }
 
 // Mutation returns the APIKeyMutation object of the builder.
@@ -383,6 +399,22 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GatewayOperationsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GatewayOperationsTable,
+			Columns: []string{apikey.GatewayOperationsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

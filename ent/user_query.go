@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
@@ -28,20 +29,21 @@ import (
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx               *QueryContext
-	order             []user.OrderOption
-	inters            []Interceptor
-	predicates        []predicate.User
-	withSessions      *UserSessionQuery
-	withIdentities    *UserIdentityQuery
-	withAPIKeys       *APIKeyQuery
-	withWallet        *WalletQuery
-	withWalletEntries *WalletEntryQuery
-	withTopUpOrders   *TopUpOrderQuery
-	withAPIUsages     *APIUsageQuery
-	withReferrer      *UserQuery
-	withReferrals     *UserQuery
-	modifiers         []func(*sql.Selector)
+	ctx                   *QueryContext
+	order                 []user.OrderOption
+	inters                []Interceptor
+	predicates            []predicate.User
+	withSessions          *UserSessionQuery
+	withIdentities        *UserIdentityQuery
+	withAPIKeys           *APIKeyQuery
+	withWallet            *WalletQuery
+	withWalletEntries     *WalletEntryQuery
+	withTopUpOrders       *TopUpOrderQuery
+	withAPIUsages         *APIUsageQuery
+	withGatewayOperations *GatewayOperationQuery
+	withReferrer          *UserQuery
+	withReferrals         *UserQuery
+	modifiers             []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -225,6 +227,28 @@ func (_q *UserQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.APIUsagesTable, user.APIUsagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGatewayOperations chains the current query on the "gateway_operations" edge.
+func (_q *UserQuery) QueryGatewayOperations() *GatewayOperationQuery {
+	query := (&GatewayOperationClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.GatewayOperationsTable, user.GatewayOperationsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -463,20 +487,21 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:            _q.config,
-		ctx:               _q.ctx.Clone(),
-		order:             append([]user.OrderOption{}, _q.order...),
-		inters:            append([]Interceptor{}, _q.inters...),
-		predicates:        append([]predicate.User{}, _q.predicates...),
-		withSessions:      _q.withSessions.Clone(),
-		withIdentities:    _q.withIdentities.Clone(),
-		withAPIKeys:       _q.withAPIKeys.Clone(),
-		withWallet:        _q.withWallet.Clone(),
-		withWalletEntries: _q.withWalletEntries.Clone(),
-		withTopUpOrders:   _q.withTopUpOrders.Clone(),
-		withAPIUsages:     _q.withAPIUsages.Clone(),
-		withReferrer:      _q.withReferrer.Clone(),
-		withReferrals:     _q.withReferrals.Clone(),
+		config:                _q.config,
+		ctx:                   _q.ctx.Clone(),
+		order:                 append([]user.OrderOption{}, _q.order...),
+		inters:                append([]Interceptor{}, _q.inters...),
+		predicates:            append([]predicate.User{}, _q.predicates...),
+		withSessions:          _q.withSessions.Clone(),
+		withIdentities:        _q.withIdentities.Clone(),
+		withAPIKeys:           _q.withAPIKeys.Clone(),
+		withWallet:            _q.withWallet.Clone(),
+		withWalletEntries:     _q.withWalletEntries.Clone(),
+		withTopUpOrders:       _q.withTopUpOrders.Clone(),
+		withAPIUsages:         _q.withAPIUsages.Clone(),
+		withGatewayOperations: _q.withGatewayOperations.Clone(),
+		withReferrer:          _q.withReferrer.Clone(),
+		withReferrals:         _q.withReferrals.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -557,6 +582,17 @@ func (_q *UserQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *UserQuery {
 		opt(query)
 	}
 	_q.withAPIUsages = query
+	return _q
+}
+
+// WithGatewayOperations tells the query-builder to eager-load the nodes that are connected to
+// the "gateway_operations" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithGatewayOperations(opts ...func(*GatewayOperationQuery)) *UserQuery {
+	query := (&GatewayOperationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGatewayOperations = query
 	return _q
 }
 
@@ -660,7 +696,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [10]bool{
 			_q.withSessions != nil,
 			_q.withIdentities != nil,
 			_q.withAPIKeys != nil,
@@ -668,6 +704,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withWalletEntries != nil,
 			_q.withTopUpOrders != nil,
 			_q.withAPIUsages != nil,
+			_q.withGatewayOperations != nil,
 			_q.withReferrer != nil,
 			_q.withReferrals != nil,
 		}
@@ -738,6 +775,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *User) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *User, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGatewayOperations; query != nil {
+		if err := _q.loadGatewayOperations(ctx, query, nodes,
+			func(n *User) { n.Edges.GatewayOperations = []*GatewayOperation{} },
+			func(n *User, e *GatewayOperation) { n.Edges.GatewayOperations = append(n.Edges.GatewayOperations, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -952,6 +996,36 @@ func (_q *UserQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, no
 	}
 	query.Where(predicate.APIUsage(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(user.APIUsagesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadGatewayOperations(ctx context.Context, query *GatewayOperationQuery, nodes []*User, init func(*User), assign func(*User, *GatewayOperation)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(gatewayoperation.FieldUserID)
+	}
+	query.Where(predicate.GatewayOperation(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.GatewayOperationsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

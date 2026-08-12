@@ -12,7 +12,8 @@ User
 └── APIUsage[]
 
 APIKey
-└── BillingGroup
+├── BillingGroup
+└── GatewayOperation[]
 
 Provider
 ├── BillingGroup
@@ -89,14 +90,16 @@ EmailVerificationCode
 
 保存 `initial_admin_created` 安装标记和不含秘密的应用设置。`referral_reward_bps` 记录管理员
 设置的全局邀请返现基点；`gateway_request_settings` 以 JSON 原子保存 SSE 心跳开关、心跳间隔、
-上游总超时和流式空闲超时。该表不保存初始化令牌、密码、连接信息或其他部署密钥。初始化标记
+上游总超时、流式空闲超时，以及输入/输出预占 Token 上限。旧 JSON 缺少预占上限时分别补
+默认值 16384 和 1024。该表不保存初始化令牌、密码、连接信息或其他部署密钥。初始化标记
 与第一个管理员在同一数据库事务中创建，保证初始化只能完成一次。
 
 ## 6. 当前迁移状态
 
-当前迁移已压缩为 `0001_initial_schema.sql`，面向重新部署的空库初始化当前最终结构。
-该迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
-邮件、邀请返现和用量审计相关表，并写入默认计费分组与默认邀请返现比例。
+当前迁移从 `0001_initial_schema.sql` 开始，并通过后续有序迁移演进。`0009_gateway_billing_safety.sql`
+新增持久化网关 operation 和计费补偿流水类型；部署包含本功能的代码前必须先成功执行到 `0009`。
+迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
+邮件、邀请返现、用量审计和结算恢复相关表，并写入默认计费分组与默认邀请返现比例。
 服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
 当前迁移文件的目标，保留数据升级时需要使用对应历史版本先完成迁移。
 
@@ -125,7 +128,7 @@ EmailVerificationCode
 - `wallet_id`
 - `amount_micros`
 - `balance_after_micros`
-- `entry_type`，`manual_adjustment`、`top_up`、`referral_reward`、`usage_reservation`、`usage_refund` 或 `usage_settlement`
+- `entry_type`，`manual_adjustment`、`top_up`、`referral_reward`、`usage_reservation`、`usage_refund`、`usage_settlement` 或 `usage_compensation`
 - `reference_id`
 - `description`
 - `actor_user_id`，人工调整时记录管理员
@@ -138,6 +141,11 @@ EmailVerificationCode
 `reference_id + entry_type` 唯一，使余额预占和退款可以安全重试；相同金额的重复请求
 视为已完成，不同金额的重复请求视为冲突。若真实 usage 超过预占，会追加一条
 `usage_settlement` 补扣流水，不能静默截断费用。
+
+`usage_compensation` 只用于经核对的旧版 `token-v2`、成功状态、`estimated=true` 异常用量。
+它使用原调用 `request_id` 作为引用并全额冲回该记录费用；同一钱包、请求和流水类型的唯一约束
+确保并发或重复执行只补偿一次。生产补偿必须基于审核后的 request ID 清单执行，不能按模糊条件
+直接批量修改余额。
 
 `referral_reward` 使用被邀请用户的充值订单 ID 作为 `reference_id`。同一钱包、订单和流水
 类型的唯一约束保证重复支付回调只能写入一次返现；返现与充值入账在同一事务内提交。
@@ -270,7 +278,29 @@ GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不应
 Token 维度；缺失维度保持 0 并设置 `estimated`，保守请求预占只用于余额校验，不能作为最终费用。
 预占和最终费用都应用 API Key 请求时绑定的 `multiplier_bps`。
 
-## 16. 数据库扩展
+## 16. gateway_operations
+
+- `id`，也是对外 `request_id`
+- `user_id`、`api_key_id`
+- `idempotency_key_hash`，只保存客户端幂等键的 SHA-256，不保存原值
+- `request_hash`，绑定 endpoint 与原始请求体
+- `endpoint`
+- `status`，`processing`、`pending_settlement`、`pending_unknown`、`completed` 或 `failed`
+- `reserved_micros`
+- `settlement_json`，完整且可验证的最终 `UsageInput` 快照
+- `failure_code`、`created_at`、`updated_at`
+
+`api_key_id + idempotency_key_hash` 唯一。operation 创建、钱包行锁、预占扣减和
+`usage_reservation` 流水在同一事务中完成，因此同键并发请求只能有一个创建者。相同键和相同
+请求读取已有 operation，不再次调用上游；相同键绑定不同请求时返回冲突。
+
+成功终态先把不可变 usage 快照写为 `pending_settlement`，再在钱包事务中验证 operation、用户、
+API Key、endpoint、预占金额和对应预占流水，最后写 `api_usages`、退款或补扣流水。后台周期恢复
+`pending_settlement`。`pending_unknown` 表示请求可能已送达上游但没有可安全结算的终态；系统
+保留预占且不自动重放或退款，必须根据提供商请求记录和 `request_id` 人工核对。长期
+`processing` 也需要运维核查，不能仅凭超时自动释放。
+
+## 17. 数据库扩展
 
 使用 Ent 生成数据访问层，以 MySQL 为默认数据库，同时避免在业务代码中散落只适用于
 MySQL 的 SQL，让后续更换数据库时只需要替换驱动和迁移细节。

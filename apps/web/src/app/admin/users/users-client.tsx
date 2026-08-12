@@ -33,7 +33,7 @@ type UserRecord = {
 };
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
-type WalletEntry = { id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
+type WalletEntry = { id: string; entry_type: "manual_adjustment" | "top_up" | "referral_reward" | "usage_reservation" | "usage_refund" | "usage_settlement" | "usage_compensation"; amount_micros: number; balance_after_micros: number; description: string; created_at: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string }; entries: WalletEntry[] };
 type ErrorResponse = { error?: { message?: string } };
 
@@ -82,6 +82,7 @@ export default function UsersClient() {
   const [balanceError, setBalanceError] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [adjustmentIdempotencyKey, setAdjustmentIdempotencyKey] = useState("");
 	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member", can_access_hidden_groups: false });
 	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member", can_access_hidden_groups: false });
   const [resetPassword, setResetPassword] = useState("");
@@ -193,11 +194,18 @@ export default function UsersClient() {
     const amount = yuanToMicros(adjustmentAmount);
     if (amount === null || amount === 0) { setBalanceError("请输入非零金额，最多保留 6 位小数"); return; }
     setBusy(true); setBalanceError(""); setMessage("");
-    const response = await fetch(`/api/admin/users/${balanceUser.id}/balance-adjustments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount_micros: amount, note: adjustmentNote }) });
-    setBusy(false);
-    if (!response.ok) { setBalanceError(await readError(response)); return; }
-    setBalanceSummary((await response.json()) as BalanceSummary);
-    setAdjustmentAmount(""); setAdjustmentNote(""); setMessage("用户余额已调整");
+    const idempotencyKey = adjustmentIdempotencyKey || crypto.randomUUID();
+    if (!adjustmentIdempotencyKey) setAdjustmentIdempotencyKey(idempotencyKey);
+    try {
+      const response = await fetch(`/api/admin/users/${balanceUser.id}/balance-adjustments`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ amount_micros: amount, note: adjustmentNote }) });
+      if (!response.ok) { setBalanceError(await readError(response)); return; }
+      setBalanceSummary((await response.json()) as BalanceSummary);
+      setAdjustmentAmount(""); setAdjustmentNote(""); setAdjustmentIdempotencyKey(""); setMessage("用户余额已调整");
+    } catch {
+      setBalanceError("网络异常，未能确认调整结果。请保持金额和备注不变后重试");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const activeCount = users.filter((record) => record.status === "active").length;
@@ -301,14 +309,14 @@ export default function UsersClient() {
           </SheetContent>
         </Sheet>
 
-        <Sheet onOpenChange={(open) => { if (!open) { setBalanceUser(null); setBalanceSummary(null); setBalanceError(""); setAdjustmentAmount(""); setAdjustmentNote(""); } }} open={balanceUser !== null}>
+        <Sheet onOpenChange={(open) => { if (!open) { setBalanceUser(null); setBalanceSummary(null); setBalanceError(""); setAdjustmentAmount(""); setAdjustmentNote(""); setAdjustmentIdempotencyKey(""); } }} open={balanceUser !== null}>
           <SheetContent className="w-full overflow-y-auto sm:max-w-lg" side="right">
             {balanceUser ? <><SheetHeader className="border-b px-6 py-5"><SheetTitle>{balanceUser.display_name || balanceUser.username} 的余额</SheetTitle><SheetDescription>@{balanceUser.username}</SheetDescription></SheetHeader>
               <div className="space-y-6 px-6">
                 <div className="border-y py-5"><p className="text-xs text-muted-foreground">可用余额</p><p className="mt-2 text-2xl font-semibold">{balanceLoading ? "加载中..." : balanceSummary ? formatMoney(balanceSummary.wallet.balance_micros) : "--"}</p></div>
                 <form className="space-y-4" id="adjust-balance-form" onSubmit={adjustBalance}>
-                  <div className="space-y-2"><Label htmlFor="adjustment-amount">调整金额（元）</Label><Input id="adjustment-amount" inputMode="decimal" onChange={(event) => setAdjustmentAmount(event.target.value)} placeholder="增加输入 100，扣减输入 -20" required value={adjustmentAmount} /></div>
-                  <div className="space-y-2"><Label htmlFor="adjustment-note">备注</Label><Input id="adjustment-note" maxLength={255} onChange={(event) => setAdjustmentNote(event.target.value)} placeholder="例如 初始额度" required value={adjustmentNote} /></div>
+                  <div className="space-y-2"><Label htmlFor="adjustment-amount">调整金额（元）</Label><Input id="adjustment-amount" inputMode="decimal" onChange={(event) => { setAdjustmentAmount(event.target.value); setAdjustmentIdempotencyKey(""); }} placeholder="增加输入 100，扣减输入 -20" required value={adjustmentAmount} /></div>
+                  <div className="space-y-2"><Label htmlFor="adjustment-note">备注</Label><Input id="adjustment-note" maxLength={255} onChange={(event) => { setAdjustmentNote(event.target.value); setAdjustmentIdempotencyKey(""); }} placeholder="例如 初始额度" required value={adjustmentNote} /></div>
                   {balanceError ? <p className="text-sm text-destructive" role="alert">{balanceError}</p> : null}
                   <Button disabled={busy || balanceLoading} type="submit"><CircleDollarSign />{busy ? "正在调整..." : "确认调整"}</Button>
                 </form>

@@ -35,6 +35,7 @@ func (APIKey) Edges() []ent.Edge {
 		edge.From("user", User.Type).Ref("api_keys").Unique().Field("user_id").Required(),
 		edge.From("billing_group", BillingGroup.Type).Ref("api_keys").Unique().Field("billing_group_id").Required(),
 		edge.To("api_usages", APIUsage.Type),
+		edge.To("gateway_operations", GatewayOperation.Type),
 	}
 }
 

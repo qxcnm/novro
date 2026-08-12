@@ -737,6 +737,7 @@ Novro 的数据库迁移是显式、按文件名顺序、前向执行的；服�
 都应按以下顺序操作：
 
 1. 阅读新版本变更说明，确认是否新增迁移、配置变量或上游兼容性要求。
+   计费安全版本必须包含并成功应用 `0009_gateway_billing_safety`；未看到该版本时不要启动新 API 写流量。
 2. 在 CI 或发布工作区依次执行完整检查：
 
    ```bash
@@ -833,9 +834,21 @@ docker compose --env-file /data/novro/.env.docker exec -T novro /usr/local/bin/n
 ### 模型请求失败或余额不变
 
 在控制台确认提供商为启用状态、模型已同步/选中、对外路由启用且单价已维护。检查请求返回的
-`request_id`，再对照 `api_usages` 和钱包流水。出现 `finalize gateway usage` 或
-`refund gateway reservation` 重试耗尽时，先保留日志、提供商响应和流水记录，再由管理员做
-人工对账；不要直接改数据库余额。
+`request_id`，再对照 `gateway_operations`、`api_usages` 和钱包流水。`pending_settlement` 会由
+后台周期恢复；持续不恢复时保留日志和结算快照并检查数据库错误。`pending_unknown` 表示请求可能
+已送达上游但终态无法确认，系统会保留预占且不会自动重放或退款；必须用该 request ID 对照
+提供商请求/账单后人工决定。不要直接改数据库余额，也不要把未知状态批量改成失败。
+
+经审核确认属于旧 `token-v2`、成功状态、`estimated=true` 的 usage 不完整异常时，可以逐条执行：
+
+```bash
+docker compose --env-file /data/novro/.env.docker exec -T novro \
+  /usr/local/bin/novro compensate-usage REQUEST_ID ACTOR_ADMIN_USER_ID
+```
+
+命令只接受单个 request ID，并以 `usage_compensation` 流水幂等补偿；重复执行不会再次入账。
+执行前导出并审批明确的 request ID 清单，执行后核对钱包余额和补偿流水。不要按模型名、时间段
+或 `estimated` 标签直接批量补偿，因为新算法中 usage 缺少一个维度也会合法标记为不完整。
 
 ### 忘记系统管理员密码
 

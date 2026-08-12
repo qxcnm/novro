@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
 )
@@ -24,14 +25,15 @@ import (
 // APIKeyQuery is the builder for querying APIKey entities.
 type APIKeyQuery struct {
 	config
-	ctx              *QueryContext
-	order            []apikey.OrderOption
-	inters           []Interceptor
-	predicates       []predicate.APIKey
-	withUser         *UserQuery
-	withBillingGroup *BillingGroupQuery
-	withAPIUsages    *APIUsageQuery
-	modifiers        []func(*sql.Selector)
+	ctx                   *QueryContext
+	order                 []apikey.OrderOption
+	inters                []Interceptor
+	predicates            []predicate.APIKey
+	withUser              *UserQuery
+	withBillingGroup      *BillingGroupQuery
+	withAPIUsages         *APIUsageQuery
+	withGatewayOperations *GatewayOperationQuery
+	modifiers             []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -127,6 +129,28 @@ func (_q *APIKeyQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(apikey.Table, apikey.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, apikey.APIUsagesTable, apikey.APIUsagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGatewayOperations chains the current query on the "gateway_operations" edge.
+func (_q *APIKeyQuery) QueryGatewayOperations() *GatewayOperationQuery {
+	query := (&GatewayOperationClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, selector),
+			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.GatewayOperationsTable, apikey.GatewayOperationsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -321,14 +345,15 @@ func (_q *APIKeyQuery) Clone() *APIKeyQuery {
 		return nil
 	}
 	return &APIKeyQuery{
-		config:           _q.config,
-		ctx:              _q.ctx.Clone(),
-		order:            append([]apikey.OrderOption{}, _q.order...),
-		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.APIKey{}, _q.predicates...),
-		withUser:         _q.withUser.Clone(),
-		withBillingGroup: _q.withBillingGroup.Clone(),
-		withAPIUsages:    _q.withAPIUsages.Clone(),
+		config:                _q.config,
+		ctx:                   _q.ctx.Clone(),
+		order:                 append([]apikey.OrderOption{}, _q.order...),
+		inters:                append([]Interceptor{}, _q.inters...),
+		predicates:            append([]predicate.APIKey{}, _q.predicates...),
+		withUser:              _q.withUser.Clone(),
+		withBillingGroup:      _q.withBillingGroup.Clone(),
+		withAPIUsages:         _q.withAPIUsages.Clone(),
+		withGatewayOperations: _q.withGatewayOperations.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -365,6 +390,17 @@ func (_q *APIKeyQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *APIKeyQuery 
 		opt(query)
 	}
 	_q.withAPIUsages = query
+	return _q
+}
+
+// WithGatewayOperations tells the query-builder to eager-load the nodes that are connected to
+// the "gateway_operations" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *APIKeyQuery) WithGatewayOperations(opts ...func(*GatewayOperationQuery)) *APIKeyQuery {
+	query := (&GatewayOperationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGatewayOperations = query
 	return _q
 }
 
@@ -446,10 +482,11 @@ func (_q *APIKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*APIKe
 	var (
 		nodes       = []*APIKey{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withUser != nil,
 			_q.withBillingGroup != nil,
 			_q.withAPIUsages != nil,
+			_q.withGatewayOperations != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -489,6 +526,13 @@ func (_q *APIKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*APIKe
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *APIKey) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *APIKey, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGatewayOperations; query != nil {
+		if err := _q.loadGatewayOperations(ctx, query, nodes,
+			func(n *APIKey) { n.Edges.GatewayOperations = []*GatewayOperation{} },
+			func(n *APIKey, e *GatewayOperation) { n.Edges.GatewayOperations = append(n.Edges.GatewayOperations, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -568,6 +612,36 @@ func (_q *APIKeyQuery) loadAPIUsages(ctx context.Context, query *APIUsageQuery, 
 	}
 	query.Where(predicate.APIUsage(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(apikey.APIUsagesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.APIKeyID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "api_key_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *APIKeyQuery) loadGatewayOperations(ctx context.Context, query *GatewayOperationQuery, nodes []*APIKey, init func(*APIKey), assign func(*APIKey, *GatewayOperation)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*APIKey)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(gatewayoperation.FieldAPIKeyID)
+	}
+	query.Where(predicate.GatewayOperation(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(apikey.GatewayOperationsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

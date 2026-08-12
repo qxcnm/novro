@@ -73,7 +73,8 @@ type BillingService interface {
 	Summary(context.Context, uuid.UUID) (billing.Summary, error)
 	SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error)
 	Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error)
-	Adjust(context.Context, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
+	UsageRate(context.Context, uuid.UUID) (billing.UsageRate, error)
+	Adjust(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
 }
 
 type PaymentService interface {
@@ -256,6 +257,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/account/models", h.listAvailableModels)
 	mux.HandleFunc("GET /api/account/balance", h.myBalance)
 	mux.HandleFunc("GET /api/account/usage", h.myUsage)
+	mux.HandleFunc("GET /api/account/usage/rate", h.myUsageRate)
 	mux.HandleFunc("GET /api/account/top-ups/config", h.topUpConfig)
 	mux.HandleFunc("GET /api/account/top-ups", h.listMyTopUps)
 	mux.HandleFunc("POST /api/account/top-ups", h.createMyTopUp)
@@ -1431,6 +1433,19 @@ func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, usage)
 }
 
+func (h *apiHandler) myUsageRate(w http.ResponseWriter, r *http.Request) {
+	record, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	rate, err := h.billing.UsageRate(r.Context(), record.ID)
+	if err != nil {
+		h.writeBillingError(w, "read account usage rate", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rate)
+}
+
 func (h *apiHandler) topUpConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
@@ -1771,16 +1786,25 @@ func (h *apiHandler) adjustUserBalance(w http.ResponseWriter, r *http.Request) {
 		AmountMicros int64  `json:"amount_micros"`
 		Note         string `json:"note"`
 	}
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey == "" || len(idempotencyKey) > 255 {
+		writeError(w, http.StatusBadRequest, "invalid_idempotency_key", "余额调整必须提供不超过 255 个字符的 Idempotency-Key")
+		return
+	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "余额调整信息无效")
 		return
 	}
-	summary, err := h.billing.Adjust(r.Context(), id, admin.ID, request.AmountMicros, request.Note)
+	summary, err := h.billing.Adjust(r.Context(), id, admin.ID, stableAdjustmentReference(admin.ID, id, idempotencyKey), request.AmountMicros, request.Note)
 	if err != nil {
 		h.writeBillingError(w, "adjust user balance", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+func stableAdjustmentReference(actorID, userID uuid.UUID, key string) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(actorID.String()+"\x00"+userID.String()+"\x00"+key))
 }
 
 func (h *apiHandler) listModelRoutes(w http.ResponseWriter, r *http.Request) {
@@ -2073,6 +2097,8 @@ func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, 
 		writeError(w, http.StatusNotFound, "not_found", "用户钱包不存在")
 	case errors.Is(err, billing.ErrInsufficientBalance):
 		writeError(w, http.StatusConflict, "insufficient_balance", "余额不足")
+	case errors.Is(err, billing.ErrRequestConflict):
+		writeError(w, http.StatusConflict, "idempotency_conflict", "同一 Idempotency-Key 已用于不同的余额调整")
 	default:
 		h.internalError(w, operation, err)
 	}
