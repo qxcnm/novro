@@ -64,6 +64,20 @@ func (_c *BillingGroupCreate) SetNillableIsDefault(v *bool) *BillingGroupCreate 
 	return _c
 }
 
+// SetIsHidden sets the "is_hidden" field.
+func (_c *BillingGroupCreate) SetIsHidden(v bool) *BillingGroupCreate {
+	_c.mutation.SetIsHidden(v)
+	return _c
+}
+
+// SetNillableIsHidden sets the "is_hidden" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableIsHidden(v *bool) *BillingGroupCreate {
+	if v != nil {
+		_c.SetIsHidden(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *BillingGroupCreate) SetStatus(v billinggroup.Status) *BillingGroupCreate {
 	_c.mutation.SetStatus(v)
@@ -222,6 +236,10 @@ func (_c *BillingGroupCreate) defaults() {
 		v := billinggroup.DefaultIsDefault
 		_c.mutation.SetIsDefault(v)
 	}
+	if _, ok := _c.mutation.IsHidden(); !ok {
+		v := billinggroup.DefaultIsHidden
+		_c.mutation.SetIsHidden(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := billinggroup.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -268,6 +286,9 @@ func (_c *BillingGroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.IsDefault(); !ok {
 		return &ValidationError{Name: "is_default", err: errors.New(`ent: missing required field "BillingGroup.is_default"`)}
+	}
+	if _, ok := _c.mutation.IsHidden(); !ok {
+		return &ValidationError{Name: "is_hidden", err: errors.New(`ent: missing required field "BillingGroup.is_hidden"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "BillingGroup.status"`)}
@@ -333,6 +354,10 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)
 		_node.IsDefault = value
+	}
+	if value, ok := _c.mutation.IsHidden(); ok {
+		_spec.SetField(billinggroup.FieldIsHidden, field.TypeBool, value)
+		_node.IsHidden = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(billinggroup.FieldStatus, field.TypeEnum, value)

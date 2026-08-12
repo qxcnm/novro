@@ -38,6 +38,7 @@ func (WalletEntry) Edges() []ent.Edge {
 func (WalletEntry) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("wallet_id", "created_at"),
+		index.Fields("wallet_id", "entry_type", "created_at"),
 		index.Fields("reference_id"),
 		index.Fields("wallet_id", "reference_id", "entry_type").Unique(),
 	}

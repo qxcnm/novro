@@ -118,6 +118,20 @@ func (_c *UserCreate) SetNillableIsSystemAdmin(v *bool) *UserCreate {
 	return _c
 }
 
+// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
+func (_c *UserCreate) SetCanAccessHiddenGroups(v bool) *UserCreate {
+	_c.mutation.SetCanAccessHiddenGroups(v)
+	return _c
+}
+
+// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
+func (_c *UserCreate) SetNillableCanAccessHiddenGroups(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetCanAccessHiddenGroups(*v)
+	}
+	return _c
+}
+
 // SetRole sets the "role" field.
 func (_c *UserCreate) SetRole(v user.Role) *UserCreate {
 	_c.mutation.SetRole(v)
@@ -392,6 +406,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultIsSystemAdmin
 		_c.mutation.SetIsSystemAdmin(v)
 	}
+	if _, ok := _c.mutation.CanAccessHiddenGroups(); !ok {
+		v := user.DefaultCanAccessHiddenGroups
+		_c.mutation.SetCanAccessHiddenGroups(v)
+	}
 	if _, ok := _c.mutation.Role(); !ok {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
@@ -447,6 +465,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.IsSystemAdmin(); !ok {
 		return &ValidationError{Name: "is_system_admin", err: errors.New(`ent: missing required field "User.is_system_admin"`)}
+	}
+	if _, ok := _c.mutation.CanAccessHiddenGroups(); !ok {
+		return &ValidationError{Name: "can_access_hidden_groups", err: errors.New(`ent: missing required field "User.can_access_hidden_groups"`)}
 	}
 	if _, ok := _c.mutation.Role(); !ok {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "User.role"`)}
@@ -528,6 +549,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
 		_node.IsSystemAdmin = value
+	}
+	if value, ok := _c.mutation.CanAccessHiddenGroups(); ok {
+		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
+		_node.CanAccessHiddenGroups = value
 	}
 	if value, ok := _c.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)

@@ -91,6 +91,11 @@ func IsSystemAdmin(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldIsSystemAdmin, v))
 }
 
+// CanAccessHiddenGroups applies equality check predicate on the "can_access_hidden_groups" field. It's identical to CanAccessHiddenGroupsEQ.
+func CanAccessHiddenGroups(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCanAccessHiddenGroups, v))
+}
+
 // LastLoginAt applies equality check predicate on the "last_login_at" field. It's identical to LastLoginAtEQ.
 func LastLoginAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldLastLoginAt, v))
@@ -489,6 +494,16 @@ func IsSystemAdminEQ(v bool) predicate.User {
 // IsSystemAdminNEQ applies the NEQ predicate on the "is_system_admin" field.
 func IsSystemAdminNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldIsSystemAdmin, v))
+}
+
+// CanAccessHiddenGroupsEQ applies the EQ predicate on the "can_access_hidden_groups" field.
+func CanAccessHiddenGroupsEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCanAccessHiddenGroups, v))
+}
+
+// CanAccessHiddenGroupsNEQ applies the NEQ predicate on the "can_access_hidden_groups" field.
+func CanAccessHiddenGroupsNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldCanAccessHiddenGroups, v))
 }
 
 // RoleEQ applies the EQ predicate on the "role" field.

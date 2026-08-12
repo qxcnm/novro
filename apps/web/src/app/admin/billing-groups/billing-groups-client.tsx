@@ -24,14 +24,15 @@ type Group = {
   display_name: string;
   multiplier_bps: number;
   is_default: boolean;
+  is_hidden: boolean;
   status: "active" | "disabled";
   api_key_count: number;
   provider_count: number;
 };
 
-type Form = { code: string; display_name: string; multiplier: string };
+type Form = { code: string; display_name: string; multiplier: string; is_hidden: boolean };
 
-const emptyForm: Form = { code: "", display_name: "", multiplier: "1" };
+const emptyForm: Form = { code: "", display_name: "", multiplier: "1", is_hidden: false };
 
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
@@ -85,7 +86,7 @@ export default function BillingGroupsClient() {
 
   function beginEdit(group: Group) {
     setEditing(group);
-    setForm({ code: group.code, display_name: group.display_name, multiplier: String(group.multiplier_bps / 10_000) });
+    setForm({ code: group.code, display_name: group.display_name, multiplier: String(group.multiplier_bps / 10_000), is_hidden: group.is_hidden });
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -93,8 +94,8 @@ export default function BillingGroupsClient() {
     const bps = multiplierBPS(form.multiplier);
     if (bps === null) { setMessage("计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数"); return; }
     const body = editing
-      ? { display_name: form.display_name, multiplier_bps: bps }
-      : { code: form.code, display_name: form.display_name, multiplier_bps: bps };
+      ? { display_name: form.display_name, multiplier_bps: bps, is_hidden: form.is_hidden }
+      : { code: form.code, display_name: form.display_name, multiplier_bps: bps, is_hidden: form.is_hidden };
     setBusy(true);
     const response = await fetch(editing ? `/api/admin/billing-groups/${editing.id}` : "/api/admin/billing-groups", {
       method: editing ? "PATCH" : "POST",
@@ -170,6 +171,7 @@ export default function BillingGroupsClient() {
     <div className="space-y-2"><Label htmlFor="group-code">分组标识</Label><Input disabled={editing !== null} id="group-code" maxLength={64} onChange={(event) => setForm({ ...form, code: event.target.value })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 vip" required title="分组标识需为 3 到 64 位，只能使用小写字母、数字和连字符，不能包含点号、小数点、下划线或空格，且必须以字母或数字开头和结尾" value={form.code} /><p className="text-xs text-muted-foreground">3 到 64 位；只允许小写字母、数字和连字符，不允许点号、小数点、下划线或空格。</p></div>
     <div className="space-y-2"><Label htmlFor="group-name">显示名称</Label><Input id="group-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} required value={form.display_name} /></div>
     <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" title="计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">范围 0.0001 到 100；1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>
+    <label className="flex cursor-pointer items-start gap-3 border-y py-3"><Checkbox aria-label="隐藏计费分组" checked={form.is_hidden} disabled={editing?.is_default === true} onCheckedChange={(checked) => setForm({ ...form, is_hidden: checked === true })} /><span><span className="block text-sm font-medium">隐藏分组</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">仅管理员和已授予隐藏分组权限的用户可以查看、选择和使用此分组。</span></span></label>
   </>;
 
   return (
@@ -203,7 +205,7 @@ export default function BillingGroupsClient() {
               {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>还没有计费分组</TableCell></TableRow> : null}
               {filtered.map((group) => <TableRow key={group.id}>
                 <TableCell><Checkbox aria-label={`选择 ${group.display_name}`} checked={selection.isSelected(group.id)} disabled={group.is_default} onCheckedChange={(checked) => selection.toggleOne(group.id, checked === true)} /></TableCell>
-                <TableCell><p className="font-medium">{group.display_name} {group.is_default ? <Badge className="ml-1" variant="secondary">默认</Badge> : null}</p><p className="font-mono text-xs text-muted-foreground">{group.code}</p></TableCell>
+                <TableCell><p className="font-medium">{group.display_name} {group.is_default ? <Badge className="ml-1" variant="secondary">默认</Badge> : null}{group.is_hidden ? <Badge className="ml-1" variant="outline">隐藏</Badge> : null}</p><p className="font-mono text-xs text-muted-foreground">{group.code}</p></TableCell>
                 <TableCell className="font-mono">{(group.multiplier_bps / 10_000).toFixed(4)}x</TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><KeyRound className="size-4 text-muted-foreground" />{group.api_key_count}</span></TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><ServerCog className="size-4 text-muted-foreground" />{group.provider_count}</span></TableCell>

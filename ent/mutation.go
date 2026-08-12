@@ -4211,6 +4211,7 @@ type BillingGroupMutation struct {
 	multiplier_bps    *int64
 	addmultiplier_bps *int64
 	is_default        *bool
+	is_hidden         *bool
 	status            *billinggroup.Status
 	created_at        *time.Time
 	updated_at        *time.Time
@@ -4496,6 +4497,42 @@ func (m *BillingGroupMutation) OldIsDefault(ctx context.Context) (v bool, err er
 // ResetIsDefault resets all changes to the "is_default" field.
 func (m *BillingGroupMutation) ResetIsDefault() {
 	m.is_default = nil
+}
+
+// SetIsHidden sets the "is_hidden" field.
+func (m *BillingGroupMutation) SetIsHidden(b bool) {
+	m.is_hidden = &b
+}
+
+// IsHidden returns the value of the "is_hidden" field in the mutation.
+func (m *BillingGroupMutation) IsHidden() (r bool, exists bool) {
+	v := m.is_hidden
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsHidden returns the old "is_hidden" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldIsHidden(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsHidden is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsHidden requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsHidden: %w", err)
+	}
+	return oldValue.IsHidden, nil
+}
+
+// ResetIsHidden resets all changes to the "is_hidden" field.
+func (m *BillingGroupMutation) ResetIsHidden() {
+	m.is_hidden = nil
 }
 
 // SetStatus sets the "status" field.
@@ -4851,7 +4888,7 @@ func (m *BillingGroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BillingGroupMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.code != nil {
 		fields = append(fields, billinggroup.FieldCode)
 	}
@@ -4863,6 +4900,9 @@ func (m *BillingGroupMutation) Fields() []string {
 	}
 	if m.is_default != nil {
 		fields = append(fields, billinggroup.FieldIsDefault)
+	}
+	if m.is_hidden != nil {
+		fields = append(fields, billinggroup.FieldIsHidden)
 	}
 	if m.status != nil {
 		fields = append(fields, billinggroup.FieldStatus)
@@ -4892,6 +4932,8 @@ func (m *BillingGroupMutation) Field(name string) (ent.Value, bool) {
 		return m.MultiplierBps()
 	case billinggroup.FieldIsDefault:
 		return m.IsDefault()
+	case billinggroup.FieldIsHidden:
+		return m.IsHidden()
 	case billinggroup.FieldStatus:
 		return m.Status()
 	case billinggroup.FieldCreatedAt:
@@ -4917,6 +4959,8 @@ func (m *BillingGroupMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldMultiplierBps(ctx)
 	case billinggroup.FieldIsDefault:
 		return m.OldIsDefault(ctx)
+	case billinggroup.FieldIsHidden:
+		return m.OldIsHidden(ctx)
 	case billinggroup.FieldStatus:
 		return m.OldStatus(ctx)
 	case billinggroup.FieldCreatedAt:
@@ -4961,6 +5005,13 @@ func (m *BillingGroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsDefault(v)
+		return nil
+	case billinggroup.FieldIsHidden:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsHidden(v)
 		return nil
 	case billinggroup.FieldStatus:
 		v, ok := value.(billinggroup.Status)
@@ -5074,6 +5125,9 @@ func (m *BillingGroupMutation) ResetField(name string) error {
 		return nil
 	case billinggroup.FieldIsDefault:
 		m.ResetIsDefault()
+		return nil
+	case billinggroup.FieldIsHidden:
+		m.ResetIsHidden()
 		return nil
 	case billinggroup.FieldStatus:
 		m.ResetStatus()
@@ -12902,49 +12956,50 @@ func (m *UpstreamModelMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *uuid.UUID
-	invite_code           *string
-	username              *string
-	email                 *string
-	display_name          *string
-	password_hash         *string
-	is_system_admin       *bool
-	role                  *user.Role
-	status                *user.Status
-	last_login_at         *time.Time
-	created_at            *time.Time
-	updated_at            *time.Time
-	clearedFields         map[string]struct{}
-	sessions              map[uuid.UUID]struct{}
-	removedsessions       map[uuid.UUID]struct{}
-	clearedsessions       bool
-	identities            map[uuid.UUID]struct{}
-	removedidentities     map[uuid.UUID]struct{}
-	clearedidentities     bool
-	api_keys              map[uuid.UUID]struct{}
-	removedapi_keys       map[uuid.UUID]struct{}
-	clearedapi_keys       bool
-	wallet                *uuid.UUID
-	clearedwallet         bool
-	wallet_entries        map[uuid.UUID]struct{}
-	removedwallet_entries map[uuid.UUID]struct{}
-	clearedwallet_entries bool
-	top_up_orders         map[uuid.UUID]struct{}
-	removedtop_up_orders  map[uuid.UUID]struct{}
-	clearedtop_up_orders  bool
-	api_usages            map[uuid.UUID]struct{}
-	removedapi_usages     map[uuid.UUID]struct{}
-	clearedapi_usages     bool
-	referrer              *uuid.UUID
-	clearedreferrer       bool
-	referrals             map[uuid.UUID]struct{}
-	removedreferrals      map[uuid.UUID]struct{}
-	clearedreferrals      bool
-	done                  bool
-	oldValue              func(context.Context) (*User, error)
-	predicates            []predicate.User
+	op                       Op
+	typ                      string
+	id                       *uuid.UUID
+	invite_code              *string
+	username                 *string
+	email                    *string
+	display_name             *string
+	password_hash            *string
+	is_system_admin          *bool
+	can_access_hidden_groups *bool
+	role                     *user.Role
+	status                   *user.Status
+	last_login_at            *time.Time
+	created_at               *time.Time
+	updated_at               *time.Time
+	clearedFields            map[string]struct{}
+	sessions                 map[uuid.UUID]struct{}
+	removedsessions          map[uuid.UUID]struct{}
+	clearedsessions          bool
+	identities               map[uuid.UUID]struct{}
+	removedidentities        map[uuid.UUID]struct{}
+	clearedidentities        bool
+	api_keys                 map[uuid.UUID]struct{}
+	removedapi_keys          map[uuid.UUID]struct{}
+	clearedapi_keys          bool
+	wallet                   *uuid.UUID
+	clearedwallet            bool
+	wallet_entries           map[uuid.UUID]struct{}
+	removedwallet_entries    map[uuid.UUID]struct{}
+	clearedwallet_entries    bool
+	top_up_orders            map[uuid.UUID]struct{}
+	removedtop_up_orders     map[uuid.UUID]struct{}
+	clearedtop_up_orders     bool
+	api_usages               map[uuid.UUID]struct{}
+	removedapi_usages        map[uuid.UUID]struct{}
+	clearedapi_usages        bool
+	referrer                 *uuid.UUID
+	clearedreferrer          bool
+	referrals                map[uuid.UUID]struct{}
+	removedreferrals         map[uuid.UUID]struct{}
+	clearedreferrals         bool
+	done                     bool
+	oldValue                 func(context.Context) (*User, error)
+	predicates               []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -13340,6 +13395,42 @@ func (m *UserMutation) OldIsSystemAdmin(ctx context.Context) (v bool, err error)
 // ResetIsSystemAdmin resets all changes to the "is_system_admin" field.
 func (m *UserMutation) ResetIsSystemAdmin() {
 	m.is_system_admin = nil
+}
+
+// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
+func (m *UserMutation) SetCanAccessHiddenGroups(b bool) {
+	m.can_access_hidden_groups = &b
+}
+
+// CanAccessHiddenGroups returns the value of the "can_access_hidden_groups" field in the mutation.
+func (m *UserMutation) CanAccessHiddenGroups() (r bool, exists bool) {
+	v := m.can_access_hidden_groups
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCanAccessHiddenGroups returns the old "can_access_hidden_groups" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldCanAccessHiddenGroups(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCanAccessHiddenGroups is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCanAccessHiddenGroups requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCanAccessHiddenGroups: %w", err)
+	}
+	return oldValue.CanAccessHiddenGroups, nil
+}
+
+// ResetCanAccessHiddenGroups resets all changes to the "can_access_hidden_groups" field.
+func (m *UserMutation) ResetCanAccessHiddenGroups() {
+	m.can_access_hidden_groups = nil
 }
 
 // SetRole sets the "role" field.
@@ -14026,7 +14117,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.invite_code != nil {
 		fields = append(fields, user.FieldInviteCode)
 	}
@@ -14047,6 +14138,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.is_system_admin != nil {
 		fields = append(fields, user.FieldIsSystemAdmin)
+	}
+	if m.can_access_hidden_groups != nil {
+		fields = append(fields, user.FieldCanAccessHiddenGroups)
 	}
 	if m.role != nil {
 		fields = append(fields, user.FieldRole)
@@ -14085,6 +14179,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.PasswordHash()
 	case user.FieldIsSystemAdmin:
 		return m.IsSystemAdmin()
+	case user.FieldCanAccessHiddenGroups:
+		return m.CanAccessHiddenGroups()
 	case user.FieldRole:
 		return m.Role()
 	case user.FieldStatus:
@@ -14118,6 +14214,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldPasswordHash(ctx)
 	case user.FieldIsSystemAdmin:
 		return m.OldIsSystemAdmin(ctx)
+	case user.FieldCanAccessHiddenGroups:
+		return m.OldCanAccessHiddenGroups(ctx)
 	case user.FieldRole:
 		return m.OldRole(ctx)
 	case user.FieldStatus:
@@ -14185,6 +14283,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsSystemAdmin(v)
+		return nil
+	case user.FieldCanAccessHiddenGroups:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCanAccessHiddenGroups(v)
 		return nil
 	case user.FieldRole:
 		v, ok := value.(user.Role)
@@ -14317,6 +14422,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldIsSystemAdmin:
 		m.ResetIsSystemAdmin()
+		return nil
+	case user.FieldCanAccessHiddenGroups:
+		m.ResetCanAccessHiddenGroups()
 		return nil
 	case user.FieldRole:
 		m.ResetRole()

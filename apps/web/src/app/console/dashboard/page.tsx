@@ -26,7 +26,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const responses = await Promise.all([fetch("/api/account/usage", { cache: "no-store" }), fetch("/api/account/balance", { cache: "no-store" }), fetch("/api/account/api-keys", { cache: "no-store" })]);
+      const responses = await Promise.all([fetch("/api/account/usage?limit=50", { cache: "no-store" }), fetch("/api/account/balance", { cache: "no-store" }), fetch("/api/account/api-keys", { cache: "no-store" })]);
       if (responses.some((response) => response.status === 401)) { router.replace("/login"); return; }
       if (responses.some((response) => !response.ok)) throw new Error("数据暂时不可用");
       const [usageBody, balanceBody, keysBody] = await Promise.all(responses.map((response) => response.json()));

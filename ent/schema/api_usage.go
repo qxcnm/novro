@@ -69,6 +69,8 @@ func (APIUsage) Edges() []ent.Edge {
 func (APIUsage) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id", "created_at"),
+		index.Fields("user_id", "model_name", "created_at"),
+		index.Fields("user_id", "status_code", "created_at"),
 		index.Fields("api_key_id", "created_at"),
 		index.Fields("model_route_id", "created_at"),
 		index.Fields("upstream_model_id", "created_at"),

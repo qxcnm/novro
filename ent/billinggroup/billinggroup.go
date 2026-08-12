@@ -24,6 +24,8 @@ const (
 	FieldMultiplierBps = "multiplier_bps"
 	// FieldIsDefault holds the string denoting the is_default field in the database.
 	FieldIsDefault = "is_default"
+	// FieldIsHidden holds the string denoting the is_hidden field in the database.
+	FieldIsHidden = "is_hidden"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -70,6 +72,7 @@ var Columns = []string{
 	FieldDisplayName,
 	FieldMultiplierBps,
 	FieldIsDefault,
+	FieldIsHidden,
 	FieldStatus,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -97,6 +100,8 @@ var (
 	MultiplierBpsValidator func(int64) error
 	// DefaultIsDefault holds the default value on creation for the "is_default" field.
 	DefaultIsDefault bool
+	// DefaultIsHidden holds the default value on creation for the "is_hidden" field.
+	DefaultIsHidden bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -159,6 +164,11 @@ func ByMultiplierBps(opts ...sql.OrderTermOption) OrderOption {
 // ByIsDefault orders the results by the is_default field.
 func ByIsDefault(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsDefault, opts...).ToFunc()
+}
+
+// ByIsHidden orders the results by the is_hidden field.
+func ByIsHidden(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsHidden, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

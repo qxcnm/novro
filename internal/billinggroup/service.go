@@ -41,7 +41,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.MultiplierBPS == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.MultiplierBPS == nil && input.IsHidden == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	if input.DisplayName != nil {

@@ -26,6 +26,8 @@ type BillingGroup struct {
 	MultiplierBps int64 `json:"multiplier_bps,omitempty"`
 	// IsDefault holds the value of the "is_default" field.
 	IsDefault bool `json:"is_default,omitempty"`
+	// IsHidden holds the value of the "is_hidden" field.
+	IsHidden bool `json:"is_hidden,omitempty"`
 	// Status holds the value of the "status" field.
 	Status billinggroup.Status `json:"status,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -85,7 +87,7 @@ func (*BillingGroup) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case billinggroup.FieldIsDefault:
+		case billinggroup.FieldIsDefault, billinggroup.FieldIsHidden:
 			values[i] = new(sql.NullBool)
 		case billinggroup.FieldMultiplierBps:
 			values[i] = new(sql.NullInt64)
@@ -139,6 +141,12 @@ func (_m *BillingGroup) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_default", values[i])
 			} else if value.Valid {
 				_m.IsDefault = value.Bool
+			}
+		case billinggroup.FieldIsHidden:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field is_hidden", values[i])
+			} else if value.Valid {
+				_m.IsHidden = value.Bool
 			}
 		case billinggroup.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -227,6 +235,9 @@ func (_m *BillingGroup) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_default=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsDefault))
+	builder.WriteString(", ")
+	builder.WriteString("is_hidden=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IsHidden))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))

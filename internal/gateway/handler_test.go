@@ -106,6 +106,11 @@ func (f *fakeBilling) Refund(_ context.Context, _, _ uuid.UUID, amount int64, _ 
 	f.refunded += amount
 	return nil
 }
+func (f *fakeBilling) ReleaseReservation(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
+	f.refundCalls++
+	f.refunded += amount
+	return nil
+}
 func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) error {
 	f.finalizeCalls++
 	if len(f.finalizeErrors) > 0 {
@@ -154,8 +159,11 @@ type noopBilling struct{}
 
 func (noopBilling) Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error { return nil }
 func (noopBilling) Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error  { return nil }
-func (noopBilling) Finalize(context.Context, billing.UsageInput) error                 { return nil }
-func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error          { return nil }
+func (noopBilling) ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error {
+	return nil
+}
+func (noopBilling) Finalize(context.Context, billing.UsageInput) error        { return nil }
+func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error { return nil }
 
 type terminalErrorReader struct {
 	reader *strings.Reader
@@ -404,12 +412,12 @@ func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 		wantOutput   int
 		wantEstimate bool
 	}{
-		{name: "string input", body: `{"usage":{"prompt_tokens":"10","completion_tokens":20}}`, wantInput: 100, wantOutput: 20, wantEstimate: true},
-		{name: "negative output", body: `{"usage":{"prompt_tokens":10,"completion_tokens":-1}}`, wantInput: 10, wantOutput: 50, wantEstimate: true},
-		{name: "fractional input", body: `{"usage":{"prompt_tokens":1.5,"completion_tokens":20}}`, wantInput: 100, wantOutput: 20, wantEstimate: true},
+		{name: "string input", body: `{"usage":{"prompt_tokens":"10","completion_tokens":20}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
+		{name: "negative output", body: `{"usage":{"prompt_tokens":10,"completion_tokens":-1}}`, wantInput: 10, wantOutput: 0, wantEstimate: true},
+		{name: "fractional input", body: `{"usage":{"prompt_tokens":1.5,"completion_tokens":20}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
 		{name: "large output", body: `{"usage":{"prompt_tokens":10,"completion_tokens":100000001}}`, wantInput: 10, wantOutput: 100000001, wantEstimate: false},
-		{name: "invalid cache field", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cached_tokens":"4"}}`, wantInput: 100, wantOutput: 20, wantEstimate: true},
-		{name: "invalid cache container", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cache_creation":"4"}}`, wantInput: 100, wantOutput: 20, wantEstimate: true},
+		{name: "invalid cache field", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cached_tokens":"4"}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
+		{name: "invalid cache container", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cache_creation":"4"}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -824,7 +832,7 @@ func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != body || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+	if response.Code != http.StatusOK || response.Body.String() != body || biller.finalizeCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d body=%s", response.Code, biller.finalizeCalls, biller.refundCalls, response.Body.String())
 	}
 	if !strings.Contains(logs.String(), "forward successful response after usage finalization failure") {
@@ -966,7 +974,7 @@ func TestStreamingFinalizationFailureKeepsSuccessfulResponse(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
+	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 1 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d body=%s", response.Code, biller.finalizeCalls, biller.refundCalls, response.Body.String())
 	}
 	if !strings.Contains(logs.String(), "stream usage finalization unavailable") {
@@ -990,6 +998,21 @@ func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
 	}
 	if biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 9 || biller.usage.Estimated {
 		t.Fatalf("unexpected large streamed usage %+v", biller.usage)
+	}
+}
+
+func TestInvalidStreamedUsageReleasesReservation(t *testing.T) {
+	biller := &fakeBilling{}
+	stream := "data: {\"id\":\"stream-invalid\",\"usage\":{\"prompt_tokens\":2147483648,\"completion_tokens\":1}}\n\ndata: [DONE]\n\n"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: openAIRoute()}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":20,"stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != stream || biller.finalizeCalls != 0 || biller.refundCalls != 1 || biller.refunded != biller.reserved {
+		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d refunded=%d reserved=%d", response.Code, biller.finalizeCalls, biller.refundCalls, biller.refunded, biller.reserved)
 	}
 }
 
@@ -1249,7 +1272,7 @@ func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 	}
 }
 
-func TestUsageFallbackOnlyEstimatesMissingDimensionsAtHighestRate(t *testing.T) {
+func TestUsageFallbackNeverChargesUnreportedDimensions(t *testing.T) {
 	rates := billing.RateCard{InputMicros: 1, CacheReadMicros: 2, CacheWriteMicros: 3, CacheWrite1hMicros: 4, OutputMicros: 5}
 
 	usage := applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10,"completion_tokens":0}}`)), 100, 20, rates)
@@ -1258,12 +1281,12 @@ func TestUsageFallbackOnlyEstimatesMissingDimensionsAtHighestRate(t *testing.T) 
 	}
 
 	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"completion_tokens":7}}`)), 100, 20, rates)
-	if usage.Input != 100 || usage.CacheWrite1h != 100 || usage.Output != 7 || !usage.Estimated {
-		t.Fatalf("missing input was not conservatively estimated: %+v", usage)
+	if usage.Input != 0 || usage.UncachedInput != 0 || usage.CacheRead != 0 || usage.CacheWrite != 0 || usage.CacheWrite1h != 0 || usage.Output != 7 || !usage.Estimated {
+		t.Fatalf("missing input was charged: %+v", usage)
 	}
 
 	usage = applyUsageFallback(parseUsage([]byte(`{"usage":{"prompt_tokens":10}}`)), 100, 20, rates)
-	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 20 || !usage.Estimated {
-		t.Fatalf("missing output was not conservatively estimated: %+v", usage)
+	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 0 || !usage.Estimated {
+		t.Fatalf("missing output was charged: %+v", usage)
 	}
 }

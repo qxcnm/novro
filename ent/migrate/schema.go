@@ -143,6 +143,16 @@ var (
 				Columns: []*schema.Column{APIUsagesColumns[36], APIUsagesColumns[29]},
 			},
 			{
+				Name:    "apiusage_user_id_model_name_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[36], APIUsagesColumns[24], APIUsagesColumns[29]},
+			},
+			{
+				Name:    "apiusage_user_id_status_code_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIUsagesColumns[36], APIUsagesColumns[3], APIUsagesColumns[29]},
+			},
+			{
 				Name:    "apiusage_api_key_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{APIUsagesColumns[32], APIUsagesColumns[29]},
@@ -171,6 +181,7 @@ var (
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "multiplier_bps", Type: field.TypeInt64, Default: 10000},
 		{Name: "is_default", Type: field.TypeBool, Default: false},
+		{Name: "is_hidden", Type: field.TypeBool, Default: false},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -185,7 +196,7 @@ var (
 			{
 				Name:    "billinggroup_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[5], BillingGroupsColumns[6]},
+				Columns: []*schema.Column{BillingGroupsColumns[6], BillingGroupsColumns[7]},
 			},
 			{
 				Name:    "billinggroup_is_default",
@@ -195,7 +206,7 @@ var (
 			{
 				Name:    "billinggroup_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[8]},
+				Columns: []*schema.Column{BillingGroupsColumns[9]},
 			},
 		},
 	}
@@ -482,6 +493,7 @@ var (
 		{Name: "display_name", Type: field.TypeString, Size: 128, Default: ""},
 		{Name: "password_hash", Type: field.TypeString, Nullable: true},
 		{Name: "is_system_admin", Type: field.TypeBool, Default: false},
+		{Name: "can_access_hidden_groups", Type: field.TypeBool, Default: false},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "member"}, Default: "member"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "last_login_at", Type: field.TypeTime, Nullable: true},
@@ -497,7 +509,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_users_referrals",
-				Columns:    []*schema.Column{UsersColumns[12]},
+				Columns:    []*schema.Column{UsersColumns[13]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -506,12 +518,12 @@ var (
 			{
 				Name:    "user_role_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[7], UsersColumns[8]},
+				Columns: []*schema.Column{UsersColumns[8], UsersColumns[9]},
 			},
 			{
 				Name:    "user_referred_by_user_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[12], UsersColumns[10]},
+				Columns: []*schema.Column{UsersColumns[13], UsersColumns[11]},
 			},
 		},
 	}
@@ -633,6 +645,11 @@ var (
 				Name:    "walletentry_wallet_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{WalletEntriesColumns[8], WalletEntriesColumns[6]},
+			},
+			{
+				Name:    "walletentry_wallet_id_entry_type_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{WalletEntriesColumns[8], WalletEntriesColumns[2], WalletEntriesColumns[6]},
 			},
 			{
 				Name:    "walletentry_reference_id",

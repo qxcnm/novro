@@ -46,6 +46,18 @@ type Order struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
+type Page struct {
+	Orders []Order `json:"orders"`
+	Total  int     `json:"total"`
+	Offset int     `json:"offset"`
+	Limit  int     `json:"limit"`
+}
+
+type ListFilter struct {
+	Offset int
+	Limit  int
+}
+
 type PaymentMethod struct {
 	Code      string `json:"code"`
 	Name      string `json:"name"`

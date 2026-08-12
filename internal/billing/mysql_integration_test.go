@@ -163,14 +163,8 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if err := service.Reserve(ctx, createdUser.ID, requestID, 300_000, "conflicting retry"); !errors.Is(err, ErrRequestConflict) {
 		t.Fatalf("conflicting reservation err=%v", err)
 	}
-	if err := service.Refund(ctx, createdUser.ID, requestID, 100_000, "idempotent refund"); err != nil {
-		t.Fatalf("refund balance: %v", err)
-	}
-	if err := service.Refund(ctx, createdUser.ID, requestID, 100_000, "idempotent refund retry"); err != nil {
-		t.Fatalf("retry refund: %v", err)
-	}
-	if err := service.Refund(ctx, createdUser.ID, requestID, 200_000, "conflicting refund"); !errors.Is(err, ErrRequestConflict) {
-		t.Fatalf("conflicting refund err=%v", err)
+	if err := service.Refund(ctx, createdUser.ID, requestID, 100_000, "partial refund"); !errors.Is(err, ErrRequestConflict) {
+		t.Fatalf("partial refund err=%v", err)
 	}
 
 	usage := UsageInput{UserID: createdUser.ID, APIKeyID: apiKey.ID, ModelRouteID: route.ID, UpstreamModelID: &upstream.ID, BillingGroupID: &group.ID, RequestID: requestID, Endpoint: "chat_completions", InputTokens: 10, Tokens: TokenBreakdown{UncachedInput: 10, Output: 20}, OutputTokens: 20, Rates: RateCard{RequestMicros: 300_000}, BaseCostMicros: 300_000, MultiplierBPS: 10_000, CostMicros: 300_000, ReservedMicros: 400_000, ModelName: "integration-model", UpstreamModelName: "upstream-model", BillingGroupCode: group.Code, BillingGroupName: group.DisplayName, CalculationVersion: CalculationVersion, CreatedAt: time.Now().UTC(), FinishedAt: time.Now().UTC()}
@@ -179,6 +173,9 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 	if err := service.Finalize(ctx, usage); err != nil {
 		t.Fatalf("retry finalization: %v", err)
+	}
+	if err := service.ReleaseReservation(ctx, createdUser.ID, requestID, 400_000, "unknown commit retry"); err != nil {
+		t.Fatalf("release after committed usage: %v", err)
 	}
 	conflictingUsage := usage
 	conflictingUsage.OutputTokens++
@@ -194,6 +191,27 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if summary.Wallet.BalanceMicros != initialBalance-300_000 {
 		t.Fatalf("balance=%d want=%d", summary.Wallet.BalanceMicros, initialBalance-300_000)
 	}
+	usagePage, err := service.Usage(ctx, createdUser.ID, UsageFilter{Limit: 20})
+	if err != nil {
+		t.Fatalf("list usage page: %v", err)
+	}
+	if usagePage.Total != 1 || len(usagePage.Usage) != 1 || usagePage.TotalTokens != 30 || usagePage.TotalCostMicros != 300_000 || len(usagePage.Models) != 1 || usagePage.Models[0] != "integration-model" {
+		t.Fatalf("usage page=%+v", usagePage)
+	}
+	searchPage, err := service.Usage(ctx, createdUser.ID, UsageFilter{Search: requestID.String(), Status: UsageStatusSuccess, Offset: 1, Limit: 1})
+	if err != nil {
+		t.Fatalf("filter usage page: %v", err)
+	}
+	if searchPage.Total != 1 || len(searchPage.Usage) != 0 || searchPage.TotalTokens != 30 || searchPage.TotalCostMicros != 300_000 {
+		t.Fatalf("filtered usage page=%+v", searchPage)
+	}
+	entryPage, err := service.SummaryPage(ctx, createdUser.ID, EntryFilter{Offset: 1, Limit: 1})
+	if err != nil {
+		t.Fatalf("list wallet entry page: %v", err)
+	}
+	if entryPage.EntriesTotal != 2 || len(entryPage.Entries) != 1 || entryPage.EntriesOffset != 1 || entryPage.EntriesLimit != 1 {
+		t.Fatalf("wallet entry page=%+v", entryPage)
+	}
 	entries, err := client.WalletEntry.Query().Where(entwalletentry.ReferenceIDEQ(requestID)).All(ctx)
 	if err != nil {
 		t.Fatalf("list idempotent ledger entries: %v", err)
@@ -202,15 +220,32 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 		t.Fatalf("ledger entries=%d want=2", len(entries))
 	}
 
-	fullyRefundedRequestID := uuid.New()
-	if err := service.Reserve(ctx, createdUser.ID, fullyRefundedRequestID, 50_000, "fully refunded request"); err != nil {
-		t.Fatalf("reserve fully refunded request: %v", err)
+	orphanedRequestID := uuid.New()
+	if err := service.Reserve(ctx, createdUser.ID, orphanedRequestID, 50_000, "orphaned request"); err != nil {
+		t.Fatalf("reserve orphaned request: %v", err)
 	}
-	if err := service.Refund(ctx, createdUser.ID, fullyRefundedRequestID, 50_000, "fully refund request"); err != nil {
-		t.Fatalf("fully refund request: %v", err)
+	reservedSummary, err := service.Summary(ctx, createdUser.ID)
+	if err != nil {
+		t.Fatalf("summarize orphaned request: %v", err)
+	}
+	if reservedSummary.ReservedMicros != 50_000 {
+		t.Fatalf("active reservation=%d want=50000", reservedSummary.ReservedMicros)
+	}
+	if err := service.ReleaseReservation(ctx, createdUser.ID, orphanedRequestID, 50_000, "release orphaned request"); err != nil {
+		t.Fatalf("release orphaned request: %v", err)
+	}
+	if err := service.ReleaseReservation(ctx, createdUser.ID, orphanedRequestID, 50_000, "retry orphaned release"); err != nil {
+		t.Fatalf("retry orphaned release: %v", err)
+	}
+	releasedSummary, err := service.Summary(ctx, createdUser.ID)
+	if err != nil {
+		t.Fatalf("summarize released request: %v", err)
+	}
+	if releasedSummary.ReservedMicros != 0 || releasedSummary.Wallet.BalanceMicros != initialBalance-300_000 {
+		t.Fatalf("released summary=%+v", releasedSummary)
 	}
 	fullyChargedUsage := usage
-	fullyChargedUsage.RequestID = fullyRefundedRequestID
+	fullyChargedUsage.RequestID = orphanedRequestID
 	fullyChargedUsage.Rates.RequestMicros = 50_000
 	fullyChargedUsage.BaseCostMicros = 50_000
 	fullyChargedUsage.CostMicros = 50_000
@@ -218,7 +253,7 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if err := service.Finalize(ctx, fullyChargedUsage); !errors.Is(err, ErrRequestConflict) {
 		t.Fatalf("finalize after incompatible refund err=%v", err)
 	}
-	usageCount, err := client.APIUsage.Query().Where(entapiusage.RequestIDEQ(fullyRefundedRequestID)).Count(ctx)
+	usageCount, err := client.APIUsage.Query().Where(entapiusage.RequestIDEQ(orphanedRequestID)).Count(ctx)
 	if err != nil {
 		t.Fatalf("count usage after incompatible refund: %v", err)
 	}
@@ -247,7 +282,7 @@ func TestMySQLConcurrentTopUpNotificationsCreditOnce(t *testing.T) {
 	orderID := uuid.New()
 	created, err := store.Create(ctx, payment.CreateParams{
 		ID: orderID, UserID: createdUser.ID, OutTradeNo: "NVR" + strings.ReplaceAll(orderID.String(), "-", ""),
-		Channel: "alipay", AmountMicros: 10_000_000,
+		Channel: "alipay", AmountMicros: 10_000_000, CreditedMicros: 10_000_000,
 	})
 	if err != nil {
 		t.Fatalf("create top-up integration order: %v", err)

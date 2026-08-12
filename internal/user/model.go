@@ -33,29 +33,32 @@ var (
 )
 
 type Record struct {
-	ID            uuid.UUID  `json:"id"`
-	Username      string     `json:"username"`
-	Email         string     `json:"email"`
-	DisplayName   string     `json:"display_name"`
-	Role          Role       `json:"role"`
-	Status        Status     `json:"status"`
-	IsSystemAdmin bool       `json:"is_system_admin"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                    uuid.UUID  `json:"id"`
+	Username              string     `json:"username"`
+	Email                 string     `json:"email"`
+	DisplayName           string     `json:"display_name"`
+	Role                  Role       `json:"role"`
+	Status                Status     `json:"status"`
+	IsSystemAdmin         bool       `json:"is_system_admin"`
+	CanAccessHiddenGroups bool       `json:"can_access_hidden_groups"`
+	LastLoginAt           *time.Time `json:"last_login_at"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Password    string `json:"password"`
-	Role        Role   `json:"role"`
+	Username              string `json:"username"`
+	Email                 string `json:"email"`
+	DisplayName           string `json:"display_name"`
+	Password              string `json:"password"`
+	Role                  Role   `json:"role"`
+	CanAccessHiddenGroups bool   `json:"can_access_hidden_groups"`
 }
 
 type UpdateInput struct {
-	DisplayName *string `json:"display_name"`
-	Role        *Role   `json:"role"`
+	DisplayName           *string `json:"display_name"`
+	Role                  *Role   `json:"role"`
+	CanAccessHiddenGroups *bool   `json:"can_access_hidden_groups"`
 }
 
 type RegisterInput struct {

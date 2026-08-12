@@ -16,7 +16,7 @@ import (
 type Store interface {
 	Create(context.Context, CreateParams) (Order, error)
 	Get(context.Context, string) (Order, error)
-	List(context.Context, uuid.UUID, int) ([]Order, error)
+	List(context.Context, uuid.UUID, ListFilter) (Page, error)
 	ListAll(context.Context, AdminListFilter) (AdminPage, error)
 	Complete(context.Context, CompleteParams) (Order, error)
 }
@@ -142,11 +142,11 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, amountMicros int
 	return CreateResult{Order: created, Checkout: checkout}, nil
 }
 
-func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]Order, error) {
-	if userID == uuid.Nil {
-		return nil, ErrInvalidInput
+func (s *Service) List(ctx context.Context, userID uuid.UUID, filter ListFilter) (Page, error) {
+	if userID == uuid.Nil || filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 {
+		return Page{}, ErrInvalidInput
 	}
-	return s.store.List(ctx, userID, 20)
+	return s.store.List(ctx, userID, filter)
 }
 
 func (s *Service) ListAll(ctx context.Context, filter AdminListFilter) (AdminPage, error) {

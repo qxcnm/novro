@@ -24,13 +24,19 @@ func TestReadMigrationsSortsAndHashesFiles(t *testing.T) {
 	}
 }
 
-func TestVersionedSQLContainsInitialProviderWeightAndApiKeySecretMigrations(t *testing.T) {
+func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	entries, err := fs.ReadDir(VersionedSQL, "migrations")
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	if len(entries) != 3 || entries[0].IsDir() || entries[0].Name() != "0001_initial_schema.sql" || entries[1].IsDir() || entries[1].Name() != "0002_provider_weight.sql" || entries[2].IsDir() || entries[2].Name() != "0006_api_keys_secret_ciphertext.sql" {
-		t.Fatalf("expected initial, provider weight, and API key secret migrations, got %+v", entries)
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql"}
+	if len(entries) != len(expected) {
+		t.Fatalf("expected migrations %v, got %+v", expected, entries)
+	}
+	for index, name := range expected {
+		if entries[index].IsDir() || entries[index].Name() != name {
+			t.Fatalf("expected migrations %v, got %+v", expected, entries)
+		}
 	}
 }
 

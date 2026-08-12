@@ -47,6 +47,16 @@ func TestEstimateReservationUsesHighestInputDimensionRate(t *testing.T) {
 	}
 }
 
+func TestEstimateReservationAppliesBillingGroupMultiplier(t *testing.T) {
+	quote, err := EstimateReservation(1_000_000, 0, RateCard{InputMicros: 3_000_000}, 4_000)
+	if err != nil {
+		t.Fatalf("estimate: %v", err)
+	}
+	if quote.BaseCostMicros != 3_000_000 || quote.CostMicros != 1_200_000 {
+		t.Fatalf("0.4 multiplier must reduce a 3 yuan reservation to 1.2 yuan: %+v", quote)
+	}
+}
+
 func TestEstimateReservationCoversEveryActualInputDimension(t *testing.T) {
 	rates := RateCard{InputMicros: 1_000_000, CacheReadMicros: 100_000, CacheWriteMicros: 1_250_000, CacheWrite1hMicros: 2_000_000, OutputMicros: 5_000_000, RequestMicros: 7}
 	reservation, err := EstimateReservation(100, 20, rates, 12_500)

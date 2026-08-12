@@ -30,6 +30,7 @@ type Record struct {
 	DisplayName   string    `json:"display_name"`
 	MultiplierBPS int64     `json:"multiplier_bps"`
 	IsDefault     bool      `json:"is_default"`
+	IsHidden      bool      `json:"is_hidden"`
 	Status        Status    `json:"status"`
 	APIKeyCount   int       `json:"api_key_count"`
 	ProviderCount int       `json:"provider_count"`
@@ -48,14 +49,17 @@ type CreateInput struct {
 	Code          string `json:"code"`
 	DisplayName   string `json:"display_name"`
 	MultiplierBPS int64  `json:"multiplier_bps"`
+	IsHidden      bool   `json:"is_hidden"`
 }
 
 type UpdateInput struct {
 	DisplayName   *string `json:"display_name"`
 	MultiplierBPS *int64  `json:"multiplier_bps"`
+	IsHidden      *bool   `json:"is_hidden"`
 }
 
 type ListFilter struct {
-	Search string
-	Status Status
+	Search        string
+	Status        Status
+	IncludeHidden bool
 }

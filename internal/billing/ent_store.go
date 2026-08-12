@@ -2,14 +2,18 @@ package billing
 
 import (
 	"context"
+	stdsql "database/sql"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 	"unicode/utf8"
 
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
 	entapiusage "github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/predicate"
 	entwallet "github.com/novro-gateway/novro/ent/wallet"
 	entwalletentry "github.com/novro-gateway/novro/ent/walletentry"
 )
@@ -18,7 +22,7 @@ type EntStore struct{ client *ent.Client }
 
 func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
 
-func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, limit int) (Summary, error) {
+func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, filter EntryFilter) (Summary, error) {
 	walletEntity, err := s.client.Wallet.Query().Where(entwallet.UserIDEQ(userID)).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Summary{}, ErrWalletNotFound
@@ -26,17 +30,100 @@ func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, limit int) 
 	if err != nil {
 		return Summary{}, fmt.Errorf("read wallet: %w", err)
 	}
-	entries, err := walletEntity.QueryEntries().Order(ent.Desc(entwalletentry.FieldCreatedAt)).Limit(limit).All(ctx)
+	entriesQuery := walletEntity.QueryEntries()
+	total, err := entriesQuery.Clone().Count(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("count wallet entries: %w", err)
+	}
+	entries, err := entriesQuery.Clone().Order(ent.Desc(entwalletentry.FieldCreatedAt), ent.Desc(entwalletentry.FieldID)).Offset(filter.Offset).Limit(filter.Limit).All(ctx)
 	if err != nil {
 		return Summary{}, fmt.Errorf("list wallet entries: %w", err)
 	}
-	return Summary{Wallet: walletFromEnt(walletEntity), Entries: entriesFromEnt(entries)}, nil
+	var activeReservations []struct {
+		Amount stdsql.NullInt64 `json:"amount_micros"`
+	}
+	reservationQuery := walletEntity.QueryEntries().Where(
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageReservation),
+		func(selector *entsql.Selector) {
+			usage := entsql.Table(entapiusage.Table).As("reserved_usage")
+			selector.Where(entsql.Not(entsql.Exists(
+				entsql.Select(usage.C(entapiusage.FieldRequestID)).From(usage).Where(entsql.And(
+					entsql.ColumnsEQ(usage.C(entapiusage.FieldRequestID), selector.C(entwalletentry.FieldReferenceID)),
+					entsql.LT(usage.C(entapiusage.FieldStatusCode), 400),
+				)),
+			)))
+		},
+		func(selector *entsql.Selector) {
+			refund := entsql.Table(entwalletentry.Table).As("reservation_refund")
+			selector.Where(entsql.Not(entsql.Exists(
+				entsql.Select(refund.C(entwalletentry.FieldReferenceID)).From(refund).Where(entsql.And(
+					entsql.ColumnsEQ(refund.C(entwalletentry.FieldWalletID), selector.C(entwalletentry.FieldWalletID)),
+					entsql.ColumnsEQ(refund.C(entwalletentry.FieldReferenceID), selector.C(entwalletentry.FieldReferenceID)),
+					entsql.EQ(refund.C(entwalletentry.FieldEntryType), entwalletentry.EntryTypeUsageRefund),
+				)),
+			)))
+		},
+	)
+	if err := reservationQuery.Aggregate(ent.As(ent.Sum(entwalletentry.FieldAmountMicros), "amount_micros")).Scan(ctx, &activeReservations); err != nil {
+		return Summary{}, fmt.Errorf("summarize active usage reservations: %w", err)
+	}
+	var reservedMicros int64
+	if len(activeReservations) > 0 {
+		reservedMicros = -activeReservations[0].Amount.Int64
+	}
+	return Summary{
+		Wallet: walletFromEnt(walletEntity), Entries: entriesFromEnt(entries), EntriesTotal: total,
+		EntriesOffset: filter.Offset, EntriesLimit: filter.Limit, ReservedMicros: reservedMicros,
+	}, nil
 }
 
-func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) ([]Usage, error) {
-	entities, err := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID)).WithModelRoute().WithAPIKey().Order(ent.Desc(entapiusage.FieldCreatedAt)).Limit(limit).All(ctx)
+func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
+	query := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID))
+	if filter.APIKeyID != uuid.Nil {
+		query.Where(entapiusage.APIKeyIDEQ(filter.APIKeyID))
+	}
+	if filter.Model != "" {
+		query.Where(entapiusage.ModelNameEQ(filter.Model))
+	}
+	switch filter.Status {
+	case UsageStatusSuccess:
+		query.Where(entapiusage.StatusCodeLT(400))
+	case UsageStatusFailed:
+		query.Where(entapiusage.StatusCodeGTE(400))
+	}
+	if filter.From != nil {
+		query.Where(entapiusage.CreatedAtGTE(*filter.From))
+	}
+	if filter.Search != "" {
+		predicates := []predicate.APIUsage{
+			entapiusage.ModelNameContainsFold(filter.Search),
+			entapiusage.UpstreamModelNameContainsFold(filter.Search),
+			entapiusage.UpstreamRequestIDContainsFold(filter.Search),
+		}
+		if requestID, err := uuid.Parse(filter.Search); err == nil {
+			predicates = append(predicates, entapiusage.RequestIDEQ(requestID))
+		}
+		query.Where(entapiusage.Or(predicates...))
+	}
+	total, err := query.Clone().Count(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list API usage: %w", err)
+		return UsagePage{}, fmt.Errorf("count API usage: %w", err)
+	}
+	var aggregates []struct {
+		InputTokens  stdsql.NullInt64 `json:"input_tokens"`
+		OutputTokens stdsql.NullInt64 `json:"output_tokens"`
+		CostMicros   stdsql.NullInt64 `json:"cost_micros"`
+	}
+	if err := query.Clone().Aggregate(
+		ent.As(ent.Sum(entapiusage.FieldInputTokens), "input_tokens"),
+		ent.As(ent.Sum(entapiusage.FieldOutputTokens), "output_tokens"),
+		ent.As(ent.Sum(entapiusage.FieldCostMicros), "cost_micros"),
+	).Scan(ctx, &aggregates); err != nil {
+		return UsagePage{}, fmt.Errorf("summarize API usage: %w", err)
+	}
+	entities, err := query.Clone().WithModelRoute().WithAPIKey().Order(ent.Desc(entapiusage.FieldCreatedAt), ent.Desc(entapiusage.FieldID)).Offset(filter.Offset).Limit(filter.Limit).All(ctx)
+	if err != nil {
+		return UsagePage{}, fmt.Errorf("list API usage: %w", err)
 	}
 	items := make([]Usage, 0, len(entities))
 	for _, entity := range entities {
@@ -59,7 +146,24 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, limit int) (
 			BaseCostMicros: entity.BaseCostMicros, MultiplierBPS: entity.MultiplierBps, CostMicros: entity.CostMicros, ReservedMicros: entity.ReservedMicros, BillingGroupCode: entity.BillingGroupCode, BillingGroupName: entity.BillingGroupName, UpstreamModelName: entity.UpstreamModelName, CalculationVersion: entity.CalculationVersion,
 			Estimated: entity.Estimated, UpstreamRequestID: entity.UpstreamRequestID, CreatedAt: entity.CreatedAt, FinishedAt: entity.FinishedAt, DurationMS: entity.DurationMs})
 	}
-	return items, nil
+	var modelRows []struct {
+		Model string `json:"model_name"`
+	}
+	modelQuery := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID), entapiusage.ModelNameNEQ(""))
+	if err := modelQuery.GroupBy(entapiusage.FieldModelName).Scan(ctx, &modelRows); err != nil {
+		return UsagePage{}, fmt.Errorf("list API usage models: %w", err)
+	}
+	models := make([]string, 0, len(modelRows))
+	for _, row := range modelRows {
+		models = append(models, row.Model)
+	}
+	sort.Strings(models)
+	page := UsagePage{Usage: items, Models: models, Total: total, Offset: filter.Offset, Limit: filter.Limit}
+	if len(aggregates) > 0 {
+		page.TotalTokens = aggregates[0].InputTokens.Int64 + aggregates[0].OutputTokens.Int64
+		page.TotalCostMicros = aggregates[0].CostMicros.Int64
+	}
+	return page, nil
 }
 
 func (s *EntStore) Adjust(ctx context.Context, userID, actorID uuid.UUID, amount int64, note string) (Summary, error) {
@@ -89,7 +193,7 @@ func (s *EntStore) Adjust(ctx context.Context, userID, actorID uuid.UUID, amount
 	if err := tx.Commit(); err != nil {
 		return Summary{}, fmt.Errorf("commit balance adjustment: %w", err)
 	}
-	return s.GetSummary(ctx, updated.UserID, 20)
+	return s.GetSummary(ctx, updated.UserID, EntryFilter{Limit: 20})
 }
 
 func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
@@ -136,6 +240,14 @@ func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, a
 }
 
 func (s *EntStore) Refund(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
+	return s.releaseReservation(ctx, userID, referenceID, amount, description, false)
+}
+
+func (s *EntStore) ReleaseReservation(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
+	return s.releaseReservation(ctx, userID, referenceID, amount, description, true)
+}
+
+func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string, requireUnfinalized bool) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin usage refund: %w", err)
@@ -147,6 +259,29 @@ func (s *EntStore) Refund(ctx context.Context, userID, referenceID uuid.UUID, am
 	}
 	if err != nil {
 		return fmt.Errorf("lock wallet for refund: %w", err)
+	}
+	reservation, err := tx.WalletEntry.Query().Where(
+		entwalletentry.WalletIDEQ(walletEntity.ID),
+		entwalletentry.ReferenceIDEQ(referenceID),
+		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageReservation),
+	).Only(ctx)
+	if ent.IsNotFound(err) {
+		return ErrRequestConflict
+	}
+	if err != nil {
+		return fmt.Errorf("read usage reservation for refund: %w", err)
+	}
+	if reservation.AmountMicros != -amount {
+		return ErrRequestConflict
+	}
+	if requireUnfinalized {
+		usageExists, err := tx.APIUsage.Query().Where(entapiusage.RequestIDEQ(referenceID), entapiusage.StatusCodeLT(400)).Exist(ctx)
+		if err != nil {
+			return fmt.Errorf("check usage before releasing reservation: %w", err)
+		}
+		if usageExists {
+			return nil
+		}
 	}
 	existing, err := tx.WalletEntry.Query().Where(
 		entwalletentry.WalletIDEQ(walletEntity.ID),

@@ -17,10 +17,12 @@ type fakeStore struct {
 	err       error
 }
 
-func (f *fakeStore) GetSummary(context.Context, uuid.UUID, int) (Summary, error) {
+func (f *fakeStore) GetSummary(context.Context, uuid.UUID, EntryFilter) (Summary, error) {
 	return Summary{}, f.err
 }
-func (f *fakeStore) ListUsage(context.Context, uuid.UUID, int) ([]Usage, error) { return nil, f.err }
+func (f *fakeStore) ListUsage(context.Context, uuid.UUID, UsageFilter) (UsagePage, error) {
+	return UsagePage{}, f.err
+}
 func (f *fakeStore) Adjust(_ context.Context, _, _ uuid.UUID, amount int64, note string) (Summary, error) {
 	f.adjusted, f.note = amount, note
 	return Summary{}, f.err
@@ -30,6 +32,9 @@ func (f *fakeStore) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _ s
 	return f.err
 }
 func (f *fakeStore) Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error { return f.err }
+func (f *fakeStore) ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error {
+	return f.err
+}
 func (f *fakeStore) Finalize(_ context.Context, input UsageInput) error {
 	f.finalized = input
 	return f.err

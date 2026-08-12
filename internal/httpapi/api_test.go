@@ -140,6 +140,7 @@ type fakeProviderModels struct {
 type fakePayments struct {
 	notification     url.Values
 	listFilter       payment.AdminListFilter
+	userListFilter   payment.ListFilter
 	reconcileUserID  uuid.UUID
 	reconcileOrderNo string
 	reconciled       payment.Order
@@ -262,7 +263,7 @@ func (f *fakeBillingGroups) List(_ context.Context, filter billinggroup.ListFilt
 	}
 	filtered := make([]billinggroup.Record, 0, len(records))
 	for _, record := range records {
-		if record.Status == filter.Status {
+		if record.Status == filter.Status && (filter.IncludeHidden || !record.IsHidden) {
 			filtered = append(filtered, record)
 		}
 	}
@@ -315,8 +316,9 @@ func (f *fakePayments) Create(_ context.Context, userID uuid.UUID, amount int64,
 	return payment.CreateResult{Order: payment.Order{ID: uuid.New(), UserID: userID, AmountMicros: amount, Channel: channel, Status: payment.StatusPending}}, f.err
 }
 
-func (f *fakePayments) List(context.Context, uuid.UUID) ([]payment.Order, error) {
-	return []payment.Order{}, f.err
+func (f *fakePayments) List(_ context.Context, _ uuid.UUID, filter payment.ListFilter) (payment.Page, error) {
+	f.userListFilter = filter
+	return payment.Page{Orders: []payment.Order{}, Total: 0, Offset: filter.Offset, Limit: filter.Limit}, f.err
 }
 
 func (f *fakePayments) ReconcileForUser(_ context.Context, userID uuid.UUID, outTradeNo string) (payment.Order, error) {
@@ -746,6 +748,24 @@ func TestUserCanReconcileOnlyThroughAuthenticatedOrderFlow(t *testing.T) {
 
 	if response.Code != http.StatusOK || payments.reconcileUserID != userID || payments.reconcileOrderNo != "NVR1" || !strings.Contains(response.Body.String(), `"status":"paid"`) {
 		t.Fatalf("status=%d body=%s user=%s order=%q", response.Code, response.Body.String(), payments.reconcileUserID, payments.reconcileOrderNo)
+	}
+}
+
+func TestUserListsTopUpsWithPagination(t *testing.T) {
+	userID := uuid.New()
+	payments := &fakePayments{}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: userID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CookieName: "novro_session",
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/account/top-ups?offset=20&limit=50", nil)
+	request.AddCookie(&http.Cookie{Name: "novro_session", Value: "nvs_member-token"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || payments.userListFilter.Offset != 20 || payments.userListFilter.Limit != 50 || !strings.Contains(response.Body.String(), `"total":0`) {
+		t.Fatalf("status=%d body=%s filter=%+v", response.Code, response.Body.String(), payments.userListFilter)
 	}
 }
 
@@ -1274,8 +1294,12 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	active.APIKeyCount = 7
 	active.ProviderCount = 3
 	active.CreatedAt = time.Unix(1_700_000_000, 0).UTC()
+	hiddenID := uuid.New()
+	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
+	hidden.IsHidden = true
 	groups := &fakeBillingGroups{records: []billinggroup.Record{
 		active,
+		hidden,
 		{ID: disabledID, Code: "disabled", DisplayName: "停用组", MultiplierBPS: 20_000, Status: billinggroup.StatusDisabled},
 	}}
 	handler := New(Dependencies{
@@ -1286,8 +1310,43 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
 	body := response.Body.String()
-	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || !strings.Contains(body, activeID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "provider_count") || strings.Contains(body, "created_at") {
+	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || groups.listFilter.IncludeHidden || !strings.Contains(body, activeID.String()) || strings.Contains(body, hiddenID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "provider_count") || strings.Contains(body, "created_at") {
 		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
+	}
+}
+
+func TestAuthorizedUserListsHiddenBillingGroups(t *testing.T) {
+	hiddenID := uuid.New()
+	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
+	hidden.IsHidden = true
+	groups := &fakeBillingGroups{records: []billinggroup.Record{hidden}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive, CanAccessHiddenGroups: true}},
+		Users: &fakeAPIUsers{}, BillingGroups: groups,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
+	if response.Code != http.StatusOK || !groups.listFilter.IncludeHidden || !strings.Contains(response.Body.String(), hiddenID.String()) {
+		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
+	}
+}
+
+func TestUserModelListRejectsHiddenGroupWithoutPermission(t *testing.T) {
+	hiddenID := uuid.New()
+	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
+	hidden.IsHidden = true
+	groups := &fakeBillingGroups{records: []billinggroup.Record{hidden}}
+	routes := &fakeModelRoutes{}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, BillingGroups: groups, ModelRoutes: routes,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models?billing_group_id="+hiddenID.String(), nil))
+	if response.Code != http.StatusBadRequest || groups.listFilter.IncludeHidden || routes.listActiveGroupID != uuid.Nil || !strings.Contains(response.Body.String(), "billing_group_unavailable") {
+		t.Fatalf("status=%d filter=%+v routeGroup=%s body=%s", response.Code, groups.listFilter, routes.listActiveGroupID, response.Body.String())
 	}
 }
 

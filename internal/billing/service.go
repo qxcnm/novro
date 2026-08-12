@@ -8,11 +8,12 @@ import (
 )
 
 type Store interface {
-	GetSummary(context.Context, uuid.UUID, int) (Summary, error)
-	ListUsage(context.Context, uuid.UUID, int) ([]Usage, error)
+	GetSummary(context.Context, uuid.UUID, EntryFilter) (Summary, error)
+	ListUsage(context.Context, uuid.UUID, UsageFilter) (UsagePage, error)
 	Adjust(context.Context, uuid.UUID, uuid.UUID, int64, string) (Summary, error)
 	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error
+	ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Finalize(context.Context, UsageInput) error
 	RecordFailure(context.Context, FailureInput) error
 }
@@ -22,17 +23,30 @@ type Service struct{ store Store }
 func NewService(store Store) *Service { return &Service{store: store} }
 
 func (s *Service) Summary(ctx context.Context, userID uuid.UUID) (Summary, error) {
-	if userID == uuid.Nil {
-		return Summary{}, ErrInvalidInput
-	}
-	return s.store.GetSummary(ctx, userID, 20)
+	return s.SummaryPage(ctx, userID, EntryFilter{Limit: 20})
 }
 
-func (s *Service) Usage(ctx context.Context, userID uuid.UUID) ([]Usage, error) {
-	if userID == uuid.Nil {
-		return nil, ErrInvalidInput
+func (s *Service) SummaryPage(ctx context.Context, userID uuid.UUID, filter EntryFilter) (Summary, error) {
+	if filter.Limit == 0 {
+		filter.Limit = 20
 	}
-	return s.store.ListUsage(ctx, userID, 50)
+	if userID == uuid.Nil || filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 {
+		return Summary{}, ErrInvalidInput
+	}
+	return s.store.GetSummary(ctx, userID, filter)
+}
+
+func (s *Service) Usage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
+	filter.Search = strings.TrimSpace(filter.Search)
+	filter.Model = strings.TrimSpace(filter.Model)
+	if filter.Limit == 0 {
+		filter.Limit = 20
+	}
+	if userID == uuid.Nil || filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 || len([]rune(filter.Search)) > 128 || len([]rune(filter.Model)) > 256 ||
+		(filter.Status != UsageStatusAll && filter.Status != UsageStatusSuccess && filter.Status != UsageStatusFailed) {
+		return UsagePage{}, ErrInvalidInput
+	}
+	return s.store.ListUsage(ctx, userID, filter)
 }
 
 func (s *Service) Adjust(ctx context.Context, userID, actorID uuid.UUID, amountMicros int64, note string) (Summary, error) {
@@ -57,11 +71,18 @@ func (s *Service) Refund(ctx context.Context, userID, referenceID uuid.UUID, amo
 	return s.store.Refund(ctx, userID, referenceID, amountMicros, description)
 }
 
+func (s *Service) ReleaseReservation(ctx context.Context, userID, referenceID uuid.UUID, amountMicros int64, description string) error {
+	if userID == uuid.Nil || referenceID == uuid.Nil || amountMicros <= 0 || amountMicros > 1_000_000_000_000_000 {
+		return ErrInvalidInput
+	}
+	return s.store.ReleaseReservation(ctx, userID, referenceID, amountMicros, description)
+}
+
 func (s *Service) Finalize(ctx context.Context, input UsageInput) error {
 	if input.StatusCode == 0 {
 		input.StatusCode = 200
 	}
-	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.StatusCode < 100 || input.StatusCode > 599 || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
+	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.StatusCode < 100 || input.StatusCode > 599 || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || input.CostMicros > input.ReservedMicros || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
 		return ErrInvalidInput
 	}
 	quote, err := CalculateCost(input.Tokens, input.Rates, input.MultiplierBPS)

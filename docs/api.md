@@ -30,7 +30,7 @@
 | `PATCH` | `/api/admin/users/{id}/status` | 管理员 | 启用或停用用户 |
 | `POST` | `/api/admin/users/{id}/reset-password` | 管理员 | 重置密码并撤销旧会话 |
 | `GET` | `/api/account/api-keys` | 登录 | 当前用户的 Key 元数据 |
-| `GET` | `/api/account/billing-groups` | 登录 | 当前可选择的启用计费分组 |
+| `GET` | `/api/account/billing-groups` | 登录 | 当前用户有权选择的启用计费分组；隐藏分组仅对管理员和已授权用户返回 |
 | `POST` | `/api/account/api-keys` | 登录 | 指定计费分组创建 Key，完整值只返回一次 |
 | `DELETE` | `/api/account/api-keys/{id}` | 登录 | 撤销当前用户的 Key |
 | `GET` | `/api/account/models` | 登录 | 当前可用模型和指定或默认分组的结算单价 |
@@ -66,7 +66,7 @@
 | `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改上游模型映射和显示名称 |
 | `PATCH` | `/api/admin/model-routes/{id}/status` | 管理员 | 启用或停用模型路由 |
 | `DELETE` | `/api/admin/model-routes/{id}` | 管理员 | 软删除模型路由 |
-| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、API Key 数和供应商数 |
+| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、隐藏属性、API Key 数和供应商数 |
 | `POST` | `/api/admin/billing-groups` | 管理员 | 创建计费分组和倍率 |
 | `PATCH` | `/api/admin/billing-groups/{id}` | 管理员 | 修改分组名称或倍率 |
 | `PATCH` | `/api/admin/billing-groups/{id}/status` | 管理员 | 启用或停用非默认分组 |
@@ -202,16 +202,20 @@ POST /v1/messages
   成功后按实际命中渠道的上游 usage 和单价结算并释放差额。候选渠道只来自与当前 API Key
   同一计费分组的供应商。用户可用模型页按所选分组、同协议渠道池的各维度最高单价展示，
   避免实际结算高于页面价格。
-- 供应商调用成功后，根据实际 usage 扣减用户余额。
+- 供应商调用成功后，只根据上游明确返回的 usage 扣减用户余额。usage 缺少输入或输出维度时，
+  缺失维度按 0 结算并释放对应预占，不使用请求字节数或最大输出 token 猜测最终费用。
 - 余额不足时拒绝请求，不向供应商发起调用。
 - 单个上游失败不会重复预占或立即退款；所有候选渠道都失败后释放一次预占。流式请求在结束
-  或异常时记录最终用量，缺少 usage 时标记为估算。
+  或异常时记录最终用量，缺少 usage 时标记为不完整，但只收取已确认维度的费用。
 - 所有候选渠道均失败时仍会写入一条使用日志，记录最终网关状态码、耗时、错误码和安全的错误摘要；
   失败请求不会计入费用，已预占余额会按原流程释放。
 - SSE 单行事件会分段透传并完整解析 usage，不设置固定的单行字节上限。
 - 结算和失败退款遇到短暂存储错误时会用同一请求 ID 有限重试，业务冲突不会重复执行。
 - 每次余额变化都写入余额流水，不能只更新余额总数。
 - 钱包行在事务中锁定，避免并发请求共同花费同一份余额。
+- `GET /api/account/usage` 支持 `offset`、`limit`、`api_key_id`、`model`、`status`、`search`
+  和 `from`；返回匹配历史的总条数、Token 与费用汇总。`GET /api/account/balance` 支持
+  `offset` 和 `limit`，并返回流水总数和当前尚未结算的调用预占。
 
 ### 在线充值
 

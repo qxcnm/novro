@@ -71,7 +71,8 @@ type ProviderService interface {
 
 type BillingService interface {
 	Summary(context.Context, uuid.UUID) (billing.Summary, error)
-	Usage(context.Context, uuid.UUID) ([]billing.Usage, error)
+	SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error)
+	Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error)
 	Adjust(context.Context, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
 }
 
@@ -80,7 +81,7 @@ type PaymentService interface {
 	AdminConfig(context.Context) (payment.AdminConfig, error)
 	UpdateConfig(context.Context, payment.ConfigInput) (payment.AdminConfig, error)
 	Create(context.Context, uuid.UUID, int64, string) (payment.CreateResult, error)
-	List(context.Context, uuid.UUID) ([]payment.Order, error)
+	List(context.Context, uuid.UUID, payment.ListFilter) (payment.Page, error)
 	ReconcileForUser(context.Context, uuid.UUID, string) (payment.Order, error)
 	ListAll(context.Context, payment.AdminListFilter) (payment.AdminPage, error)
 	HandleNotification(context.Context, url.Values) error
@@ -1133,7 +1134,7 @@ func (h *apiHandler) listBillingGroups(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Search: r.URL.Query().Get("search"), Status: billinggroup.Status(r.URL.Query().Get("status"))})
+	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Search: r.URL.Query().Get("search"), Status: billinggroup.Status(r.URL.Query().Get("status")), IncludeHidden: true})
 	if err != nil {
 		h.writeBillingGroupError(w, "list billing groups", err)
 		return
@@ -1225,7 +1226,17 @@ func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	summary, err := h.billing.Summary(r.Context(), record.ID)
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	summary, err := h.billing.SummaryPage(r.Context(), record.ID, billing.EntryFilter{Offset: offset, Limit: limit})
 	if err != nil {
 		h.writeBillingError(w, "read account balance", err)
 		return
@@ -1243,10 +1254,11 @@ type availableModel struct {
 }
 
 func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireUser(w, r); !ok {
+	record, ok := h.requireUser(w, r)
+	if !ok {
 		return
 	}
-	groups, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive})
+	groups, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive, IncludeHidden: canAccessHiddenGroups(record)})
 	if err != nil {
 		h.writeBillingGroupError(w, "list account billing groups", err)
 		return
@@ -1326,10 +1338,11 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireUser(w, r); !ok {
+	record, ok := h.requireUser(w, r)
+	if !ok {
 		return
 	}
-	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive})
+	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive, IncludeHidden: canAccessHiddenGroups(record)})
 	if err != nil {
 		h.writeBillingGroupError(w, "list account billing groups", err)
 		return
@@ -1380,12 +1393,42 @@ func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	usage, err := h.billing.Usage(r.Context(), record.ID)
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	var apiKeyID uuid.UUID
+	if raw := strings.TrimSpace(r.URL.Query().Get("api_key_id")); raw != "" {
+		apiKeyID, err = uuid.Parse(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "API Key 筛选无效")
+			return
+		}
+	}
+	var from *time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+		value, parseErr := time.Parse(time.RFC3339, raw)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "时间筛选无效")
+			return
+		}
+		from = &value
+	}
+	usage, err := h.billing.Usage(r.Context(), record.ID, billing.UsageFilter{
+		Search: r.URL.Query().Get("search"), APIKeyID: apiKeyID, Model: r.URL.Query().Get("model"),
+		Status: billing.UsageStatus(r.URL.Query().Get("status")), From: from, Offset: offset, Limit: limit,
+	})
 	if err != nil {
 		h.writeBillingError(w, "list account usage", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"usage": usage})
+	writeJSON(w, http.StatusOK, usage)
 }
 
 func (h *apiHandler) topUpConfig(w http.ResponseWriter, r *http.Request) {
@@ -1580,12 +1623,26 @@ func (h *apiHandler) listMyTopUps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "payments_disabled", "充值暂未开放")
 		return
 	}
-	orders, err := h.payments.List(r.Context(), record.ID)
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	page, err := h.payments.List(r.Context(), record.ID, payment.ListFilter{Offset: offset, Limit: limit})
+	if errors.Is(err, payment.ErrInvalidInput) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
 	if err != nil {
 		h.writePaymentError(w, "list top-up orders", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"orders": orders})
+	writeJSON(w, http.StatusOK, page)
 }
 
 func (h *apiHandler) createMyTopUp(w http.ResponseWriter, r *http.Request) {
@@ -1842,6 +1899,10 @@ func (h *apiHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (user.
 	return record, true
 }
 
+func canAccessHiddenGroups(record user.Record) bool {
+	return record.Role == user.RoleAdmin || record.CanAccessHiddenGroups
+}
+
 func (h *apiHandler) sessionToken(r *http.Request) string {
 	cookie, err := r.Cookie(h.cookieName)
 	if err != nil {
@@ -2083,7 +2144,7 @@ func (h *apiHandler) writeBillingGroupError(w http.ResponseWriter, operation str
 	case errors.Is(err, billinggroup.ErrCodeTaken):
 		writeError(w, http.StatusConflict, "billing_group_code_taken", "计费分组标识已存在")
 	case errors.Is(err, billinggroup.ErrProtected):
-		writeError(w, http.StatusConflict, "default_billing_group", "默认计费分组不能停用或删除")
+		writeError(w, http.StatusConflict, "default_billing_group", "默认计费分组不能隐藏、停用或删除")
 	case errors.Is(err, billinggroup.ErrInUse):
 		writeError(w, http.StatusConflict, "billing_group_in_use", "计费分组仍被 API Key 或提供商使用，请先迁移关联配置")
 	default:

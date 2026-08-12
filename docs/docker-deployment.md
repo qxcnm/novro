@@ -213,6 +213,7 @@ certbot certonly --standalone \
   -d YOUR_DOMAIN
 
 sed -i 's|^NOVRO_PUBLIC_URL=.*|NOVRO_PUBLIC_URL=https://YOUR_DOMAIN|' /data/novro/.env.docker
+sed -i 's|^NOVRO_FILING_NUMBER=.*|NOVRO_FILING_NUMBER=YOUR_ICP_FILING_NUMBER|' /data/novro/.env.docker
 install -m 0644 /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem /data/novro/tls/fullchain.pem
 install -m 0600 /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem /data/novro/tls/privkey.pem
 

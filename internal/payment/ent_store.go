@@ -98,16 +98,21 @@ func (s *EntStore) ListAll(ctx context.Context, filter AdminListFilter) (AdminPa
 	return AdminPage{Orders: orders, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
 
-func (s *EntStore) List(ctx context.Context, userID uuid.UUID, limit int) ([]Order, error) {
-	entities, err := s.client.TopUpOrder.Query().Where(enttopuporder.UserIDEQ(userID)).Order(ent.Desc(enttopuporder.FieldCreatedAt)).Limit(limit).All(ctx)
+func (s *EntStore) List(ctx context.Context, userID uuid.UUID, filter ListFilter) (Page, error) {
+	query := s.client.TopUpOrder.Query().Where(enttopuporder.UserIDEQ(userID))
+	total, err := query.Clone().Count(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list top-up orders: %w", err)
+		return Page{}, fmt.Errorf("count top-up orders: %w", err)
+	}
+	entities, err := query.Order(ent.Desc(enttopuporder.FieldCreatedAt)).Offset(filter.Offset).Limit(filter.Limit).All(ctx)
+	if err != nil {
+		return Page{}, fmt.Errorf("list top-up orders: %w", err)
 	}
 	orders := make([]Order, 0, len(entities))
 	for _, entity := range entities {
 		orders = append(orders, orderFromEnt(entity))
 	}
-	return orders, nil
+	return Page{Orders: orders, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
 
 func (s *EntStore) Complete(ctx context.Context, params CompleteParams) (Order, error) {

@@ -18,7 +18,7 @@ func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client
 
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
 	created, err := s.client.BillingGroup.Create().SetCode(input.Code).SetDisplayName(input.DisplayName).
-		SetMultiplierBps(input.MultiplierBPS).SetStatus(entbillinggroup.StatusActive).Save(ctx)
+		SetMultiplierBps(input.MultiplierBPS).SetIsHidden(input.IsHidden).SetStatus(entbillinggroup.StatusActive).Save(ctx)
 	if ent.IsConstraintError(err) {
 		return Record{}, ErrCodeTaken
 	}
@@ -30,6 +30,9 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	query := s.client.BillingGroup.Query().Where(entbillinggroup.DeletedAtIsNil())
+	if !filter.IncludeHidden {
+		query = query.Where(entbillinggroup.IsHiddenEQ(false))
+	}
 	if filter.Search != "" {
 		query = query.Where(entbillinggroup.Or(entbillinggroup.CodeContainsFold(filter.Search), entbillinggroup.DisplayNameContainsFold(filter.Search)))
 	}
@@ -47,12 +50,27 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 }
 
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
+	if input.IsHidden != nil && *input.IsHidden {
+		entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).Only(ctx)
+		if ent.IsNotFound(err) {
+			return Record{}, ErrNotFound
+		}
+		if err != nil {
+			return Record{}, fmt.Errorf("read billing group before hiding: %w", err)
+		}
+		if entity.IsDefault {
+			return Record{}, ErrProtected
+		}
+	}
 	update := s.client.BillingGroup.UpdateOneID(id).Where(entbillinggroup.DeletedAtIsNil())
 	if input.DisplayName != nil {
 		update.SetDisplayName(*input.DisplayName)
 	}
 	if input.MultiplierBPS != nil {
 		update.SetMultiplierBps(*input.MultiplierBPS)
+	}
+	if input.IsHidden != nil {
+		update.SetIsHidden(*input.IsHidden)
 	}
 	if _, err := update.Save(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
@@ -138,5 +156,5 @@ func fromEntList(entities []*ent.BillingGroup) []Record {
 
 func fromEnt(entity *ent.BillingGroup) Record {
 	return Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
-		IsDefault: entity.IsDefault, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 }

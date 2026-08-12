@@ -27,6 +27,7 @@ func (User) Fields() []ent.Field {
 		field.String("display_name").MaxLen(128).Default(""),
 		field.String("password_hash").Optional().Nillable().Sensitive(),
 		field.Bool("is_system_admin").Default(false),
+		field.Bool("can_access_hidden_groups").Default(false),
 		field.Enum("role").Values("admin", "member").Default("member"),
 		field.Enum("status").Values("active", "disabled").Default("active"),
 		field.Time("last_login_at").Optional().Nillable(),

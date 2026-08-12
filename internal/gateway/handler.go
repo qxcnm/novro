@@ -44,6 +44,7 @@ type RouteService interface {
 type BillingService interface {
 	Reserve(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Refund(context.Context, uuid.UUID, uuid.UUID, int64, string) error
+	ReleaseReservation(context.Context, uuid.UUID, uuid.UUID, int64, string) error
 	Finalize(context.Context, billing.UsageInput) error
 	RecordFailure(context.Context, billing.FailureInput) error
 }
@@ -476,6 +477,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	}
 	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		h.logger.Error("forward buffered stream after usage finalization failure", "request_id", requestID, "error", err)
+		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
 	}
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -573,9 +575,10 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	}
 	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		// The reservation was already deducted before the upstream call. Keep the
-		// successful upstream response visible and retain the reservation when the
-		// usage record cannot be finalized.
+		// successful upstream response visible, but safely release an unfinalized
+		// reservation so a storage failure cannot become a permanent overcharge.
 		h.logger.Error("forward successful response after usage finalization failure", "request_id", requestID, "error", err)
+		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
 	}
 	copyResponseHeaders(w.Header(), response.Header)
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
@@ -827,12 +830,14 @@ streamLoop:
 	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 	if err != nil {
 		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
+		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费计算失败，释放调用预占")
 		return
 	}
 	if err := h.finalize(r.Context(), actor, route, requestID, endpoint, reserved, quote, usage, startedAt); err != nil {
 		// A successful stream is billable even when the client disconnects or the
 		// usage row cannot be persisted after the response has started.
 		h.logger.Error("stream usage finalization unavailable", "request_id", requestID, "error", err)
+		h.releaseUnfinalized(actor.User.ID, requestID, reserved, "计费记录失败，释放调用预占")
 	}
 }
 
@@ -901,6 +906,17 @@ func (h *Handler) refund(userID, requestID uuid.UUID, amount int64, description 
 	defer cancel()
 	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.Refund(ctx, userID, requestID, amount, description) }); err != nil {
 		h.logger.Error("refund gateway reservation", "request_id", requestID, "attempts", attempts, "error", err)
+	}
+}
+
+func (h *Handler) releaseUnfinalized(userID, requestID uuid.UUID, amount int64, description string) {
+	if amount <= 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err, attempts := h.retrySettlement(ctx, func() error { return h.billing.ReleaseReservation(ctx, userID, requestID, amount, description) }); err != nil {
+		h.logger.Error("release unfinalized gateway reservation", "request_id", requestID, "attempts", attempts, "error", err)
 	}
 }
 
@@ -1061,36 +1077,18 @@ func (u tokenUsage) breakdown() billing.TokenBreakdown {
 	return billing.TokenBreakdown{UncachedInput: u.UncachedInput, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheWrite1h: u.CacheWrite1h, Output: u.Output}
 }
 
-func applyUsageFallback(usage tokenUsage, input, output int, rates billing.RateCard) tokenUsage {
+func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsage {
 	if !usage.InputReported {
-		estimated := estimatedUsage(input, 0, rates)
-		usage.Input = estimated.Input
-		usage.UncachedInput = estimated.UncachedInput
-		usage.CacheRead = estimated.CacheRead
-		usage.CacheWrite = estimated.CacheWrite
-		usage.CacheWrite1h = estimated.CacheWrite1h
+		usage.Input = 0
+		usage.UncachedInput = 0
+		usage.CacheRead = 0
+		usage.CacheWrite = 0
+		usage.CacheWrite1h = 0
 		usage.Estimated = true
 	}
 	if !usage.OutputReported {
-		usage.Output = output
+		usage.Output = 0
 		usage.Estimated = true
-	}
-	return usage
-}
-
-func estimatedUsage(input, output int, rates billing.RateCard) tokenUsage {
-	usage := tokenUsage{Input: input, UncachedInput: input, Output: output, Estimated: true}
-	highest := rates.InputMicros
-	if rates.CacheReadMicros > highest {
-		highest = rates.CacheReadMicros
-		usage.UncachedInput, usage.CacheRead = 0, input
-	}
-	if rates.CacheWriteMicros > highest {
-		highest = rates.CacheWriteMicros
-		usage.UncachedInput, usage.CacheRead, usage.CacheWrite = 0, 0, input
-	}
-	if rates.CacheWrite1hMicros > highest {
-		usage.UncachedInput, usage.CacheRead, usage.CacheWrite, usage.CacheWrite1h = 0, 0, 0, input
 	}
 	return usage
 }

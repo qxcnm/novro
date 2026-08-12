@@ -321,12 +321,16 @@ func init() {
 	billinggroupDescIsDefault := billinggroupFields[4].Descriptor()
 	// billinggroup.DefaultIsDefault holds the default value on creation for the is_default field.
 	billinggroup.DefaultIsDefault = billinggroupDescIsDefault.Default.(bool)
+	// billinggroupDescIsHidden is the schema descriptor for is_hidden field.
+	billinggroupDescIsHidden := billinggroupFields[5].Descriptor()
+	// billinggroup.DefaultIsHidden holds the default value on creation for the is_hidden field.
+	billinggroup.DefaultIsHidden = billinggroupDescIsHidden.Default.(bool)
 	// billinggroupDescCreatedAt is the schema descriptor for created_at field.
-	billinggroupDescCreatedAt := billinggroupFields[6].Descriptor()
+	billinggroupDescCreatedAt := billinggroupFields[7].Descriptor()
 	// billinggroup.DefaultCreatedAt holds the default value on creation for the created_at field.
 	billinggroup.DefaultCreatedAt = billinggroupDescCreatedAt.Default.(func() time.Time)
 	// billinggroupDescUpdatedAt is the schema descriptor for updated_at field.
-	billinggroupDescUpdatedAt := billinggroupFields[7].Descriptor()
+	billinggroupDescUpdatedAt := billinggroupFields[8].Descriptor()
 	// billinggroup.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	billinggroup.DefaultUpdatedAt = billinggroupDescUpdatedAt.Default.(func() time.Time)
 	// billinggroup.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -1021,12 +1025,16 @@ func init() {
 	userDescIsSystemAdmin := userFields[7].Descriptor()
 	// user.DefaultIsSystemAdmin holds the default value on creation for the is_system_admin field.
 	user.DefaultIsSystemAdmin = userDescIsSystemAdmin.Default.(bool)
+	// userDescCanAccessHiddenGroups is the schema descriptor for can_access_hidden_groups field.
+	userDescCanAccessHiddenGroups := userFields[8].Descriptor()
+	// user.DefaultCanAccessHiddenGroups holds the default value on creation for the can_access_hidden_groups field.
+	user.DefaultCanAccessHiddenGroups = userDescCanAccessHiddenGroups.Default.(bool)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[11].Descriptor()
+	userDescCreatedAt := userFields[12].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[12].Descriptor()
+	userDescUpdatedAt := userFields[13].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

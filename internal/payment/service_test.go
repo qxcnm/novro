@@ -16,11 +16,12 @@ import (
 )
 
 type fakePaymentStore struct {
-	created    CreateParams
-	completed  CompleteParams
-	orders     []Order
-	listFilter AdminListFilter
-	err        error
+	created     CreateParams
+	completed   CompleteParams
+	orders      []Order
+	listFilter  ListFilter
+	adminFilter AdminListFilter
+	err         error
 }
 
 func (f *fakePaymentStore) Create(_ context.Context, params CreateParams) (Order, error) {
@@ -37,12 +38,13 @@ func (f *fakePaymentStore) Get(_ context.Context, outTradeNo string) (Order, err
 	return Order{}, ErrOrderNotFound
 }
 
-func (f *fakePaymentStore) List(context.Context, uuid.UUID, int) ([]Order, error) {
-	return f.orders, f.err
+func (f *fakePaymentStore) List(_ context.Context, _ uuid.UUID, filter ListFilter) (Page, error) {
+	f.listFilter = filter
+	return Page{Orders: f.orders, Total: len(f.orders), Offset: filter.Offset, Limit: filter.Limit}, f.err
 }
 
 func (f *fakePaymentStore) ListAll(_ context.Context, filter AdminListFilter) (AdminPage, error) {
-	f.listFilter = filter
+	f.adminFilter = filter
 	return AdminPage{Orders: []AdminOrder{}}, f.err
 }
 
@@ -220,11 +222,26 @@ func TestServiceEnforcesPaymentMethodMinimumAndAdminListFilter(t *testing.T) {
 	if _, err := service.ListAll(context.Background(), AdminListFilter{Search: " alice ", Status: StatusPaid, Channel: " BANKPAY ", Limit: 50}); err != nil {
 		t.Fatalf("list all top-ups: %v", err)
 	}
-	if store.listFilter.Search != "alice" || store.listFilter.Channel != "bankpay" || store.listFilter.Status != StatusPaid {
-		t.Fatalf("admin list filter = %+v", store.listFilter)
+	if store.adminFilter.Search != "alice" || store.adminFilter.Channel != "bankpay" || store.adminFilter.Status != StatusPaid {
+		t.Fatalf("admin list filter = %+v", store.adminFilter)
 	}
 	if _, err := service.ListAll(context.Background(), AdminListFilter{Limit: 101}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("invalid admin list error = %v", err)
+	}
+}
+
+func TestServiceListsUserTopUpsWithPagination(t *testing.T) {
+	store := &fakePaymentStore{orders: []Order{{ID: uuid.New()}}}
+	service := NewService(store, nil, nil, EPayConfig{})
+	page, err := service.List(context.Background(), uuid.New(), ListFilter{Offset: 20, Limit: 50})
+	if err != nil {
+		t.Fatalf("list user top-ups: %v", err)
+	}
+	if store.listFilter.Offset != 20 || store.listFilter.Limit != 50 || page.Total != 1 {
+		t.Fatalf("page=%+v filter=%+v", page, store.listFilter)
+	}
+	if _, err := service.List(context.Background(), uuid.New(), ListFilter{Limit: 101}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid user list error = %v", err)
 	}
 }
 

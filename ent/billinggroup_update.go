@@ -81,6 +81,20 @@ func (_u *BillingGroupUpdate) SetNillableIsDefault(v *bool) *BillingGroupUpdate 
 	return _u
 }
 
+// SetIsHidden sets the "is_hidden" field.
+func (_u *BillingGroupUpdate) SetIsHidden(v bool) *BillingGroupUpdate {
+	_u.mutation.SetIsHidden(v)
+	return _u
+}
+
+// SetNillableIsHidden sets the "is_hidden" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableIsHidden(v *bool) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetIsHidden(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *BillingGroupUpdate) SetStatus(v billinggroup.Status) *BillingGroupUpdate {
 	_u.mutation.SetStatus(v)
@@ -314,6 +328,9 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.IsHidden(); ok {
+		_spec.SetField(billinggroup.FieldIsHidden, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(billinggroup.FieldStatus, field.TypeEnum, value)
 	}
@@ -526,6 +543,20 @@ func (_u *BillingGroupUpdateOne) SetIsDefault(v bool) *BillingGroupUpdateOne {
 func (_u *BillingGroupUpdateOne) SetNillableIsDefault(v *bool) *BillingGroupUpdateOne {
 	if v != nil {
 		_u.SetIsDefault(*v)
+	}
+	return _u
+}
+
+// SetIsHidden sets the "is_hidden" field.
+func (_u *BillingGroupUpdateOne) SetIsHidden(v bool) *BillingGroupUpdateOne {
+	_u.mutation.SetIsHidden(v)
+	return _u
+}
+
+// SetNillableIsHidden sets the "is_hidden" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableIsHidden(v *bool) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetIsHidden(*v)
 	}
 	return _u
 }
@@ -792,6 +823,9 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 	}
 	if value, ok := _u.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.IsHidden(); ok {
+		_spec.SetField(billinggroup.FieldIsHidden, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(billinggroup.FieldStatus, field.TypeEnum, value)

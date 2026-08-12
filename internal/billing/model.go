@@ -43,8 +43,45 @@ type Entry struct {
 }
 
 type Summary struct {
-	Wallet  Wallet  `json:"wallet"`
-	Entries []Entry `json:"entries"`
+	Wallet         Wallet  `json:"wallet"`
+	Entries        []Entry `json:"entries"`
+	EntriesTotal   int     `json:"entries_total"`
+	EntriesOffset  int     `json:"entries_offset"`
+	EntriesLimit   int     `json:"entries_limit"`
+	ReservedMicros int64   `json:"reserved_micros"`
+}
+
+type EntryFilter struct {
+	Offset int
+	Limit  int
+}
+
+type UsageStatus string
+
+const (
+	UsageStatusAll     UsageStatus = ""
+	UsageStatusSuccess UsageStatus = "success"
+	UsageStatusFailed  UsageStatus = "failed"
+)
+
+type UsageFilter struct {
+	Search   string
+	APIKeyID uuid.UUID
+	Model    string
+	Status   UsageStatus
+	From     *time.Time
+	Offset   int
+	Limit    int
+}
+
+type UsagePage struct {
+	Usage           []Usage  `json:"usage"`
+	Models          []string `json:"models"`
+	Total           int      `json:"total"`
+	Offset          int      `json:"offset"`
+	Limit           int      `json:"limit"`
+	TotalTokens     int64    `json:"total_tokens"`
+	TotalCostMicros int64    `json:"total_cost_micros"`
 }
 
 type Usage struct {

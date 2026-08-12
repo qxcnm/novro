@@ -118,6 +118,20 @@ func (_u *UserUpdate) SetNillableIsSystemAdmin(v *bool) *UserUpdate {
 	return _u
 }
 
+// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
+func (_u *UserUpdate) SetCanAccessHiddenGroups(v bool) *UserUpdate {
+	_u.mutation.SetCanAccessHiddenGroups(v)
+	return _u
+}
+
+// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableCanAccessHiddenGroups(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetCanAccessHiddenGroups(*v)
+	}
+	return _u
+}
+
 // SetRole sets the "role" field.
 func (_u *UserUpdate) SetRole(v user.Role) *UserUpdate {
 	_u.mutation.SetRole(v)
@@ -552,6 +566,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CanAccessHiddenGroups(); ok {
+		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -1010,6 +1027,20 @@ func (_u *UserUpdateOne) SetIsSystemAdmin(v bool) *UserUpdateOne {
 func (_u *UserUpdateOne) SetNillableIsSystemAdmin(v *bool) *UserUpdateOne {
 	if v != nil {
 		_u.SetIsSystemAdmin(*v)
+	}
+	return _u
+}
+
+// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
+func (_u *UserUpdateOne) SetCanAccessHiddenGroups(v bool) *UserUpdateOne {
+	_u.mutation.SetCanAccessHiddenGroups(v)
+	return _u
+}
+
+// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableCanAccessHiddenGroups(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetCanAccessHiddenGroups(*v)
 	}
 	return _u
 }
@@ -1478,6 +1509,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CanAccessHiddenGroups(); ok {
+		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)

@@ -8,7 +8,7 @@ const (
 	PriceUnitTokens    int64 = 1_000_000
 	BasisPointsUnit    int64 = 10_000
 	MaxRecordedTokens  int64 = 2_147_483_647
-	CalculationVersion       = "token-v2"
+	CalculationVersion       = "token-v3-confirmed-usage"
 )
 
 type TokenBreakdown struct {

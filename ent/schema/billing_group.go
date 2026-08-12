@@ -21,6 +21,7 @@ func (BillingGroup) Fields() []ent.Field {
 		field.String("display_name").NotEmpty().MaxLen(128),
 		field.Int64("multiplier_bps").Positive().Default(10_000),
 		field.Bool("is_default").Default(false),
+		field.Bool("is_hidden").Default(false),
 		field.Enum("status").Values("active", "disabled").Default("active"),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

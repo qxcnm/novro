@@ -30,6 +30,8 @@ const (
 	FieldPasswordHash = "password_hash"
 	// FieldIsSystemAdmin holds the string denoting the is_system_admin field in the database.
 	FieldIsSystemAdmin = "is_system_admin"
+	// FieldCanAccessHiddenGroups holds the string denoting the can_access_hidden_groups field in the database.
+	FieldCanAccessHiddenGroups = "can_access_hidden_groups"
 	// FieldRole holds the string denoting the role field in the database.
 	FieldRole = "role"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -129,6 +131,7 @@ var Columns = []string{
 	FieldDisplayName,
 	FieldPasswordHash,
 	FieldIsSystemAdmin,
+	FieldCanAccessHiddenGroups,
 	FieldRole,
 	FieldStatus,
 	FieldLastLoginAt,
@@ -161,6 +164,8 @@ var (
 	DisplayNameValidator func(string) error
 	// DefaultIsSystemAdmin holds the default value on creation for the "is_system_admin" field.
 	DefaultIsSystemAdmin bool
+	// DefaultCanAccessHiddenGroups holds the default value on creation for the "can_access_hidden_groups" field.
+	DefaultCanAccessHiddenGroups bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -264,6 +269,11 @@ func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 // ByIsSystemAdmin orders the results by the is_system_admin field.
 func ByIsSystemAdmin(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsSystemAdmin, opts...).ToFunc()
+}
+
+// ByCanAccessHiddenGroups orders the results by the can_access_hidden_groups field.
+func ByCanAccessHiddenGroups(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCanAccessHiddenGroups, opts...).ToFunc()
 }
 
 // ByRole orders the results by the role field.

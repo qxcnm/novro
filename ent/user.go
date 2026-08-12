@@ -33,6 +33,8 @@ type User struct {
 	PasswordHash *string `json:"-"`
 	// IsSystemAdmin holds the value of the "is_system_admin" field.
 	IsSystemAdmin bool `json:"is_system_admin,omitempty"`
+	// CanAccessHiddenGroups holds the value of the "can_access_hidden_groups" field.
+	CanAccessHiddenGroups bool `json:"can_access_hidden_groups,omitempty"`
 	// Role holds the value of the "role" field.
 	Role user.Role `json:"role,omitempty"`
 	// Status holds the value of the "status" field.
@@ -166,7 +168,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldReferredByUserID:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case user.FieldIsSystemAdmin:
+		case user.FieldIsSystemAdmin, user.FieldCanAccessHiddenGroups:
 			values[i] = new(sql.NullBool)
 		case user.FieldInviteCode, user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -239,6 +241,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_system_admin", values[i])
 			} else if value.Valid {
 				_m.IsSystemAdmin = value.Bool
+			}
+		case user.FieldCanAccessHiddenGroups:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field can_access_hidden_groups", values[i])
+			} else if value.Valid {
+				_m.CanAccessHiddenGroups = value.Bool
 			}
 		case user.FieldRole:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -375,6 +383,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_system_admin=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsSystemAdmin))
+	builder.WriteString(", ")
+	builder.WriteString("can_access_hidden_groups=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CanAccessHiddenGroups))
 	builder.WriteString(", ")
 	builder.WriteString("role=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Role))
