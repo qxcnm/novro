@@ -293,7 +293,14 @@ func (f *fakeBillingGroups) List(_ context.Context, filter billinggroup.ListFilt
 	}
 	filtered := make([]billinggroup.Record, 0, len(records))
 	for _, record := range records {
-		if record.Status == filter.Status && (filter.IncludeHidden || !record.IsHidden) {
+		authorized := false
+		for _, authorizedUser := range record.AuthorizedUsers {
+			if authorizedUser.ID == filter.AuthorizedUserID {
+				authorized = true
+				break
+			}
+		}
+		if record.Status == filter.Status && (filter.IncludeHidden || !record.IsHidden || authorized) {
 			filtered = append(filtered, record)
 		}
 	}
@@ -1406,18 +1413,23 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 }
 
 func TestAuthorizedUserListsHiddenBillingGroups(t *testing.T) {
-	hiddenID := uuid.New()
-	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
-	hidden.IsHidden = true
-	groups := &fakeBillingGroups{records: []billinggroup.Record{hidden}}
+	userID := uuid.New()
+	partnerID := uuid.New()
+	partner := activeBillingGroup(partnerID, "partner", "代理折扣", 3_000, false)
+	partner.IsHidden = true
+	partner.AuthorizedUsers = []billinggroup.AuthorizedUser{{ID: userID, Username: "partner-user"}}
+	businessID := uuid.New()
+	business := activeBillingGroup(businessID, "business", "B 端专用", 8_000, false)
+	business.IsHidden = true
+	groups := &fakeBillingGroups{records: []billinggroup.Record{partner, business}}
 	handler := New(Dependencies{
-		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive, CanAccessHiddenGroups: true}},
+		Auth:  &fakeAPIAuth{current: user.Record{ID: userID, Role: user.RoleMember, Status: user.StatusActive}},
 		Users: &fakeAPIUsers{}, BillingGroups: groups,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 	})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
-	if response.Code != http.StatusOK || !groups.listFilter.IncludeHidden || !strings.Contains(response.Body.String(), hiddenID.String()) {
+	if response.Code != http.StatusOK || groups.listFilter.IncludeHidden || groups.listFilter.AuthorizedUserID != userID || !strings.Contains(response.Body.String(), partnerID.String()) || strings.Contains(response.Body.String(), businessID.String()) {
 		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
 	}
 }
@@ -1555,6 +1567,31 @@ func TestBillingGroupDeleteConflictUsesSafeMessage(t *testing.T) {
 	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeBillingGroupError(response, "delete billing group", fmt.Errorf("%w: internal constraint", billinggroup.ErrInUse))
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "billing_group_in_use") || strings.Contains(response.Body.String(), "internal constraint") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
+	firstUserID := uuid.New()
+	secondUserID := uuid.New()
+	groups := &fakeBillingGroups{}
+	handler := New(Dependencies{
+		Auth:           &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users:          &fakeAPIUsers{},
+		BillingGroups:  groups,
+		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CookieName:     "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/billing-groups", strings.NewReader(fmt.Sprintf(`{"code":"partner","display_name":"代理端","multiplier_bps":5000,"is_hidden":true,"authorized_user_ids":["%s","%s"]}`, firstUserID, secondUserID)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !groups.createInput.IsHidden || len(groups.createInput.AuthorizedUserIDs) != 2 || groups.createInput.AuthorizedUserIDs[0] != firstUserID || groups.createInput.AuthorizedUserIDs[1] != secondUserID {
+		t.Fatalf("unexpected create input: %+v", groups.createInput)
 	}
 }
 

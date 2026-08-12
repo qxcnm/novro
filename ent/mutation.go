@@ -4288,32 +4288,35 @@ func (m *APIUsageMutation) ResetEdge(name string) error {
 // BillingGroupMutation represents an operation that mutates the BillingGroup nodes in the graph.
 type BillingGroupMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *uuid.UUID
-	code              *string
-	display_name      *string
-	multiplier_bps    *int64
-	addmultiplier_bps *int64
-	is_default        *bool
-	is_hidden         *bool
-	status            *billinggroup.Status
-	created_at        *time.Time
-	updated_at        *time.Time
-	deleted_at        *time.Time
-	clearedFields     map[string]struct{}
-	api_keys          map[uuid.UUID]struct{}
-	removedapi_keys   map[uuid.UUID]struct{}
-	clearedapi_keys   bool
-	providers         map[uuid.UUID]struct{}
-	removedproviders  map[uuid.UUID]struct{}
-	clearedproviders  bool
-	api_usages        map[uuid.UUID]struct{}
-	removedapi_usages map[uuid.UUID]struct{}
-	clearedapi_usages bool
-	done              bool
-	oldValue          func(context.Context) (*BillingGroup, error)
-	predicates        []predicate.BillingGroup
+	op                      Op
+	typ                     string
+	id                      *uuid.UUID
+	code                    *string
+	display_name            *string
+	multiplier_bps          *int64
+	addmultiplier_bps       *int64
+	is_default              *bool
+	is_hidden               *bool
+	status                  *billinggroup.Status
+	created_at              *time.Time
+	updated_at              *time.Time
+	deleted_at              *time.Time
+	clearedFields           map[string]struct{}
+	api_keys                map[uuid.UUID]struct{}
+	removedapi_keys         map[uuid.UUID]struct{}
+	clearedapi_keys         bool
+	providers               map[uuid.UUID]struct{}
+	removedproviders        map[uuid.UUID]struct{}
+	clearedproviders        bool
+	api_usages              map[uuid.UUID]struct{}
+	removedapi_usages       map[uuid.UUID]struct{}
+	clearedapi_usages       bool
+	authorized_users        map[uuid.UUID]struct{}
+	removedauthorized_users map[uuid.UUID]struct{}
+	clearedauthorized_users bool
+	done                    bool
+	oldValue                func(context.Context) (*BillingGroup, error)
+	predicates              []predicate.BillingGroup
 }
 
 var _ ent.Mutation = (*BillingGroupMutation)(nil)
@@ -4939,6 +4942,60 @@ func (m *BillingGroupMutation) ResetAPIUsages() {
 	m.removedapi_usages = nil
 }
 
+// AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by ids.
+func (m *BillingGroupMutation) AddAuthorizedUserIDs(ids ...uuid.UUID) {
+	if m.authorized_users == nil {
+		m.authorized_users = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.authorized_users[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAuthorizedUsers clears the "authorized_users" edge to the User entity.
+func (m *BillingGroupMutation) ClearAuthorizedUsers() {
+	m.clearedauthorized_users = true
+}
+
+// AuthorizedUsersCleared reports if the "authorized_users" edge to the User entity was cleared.
+func (m *BillingGroupMutation) AuthorizedUsersCleared() bool {
+	return m.clearedauthorized_users
+}
+
+// RemoveAuthorizedUserIDs removes the "authorized_users" edge to the User entity by IDs.
+func (m *BillingGroupMutation) RemoveAuthorizedUserIDs(ids ...uuid.UUID) {
+	if m.removedauthorized_users == nil {
+		m.removedauthorized_users = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.authorized_users, ids[i])
+		m.removedauthorized_users[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAuthorizedUsers returns the removed IDs of the "authorized_users" edge to the User entity.
+func (m *BillingGroupMutation) RemovedAuthorizedUsersIDs() (ids []uuid.UUID) {
+	for id := range m.removedauthorized_users {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// AuthorizedUsersIDs returns the "authorized_users" edge IDs in the mutation.
+func (m *BillingGroupMutation) AuthorizedUsersIDs() (ids []uuid.UUID) {
+	for id := range m.authorized_users {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAuthorizedUsers resets all changes to the "authorized_users" edge.
+func (m *BillingGroupMutation) ResetAuthorizedUsers() {
+	m.authorized_users = nil
+	m.clearedauthorized_users = false
+	m.removedauthorized_users = nil
+}
+
 // Where appends a list predicates to the BillingGroupMutation builder.
 func (m *BillingGroupMutation) Where(ps ...predicate.BillingGroup) {
 	m.predicates = append(m.predicates, ps...)
@@ -5232,7 +5289,7 @@ func (m *BillingGroupMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *BillingGroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.api_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5241,6 +5298,9 @@ func (m *BillingGroupMutation) AddedEdges() []string {
 	}
 	if m.api_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.authorized_users != nil {
+		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
 	}
 	return edges
 }
@@ -5267,13 +5327,19 @@ func (m *BillingGroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case billinggroup.EdgeAuthorizedUsers:
+		ids := make([]ent.Value, 0, len(m.authorized_users))
+		for id := range m.authorized_users {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *BillingGroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedapi_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5282,6 +5348,9 @@ func (m *BillingGroupMutation) RemovedEdges() []string {
 	}
 	if m.removedapi_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.removedauthorized_users != nil {
+		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
 	}
 	return edges
 }
@@ -5308,13 +5377,19 @@ func (m *BillingGroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case billinggroup.EdgeAuthorizedUsers:
+		ids := make([]ent.Value, 0, len(m.removedauthorized_users))
+		for id := range m.removedauthorized_users {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *BillingGroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedapi_keys {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5323,6 +5398,9 @@ func (m *BillingGroupMutation) ClearedEdges() []string {
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.clearedauthorized_users {
+		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
 	}
 	return edges
 }
@@ -5337,6 +5415,8 @@ func (m *BillingGroupMutation) EdgeCleared(name string) bool {
 		return m.clearedproviders
 	case billinggroup.EdgeAPIUsages:
 		return m.clearedapi_usages
+	case billinggroup.EdgeAuthorizedUsers:
+		return m.clearedauthorized_users
 	}
 	return false
 }
@@ -5361,6 +5441,9 @@ func (m *BillingGroupMutation) ResetEdge(name string) error {
 		return nil
 	case billinggroup.EdgeAPIUsages:
 		m.ResetAPIUsages()
+		return nil
+	case billinggroup.EdgeAuthorizedUsers:
+		m.ResetAuthorizedUsers()
 		return nil
 	}
 	return fmt.Errorf("unknown BillingGroup edge %s", name)
@@ -14049,53 +14132,55 @@ func (m *UpstreamModelMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                        Op
-	typ                       string
-	id                        *uuid.UUID
-	invite_code               *string
-	username                  *string
-	email                     *string
-	display_name              *string
-	password_hash             *string
-	is_system_admin           *bool
-	can_access_hidden_groups  *bool
-	role                      *user.Role
-	status                    *user.Status
-	last_login_at             *time.Time
-	created_at                *time.Time
-	updated_at                *time.Time
-	clearedFields             map[string]struct{}
-	sessions                  map[uuid.UUID]struct{}
-	removedsessions           map[uuid.UUID]struct{}
-	clearedsessions           bool
-	identities                map[uuid.UUID]struct{}
-	removedidentities         map[uuid.UUID]struct{}
-	clearedidentities         bool
-	api_keys                  map[uuid.UUID]struct{}
-	removedapi_keys           map[uuid.UUID]struct{}
-	clearedapi_keys           bool
-	wallet                    *uuid.UUID
-	clearedwallet             bool
-	wallet_entries            map[uuid.UUID]struct{}
-	removedwallet_entries     map[uuid.UUID]struct{}
-	clearedwallet_entries     bool
-	top_up_orders             map[uuid.UUID]struct{}
-	removedtop_up_orders      map[uuid.UUID]struct{}
-	clearedtop_up_orders      bool
-	api_usages                map[uuid.UUID]struct{}
-	removedapi_usages         map[uuid.UUID]struct{}
-	clearedapi_usages         bool
-	gateway_operations        map[uuid.UUID]struct{}
-	removedgateway_operations map[uuid.UUID]struct{}
-	clearedgateway_operations bool
-	referrer                  *uuid.UUID
-	clearedreferrer           bool
-	referrals                 map[uuid.UUID]struct{}
-	removedreferrals          map[uuid.UUID]struct{}
-	clearedreferrals          bool
-	done                      bool
-	oldValue                  func(context.Context) (*User, error)
-	predicates                []predicate.User
+	op                               Op
+	typ                              string
+	id                               *uuid.UUID
+	invite_code                      *string
+	username                         *string
+	email                            *string
+	display_name                     *string
+	password_hash                    *string
+	is_system_admin                  *bool
+	role                             *user.Role
+	status                           *user.Status
+	last_login_at                    *time.Time
+	created_at                       *time.Time
+	updated_at                       *time.Time
+	clearedFields                    map[string]struct{}
+	sessions                         map[uuid.UUID]struct{}
+	removedsessions                  map[uuid.UUID]struct{}
+	clearedsessions                  bool
+	identities                       map[uuid.UUID]struct{}
+	removedidentities                map[uuid.UUID]struct{}
+	clearedidentities                bool
+	api_keys                         map[uuid.UUID]struct{}
+	removedapi_keys                  map[uuid.UUID]struct{}
+	clearedapi_keys                  bool
+	wallet                           *uuid.UUID
+	clearedwallet                    bool
+	wallet_entries                   map[uuid.UUID]struct{}
+	removedwallet_entries            map[uuid.UUID]struct{}
+	clearedwallet_entries            bool
+	top_up_orders                    map[uuid.UUID]struct{}
+	removedtop_up_orders             map[uuid.UUID]struct{}
+	clearedtop_up_orders             bool
+	api_usages                       map[uuid.UUID]struct{}
+	removedapi_usages                map[uuid.UUID]struct{}
+	clearedapi_usages                bool
+	gateway_operations               map[uuid.UUID]struct{}
+	removedgateway_operations        map[uuid.UUID]struct{}
+	clearedgateway_operations        bool
+	authorized_billing_groups        map[uuid.UUID]struct{}
+	removedauthorized_billing_groups map[uuid.UUID]struct{}
+	clearedauthorized_billing_groups bool
+	referrer                         *uuid.UUID
+	clearedreferrer                  bool
+	referrals                        map[uuid.UUID]struct{}
+	removedreferrals                 map[uuid.UUID]struct{}
+	clearedreferrals                 bool
+	done                             bool
+	oldValue                         func(context.Context) (*User, error)
+	predicates                       []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -14491,42 +14576,6 @@ func (m *UserMutation) OldIsSystemAdmin(ctx context.Context) (v bool, err error)
 // ResetIsSystemAdmin resets all changes to the "is_system_admin" field.
 func (m *UserMutation) ResetIsSystemAdmin() {
 	m.is_system_admin = nil
-}
-
-// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
-func (m *UserMutation) SetCanAccessHiddenGroups(b bool) {
-	m.can_access_hidden_groups = &b
-}
-
-// CanAccessHiddenGroups returns the value of the "can_access_hidden_groups" field in the mutation.
-func (m *UserMutation) CanAccessHiddenGroups() (r bool, exists bool) {
-	v := m.can_access_hidden_groups
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCanAccessHiddenGroups returns the old "can_access_hidden_groups" field's value of the User entity.
-// If the User object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserMutation) OldCanAccessHiddenGroups(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCanAccessHiddenGroups is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCanAccessHiddenGroups requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCanAccessHiddenGroups: %w", err)
-	}
-	return oldValue.CanAccessHiddenGroups, nil
-}
-
-// ResetCanAccessHiddenGroups resets all changes to the "can_access_hidden_groups" field.
-func (m *UserMutation) ResetCanAccessHiddenGroups() {
-	m.can_access_hidden_groups = nil
 }
 
 // SetRole sets the "role" field.
@@ -15139,6 +15188,60 @@ func (m *UserMutation) ResetGatewayOperations() {
 	m.removedgateway_operations = nil
 }
 
+// AddAuthorizedBillingGroupIDs adds the "authorized_billing_groups" edge to the BillingGroup entity by ids.
+func (m *UserMutation) AddAuthorizedBillingGroupIDs(ids ...uuid.UUID) {
+	if m.authorized_billing_groups == nil {
+		m.authorized_billing_groups = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.authorized_billing_groups[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAuthorizedBillingGroups clears the "authorized_billing_groups" edge to the BillingGroup entity.
+func (m *UserMutation) ClearAuthorizedBillingGroups() {
+	m.clearedauthorized_billing_groups = true
+}
+
+// AuthorizedBillingGroupsCleared reports if the "authorized_billing_groups" edge to the BillingGroup entity was cleared.
+func (m *UserMutation) AuthorizedBillingGroupsCleared() bool {
+	return m.clearedauthorized_billing_groups
+}
+
+// RemoveAuthorizedBillingGroupIDs removes the "authorized_billing_groups" edge to the BillingGroup entity by IDs.
+func (m *UserMutation) RemoveAuthorizedBillingGroupIDs(ids ...uuid.UUID) {
+	if m.removedauthorized_billing_groups == nil {
+		m.removedauthorized_billing_groups = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.authorized_billing_groups, ids[i])
+		m.removedauthorized_billing_groups[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAuthorizedBillingGroups returns the removed IDs of the "authorized_billing_groups" edge to the BillingGroup entity.
+func (m *UserMutation) RemovedAuthorizedBillingGroupsIDs() (ids []uuid.UUID) {
+	for id := range m.removedauthorized_billing_groups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// AuthorizedBillingGroupsIDs returns the "authorized_billing_groups" edge IDs in the mutation.
+func (m *UserMutation) AuthorizedBillingGroupsIDs() (ids []uuid.UUID) {
+	for id := range m.authorized_billing_groups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAuthorizedBillingGroups resets all changes to the "authorized_billing_groups" edge.
+func (m *UserMutation) ResetAuthorizedBillingGroups() {
+	m.authorized_billing_groups = nil
+	m.clearedauthorized_billing_groups = false
+	m.removedauthorized_billing_groups = nil
+}
+
 // SetReferrerID sets the "referrer" edge to the User entity by id.
 func (m *UserMutation) SetReferrerID(id uuid.UUID) {
 	m.referrer = &id
@@ -15267,7 +15370,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 12)
 	if m.invite_code != nil {
 		fields = append(fields, user.FieldInviteCode)
 	}
@@ -15288,9 +15391,6 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.is_system_admin != nil {
 		fields = append(fields, user.FieldIsSystemAdmin)
-	}
-	if m.can_access_hidden_groups != nil {
-		fields = append(fields, user.FieldCanAccessHiddenGroups)
 	}
 	if m.role != nil {
 		fields = append(fields, user.FieldRole)
@@ -15329,8 +15429,6 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.PasswordHash()
 	case user.FieldIsSystemAdmin:
 		return m.IsSystemAdmin()
-	case user.FieldCanAccessHiddenGroups:
-		return m.CanAccessHiddenGroups()
 	case user.FieldRole:
 		return m.Role()
 	case user.FieldStatus:
@@ -15364,8 +15462,6 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldPasswordHash(ctx)
 	case user.FieldIsSystemAdmin:
 		return m.OldIsSystemAdmin(ctx)
-	case user.FieldCanAccessHiddenGroups:
-		return m.OldCanAccessHiddenGroups(ctx)
 	case user.FieldRole:
 		return m.OldRole(ctx)
 	case user.FieldStatus:
@@ -15433,13 +15529,6 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsSystemAdmin(v)
-		return nil
-	case user.FieldCanAccessHiddenGroups:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCanAccessHiddenGroups(v)
 		return nil
 	case user.FieldRole:
 		v, ok := value.(user.Role)
@@ -15573,9 +15662,6 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldIsSystemAdmin:
 		m.ResetIsSystemAdmin()
 		return nil
-	case user.FieldCanAccessHiddenGroups:
-		m.ResetCanAccessHiddenGroups()
-		return nil
 	case user.FieldRole:
 		m.ResetRole()
 		return nil
@@ -15597,7 +15683,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.sessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -15621,6 +15707,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.gateway_operations != nil {
 		edges = append(edges, user.EdgeGatewayOperations)
+	}
+	if m.authorized_billing_groups != nil {
+		edges = append(edges, user.EdgeAuthorizedBillingGroups)
 	}
 	if m.referrer != nil {
 		edges = append(edges, user.EdgeReferrer)
@@ -15681,6 +15770,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeAuthorizedBillingGroups:
+		ids := make([]ent.Value, 0, len(m.authorized_billing_groups))
+		for id := range m.authorized_billing_groups {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeReferrer:
 		if id := m.referrer; id != nil {
 			return []ent.Value{*id}
@@ -15697,7 +15792,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.removedsessions != nil {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -15718,6 +15813,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedgateway_operations != nil {
 		edges = append(edges, user.EdgeGatewayOperations)
+	}
+	if m.removedauthorized_billing_groups != nil {
+		edges = append(edges, user.EdgeAuthorizedBillingGroups)
 	}
 	if m.removedreferrals != nil {
 		edges = append(edges, user.EdgeReferrals)
@@ -15771,6 +15869,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeAuthorizedBillingGroups:
+		ids := make([]ent.Value, 0, len(m.removedauthorized_billing_groups))
+		for id := range m.removedauthorized_billing_groups {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeReferrals:
 		ids := make([]ent.Value, 0, len(m.removedreferrals))
 		for id := range m.removedreferrals {
@@ -15783,7 +15887,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 11)
 	if m.clearedsessions {
 		edges = append(edges, user.EdgeSessions)
 	}
@@ -15807,6 +15911,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedgateway_operations {
 		edges = append(edges, user.EdgeGatewayOperations)
+	}
+	if m.clearedauthorized_billing_groups {
+		edges = append(edges, user.EdgeAuthorizedBillingGroups)
 	}
 	if m.clearedreferrer {
 		edges = append(edges, user.EdgeReferrer)
@@ -15837,6 +15944,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedapi_usages
 	case user.EdgeGatewayOperations:
 		return m.clearedgateway_operations
+	case user.EdgeAuthorizedBillingGroups:
+		return m.clearedauthorized_billing_groups
 	case user.EdgeReferrer:
 		return m.clearedreferrer
 	case user.EdgeReferrals:
@@ -15886,6 +15995,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeGatewayOperations:
 		m.ResetGatewayOperations()
+		return nil
+	case user.EdgeAuthorizedBillingGroups:
+		m.ResetAuthorizedBillingGroups()
 		return nil
 	case user.EdgeReferrer:
 		m.ResetReferrer()

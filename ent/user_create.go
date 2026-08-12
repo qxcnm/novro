@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/user"
@@ -115,20 +116,6 @@ func (_c *UserCreate) SetIsSystemAdmin(v bool) *UserCreate {
 func (_c *UserCreate) SetNillableIsSystemAdmin(v *bool) *UserCreate {
 	if v != nil {
 		_c.SetIsSystemAdmin(*v)
-	}
-	return _c
-}
-
-// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
-func (_c *UserCreate) SetCanAccessHiddenGroups(v bool) *UserCreate {
-	_c.mutation.SetCanAccessHiddenGroups(v)
-	return _c
-}
-
-// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
-func (_c *UserCreate) SetNillableCanAccessHiddenGroups(v *bool) *UserCreate {
-	if v != nil {
-		_c.SetCanAccessHiddenGroups(*v)
 	}
 	return _c
 }
@@ -341,6 +328,21 @@ func (_c *UserCreate) AddGatewayOperations(v ...*GatewayOperation) *UserCreate {
 	return _c.AddGatewayOperationIDs(ids...)
 }
 
+// AddAuthorizedBillingGroupIDs adds the "authorized_billing_groups" edge to the BillingGroup entity by IDs.
+func (_c *UserCreate) AddAuthorizedBillingGroupIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddAuthorizedBillingGroupIDs(ids...)
+	return _c
+}
+
+// AddAuthorizedBillingGroups adds the "authorized_billing_groups" edges to the BillingGroup entity.
+func (_c *UserCreate) AddAuthorizedBillingGroups(v ...*BillingGroup) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAuthorizedBillingGroupIDs(ids...)
+}
+
 // SetReferrerID sets the "referrer" edge to the User entity by ID.
 func (_c *UserCreate) SetReferrerID(id uuid.UUID) *UserCreate {
 	_c.mutation.SetReferrerID(id)
@@ -422,10 +424,6 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultIsSystemAdmin
 		_c.mutation.SetIsSystemAdmin(v)
 	}
-	if _, ok := _c.mutation.CanAccessHiddenGroups(); !ok {
-		v := user.DefaultCanAccessHiddenGroups
-		_c.mutation.SetCanAccessHiddenGroups(v)
-	}
 	if _, ok := _c.mutation.Role(); !ok {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
@@ -481,9 +479,6 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.IsSystemAdmin(); !ok {
 		return &ValidationError{Name: "is_system_admin", err: errors.New(`ent: missing required field "User.is_system_admin"`)}
-	}
-	if _, ok := _c.mutation.CanAccessHiddenGroups(); !ok {
-		return &ValidationError{Name: "can_access_hidden_groups", err: errors.New(`ent: missing required field "User.can_access_hidden_groups"`)}
 	}
 	if _, ok := _c.mutation.Role(); !ok {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "User.role"`)}
@@ -565,10 +560,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
 		_node.IsSystemAdmin = value
-	}
-	if value, ok := _c.mutation.CanAccessHiddenGroups(); ok {
-		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
-		_node.CanAccessHiddenGroups = value
 	}
 	if value, ok := _c.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -711,6 +702,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.AuthorizedBillingGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

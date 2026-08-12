@@ -97,7 +97,8 @@ EmailVerificationCode
 ## 6. 当前迁移状态
 
 当前迁移从 `0001_initial_schema.sql` 开始，并通过后续有序迁移演进。`0009_gateway_billing_safety.sql`
-新增持久化网关 operation 和计费补偿流水类型；部署包含本功能的代码前必须先成功执行到 `0009`。
+新增持久化网关 operation 和计费补偿流水类型；`0010_billing_group_user_authorizations.sql` 新增隐藏
+计费分组与普通成员的多对多授权表。部署包含本功能的代码前必须先成功执行到 `0010`。
 迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
 邮件、邀请返现、用量审计和结算恢复相关表，并写入默认计费分组与默认邀请返现比例。
 服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
@@ -236,9 +237,12 @@ EmailVerificationCode
 - `multiplier_bps`，10000 表示 1.0000 倍
 - `is_default`、`status`、`created_at`、`updated_at`
 
-计费分组用于 API Key 和供应商两个维度。`is_hidden` 标记分组是否只对管理员和已授权用户可见，
-用户的 `can_access_hidden_groups` 控制普通成员是否拥有该权限。创建 API Key 时用户选择分组；新增或修改供应商时
-管理员选择分组。调用时以 API Key 所属分组作为结算倍率，并只访问同分组供应商。默认分组
+计费分组用于 API Key 和供应商两个维度。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
+`billing_group_authorized_users` 用 `(billing_group_id, user_id)` 唯一记录普通成员的逐组授权；管理员
+自动拥有全部隐藏组权限，不写入该表。`0010` 会将旧 `can_access_hidden_groups = TRUE` 的普通成员
+回填到迁移时所有未删除隐藏组，以保持升级前的有效权限；应用不再读取或写入旧布尔列。创建 API Key
+时用户选择分组；新增或修改供应商时管理员选择分组。调用时以 API Key 所属分组作为结算倍率，并只访问
+同分组供应商。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
 用于空库初始化和默认选择，不能停用。
 
 ## 14. upstream_models

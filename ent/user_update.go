@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/topuporder"
@@ -115,20 +116,6 @@ func (_u *UserUpdate) SetIsSystemAdmin(v bool) *UserUpdate {
 func (_u *UserUpdate) SetNillableIsSystemAdmin(v *bool) *UserUpdate {
 	if v != nil {
 		_u.SetIsSystemAdmin(*v)
-	}
-	return _u
-}
-
-// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
-func (_u *UserUpdate) SetCanAccessHiddenGroups(v bool) *UserUpdate {
-	_u.mutation.SetCanAccessHiddenGroups(v)
-	return _u
-}
-
-// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableCanAccessHiddenGroups(v *bool) *UserUpdate {
-	if v != nil {
-		_u.SetCanAccessHiddenGroups(*v)
 	}
 	return _u
 }
@@ -311,6 +298,21 @@ func (_u *UserUpdate) AddGatewayOperations(v ...*GatewayOperation) *UserUpdate {
 	return _u.AddGatewayOperationIDs(ids...)
 }
 
+// AddAuthorizedBillingGroupIDs adds the "authorized_billing_groups" edge to the BillingGroup entity by IDs.
+func (_u *UserUpdate) AddAuthorizedBillingGroupIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddAuthorizedBillingGroupIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedBillingGroups adds the "authorized_billing_groups" edges to the BillingGroup entity.
+func (_u *UserUpdate) AddAuthorizedBillingGroups(v ...*BillingGroup) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedBillingGroupIDs(ids...)
+}
+
 // AddReferralIDs adds the "referrals" edge to the User entity by IDs.
 func (_u *UserUpdate) AddReferralIDs(ids ...uuid.UUID) *UserUpdate {
 	_u.mutation.AddReferralIDs(ids...)
@@ -484,6 +486,27 @@ func (_u *UserUpdate) RemoveGatewayOperations(v ...*GatewayOperation) *UserUpdat
 	return _u.RemoveGatewayOperationIDs(ids...)
 }
 
+// ClearAuthorizedBillingGroups clears all "authorized_billing_groups" edges to the BillingGroup entity.
+func (_u *UserUpdate) ClearAuthorizedBillingGroups() *UserUpdate {
+	_u.mutation.ClearAuthorizedBillingGroups()
+	return _u
+}
+
+// RemoveAuthorizedBillingGroupIDs removes the "authorized_billing_groups" edge to BillingGroup entities by IDs.
+func (_u *UserUpdate) RemoveAuthorizedBillingGroupIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveAuthorizedBillingGroupIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedBillingGroups removes "authorized_billing_groups" edges to BillingGroup entities.
+func (_u *UserUpdate) RemoveAuthorizedBillingGroups(v ...*BillingGroup) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedBillingGroupIDs(ids...)
+}
+
 // ClearReferrals clears all "referrals" edges to the User entity.
 func (_u *UserUpdate) ClearReferrals() *UserUpdate {
 	_u.mutation.ClearReferrals()
@@ -603,9 +626,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.CanAccessHiddenGroups(); ok {
-		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -966,6 +986,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.AuthorizedBillingGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedBillingGroupsIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedBillingGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedBillingGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.ReferralsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1109,20 +1174,6 @@ func (_u *UserUpdateOne) SetIsSystemAdmin(v bool) *UserUpdateOne {
 func (_u *UserUpdateOne) SetNillableIsSystemAdmin(v *bool) *UserUpdateOne {
 	if v != nil {
 		_u.SetIsSystemAdmin(*v)
-	}
-	return _u
-}
-
-// SetCanAccessHiddenGroups sets the "can_access_hidden_groups" field.
-func (_u *UserUpdateOne) SetCanAccessHiddenGroups(v bool) *UserUpdateOne {
-	_u.mutation.SetCanAccessHiddenGroups(v)
-	return _u
-}
-
-// SetNillableCanAccessHiddenGroups sets the "can_access_hidden_groups" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableCanAccessHiddenGroups(v *bool) *UserUpdateOne {
-	if v != nil {
-		_u.SetCanAccessHiddenGroups(*v)
 	}
 	return _u
 }
@@ -1305,6 +1356,21 @@ func (_u *UserUpdateOne) AddGatewayOperations(v ...*GatewayOperation) *UserUpdat
 	return _u.AddGatewayOperationIDs(ids...)
 }
 
+// AddAuthorizedBillingGroupIDs adds the "authorized_billing_groups" edge to the BillingGroup entity by IDs.
+func (_u *UserUpdateOne) AddAuthorizedBillingGroupIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddAuthorizedBillingGroupIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedBillingGroups adds the "authorized_billing_groups" edges to the BillingGroup entity.
+func (_u *UserUpdateOne) AddAuthorizedBillingGroups(v ...*BillingGroup) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedBillingGroupIDs(ids...)
+}
+
 // AddReferralIDs adds the "referrals" edge to the User entity by IDs.
 func (_u *UserUpdateOne) AddReferralIDs(ids ...uuid.UUID) *UserUpdateOne {
 	_u.mutation.AddReferralIDs(ids...)
@@ -1478,6 +1544,27 @@ func (_u *UserUpdateOne) RemoveGatewayOperations(v ...*GatewayOperation) *UserUp
 	return _u.RemoveGatewayOperationIDs(ids...)
 }
 
+// ClearAuthorizedBillingGroups clears all "authorized_billing_groups" edges to the BillingGroup entity.
+func (_u *UserUpdateOne) ClearAuthorizedBillingGroups() *UserUpdateOne {
+	_u.mutation.ClearAuthorizedBillingGroups()
+	return _u
+}
+
+// RemoveAuthorizedBillingGroupIDs removes the "authorized_billing_groups" edge to BillingGroup entities by IDs.
+func (_u *UserUpdateOne) RemoveAuthorizedBillingGroupIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveAuthorizedBillingGroupIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedBillingGroups removes "authorized_billing_groups" edges to BillingGroup entities.
+func (_u *UserUpdateOne) RemoveAuthorizedBillingGroups(v ...*BillingGroup) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedBillingGroupIDs(ids...)
+}
+
 // ClearReferrals clears all "referrals" edges to the User entity.
 func (_u *UserUpdateOne) ClearReferrals() *UserUpdateOne {
 	_u.mutation.ClearReferrals()
@@ -1627,9 +1714,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.IsSystemAdmin(); ok {
 		_spec.SetField(user.FieldIsSystemAdmin, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.CanAccessHiddenGroups(); ok {
-		_spec.SetField(user.FieldCanAccessHiddenGroups, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeEnum, value)
@@ -1983,6 +2067,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(gatewayoperation.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AuthorizedBillingGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedBillingGroupsIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedBillingGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedBillingGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   user.AuthorizedBillingGroupsTable,
+			Columns: user.AuthorizedBillingGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

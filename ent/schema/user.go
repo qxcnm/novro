@@ -27,7 +27,6 @@ func (User) Fields() []ent.Field {
 		field.String("display_name").MaxLen(128).Default(""),
 		field.String("password_hash").Optional().Nillable().Sensitive(),
 		field.Bool("is_system_admin").Default(false),
-		field.Bool("can_access_hidden_groups").Default(false),
 		field.Enum("role").Values("admin", "member").Default("member"),
 		field.Enum("status").Values("active", "disabled").Default("active"),
 		field.Time("last_login_at").Optional().Nillable(),
@@ -46,6 +45,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("top_up_orders", TopUpOrder.Type),
 		edge.To("api_usages", APIUsage.Type),
 		edge.To("gateway_operations", GatewayOperation.Type),
+		edge.From("authorized_billing_groups", BillingGroup.Type).Ref("authorized_users"),
 		edge.To("referrals", User.Type).From("referrer").Unique().Field("referred_by_user_id").Immutable(),
 	}
 }

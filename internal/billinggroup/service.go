@@ -26,7 +26,7 @@ func NewService(store Store) *Service { return &Service{store: store} }
 func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error) {
 	input.Code = strings.ToLower(strings.TrimSpace(input.Code))
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	if !codePattern.MatchString(input.Code) || !validName(input.DisplayName) || !validMultiplier(input.MultiplierBPS) {
+	if !codePattern.MatchString(input.Code) || !validName(input.DisplayName) || !validMultiplier(input.MultiplierBPS) || !validAuthorizedUserIDs(input.AuthorizedUserIDs) || (!input.IsHidden && len(input.AuthorizedUserIDs) > 0) {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Create(ctx, input)
@@ -41,7 +41,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.MultiplierBPS == nil && input.IsHidden == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.MultiplierBPS == nil && input.IsHidden == nil && input.AuthorizedUserIDs == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	if input.DisplayName != nil {
@@ -52,6 +52,9 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 		input.DisplayName = &value
 	}
 	if input.MultiplierBPS != nil && !validMultiplier(*input.MultiplierBPS) {
+		return Record{}, ErrInvalidInput
+	}
+	if input.AuthorizedUserIDs != nil && !validAuthorizedUserIDs(*input.AuthorizedUserIDs) {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Update(ctx, id, input)
@@ -73,3 +76,17 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 
 func validName(value string) bool      { return value != "" && utf8.RuneCountInString(value) <= 128 }
 func validMultiplier(value int64) bool { return value >= 1 && value <= 1_000_000 }
+
+func validAuthorizedUserIDs(ids []uuid.UUID) bool {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		if id == uuid.Nil {
+			return false
+		}
+		if _, exists := seen[id]; exists {
+			return false
+		}
+		seen[id] = struct{}{}
+	}
+	return true
+}

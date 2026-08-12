@@ -91,11 +91,6 @@ func IsSystemAdmin(v bool) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldIsSystemAdmin, v))
 }
 
-// CanAccessHiddenGroups applies equality check predicate on the "can_access_hidden_groups" field. It's identical to CanAccessHiddenGroupsEQ.
-func CanAccessHiddenGroups(v bool) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldCanAccessHiddenGroups, v))
-}
-
 // LastLoginAt applies equality check predicate on the "last_login_at" field. It's identical to LastLoginAtEQ.
 func LastLoginAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldLastLoginAt, v))
@@ -496,16 +491,6 @@ func IsSystemAdminNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldIsSystemAdmin, v))
 }
 
-// CanAccessHiddenGroupsEQ applies the EQ predicate on the "can_access_hidden_groups" field.
-func CanAccessHiddenGroupsEQ(v bool) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldCanAccessHiddenGroups, v))
-}
-
-// CanAccessHiddenGroupsNEQ applies the NEQ predicate on the "can_access_hidden_groups" field.
-func CanAccessHiddenGroupsNEQ(v bool) predicate.User {
-	return predicate.User(sql.FieldNEQ(FieldCanAccessHiddenGroups, v))
-}
-
 // RoleEQ applies the EQ predicate on the "role" field.
 func RoleEQ(v Role) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRole, v))
@@ -852,6 +837,29 @@ func HasGatewayOperations() predicate.User {
 func HasGatewayOperationsWith(preds ...predicate.GatewayOperation) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newGatewayOperationsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasAuthorizedBillingGroups applies the HasEdge predicate on the "authorized_billing_groups" edge.
+func HasAuthorizedBillingGroups() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, AuthorizedBillingGroupsTable, AuthorizedBillingGroupsPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAuthorizedBillingGroupsWith applies the HasEdge predicate on the "authorized_billing_groups" edge with a given conditions (other predicates).
+func HasAuthorizedBillingGroupsWith(preds ...predicate.BillingGroup) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newAuthorizedBillingGroupsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

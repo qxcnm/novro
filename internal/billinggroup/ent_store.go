@@ -10,6 +10,7 @@ import (
 	entapikey "github.com/novro-gateway/novro/ent/apikey"
 	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
+	entuser "github.com/novro-gateway/novro/ent/user"
 )
 
 type EntStore struct{ client *ent.Client }
@@ -17,13 +18,28 @@ type EntStore struct{ client *ent.Client }
 func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
 
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
-	created, err := s.client.BillingGroup.Create().SetCode(input.Code).SetDisplayName(input.DisplayName).
-		SetMultiplierBps(input.MultiplierBPS).SetIsHidden(input.IsHidden).SetStatus(entbillinggroup.StatusActive).Save(ctx)
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin billing group creation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := validateAuthorizedUsers(ctx, tx, input.AuthorizedUserIDs); err != nil {
+		return Record{}, err
+	}
+	create := tx.BillingGroup.Create().SetCode(input.Code).SetDisplayName(input.DisplayName).
+		SetMultiplierBps(input.MultiplierBPS).SetIsHidden(input.IsHidden).SetStatus(entbillinggroup.StatusActive)
+	if input.IsHidden {
+		create.AddAuthorizedUserIDs(input.AuthorizedUserIDs...)
+	}
+	created, err := create.Save(ctx)
 	if ent.IsConstraintError(err) {
 		return Record{}, ErrCodeTaken
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create billing group: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit billing group creation: %w", err)
 	}
 	return s.get(ctx, created.ID)
 }
@@ -31,7 +47,11 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	query := s.client.BillingGroup.Query().Where(entbillinggroup.DeletedAtIsNil())
 	if !filter.IncludeHidden {
-		query = query.Where(entbillinggroup.IsHiddenEQ(false))
+		visible := entbillinggroup.IsHiddenEQ(false)
+		if filter.AuthorizedUserID != uuid.Nil {
+			visible = entbillinggroup.Or(visible, entbillinggroup.HasAuthorizedUsersWith(entuser.IDEQ(filter.AuthorizedUserID)))
+		}
+		query = query.Where(visible)
 	}
 	if filter.Search != "" {
 		query = query.Where(entbillinggroup.Or(entbillinggroup.CodeContainsFold(filter.Search), entbillinggroup.DisplayNameContainsFold(filter.Search)))
@@ -42,6 +62,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	entities, err := query.
 		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
 		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).
+		WithAuthorizedUsers(func(query *ent.UserQuery) { query.Order(ent.Asc(entuser.FieldUsername)) }).
 		Order(ent.Desc(entbillinggroup.FieldIsDefault), ent.Asc(entbillinggroup.FieldDisplayName)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list billing groups: %w", err)
@@ -50,19 +71,34 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 }
 
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if input.IsHidden != nil && *input.IsHidden {
-		entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).Only(ctx)
-		if ent.IsNotFound(err) {
-			return Record{}, ErrNotFound
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin billing group update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	entity, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrNotFound
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("lock billing group for update: %w", err)
+	}
+	willBeHidden := entity.IsHidden
+	if input.IsHidden != nil {
+		willBeHidden = *input.IsHidden
+	}
+	if willBeHidden && entity.IsDefault {
+		return Record{}, ErrProtected
+	}
+	if input.AuthorizedUserIDs != nil {
+		if !willBeHidden && len(*input.AuthorizedUserIDs) > 0 {
+			return Record{}, ErrInvalidInput
 		}
-		if err != nil {
-			return Record{}, fmt.Errorf("read billing group before hiding: %w", err)
-		}
-		if entity.IsDefault {
-			return Record{}, ErrProtected
+		if err := validateAuthorizedUsers(ctx, tx, *input.AuthorizedUserIDs); err != nil {
+			return Record{}, err
 		}
 	}
-	update := s.client.BillingGroup.UpdateOneID(id).Where(entbillinggroup.DeletedAtIsNil())
+	update := tx.BillingGroup.UpdateOneID(id)
 	if input.DisplayName != nil {
 		update.SetDisplayName(*input.DisplayName)
 	}
@@ -72,10 +108,16 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, input UpdateInput) 
 	if input.IsHidden != nil {
 		update.SetIsHidden(*input.IsHidden)
 	}
-	if _, err := update.Save(ctx); ent.IsNotFound(err) {
-		return Record{}, ErrNotFound
-	} else if err != nil {
+	if !willBeHidden {
+		update.ClearAuthorizedUsers()
+	} else if input.AuthorizedUserIDs != nil {
+		update.ClearAuthorizedUsers().AddAuthorizedUserIDs((*input.AuthorizedUserIDs)...)
+	}
+	if _, err := update.Save(ctx); err != nil {
 		return Record{}, fmt.Errorf("update billing group: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit billing group update: %w", err)
 	}
 	return s.get(ctx, id)
 }
@@ -136,7 +178,8 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 	entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).
 		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
-		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).Only(ctx)
+		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).
+		WithAuthorizedUsers(func(query *ent.UserQuery) { query.Order(ent.Asc(entuser.FieldUsername)) }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	}
@@ -155,6 +198,27 @@ func fromEntList(entities []*ent.BillingGroup) []Record {
 }
 
 func fromEnt(entity *ent.BillingGroup) Record {
-	return Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
-		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+	record := Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
+		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), AuthorizedUsers: make([]AuthorizedUser, 0, len(entity.Edges.AuthorizedUsers)), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+	for _, authorized := range entity.Edges.AuthorizedUsers {
+		record.AuthorizedUsers = append(record.AuthorizedUsers, AuthorizedUser{ID: authorized.ID, Username: authorized.Username, DisplayName: authorized.DisplayName, Status: string(authorized.Status)})
+	}
+	return record
+}
+
+func validateAuthorizedUsers(ctx context.Context, tx *ent.Tx, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	count, err := tx.User.Query().Where(
+		entuser.IDIn(ids...),
+		entuser.RoleEQ(entuser.RoleMember),
+	).Count(ctx)
+	if err != nil {
+		return fmt.Errorf("validate billing group authorized users: %w", err)
+	}
+	if count != len(ids) {
+		return ErrInvalidInput
+	}
+	return nil
 }

@@ -40,6 +40,8 @@ const (
 	EdgeProviders = "providers"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgeAuthorizedUsers holds the string denoting the authorized_users edge name in mutations.
+	EdgeAuthorizedUsers = "authorized_users"
 	// Table holds the table name of the billinggroup in the database.
 	Table = "billing_groups"
 	// APIKeysTable is the table that holds the api_keys relation/edge.
@@ -63,6 +65,11 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "billing_group_id"
+	// AuthorizedUsersTable is the table that holds the authorized_users relation/edge. The primary key declared below.
+	AuthorizedUsersTable = "billing_group_authorized_users"
+	// AuthorizedUsersInverseTable is the table name for the User entity.
+	// It exists in this package in order to avoid circular dependency with the "user" package.
+	AuthorizedUsersInverseTable = "users"
 )
 
 // Columns holds all SQL columns for billinggroup fields.
@@ -78,6 +85,12 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldDeletedAt,
 }
+
+var (
+	// AuthorizedUsersPrimaryKey and AuthorizedUsersColumn2 are the table columns denoting the
+	// primary key for the authorized_users relation (M2M).
+	AuthorizedUsersPrimaryKey = []string{"billing_group_id", "user_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -232,6 +245,20 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newAPIUsagesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByAuthorizedUsersCount orders the results by authorized_users count.
+func ByAuthorizedUsersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAuthorizedUsersStep(), opts...)
+	}
+}
+
+// ByAuthorizedUsers orders the results by authorized_users terms.
+func ByAuthorizedUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAuthorizedUsersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newAPIKeysStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -251,5 +278,12 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newAuthorizedUsersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AuthorizedUsersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, AuthorizedUsersTable, AuthorizedUsersPrimaryKey...),
 	)
 }

@@ -1260,7 +1260,7 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	groups, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive, IncludeHidden: canAccessHiddenGroups(record)})
+	groups, err := h.billingGroups.List(r.Context(), billingGroupFilterForUser(record))
 	if err != nil {
 		h.writeBillingGroupError(w, "list account billing groups", err)
 		return
@@ -1344,7 +1344,7 @@ func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	records, err := h.billingGroups.List(r.Context(), billinggroup.ListFilter{Status: billinggroup.StatusActive, IncludeHidden: canAccessHiddenGroups(record)})
+	records, err := h.billingGroups.List(r.Context(), billingGroupFilterForUser(record))
 	if err != nil {
 		h.writeBillingGroupError(w, "list account billing groups", err)
 		return
@@ -1923,8 +1923,14 @@ func (h *apiHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (user.
 	return record, true
 }
 
-func canAccessHiddenGroups(record user.Record) bool {
-	return record.Role == user.RoleAdmin || record.CanAccessHiddenGroups
+func billingGroupFilterForUser(record user.Record) billinggroup.ListFilter {
+	filter := billinggroup.ListFilter{Status: billinggroup.StatusActive}
+	if record.Role == user.RoleAdmin {
+		filter.IncludeHidden = true
+	} else {
+		filter.AuthorizedUserID = record.ID
+	}
+	return filter
 }
 
 func (h *apiHandler) sessionToken(r *http.Request) string {

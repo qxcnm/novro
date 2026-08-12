@@ -15,6 +15,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/user"
 )
 
 // BillingGroupCreate is the builder for creating a BillingGroup entity.
@@ -191,6 +192,21 @@ func (_c *BillingGroupCreate) AddAPIUsages(v ...*APIUsage) *BillingGroupCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddAPIUsageIDs(ids...)
+}
+
+// AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
+func (_c *BillingGroupCreate) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddAuthorizedUserIDs(ids...)
+	return _c
+}
+
+// AddAuthorizedUsers adds the "authorized_users" edges to the User entity.
+func (_c *BillingGroupCreate) AddAuthorizedUsers(v ...*User) *BillingGroupCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAuthorizedUserIDs(ids...)
 }
 
 // Mutation returns the BillingGroupMutation object of the builder.
@@ -416,6 +432,22 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.AuthorizedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

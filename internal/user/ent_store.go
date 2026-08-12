@@ -36,7 +36,6 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		SetDisplayName(params.DisplayName).
 		SetPasswordHash(params.PasswordHash).
 		SetIsSystemAdmin(params.IsSystemAdmin).
-		SetCanAccessHiddenGroups(params.CanAccessHiddenGroups).
 		SetRole(entuser.Role(params.Role)).
 		SetStatus(entuser.StatusActive)
 	if params.ReferralCode != "" {
@@ -217,9 +216,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	}
 	if params.Role != nil {
 		update.SetRole(entuser.Role(*params.Role))
-	}
-	if params.CanAccessHiddenGroups != nil {
-		update.SetCanAccessHiddenGroups(*params.CanAccessHiddenGroups)
+		if *params.Role == RoleAdmin {
+			update.ClearAuthorizedBillingGroups()
+		}
 	}
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -303,16 +302,15 @@ func fromEnt(entity *ent.User) Record {
 		return Record{}
 	}
 	record := Record{
-		ID:                    entity.ID,
-		Username:              entity.Username,
-		DisplayName:           entity.DisplayName,
-		Role:                  Role(entity.Role),
-		Status:                Status(entity.Status),
-		IsSystemAdmin:         entity.IsSystemAdmin,
-		CanAccessHiddenGroups: entity.CanAccessHiddenGroups,
-		LastLoginAt:           entity.LastLoginAt,
-		CreatedAt:             entity.CreatedAt,
-		UpdatedAt:             entity.UpdatedAt,
+		ID:            entity.ID,
+		Username:      entity.Username,
+		DisplayName:   entity.DisplayName,
+		Role:          Role(entity.Role),
+		Status:        Status(entity.Status),
+		IsSystemAdmin: entity.IsSystemAdmin,
+		LastLoginAt:   entity.LastLoginAt,
+		CreatedAt:     entity.CreatedAt,
+		UpdatedAt:     entity.UpdatedAt,
 	}
 	if entity.Email != nil {
 		record.Email = *entity.Email

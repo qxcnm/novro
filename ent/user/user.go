@@ -30,8 +30,6 @@ const (
 	FieldPasswordHash = "password_hash"
 	// FieldIsSystemAdmin holds the string denoting the is_system_admin field in the database.
 	FieldIsSystemAdmin = "is_system_admin"
-	// FieldCanAccessHiddenGroups holds the string denoting the can_access_hidden_groups field in the database.
-	FieldCanAccessHiddenGroups = "can_access_hidden_groups"
 	// FieldRole holds the string denoting the role field in the database.
 	FieldRole = "role"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -58,6 +56,8 @@ const (
 	EdgeAPIUsages = "api_usages"
 	// EdgeGatewayOperations holds the string denoting the gateway_operations edge name in mutations.
 	EdgeGatewayOperations = "gateway_operations"
+	// EdgeAuthorizedBillingGroups holds the string denoting the authorized_billing_groups edge name in mutations.
+	EdgeAuthorizedBillingGroups = "authorized_billing_groups"
 	// EdgeReferrer holds the string denoting the referrer edge name in mutations.
 	EdgeReferrer = "referrer"
 	// EdgeReferrals holds the string denoting the referrals edge name in mutations.
@@ -120,6 +120,11 @@ const (
 	GatewayOperationsInverseTable = "gateway_operations"
 	// GatewayOperationsColumn is the table column denoting the gateway_operations relation/edge.
 	GatewayOperationsColumn = "user_id"
+	// AuthorizedBillingGroupsTable is the table that holds the authorized_billing_groups relation/edge. The primary key declared below.
+	AuthorizedBillingGroupsTable = "billing_group_authorized_users"
+	// AuthorizedBillingGroupsInverseTable is the table name for the BillingGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
+	AuthorizedBillingGroupsInverseTable = "billing_groups"
 	// ReferrerTable is the table that holds the referrer relation/edge.
 	ReferrerTable = "users"
 	// ReferrerColumn is the table column denoting the referrer relation/edge.
@@ -140,13 +145,18 @@ var Columns = []string{
 	FieldDisplayName,
 	FieldPasswordHash,
 	FieldIsSystemAdmin,
-	FieldCanAccessHiddenGroups,
 	FieldRole,
 	FieldStatus,
 	FieldLastLoginAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
+
+var (
+	// AuthorizedBillingGroupsPrimaryKey and AuthorizedBillingGroupsColumn2 are the table columns denoting the
+	// primary key for the authorized_billing_groups relation (M2M).
+	AuthorizedBillingGroupsPrimaryKey = []string{"billing_group_id", "user_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -173,8 +183,6 @@ var (
 	DisplayNameValidator func(string) error
 	// DefaultIsSystemAdmin holds the default value on creation for the "is_system_admin" field.
 	DefaultIsSystemAdmin bool
-	// DefaultCanAccessHiddenGroups holds the default value on creation for the "can_access_hidden_groups" field.
-	DefaultCanAccessHiddenGroups bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -278,11 +286,6 @@ func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 // ByIsSystemAdmin orders the results by the is_system_admin field.
 func ByIsSystemAdmin(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsSystemAdmin, opts...).ToFunc()
-}
-
-// ByCanAccessHiddenGroups orders the results by the can_access_hidden_groups field.
-func ByCanAccessHiddenGroups(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCanAccessHiddenGroups, opts...).ToFunc()
 }
 
 // ByRole orders the results by the role field.
@@ -415,6 +418,20 @@ func ByGatewayOperations(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption
 	}
 }
 
+// ByAuthorizedBillingGroupsCount orders the results by authorized_billing_groups count.
+func ByAuthorizedBillingGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAuthorizedBillingGroupsStep(), opts...)
+	}
+}
+
+// ByAuthorizedBillingGroups orders the results by authorized_billing_groups terms.
+func ByAuthorizedBillingGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAuthorizedBillingGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByReferrerField orders the results by referrer field.
 func ByReferrerField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -489,6 +506,13 @@ func newGatewayOperationsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(GatewayOperationsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, GatewayOperationsTable, GatewayOperationsColumn),
+	)
+}
+func newAuthorizedBillingGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AuthorizedBillingGroupsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, true, AuthorizedBillingGroupsTable, AuthorizedBillingGroupsPrimaryKey...),
 	)
 }
 func newReferrerStep() *sqlgraph.Step {

@@ -505,6 +505,29 @@ func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.BillingGroup {
 	})
 }
 
+// HasAuthorizedUsers applies the HasEdge predicate on the "authorized_users" edge.
+func HasAuthorizedUsers() predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, AuthorizedUsersTable, AuthorizedUsersPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAuthorizedUsersWith applies the HasEdge predicate on the "authorized_users" edge with a given conditions (other predicates).
+func HasAuthorizedUsersWith(preds ...predicate.User) predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := newAuthorizedUsersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.BillingGroup) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.AndPredicates(predicates...))

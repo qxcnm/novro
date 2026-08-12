@@ -26,7 +26,6 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 			entapikey.StatusEQ(entapikey.StatusActive),
 			entapikey.HasUserWith(entuser.StatusEQ(entuser.StatusActive)),
 			entapikey.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()),
-			accessibleBillingGroup(),
 		).
 		WithUser().WithBillingGroup().Only(ctx)
 	if ent.IsNotFound(err) {
@@ -39,10 +38,23 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 	if err != nil {
 		return Actor{}, fmt.Errorf("read API key owner: %w", err)
 	}
+	group, err := entity.Edges.BillingGroupOrErr()
+	if err != nil {
+		return Actor{}, fmt.Errorf("read API key billing group: %w", err)
+	}
+	if group.IsHidden && owner.Role != entuser.RoleAdmin {
+		authorized, err := group.QueryAuthorizedUsers().Where(entuser.IDEQ(owner.ID)).Exist(ctx)
+		if err != nil {
+			return Actor{}, fmt.Errorf("check API key billing group authorization: %w", err)
+		}
+		if !authorized {
+			return Actor{}, ErrUnauthenticated
+		}
+	}
 	if _, err := s.client.APIKey.UpdateOneID(entity.ID).SetLastUsedAt(now).Save(ctx); err != nil {
 		return Actor{}, fmt.Errorf("update API key last use: %w", err)
 	}
-	userRecord := user.Record{ID: owner.ID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), IsSystemAdmin: owner.IsSystemAdmin, CanAccessHiddenGroups: owner.CanAccessHiddenGroups, LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}
+	userRecord := user.Record{ID: owner.ID, Username: owner.Username, DisplayName: owner.DisplayName, Role: user.Role(owner.Role), Status: user.Status(owner.Status), IsSystemAdmin: owner.IsSystemAdmin, LastLoginAt: owner.LastLoginAt, CreatedAt: owner.CreatedAt, UpdatedAt: owner.UpdatedAt}
 	return Actor{APIKey: fromEnt(entity), User: userRecord}, nil
 }
 
@@ -70,8 +82,14 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 	if err != nil {
 		return Record{}, fmt.Errorf("lock API key billing group: %w", err)
 	}
-	if group.IsHidden && owner.Role != entuser.RoleAdmin && !owner.CanAccessHiddenGroups {
-		return Record{}, ErrGroupUnavailable
+	if group.IsHidden && owner.Role != entuser.RoleAdmin {
+		authorized, err := group.QueryAuthorizedUsers().Where(entuser.IDEQ(owner.ID)).Exist(ctx)
+		if err != nil {
+			return Record{}, fmt.Errorf("check API key billing group authorization: %w", err)
+		}
+		if !authorized {
+			return Record{}, ErrGroupUnavailable
+		}
 	}
 	count, err := tx.APIKey.Query().Where(entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive)).Count(ctx)
 	if err != nil {
@@ -101,7 +119,7 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 
 func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, error) {
 	entities, err := s.client.APIKey.Query().
-		Where(entapikey.UserIDEQ(userID), accessibleBillingGroup()).
+		Where(entapikey.UserIDEQ(userID), accessibleBillingGroup(userID)).
 		WithBillingGroup().
 		Order(ent.Desc(entapikey.FieldCreatedAt)).
 		All(ctx)
@@ -117,7 +135,7 @@ func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, 
 
 func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record, error) {
 	entity, err := s.client.APIKey.Query().
-		Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive), accessibleBillingGroup()).
+		Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive), accessibleBillingGroup(userID)).
 		WithBillingGroup().
 		Only(ctx)
 	if ent.IsNotFound(err) {
@@ -130,7 +148,7 @@ func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record,
 }
 
 func (s *EntStore) RevokeByUser(ctx context.Context, userID, id uuid.UUID, now time.Time) error {
-	entity, err := s.client.APIKey.Query().Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), accessibleBillingGroup()).Only(ctx)
+	entity, err := s.client.APIKey.Query().Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), accessibleBillingGroup(userID)).Only(ctx)
 	if ent.IsNotFound(err) {
 		return ErrNotFound
 	}
@@ -222,9 +240,10 @@ func fromEnt(entity *ent.APIKey) Record {
 	return record
 }
 
-func accessibleBillingGroup() predicate.APIKey {
+func accessibleBillingGroup(userID uuid.UUID) predicate.APIKey {
 	return entapikey.Or(
 		entapikey.HasBillingGroupWith(entbillinggroup.IsHiddenEQ(false)),
-		entapikey.HasUserWith(entuser.Or(entuser.RoleEQ(entuser.RoleAdmin), entuser.CanAccessHiddenGroupsEQ(true))),
+		entapikey.HasUserWith(entuser.RoleEQ(entuser.RoleAdmin)),
+		entapikey.HasBillingGroupWith(entbillinggroup.HasAuthorizedUsersWith(entuser.IDEQ(userID))),
 	)
 }

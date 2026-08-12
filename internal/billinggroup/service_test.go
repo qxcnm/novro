@@ -8,15 +8,56 @@ import (
 	"github.com/google/uuid"
 )
 
-type fakeStore struct{ deletedID uuid.UUID }
+type fakeStore struct {
+	deletedID   uuid.UUID
+	createInput CreateInput
+	updateInput UpdateInput
+}
 
-func (*fakeStore) Create(context.Context, CreateInput) (Record, error) { return Record{}, nil }
-func (*fakeStore) List(context.Context, ListFilter) ([]Record, error)  { return nil, nil }
-func (*fakeStore) Update(context.Context, uuid.UUID, UpdateInput) (Record, error) {
+func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
+	f.createInput = input
+	return Record{}, nil
+}
+func (*fakeStore) List(context.Context, ListFilter) ([]Record, error) { return nil, nil }
+func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, input UpdateInput) (Record, error) {
+	f.updateInput = input
 	return Record{}, nil
 }
 func (*fakeStore) SetStatus(context.Context, uuid.UUID, Status) (Record, error) {
 	return Record{}, nil
+}
+
+func TestCreateValidatesPerGroupAuthorizations(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store)
+	userID := uuid.New()
+	valid := CreateInput{Code: "partner", DisplayName: "代理端", MultiplierBPS: 5_000, IsHidden: true, AuthorizedUserIDs: []uuid.UUID{userID}}
+	if _, err := service.Create(context.Background(), valid); err != nil {
+		t.Fatalf("create hidden group: %v", err)
+	}
+	if len(store.createInput.AuthorizedUserIDs) != 1 || store.createInput.AuthorizedUserIDs[0] != userID {
+		t.Fatalf("unexpected authorized users: %+v", store.createInput.AuthorizedUserIDs)
+	}
+	public := valid
+	public.Code = "public"
+	public.IsHidden = false
+	if _, err := service.Create(context.Background(), public); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected public group authorization rejection, got %v", err)
+	}
+	duplicate := valid
+	duplicate.Code = "duplicate"
+	duplicate.AuthorizedUserIDs = []uuid.UUID{userID, userID}
+	if _, err := service.Create(context.Background(), duplicate); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected duplicate authorization rejection, got %v", err)
+	}
+}
+
+func TestUpdateRejectsInvalidAuthorizedUserIDs(t *testing.T) {
+	service := NewService(&fakeStore{})
+	ids := []uuid.UUID{uuid.Nil}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{AuthorizedUserIDs: &ids}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected nil authorization ID rejection, got %v", err)
+	}
 }
 func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id

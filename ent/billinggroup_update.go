@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/user"
 )
 
 // BillingGroupUpdate is the builder for updating BillingGroup entities.
@@ -180,6 +181,21 @@ func (_u *BillingGroupUpdate) AddAPIUsages(v ...*APIUsage) *BillingGroupUpdate {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
+func (_u *BillingGroupUpdate) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.AddAuthorizedUserIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedUsers adds the "authorized_users" edges to the User entity.
+func (_u *BillingGroupUpdate) AddAuthorizedUsers(v ...*User) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedUserIDs(ids...)
+}
+
 // Mutation returns the BillingGroupMutation object of the builder.
 func (_u *BillingGroupUpdate) Mutation() *BillingGroupMutation {
 	return _u.mutation
@@ -246,6 +262,27 @@ func (_u *BillingGroupUpdate) RemoveAPIUsages(v ...*APIUsage) *BillingGroupUpdat
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearAuthorizedUsers clears all "authorized_users" edges to the User entity.
+func (_u *BillingGroupUpdate) ClearAuthorizedUsers() *BillingGroupUpdate {
+	_u.mutation.ClearAuthorizedUsers()
+	return _u
+}
+
+// RemoveAuthorizedUserIDs removes the "authorized_users" edge to User entities by IDs.
+func (_u *BillingGroupUpdate) RemoveAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.RemoveAuthorizedUserIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedUsers removes "authorized_users" edges to User entities.
+func (_u *BillingGroupUpdate) RemoveAuthorizedUsers(v ...*User) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedUserIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -478,6 +515,51 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.AuthorizedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedUsersIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{billinggroup.Label}
@@ -646,6 +728,21 @@ func (_u *BillingGroupUpdateOne) AddAPIUsages(v ...*APIUsage) *BillingGroupUpdat
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
+func (_u *BillingGroupUpdateOne) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.AddAuthorizedUserIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedUsers adds the "authorized_users" edges to the User entity.
+func (_u *BillingGroupUpdateOne) AddAuthorizedUsers(v ...*User) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedUserIDs(ids...)
+}
+
 // Mutation returns the BillingGroupMutation object of the builder.
 func (_u *BillingGroupUpdateOne) Mutation() *BillingGroupMutation {
 	return _u.mutation
@@ -712,6 +809,27 @@ func (_u *BillingGroupUpdateOne) RemoveAPIUsages(v ...*APIUsage) *BillingGroupUp
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearAuthorizedUsers clears all "authorized_users" edges to the User entity.
+func (_u *BillingGroupUpdateOne) ClearAuthorizedUsers() *BillingGroupUpdateOne {
+	_u.mutation.ClearAuthorizedUsers()
+	return _u
+}
+
+// RemoveAuthorizedUserIDs removes the "authorized_users" edge to User entities by IDs.
+func (_u *BillingGroupUpdateOne) RemoveAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.RemoveAuthorizedUserIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedUsers removes "authorized_users" edges to User entities.
+func (_u *BillingGroupUpdateOne) RemoveAuthorizedUsers(v ...*User) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedUserIDs(ids...)
 }
 
 // Where appends a list predicates to the BillingGroupUpdate builder.
@@ -967,6 +1085,51 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AuthorizedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedUsersIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   billinggroup.AuthorizedUsersTable,
+			Columns: billinggroup.AuthorizedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

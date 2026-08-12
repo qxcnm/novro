@@ -33,8 +33,6 @@ type User struct {
 	PasswordHash *string `json:"-"`
 	// IsSystemAdmin holds the value of the "is_system_admin" field.
 	IsSystemAdmin bool `json:"is_system_admin,omitempty"`
-	// CanAccessHiddenGroups holds the value of the "can_access_hidden_groups" field.
-	CanAccessHiddenGroups bool `json:"can_access_hidden_groups,omitempty"`
 	// Role holds the value of the "role" field.
 	Role user.Role `json:"role,omitempty"`
 	// Status holds the value of the "status" field.
@@ -69,13 +67,15 @@ type UserEdges struct {
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// GatewayOperations holds the value of the gateway_operations edge.
 	GatewayOperations []*GatewayOperation `json:"gateway_operations,omitempty"`
+	// AuthorizedBillingGroups holds the value of the authorized_billing_groups edge.
+	AuthorizedBillingGroups []*BillingGroup `json:"authorized_billing_groups,omitempty"`
 	// Referrer holds the value of the referrer edge.
 	Referrer *User `json:"referrer,omitempty"`
 	// Referrals holds the value of the referrals edge.
 	Referrals []*User `json:"referrals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [11]bool
 }
 
 // SessionsOrErr returns the Sessions value or an error if the edge
@@ -152,12 +152,21 @@ func (e UserEdges) GatewayOperationsOrErr() ([]*GatewayOperation, error) {
 	return nil, &NotLoadedError{edge: "gateway_operations"}
 }
 
+// AuthorizedBillingGroupsOrErr returns the AuthorizedBillingGroups value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) AuthorizedBillingGroupsOrErr() ([]*BillingGroup, error) {
+	if e.loadedTypes[8] {
+		return e.AuthorizedBillingGroups, nil
+	}
+	return nil, &NotLoadedError{edge: "authorized_billing_groups"}
+}
+
 // ReferrerOrErr returns the Referrer value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ReferrerOrErr() (*User, error) {
 	if e.Referrer != nil {
 		return e.Referrer, nil
-	} else if e.loadedTypes[8] {
+	} else if e.loadedTypes[9] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "referrer"}
@@ -166,7 +175,7 @@ func (e UserEdges) ReferrerOrErr() (*User, error) {
 // ReferralsOrErr returns the Referrals value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ReferralsOrErr() ([]*User, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[10] {
 		return e.Referrals, nil
 	}
 	return nil, &NotLoadedError{edge: "referrals"}
@@ -179,7 +188,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldReferredByUserID:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case user.FieldIsSystemAdmin, user.FieldCanAccessHiddenGroups:
+		case user.FieldIsSystemAdmin:
 			values[i] = new(sql.NullBool)
 		case user.FieldInviteCode, user.FieldUsername, user.FieldEmail, user.FieldDisplayName, user.FieldPasswordHash, user.FieldRole, user.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -252,12 +261,6 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_system_admin", values[i])
 			} else if value.Valid {
 				_m.IsSystemAdmin = value.Bool
-			}
-		case user.FieldCanAccessHiddenGroups:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field can_access_hidden_groups", values[i])
-			} else if value.Valid {
-				_m.CanAccessHiddenGroups = value.Bool
 			}
 		case user.FieldRole:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -343,6 +346,11 @@ func (_m *User) QueryGatewayOperations() *GatewayOperationQuery {
 	return NewUserClient(_m.config).QueryGatewayOperations(_m)
 }
 
+// QueryAuthorizedBillingGroups queries the "authorized_billing_groups" edge of the User entity.
+func (_m *User) QueryAuthorizedBillingGroups() *BillingGroupQuery {
+	return NewUserClient(_m.config).QueryAuthorizedBillingGroups(_m)
+}
+
 // QueryReferrer queries the "referrer" edge of the User entity.
 func (_m *User) QueryReferrer() *UserQuery {
 	return NewUserClient(_m.config).QueryReferrer(_m)
@@ -399,9 +407,6 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_system_admin=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsSystemAdmin))
-	builder.WriteString(", ")
-	builder.WriteString("can_access_hidden_groups=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CanAccessHiddenGroups))
 	builder.WriteString(", ")
 	builder.WriteString("role=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Role))

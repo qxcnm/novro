@@ -30,7 +30,7 @@
 | `PATCH` | `/api/admin/users/{id}/status` | 管理员 | 启用或停用用户 |
 | `POST` | `/api/admin/users/{id}/reset-password` | 管理员 | 重置密码并撤销旧会话 |
 | `GET` | `/api/account/api-keys` | 登录 | 当前用户的 Key 元数据 |
-| `GET` | `/api/account/billing-groups` | 登录 | 当前用户有权选择的启用计费分组；隐藏分组仅对管理员和已授权用户返回 |
+| `GET` | `/api/account/billing-groups` | 登录 | 当前用户有权选择的启用计费分组；隐藏分组仅对管理员和该分组已授权用户返回 |
 | `POST` | `/api/account/api-keys` | 登录 | 指定计费分组创建 Key，完整值只返回一次 |
 | `DELETE` | `/api/account/api-keys/{id}` | 登录 | 撤销当前用户的 Key |
 | `GET` | `/api/account/models` | 登录 | 当前可用模型和指定或默认分组的结算单价 |
@@ -67,9 +67,9 @@
 | `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改上游模型映射和显示名称 |
 | `PATCH` | `/api/admin/model-routes/{id}/status` | 管理员 | 启用或停用模型路由 |
 | `DELETE` | `/api/admin/model-routes/{id}` | 管理员 | 软删除模型路由 |
-| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、隐藏属性、API Key 数和供应商数 |
-| `POST` | `/api/admin/billing-groups` | 管理员 | 创建计费分组和倍率 |
-| `PATCH` | `/api/admin/billing-groups/{id}` | 管理员 | 修改分组名称或倍率 |
+| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、隐藏属性、授权用户、API Key 数和供应商数 |
+| `POST` | `/api/admin/billing-groups` | 管理员 | 创建计费分组、倍率和隐藏组授权用户 |
+| `PATCH` | `/api/admin/billing-groups/{id}` | 管理员 | 修改分组名称、倍率、隐藏属性或授权用户 |
 | `PATCH` | `/api/admin/billing-groups/{id}/status` | 管理员 | 启用或停用非默认分组 |
 | `DELETE` | `/api/admin/billing-groups/{id}` | 管理员 | 软删除未使用的非默认分组 |
 
@@ -79,6 +79,10 @@
 校验商户 ID 和通知签名。反向代理必须保留浏览器的 `Origin` 请求头。模型兼容
 `/v1/*` 使用 API Key 的机器请求不受这条浏览器来源规则影响。错误使用 `error.code`
 与安全的中文提示，不返回 SQL、连接字符串、密码哈希或会话令牌。
+
+隐藏计费分组的创建请求可提交 `authorized_user_ids` UUID 数组；修改请求可用同名字段整体替换
+授权名单。名单只能包含普通成员，不能包含管理员或未知用户；公开分组不能携带授权名单。
+管理员自动拥有全部隐藏组权限。管理列表中的每个分组返回 `authorized_users` 摘要，供控制台回显。
 
 每个 HTTP 请求都会返回 `X-Novro-Request-ID`。错误 JSON 还会返回顶层
 `request_id`，控制台 API、网关鉴权失败和网关上游错误都使用同一 ID，便于结合结构化

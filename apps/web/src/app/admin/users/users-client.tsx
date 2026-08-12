@@ -27,9 +27,8 @@ type UserRecord = {
   role: "admin" | "member";
   status: "active" | "disabled";
   created_at: string;
-  updated_at: string;
+	updated_at: string;
 	last_login_at: string | null;
-	can_access_hidden_groups: boolean;
 };
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
@@ -83,8 +82,8 @@ export default function UsersClient() {
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [adjustmentIdempotencyKey, setAdjustmentIdempotencyKey] = useState("");
-	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member", can_access_hidden_groups: false });
-	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member", can_access_hidden_groups: false });
+	const [form, setForm] = useState({ username: "", email: "", display_name: "", password: "", role: "member" as "admin" | "member" });
+	const [editForm, setEditForm] = useState({ display_name: "", role: "member" as "admin" | "member" });
   const [resetPassword, setResetPassword] = useState("");
   const [bulkStatus, setBulkStatus] = useState<"active" | "disabled" | null>(null);
   const selection = useListSelection(users.map((user) => user.id));
@@ -117,16 +116,16 @@ export default function UsersClient() {
 
 	function openDetails(record: UserRecord) {
 		setDetailUser(record);
-		setEditForm({ display_name: record.display_name, role: record.role, can_access_hidden_groups: record.can_access_hidden_groups });
+		setEditForm({ display_name: record.display_name, role: record.role });
 	}
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setMessage(""); setFormError("");
-    const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, can_access_hidden_groups: form.role === "admin" || form.can_access_hidden_groups }) });
+	const response = await fetch("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     setBusy(false);
 	if (!response.ok) { setFormError(await readError(response)); return; }
-	setForm({ username: "", email: "", display_name: "", password: "", role: "member", can_access_hidden_groups: false });
+	setForm({ username: "", email: "", display_name: "", password: "", role: "member" });
 	setCreateOpen(false); setOffset(0); setMessage("用户已创建");
     await loadUsers();
   }
@@ -135,7 +134,7 @@ export default function UsersClient() {
     event.preventDefault();
     if (!detailUser) return;
     setBusy(true); setMessage(""); setFormError("");
-    const response = await fetch(`/api/admin/users/${detailUser.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...editForm, can_access_hidden_groups: editForm.role === "admin" || editForm.can_access_hidden_groups }) });
+	const response = await fetch(`/api/admin/users/${detailUser.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) });
     setBusy(false);
     if (!response.ok) { setFormError(await readError(response)); return; }
     const body = (await response.json()) as { user: UserRecord };
@@ -233,7 +232,7 @@ export default function UsersClient() {
               <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
             </Select>
             <Button aria-label="刷新用户列表" disabled={loading} onClick={() => void loadUsers()} size="icon" title="刷新用户列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
-			<Button onClick={() => { setForm({ username: "", email: "", display_name: "", password: "", role: "member", can_access_hidden_groups: false }); setCreateOpen(true); }}><Plus />创建用户</Button>
+			<Button onClick={() => { setForm({ username: "", email: "", display_name: "", password: "", role: "member" }); setCreateOpen(true); }}><Plus />创建用户</Button>
           </div>
         </div>
 
@@ -256,7 +255,7 @@ export default function UsersClient() {
                     <TableRow key={record.id}>
 					  <TableCell><Checkbox aria-label={`选择用户 ${record.username}`} checked={selection.isSelected(record.id)} onCheckedChange={(checked) => selection.toggleOne(record.id, checked === true)} /></TableCell>
                       <TableCell><button className="max-w-64 text-left outline-none focus-visible:underline" onClick={() => openDetails(record)} type="button"><span className="block font-medium">{record.display_name || record.username}</span><span className="block text-xs text-muted-foreground">@{record.username}</span><span className="block truncate text-xs text-muted-foreground">{record.email || "未设置邮箱"}</span></button></TableCell>
-					  <TableCell><div className="flex flex-wrap gap-1"><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge>{record.role !== "admin" && record.can_access_hidden_groups ? <Badge variant="outline">隐藏分组</Badge> : null}</div></TableCell>
+					  <TableCell><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge></TableCell>
 					  <TableCell><Badge variant={record.status === "active" ? "outline" : "destructive"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.last_login_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.created_at)}</TableCell>
@@ -278,7 +277,7 @@ export default function UsersClient() {
           </CardContent>
         </Card>
 
-		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member", can_access_hidden_groups: false }); }} open={createOpen}>
+		<Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setForm({ username: "", email: "", display_name: "", password: "", role: "member" }); }} open={createOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>创建用户</DialogTitle><DialogDescription>创建后用户立即启用。初始密码为 8 到 72 字节，且必须包含英文和数字。</DialogDescription></DialogHeader>
             <form className="space-y-4" id="create-user-form" onSubmit={createUser}>
@@ -287,7 +286,6 @@ export default function UsersClient() {
               <div className="space-y-2"><Label htmlFor="new-display-name">显示名称</Label><Input id="new-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 Alice Chen" value={form.display_name} /></div>
               <div className="space-y-2"><Label htmlFor="new-password">初始密码</Label><Input autoComplete="new-password" id="new-password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码需为 8 到 72 字节，且必须同时包含英文和数字" type="password" value={form.password} /><p className="text-xs text-muted-foreground">8 到 72 字节，且必须同时包含英文和数字。</p></div>
 			  <div className="space-y-2"><Label htmlFor="new-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setForm({ ...form, role })} value={form.role}><SelectTrigger id="new-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select></div>
-			  <label className="flex cursor-pointer items-start gap-3 border-y py-3"><Checkbox aria-label="允许访问隐藏分组" checked={form.role === "admin" || form.can_access_hidden_groups} disabled={form.role === "admin"} onCheckedChange={(checked) => setForm({ ...form, can_access_hidden_groups: checked === true })} /><span><span className="block text-sm font-medium">允许访问隐藏分组</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">授权后可查看隐藏分组价格、创建该组 API Key 并使用该组已有 Key。管理员自动拥有权限。</span></span></label>
 			  {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
             </form>
             <DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-user-form" type="submit"><UserRound />{busy ? "正在创建..." : "创建用户"}</Button></DialogFooter>
@@ -302,7 +300,6 @@ export default function UsersClient() {
                 <div className="space-y-2"><Label htmlFor="edit-display-name">显示名称</Label><Input id="edit-display-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} value={editForm.display_name} /></div>
                 <div className="space-y-2"><Label htmlFor="edit-email">邮箱</Label><Input disabled id="edit-email" value={detailUser.email || "未设置邮箱"} /></div>
 				<div className="space-y-2"><Label htmlFor="edit-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setEditForm({ ...editForm, role })} value={editForm.role}><SelectTrigger id="edit-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select><p className="text-xs leading-5 text-muted-foreground">最后一个启用的管理员不能降级为普通成员。</p></div>
-				<label className="flex cursor-pointer items-start gap-3 border-y py-3"><Checkbox aria-label="允许访问隐藏分组" checked={editForm.role === "admin" || editForm.can_access_hidden_groups} disabled={editForm.role === "admin"} onCheckedChange={(checked) => setEditForm({ ...editForm, can_access_hidden_groups: checked === true })} /><span><span className="block text-sm font-medium">允许访问隐藏分组</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">撤销后，该用户绑定隐藏分组的 API Key 将立即停止认证。管理员自动拥有权限。</span></span></label>
 				{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
               </form>
               <SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-user-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button><Button onClick={() => { setDetailUser(null); setResetUser(detailUser); }} type="button" variant="outline"><KeyRound />重置密码</Button></SheetFooter></> : null}

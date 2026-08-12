@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/topuporder"
@@ -29,21 +30,22 @@ import (
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx                   *QueryContext
-	order                 []user.OrderOption
-	inters                []Interceptor
-	predicates            []predicate.User
-	withSessions          *UserSessionQuery
-	withIdentities        *UserIdentityQuery
-	withAPIKeys           *APIKeyQuery
-	withWallet            *WalletQuery
-	withWalletEntries     *WalletEntryQuery
-	withTopUpOrders       *TopUpOrderQuery
-	withAPIUsages         *APIUsageQuery
-	withGatewayOperations *GatewayOperationQuery
-	withReferrer          *UserQuery
-	withReferrals         *UserQuery
-	modifiers             []func(*sql.Selector)
+	ctx                         *QueryContext
+	order                       []user.OrderOption
+	inters                      []Interceptor
+	predicates                  []predicate.User
+	withSessions                *UserSessionQuery
+	withIdentities              *UserIdentityQuery
+	withAPIKeys                 *APIKeyQuery
+	withWallet                  *WalletQuery
+	withWalletEntries           *WalletEntryQuery
+	withTopUpOrders             *TopUpOrderQuery
+	withAPIUsages               *APIUsageQuery
+	withGatewayOperations       *GatewayOperationQuery
+	withAuthorizedBillingGroups *BillingGroupQuery
+	withReferrer                *UserQuery
+	withReferrals               *UserQuery
+	modifiers                   []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -249,6 +251,28 @@ func (_q *UserQuery) QueryGatewayOperations() *GatewayOperationQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.GatewayOperationsTable, user.GatewayOperationsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAuthorizedBillingGroups chains the current query on the "authorized_billing_groups" edge.
+func (_q *UserQuery) QueryAuthorizedBillingGroups() *BillingGroupQuery {
+	query := (&BillingGroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, user.AuthorizedBillingGroupsTable, user.AuthorizedBillingGroupsPrimaryKey...),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -487,21 +511,22 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:                _q.config,
-		ctx:                   _q.ctx.Clone(),
-		order:                 append([]user.OrderOption{}, _q.order...),
-		inters:                append([]Interceptor{}, _q.inters...),
-		predicates:            append([]predicate.User{}, _q.predicates...),
-		withSessions:          _q.withSessions.Clone(),
-		withIdentities:        _q.withIdentities.Clone(),
-		withAPIKeys:           _q.withAPIKeys.Clone(),
-		withWallet:            _q.withWallet.Clone(),
-		withWalletEntries:     _q.withWalletEntries.Clone(),
-		withTopUpOrders:       _q.withTopUpOrders.Clone(),
-		withAPIUsages:         _q.withAPIUsages.Clone(),
-		withGatewayOperations: _q.withGatewayOperations.Clone(),
-		withReferrer:          _q.withReferrer.Clone(),
-		withReferrals:         _q.withReferrals.Clone(),
+		config:                      _q.config,
+		ctx:                         _q.ctx.Clone(),
+		order:                       append([]user.OrderOption{}, _q.order...),
+		inters:                      append([]Interceptor{}, _q.inters...),
+		predicates:                  append([]predicate.User{}, _q.predicates...),
+		withSessions:                _q.withSessions.Clone(),
+		withIdentities:              _q.withIdentities.Clone(),
+		withAPIKeys:                 _q.withAPIKeys.Clone(),
+		withWallet:                  _q.withWallet.Clone(),
+		withWalletEntries:           _q.withWalletEntries.Clone(),
+		withTopUpOrders:             _q.withTopUpOrders.Clone(),
+		withAPIUsages:               _q.withAPIUsages.Clone(),
+		withGatewayOperations:       _q.withGatewayOperations.Clone(),
+		withAuthorizedBillingGroups: _q.withAuthorizedBillingGroups.Clone(),
+		withReferrer:                _q.withReferrer.Clone(),
+		withReferrals:               _q.withReferrals.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -593,6 +618,17 @@ func (_q *UserQuery) WithGatewayOperations(opts ...func(*GatewayOperationQuery))
 		opt(query)
 	}
 	_q.withGatewayOperations = query
+	return _q
+}
+
+// WithAuthorizedBillingGroups tells the query-builder to eager-load the nodes that are connected to
+// the "authorized_billing_groups" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithAuthorizedBillingGroups(opts ...func(*BillingGroupQuery)) *UserQuery {
+	query := (&BillingGroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAuthorizedBillingGroups = query
 	return _q
 }
 
@@ -696,7 +732,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [11]bool{
 			_q.withSessions != nil,
 			_q.withIdentities != nil,
 			_q.withAPIKeys != nil,
@@ -705,6 +741,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withTopUpOrders != nil,
 			_q.withAPIUsages != nil,
 			_q.withGatewayOperations != nil,
+			_q.withAuthorizedBillingGroups != nil,
 			_q.withReferrer != nil,
 			_q.withReferrals != nil,
 		}
@@ -782,6 +819,15 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadGatewayOperations(ctx, query, nodes,
 			func(n *User) { n.Edges.GatewayOperations = []*GatewayOperation{} },
 			func(n *User, e *GatewayOperation) { n.Edges.GatewayOperations = append(n.Edges.GatewayOperations, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAuthorizedBillingGroups; query != nil {
+		if err := _q.loadAuthorizedBillingGroups(ctx, query, nodes,
+			func(n *User) { n.Edges.AuthorizedBillingGroups = []*BillingGroup{} },
+			func(n *User, e *BillingGroup) {
+				n.Edges.AuthorizedBillingGroups = append(n.Edges.AuthorizedBillingGroups, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -1038,6 +1084,67 @@ func (_q *UserQuery) loadGatewayOperations(ctx context.Context, query *GatewayOp
 			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadAuthorizedBillingGroups(ctx context.Context, query *BillingGroupQuery, nodes []*User, init func(*User), assign func(*User, *BillingGroup)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[uuid.UUID]*User)
+	nids := make(map[uuid.UUID]map[*User]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(user.AuthorizedBillingGroupsTable)
+		s.Join(joinT).On(s.C(billinggroup.FieldID), joinT.C(user.AuthorizedBillingGroupsPrimaryKey[0]))
+		s.Where(sql.InValues(joinT.C(user.AuthorizedBillingGroupsPrimaryKey[1]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(user.AuthorizedBillingGroupsPrimaryKey[1]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(uuid.UUID)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := *values[0].(*uuid.UUID)
+				inValue := *values[1].(*uuid.UUID)
+				if nids[inValue] == nil {
+					nids[inValue] = map[*User]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*BillingGroup](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "authorized_billing_groups" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
+		}
 	}
 	return nil
 }

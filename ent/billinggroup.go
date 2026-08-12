@@ -50,9 +50,11 @@ type BillingGroupEdges struct {
 	Providers []*Provider `json:"providers,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// AuthorizedUsers holds the value of the authorized_users edge.
+	AuthorizedUsers []*User `json:"authorized_users,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // APIKeysOrErr returns the APIKeys value or an error if the edge
@@ -80,6 +82,15 @@ func (e BillingGroupEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
+}
+
+// AuthorizedUsersOrErr returns the AuthorizedUsers value or an error if the edge
+// was not loaded in eager-loading.
+func (e BillingGroupEdges) AuthorizedUsersOrErr() ([]*User, error) {
+	if e.loadedTypes[3] {
+		return e.AuthorizedUsers, nil
+	}
+	return nil, &NotLoadedError{edge: "authorized_users"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -199,6 +210,11 @@ func (_m *BillingGroup) QueryProviders() *ProviderQuery {
 // QueryAPIUsages queries the "api_usages" edge of the BillingGroup entity.
 func (_m *BillingGroup) QueryAPIUsages() *APIUsageQuery {
 	return NewBillingGroupClient(_m.config).QueryAPIUsages(_m)
+}
+
+// QueryAuthorizedUsers queries the "authorized_users" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryAuthorizedUsers() *UserQuery {
+	return NewBillingGroupClient(_m.config).QueryAuthorizedUsers(_m)
 }
 
 // Update returns a builder for updating this BillingGroup.

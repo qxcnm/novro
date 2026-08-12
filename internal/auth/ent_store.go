@@ -196,16 +196,15 @@ func (s *EntStore) RevokeSession(ctx context.Context, tokenHash string, now time
 
 func authUserFromEnt(entity *ent.User) user.Record {
 	record := user.Record{
-		ID:                    entity.ID,
-		Username:              entity.Username,
-		DisplayName:           entity.DisplayName,
-		Role:                  user.Role(entity.Role),
-		Status:                user.Status(entity.Status),
-		IsSystemAdmin:         entity.IsSystemAdmin,
-		CanAccessHiddenGroups: entity.CanAccessHiddenGroups,
-		LastLoginAt:           entity.LastLoginAt,
-		CreatedAt:             entity.CreatedAt,
-		UpdatedAt:             entity.UpdatedAt,
+		ID:            entity.ID,
+		Username:      entity.Username,
+		DisplayName:   entity.DisplayName,
+		Role:          user.Role(entity.Role),
+		Status:        user.Status(entity.Status),
+		IsSystemAdmin: entity.IsSystemAdmin,
+		LastLoginAt:   entity.LastLoginAt,
+		CreatedAt:     entity.CreatedAt,
+		UpdatedAt:     entity.UpdatedAt,
 	}
 	if entity.Email != nil {
 		record.Email = *entity.Email

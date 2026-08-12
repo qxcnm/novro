@@ -545,7 +545,6 @@ var (
 		{Name: "display_name", Type: field.TypeString, Size: 128, Default: ""},
 		{Name: "password_hash", Type: field.TypeString, Nullable: true},
 		{Name: "is_system_admin", Type: field.TypeBool, Default: false},
-		{Name: "can_access_hidden_groups", Type: field.TypeBool, Default: false},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"admin", "member"}, Default: "member"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
 		{Name: "last_login_at", Type: field.TypeTime, Nullable: true},
@@ -561,7 +560,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_users_referrals",
-				Columns:    []*schema.Column{UsersColumns[13]},
+				Columns:    []*schema.Column{UsersColumns[12]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -570,12 +569,12 @@ var (
 			{
 				Name:    "user_role_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[8], UsersColumns[9]},
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[8]},
 			},
 			{
 				Name:    "user_referred_by_user_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[13], UsersColumns[11]},
+				Columns: []*schema.Column{UsersColumns[12], UsersColumns[10]},
 			},
 		},
 	}
@@ -715,6 +714,31 @@ var (
 			},
 		},
 	}
+	// BillingGroupAuthorizedUsersColumns holds the columns for the "billing_group_authorized_users" table.
+	BillingGroupAuthorizedUsersColumns = []*schema.Column{
+		{Name: "billing_group_id", Type: field.TypeUUID},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// BillingGroupAuthorizedUsersTable holds the schema information for the "billing_group_authorized_users" table.
+	BillingGroupAuthorizedUsersTable = &schema.Table{
+		Name:       "billing_group_authorized_users",
+		Columns:    BillingGroupAuthorizedUsersColumns,
+		PrimaryKey: []*schema.Column{BillingGroupAuthorizedUsersColumns[0], BillingGroupAuthorizedUsersColumns[1]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "billing_group_authorized_users_billing_group_id",
+				Columns:    []*schema.Column{BillingGroupAuthorizedUsersColumns[0]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "billing_group_authorized_users_user_id",
+				Columns:    []*schema.Column{BillingGroupAuthorizedUsersColumns[1]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
@@ -734,6 +758,7 @@ var (
 		UserSessionsTable,
 		WalletsTable,
 		WalletEntriesTable,
+		BillingGroupAuthorizedUsersTable,
 	}
 )
 
@@ -757,4 +782,6 @@ func init() {
 	WalletsTable.ForeignKeys[0].RefTable = UsersTable
 	WalletEntriesTable.ForeignKeys[0].RefTable = UsersTable
 	WalletEntriesTable.ForeignKeys[1].RefTable = WalletsTable
+	BillingGroupAuthorizedUsersTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	BillingGroupAuthorizedUsersTable.ForeignKeys[1].RefTable = UsersTable
 }

@@ -906,6 +906,22 @@ func (c *BillingGroupClient) QueryAPIUsages(_m *BillingGroup) *APIUsageQuery {
 	return query
 }
 
+// QueryAuthorizedUsers queries the authorized_users edge of a BillingGroup.
+func (c *BillingGroupClient) QueryAuthorizedUsers(_m *BillingGroup) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, billinggroup.AuthorizedUsersTable, billinggroup.AuthorizedUsersPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *BillingGroupClient) Hooks() []Hook {
 	return c.hooks.BillingGroup
@@ -2517,6 +2533,22 @@ func (c *UserClient) QueryGatewayOperations(_m *User) *GatewayOperationQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(gatewayoperation.Table, gatewayoperation.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.GatewayOperationsTable, user.GatewayOperationsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryAuthorizedBillingGroups queries the authorized_billing_groups edge of a User.
+func (c *UserClient) QueryAuthorizedBillingGroups(_m *User) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, user.AuthorizedBillingGroupsTable, user.AuthorizedBillingGroupsPrimaryKey...),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil

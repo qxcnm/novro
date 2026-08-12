@@ -32,20 +32,18 @@ type PasswordHasher interface {
 }
 
 type CreateParams struct {
-	Username              string
-	Email                 string
-	DisplayName           string
-	PasswordHash          string
-	Role                  Role
-	ReferralCode          string
-	IsSystemAdmin         bool
-	CanAccessHiddenGroups bool
+	Username      string
+	Email         string
+	DisplayName   string
+	PasswordHash  string
+	Role          Role
+	ReferralCode  string
+	IsSystemAdmin bool
 }
 
 type UpdateParams struct {
-	DisplayName           *string
-	Role                  *Role
-	CanAccessHiddenGroups *bool
+	DisplayName *string
+	Role        *Role
 }
 
 type Service struct {
@@ -119,12 +117,11 @@ func (s *Service) create(ctx context.Context, input CreateInput, save func(conte
 		return Record{}, fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
 	}
 	return save(ctx, CreateParams{
-		Username:              username,
-		Email:                 email,
-		DisplayName:           displayName,
-		PasswordHash:          passwordHash,
-		Role:                  role,
-		CanAccessHiddenGroups: input.CanAccessHiddenGroups,
+		Username:     username,
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: passwordHash,
+		Role:         role,
 	})
 }
 
@@ -151,10 +148,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (Page, error) {
 }
 
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil && input.CanAccessHiddenGroups == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Role == nil) {
 		return Record{}, ErrInvalidInput
 	}
-	params := UpdateParams{Role: input.Role, CanAccessHiddenGroups: input.CanAccessHiddenGroups}
+	params := UpdateParams{Role: input.Role}
 	if input.DisplayName != nil {
 		displayName := strings.TrimSpace(*input.DisplayName)
 		if len([]rune(displayName)) > 128 {

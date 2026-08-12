@@ -29,13 +29,35 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}
 	for index, name := range expected {
 		if entries[index].IsDir() || entries[index].Name() != name {
 			t.Fatalf("expected migrations %v, got %+v", expected, entries)
+		}
+	}
+}
+
+func TestBillingGroupAuthorizationMigrationPreservesLegacyAccess(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0010_billing_group_user_authorizations.sql")
+	if err != nil {
+		t.Fatalf("read billing group authorization migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS billing_group_authorized_users",
+		"PRIMARY KEY (billing_group_id, user_id)",
+		"FOREIGN KEY (billing_group_id) REFERENCES billing_groups (id)",
+		"FOREIGN KEY (user_id) REFERENCES users (id)",
+		"INSERT IGNORE INTO billing_group_authorized_users",
+		"users.can_access_hidden_groups = TRUE",
+		"billing_groups.is_hidden = TRUE",
+		"users.role = 'member'",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("billing group authorization migration is missing %q", expected)
 		}
 	}
 }
