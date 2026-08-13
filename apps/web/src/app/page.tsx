@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { HomeAnnouncement } from "@/components/home-announcement";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +84,7 @@ export default function Home() {
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+          <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
             <Card className="overflow-hidden rounded-lg bg-background">
               <CardHeader className="border-b">
                 <div className="flex items-start justify-between gap-4">
@@ -105,16 +106,11 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-5">
-              <Card className="rounded-lg bg-background">
-                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><LineChart aria-hidden="true" className="size-4" />接入状态</CardTitle><CardDescription>从公开信息开始，登录后查看个人数据</CardDescription></CardHeader>
-                <CardContent className="space-y-4"><div className="flex items-center justify-between border-b pb-3 text-sm"><span className="text-muted-foreground">模型目录</span><span className="font-medium">已开放</span></div><div className="flex items-center justify-between border-b pb-3 text-sm"><span className="text-muted-foreground">API 文档</span><span className="font-medium">可直接阅读</span></div><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">余额与用量</span><span className="font-medium">登录后查看</span></div></CardContent>
-              </Card>
-              <Card className="rounded-lg bg-foreground text-background ring-0 dark:bg-card dark:text-card-foreground dark:ring-1 dark:ring-foreground/10">
-                <CardHeader className="border-b border-background/15 dark:border-border"><CardTitle className="text-base">公告</CardTitle><CardDescription className="text-background/60 dark:text-muted-foreground">当前版本已开放模型目录与统一网关</CardDescription></CardHeader>
-                <CardContent><p className="text-sm leading-6 text-background/75 dark:text-muted-foreground"></p><Button asChild className="mt-5" variant="secondary"><Link href="/docs">查看接入步骤 <ArrowRight aria-hidden="true" /></Link></Button></CardContent>
-              </Card>
-            </div>
+            <Card className="h-full rounded-lg bg-background">
+              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><LineChart aria-hidden="true" className="size-4" />接入状态</CardTitle><CardDescription>从公开信息开始，登录后查看个人数据</CardDescription></CardHeader>
+              <CardContent className="flex flex-1 flex-col justify-center gap-5"><div className="flex items-center justify-between border-b pb-4 text-sm"><span className="text-muted-foreground">模型目录</span><span className="font-medium">已开放</span></div><div className="flex items-center justify-between border-b pb-4 text-sm"><span className="text-muted-foreground">API 文档</span><span className="font-medium">可直接阅读</span></div><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">余额与用量</span><span className="font-medium">登录后查看</span></div></CardContent>
+            </Card>
+            <HomeAnnouncement />
           </div>
         </section>
 

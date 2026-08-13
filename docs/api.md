@@ -18,6 +18,7 @@
 | `GET` | `/api/auth/oidc/callback` | 公开 | 验证 OIDC 回调并建立 Novro 会话 |
 | `POST` | `/api/auth/logout` | 登录可选 | 撤销当前会话并清除 Cookie |
 | `GET` | `/api/auth/me` | 登录 | 返回当前用户 |
+| `GET` | `/api/public/announcement` | 公开 | 读取当前启用的系统公告；未启用时只返回 `available: false`，不返回草稿内容 |
 | `PATCH` | `/api/account/profile` | 登录 | 修改当前用户显示名称 |
 | `GET` | `/api/account/referral` | 登录 | 当前用户的邀请码、返现汇总、邀请链接，以及最近 20 条返现和邀请记录 |
 | `GET` | `/api/admin/referral` | 管理员 | 读取当前全局邀请返现比例 |

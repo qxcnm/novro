@@ -750,6 +750,27 @@ func TestAnnouncementPublicViewRequiresLoginAndHidesDraft(t *testing.T) {
 	}
 }
 
+func TestPublicAnnouncementDoesNotRequireLoginAndHidesDraft(t *testing.T) {
+	announcements := &fakeAnnouncements{config: announcement.Config{Enabled: false, Title: "内部草稿", Body: "尚未发布"}}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{authErr: auth.ErrUnauthenticated}, Users: &fakeAPIUsers{}, Announcements: announcements,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/public/announcement", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"available":false`) || strings.Contains(response.Body.String(), "内部草稿") {
+		t.Fatalf("draft status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	announcements.config = announcement.Config{Enabled: true, Title: "服务通知", Body: "今晚进行例行维护"}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/public/announcement", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"available":true`) || !strings.Contains(response.Body.String(), "今晚进行例行维护") {
+		t.Fatalf("published status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestAdminAnnouncementRequiresAdminAndUpdates(t *testing.T) {
 	announcements := &fakeAnnouncements{config: announcement.Config{Title: "旧公告", Body: "旧内容"}}
 	handler := New(Dependencies{

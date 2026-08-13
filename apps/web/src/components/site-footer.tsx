@@ -36,9 +36,14 @@ export async function SiteFooter() {
           ) : null}
           <p className={filingNumber ? undefined : "sm:ml-auto"}>
             © {year}{" "}
-            <Link className="font-semibold text-foreground transition-colors hover:text-primary" href="/">
+            <a
+              className="font-semibold text-foreground transition-colors hover:text-primary"
+              href="https://github.com/qxcnm/novro"
+              rel="noreferrer"
+              target="_blank"
+            >
               Novro
-            </Link>
+            </a>
             . 版权所有，由 Novro 项目贡献者设计与开发。
           </p>
         </div>

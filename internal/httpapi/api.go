@@ -253,6 +253,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/auth/me", h.me)
+	mux.HandleFunc("GET /api/public/announcement", h.getPublicAnnouncement)
 	mux.HandleFunc("PATCH /api/account/profile", h.updateProfile)
 	mux.HandleFunc("GET /api/account/referral", h.myReferral)
 	mux.HandleFunc("GET /api/admin/referral", h.getReferralConfig)
@@ -705,6 +706,19 @@ func (h *apiHandler) getAnnouncement(w http.ResponseWriter, r *http.Request) {
 	public, err := h.announcements.Public(r.Context())
 	if err != nil {
 		h.writeAnnouncementError(w, "read system announcement", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"announcement": public})
+}
+
+func (h *apiHandler) getPublicAnnouncement(w http.ResponseWriter, r *http.Request) {
+	if h.announcements == nil {
+		writeError(w, http.StatusServiceUnavailable, "announcement_unavailable", "系统公告暂不可用")
+		return
+	}
+	public, err := h.announcements.Public(r.Context())
+	if err != nil {
+		h.writeAnnouncementError(w, "read public system announcement", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"announcement": public})

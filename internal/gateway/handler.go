@@ -1203,7 +1203,11 @@ func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 		if candidate == nil {
 			continue
 		}
-		usage.merge(parseUsageCandidate(candidate, semantics))
+		parsed := parseUsageCandidate(candidate, semantics)
+		if billingUsage, ok := parseNewAPIBillingUsage(candidate); ok {
+			parsed.merge(billingUsage)
+		}
+		usage.merge(parsed)
 	}
 	if response := mapValue(root["response"]); response != nil && usage.UpstreamID == "" {
 		usage.UpstreamID = stringValue(response["id"])
@@ -1222,9 +1226,10 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 	inputFieldPresent := mapHasAny(candidate, "prompt_tokens", "input_tokens")
 	outputFieldPresent := mapHasAny(candidate, "completion_tokens", "output_tokens")
 	invalidInputTotal := hasInvalidIntField(candidate, "prompt_tokens") || hasInvalidIntField(candidate, "input_tokens") ||
-		(hasPromptTokens && hasInputTokens && promptTokens != inputTokens)
+		conflictingNonzeroAliases(promptTokens, hasPromptTokens, inputTokens, hasInputTokens)
 	invalidOutput := hasInvalidIntField(candidate, "completion_tokens") || hasInvalidIntField(candidate, "output_tokens") ||
-		(hasCompletionTokens && hasOutputTokens && completionTokens != outputTokens)
+		conflictingNonzeroAliases(completionTokens, hasCompletionTokens, outputTokens, hasOutputTokens)
+	promptTokens = max(promptTokens, inputTokens)
 	outputTokens = max(completionTokens, outputTokens)
 	details := mapValue(candidate["prompt_tokens_details"])
 	if details == nil {
@@ -1296,6 +1301,88 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 		InputReported: inputReported, OutputReported: (hasCompletionTokens || hasOutputTokens) && !invalidOutput,
 		InputInvalid: inputInvalid && inputFieldPresent, OutputInvalid: invalidOutput && outputFieldPresent,
 	}
+}
+
+func parseNewAPIBillingUsage(candidate map[string]any) (tokenUsage, bool) {
+	billingUsage := mapValue(candidate["billing_usage"])
+	if billingUsage == nil {
+		return tokenUsage{}, false
+	}
+
+	source := strings.TrimSpace(stringValue(billingUsage["source"]))
+	semantic := strings.TrimSpace(stringValue(billingUsage["semantic"]))
+	estimated := false
+	if value, exists := billingUsage["estimated"]; exists {
+		var ok bool
+		estimated, ok = value.(bool)
+		if !ok {
+			return tokenUsage{}, false
+		}
+	}
+	var usage tokenUsage
+	var ok bool
+	switch {
+	case (strings.EqualFold(source, "oai_chat") || strings.EqualFold(source, "oai_responses")) && strings.EqualFold(semantic, "openai"):
+		candidate := mapValue(billingUsage["openai_usage"])
+		if candidate == nil {
+			return tokenUsage{}, false
+		}
+		usage, ok = parseUsageCandidate(candidate, usageSemanticsOpenAITotal), true
+	case strings.EqualFold(source, "claude_messages") && strings.EqualFold(semantic, "anthropic"):
+		candidate := mapValue(billingUsage["claude_usage"])
+		if candidate == nil {
+			return tokenUsage{}, false
+		}
+		usage, ok = parseUsageCandidate(candidate, usageSemanticsAnthropicAdditional), true
+	case strings.EqualFold(source, "gemini_chat") && strings.EqualFold(semantic, "gemini"):
+		metadata := mapValue(billingUsage["gemini_usage_metadata"])
+		if metadata == nil {
+			return tokenUsage{}, false
+		}
+		usage, ok = parseNewAPIGeminiBillingUsage(metadata)
+	default:
+		return tokenUsage{}, false
+	}
+	usage.Estimated = usage.Estimated || estimated
+	return usage, ok
+}
+
+func parseNewAPIGeminiBillingUsage(metadata map[string]any) (tokenUsage, bool) {
+	fields := []string{"promptTokenCount", "toolUsePromptTokenCount", "candidatesTokenCount", "thoughtsTokenCount", "cachedContentTokenCount", "totalTokenCount"}
+	for _, field := range fields {
+		if hasInvalidIntField(metadata, field) {
+			return tokenUsage{}, false
+		}
+	}
+	inputReported := mapHasAny(metadata, "promptTokenCount", "toolUsePromptTokenCount")
+	outputReported := mapHasAny(metadata, "candidatesTokenCount", "thoughtsTokenCount")
+	input, ok := addTokenCounts(intValue(metadata["promptTokenCount"]), intValue(metadata["toolUsePromptTokenCount"]))
+	if !ok {
+		return tokenUsage{}, false
+	}
+	output, ok := addTokenCounts(intValue(metadata["candidatesTokenCount"]), intValue(metadata["thoughtsTokenCount"]))
+	if !ok {
+		return tokenUsage{}, false
+	}
+	cacheRead := intValue(metadata["cachedContentTokenCount"])
+	if cacheRead > input {
+		return tokenUsage{InputInvalid: inputReported}, true
+	}
+	return tokenUsage{
+		Input: input, UncachedInput: input - cacheRead, CacheRead: cacheRead, Output: output,
+		InputReported: inputReported, OutputReported: outputReported,
+	}, true
+}
+
+func conflictingNonzeroAliases(first int, hasFirst bool, second int, hasSecond bool) bool {
+	return hasFirst && hasSecond && first > 0 && second > 0 && first != second
+}
+
+func addTokenCounts(first, second int) (int, bool) {
+	if first > maxInt()-second {
+		return 0, false
+	}
+	return first + second, true
 }
 
 func (u tokenUsage) breakdown() billing.TokenBreakdown {
@@ -1507,7 +1594,7 @@ func hasInvalidIntField(values map[string]any, key string) bool {
 
 func hasInvalidMapField(values map[string]any, key string) bool {
 	value, exists := values[key]
-	if !exists {
+	if !exists || value == nil {
 		return false
 	}
 	_, valid := value.(map[string]any)

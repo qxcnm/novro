@@ -1606,6 +1606,16 @@ func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 			body: `{"usage":{"prompt_tokens":100,"input_tokens":100,"completion_tokens":2,"output_tokens":2}}`,
 			want: tokenUsage{Input: 100, UncachedInput: 100, Output: 2, InputReported: true, OutputReported: true},
 		},
+		{
+			name: "zero compatibility aliases and null optional details",
+			body: `{"usage":{"prompt_tokens":100,"input_tokens":0,"completion_tokens":2,"output_tokens":0,"prompt_tokens_details":{},"input_tokens_details":null}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 100, Output: 2, InputReported: true, OutputReported: true},
+		},
+		{
+			name: "zero canonical aliases",
+			body: `{"usage":{"prompt_tokens":0,"input_tokens":100,"completion_tokens":0,"output_tokens":2}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 100, Output: 2, InputReported: true, OutputReported: true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1614,6 +1624,60 @@ func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 				t.Fatalf("usage=%+v want=%+v", usage, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseUsageSupportsNewAPIBillingUsage(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want tokenUsage
+	}{
+		{
+			name: "openai chat billing usage",
+			body: `{"usage":{"completion_tokens":1941,"billing_usage":{"source":"oai_chat","semantic":"openai","openai_usage":{"prompt_tokens":71207,"completion_tokens":1941,"input_tokens":0,"output_tokens":0,"input_tokens_details":null}}}}`,
+			want: tokenUsage{Input: 71207, UncachedInput: 71207, Output: 1941, InputReported: true, OutputReported: true},
+		},
+		{
+			name: "openai responses billing usage",
+			body: `{"usage":{"billing_usage":{"source":"oai_responses","semantic":"openai","openai_usage":{"prompt_tokens":0,"completion_tokens":0,"input_tokens":120,"output_tokens":8,"prompt_tokens_details":null}}}}`,
+			want: tokenUsage{Input: 120, UncachedInput: 120, Output: 8, InputReported: true, OutputReported: true},
+		},
+		{
+			name: "anthropic billing usage",
+			body: `{"usage":{"billing_usage":{"source":"claude_messages","semantic":"anthropic","claude_usage":{"input_tokens":100,"cache_read_input_tokens":20,"cache_creation_input_tokens":30,"cache_creation":{"ephemeral_5m_input_tokens":10,"ephemeral_1h_input_tokens":20},"output_tokens":7}}}}`,
+			want: tokenUsage{Input: 150, UncachedInput: 100, CacheRead: 20, CacheWrite: 10, CacheWrite1h: 20, Output: 7, InputReported: true, OutputReported: true},
+		},
+		{
+			name: "gemini billing usage",
+			body: `{"usage":{"billing_usage":{"source":"gemini_chat","semantic":"gemini","gemini_usage_metadata":{"promptTokenCount":90,"toolUsePromptTokenCount":10,"candidatesTokenCount":7,"thoughtsTokenCount":3,"cachedContentTokenCount":40,"totalTokenCount":110}}}}`,
+			want: tokenUsage{Input: 100, UncachedInput: 60, CacheRead: 40, Output: 10, InputReported: true, OutputReported: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := applyUsageFallback(parseUsage([]byte(tt.body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
+			if usage.Input != tt.want.Input || usage.UncachedInput != tt.want.UncachedInput || usage.CacheRead != tt.want.CacheRead || usage.CacheWrite != tt.want.CacheWrite || usage.CacheWrite1h != tt.want.CacheWrite1h || usage.Output != tt.want.Output || usage.InputReported != tt.want.InputReported || usage.OutputReported != tt.want.OutputReported || usage.Estimated {
+				t.Fatalf("usage=%+v want=%+v", usage, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseUsageIgnoresUnrecognizedBillingUsage(t *testing.T) {
+	body := `{"usage":{"prompt_tokens":10,"completion_tokens":2,"billing_usage":{"source":"unknown","semantic":"openai","openai_usage":{"prompt_tokens":100000,"completion_tokens":20000}}}}`
+	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
+	if usage.Input != 10 || usage.UncachedInput != 10 || usage.Output != 2 || usage.Estimated {
+		t.Fatalf("unrecognized billing usage replaced standard usage: %+v", usage)
+	}
+}
+
+func TestParseUsagePreservesNewAPIEstimatedFlag(t *testing.T) {
+	body := `{"usage":{"billing_usage":{"source":"oai_chat","semantic":"openai","estimated":true,"openai_usage":{"prompt_tokens":10,"completion_tokens":2}}}}`
+	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
+	if usage.Input != 10 || usage.Output != 2 || !usage.Estimated {
+		t.Fatalf("estimated billing usage was treated as exact: %+v", usage)
 	}
 }
 
