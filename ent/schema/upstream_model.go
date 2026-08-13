@@ -14,6 +14,12 @@ type UpstreamModel struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UpstreamModel) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -34,6 +40,12 @@ func (UpstreamModel) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UpstreamModel) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("model_routes", ModelRoute.Type),
@@ -41,6 +53,12 @@ func (UpstreamModel) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UpstreamModel) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("upstream_name").Unique(),

@@ -31,13 +31,55 @@ const defaultMinTopUpMicros = 1_000_000;
 const emptyUsagePage: UsagePage = { usage: [], total: 0, offset: 0, limit: PAGE_SIZE, total_tokens: 0, total_cost_micros: 0 };
 const emptyTopUpPage: TopUpPage = { orders: [], total: 0, offset: 0, limit: PAGE_SIZE };
 
+/**
+ * formatMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatMoney(micros: number) { return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000); }
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string) { return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+/**
+ * entryLabel 封装该名称对应的业务处理逻辑。
+ * @param type 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function entryLabel(type: WalletEntry["entry_type"]) { if (type === "manual_adjustment") return "人工调整"; if (type === "top_up") return "在线充值"; if (type === "referral_reward") return "邀请返现"; if (type === "usage_reservation") return "调用预占"; if (type === "usage_settlement") return "结算补扣"; if (type === "usage_compensation") return "异常补偿"; return "预占释放"; }
+/**
+ * moneyInput 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function moneyInput(micros: number) { return String(micros / 1_000_000); }
+/**
+ * topUpStatus 封装该名称对应的业务处理逻辑。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function topUpStatus(status: TopUpOrder["status"]) { return status === "paid" ? "已到账" : "待支付"; }
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) { const body = (await response.json().catch(() => ({}))) as ErrorResponse; return body.error?.message ?? "加载失败，请稍后重试"; }
 
+/**
+ * parseAmountMicros 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function parseAmountMicros(value: string) {
   const normalized = value.trim();
   if (!/^\d{1,8}(\.\d{1,2})?$/.test(normalized)) return null;
@@ -46,6 +88,12 @@ function parseAmountMicros(value: string) {
   return Number.isSafeInteger(cents) ? cents * 10_000 : null;
 }
 
+/**
+ * submitCheckout 封装该名称对应的业务处理逻辑。
+ * @param checkout 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function submitCheckout(checkout: Checkout) {
   const form = document.createElement("form");
   form.method = checkout.method;
@@ -62,6 +110,12 @@ function submitCheckout(checkout: Checkout) {
   form.submit();
 }
 
+/**
+ * MethodIcon 渲染对应的 React 界面组件。
+ * @param icon 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function MethodIcon({ icon }: { icon: string }) {
   if (icon === "smartphone") return <Smartphone />;
   if (icon === "qr-code") return <QrCode />;
@@ -70,11 +124,24 @@ function MethodIcon({ icon }: { icon: string }) {
   return <WalletCards />;
 }
 
+/**
+ * creditedAmount 封装该名称对应的业务处理逻辑。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @param tiers 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function creditedAmount(amountMicros: number, tiers: BonusTier[]) {
   const bonusBPS = tiers.reduce((current, tier) => amountMicros >= tier.threshold_micros ? tier.bonus_bps : current, 0);
   return amountMicros + Math.floor(amountMicros * bonusBPS / 10_000);
 }
 
+/**
+ * BillingClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function BillingClient() {
   const router = useRouter();
   const returnHandled = useRef(false);
@@ -110,6 +177,12 @@ export default function BillingClient() {
     const failed = responses.find((response) => !response.ok);
     if (failed) { setMessage(await readError(failed)); setLoading(false); return; }
     const [balanceResponse, usageResponse, configResponse, ordersResponse] = responses;
+    /**
+     * rawConfig 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const rawConfig = (await configResponse.json()) as Partial<TopUpConfig>;
     const methods = Array.isArray(rawConfig.methods) ? rawConfig.methods : [];
     const config: TopUpConfig = {
@@ -164,6 +237,12 @@ export default function BillingClient() {
     return () => window.clearTimeout(timer);
   }, [load, router]);
 
+  /**
+   * createTopUp 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function createTopUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amountMicros = parseAmountMicros(amount);
@@ -183,11 +262,23 @@ export default function BillingClient() {
     });
     if (response.status === 401) { router.replace("/login"); return; }
     if (!response.ok) { setTopUpError(await readError(response)); setBusy(false); return; }
+    /**
+     * result 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const result = (await response.json()) as { order: TopUpOrder; checkout: Checkout };
     setTopUpOpen(false);
     submitCheckout(result.checkout);
   }
 
+  /**
+   * reconcileTopUp 封装该名称对应的业务处理逻辑。
+   * @param order 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function reconcileTopUp(order: TopUpOrder) {
     setCheckingOrder(order.out_trade_no);
     setMessage("");

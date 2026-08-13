@@ -38,20 +38,50 @@ type ErrorResponse = { error?: { message?: string } };
 
 const PAGE_SIZE = 20;
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string | null) {
   if (!value) return "从未登录";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * formatMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatMoney(micros: number) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000);
 }
 
+/**
+ * yuanToMicros 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function yuanToMicros(value: string) {
   const match = value.trim().match(/^(-?)(\d{1,9})(?:\.(\d{1,6}))?$/);
   if (!match) return null;
@@ -59,6 +89,12 @@ function yuanToMicros(value: string) {
   return match[1] === "-" ? -amount : amount;
 }
 
+/**
+ * UsersClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function UsersClient() {
 	const router = useRouter();
 	const [users, setUsers] = useState<UserRecord[]>([]);
@@ -97,6 +133,12 @@ export default function UsersClient() {
 		if (response.status === 401) { router.replace("/login"); return; }
 		if (response.status === 403) { router.replace("/console"); return; }
 		if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
+		/**
+		 * page 封装该名称对应的业务处理逻辑。
+		 * @param await 本次操作需要使用的输入参数。
+		 * @author Gao Hongshun
+		 * @date 2026-08-13
+		 */
 		const page = (await response.json()) as UserPage;
 		setUsers(page.users);
 		setTotal(page.total);
@@ -108,17 +150,35 @@ export default function UsersClient() {
     return () => window.clearTimeout(timer);
   }, [loadUsers]);
 
+  /**
+   * submitSearch 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setOffset(0);
     setSearch(searchDraft.trim());
   }
 
+	/**
+	 * openDetails 封装该名称对应的业务处理逻辑。
+	 * @param record 本次操作需要使用的输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	function openDetails(record: UserRecord) {
 		setDetailUser(record);
 		setEditForm({ display_name: record.display_name, role: record.role });
 	}
 
+  /**
+   * createUser 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setMessage(""); setFormError("");
@@ -130,6 +190,12 @@ export default function UsersClient() {
     await loadUsers();
   }
 
+  /**
+   * updateUser 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function updateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detailUser) return;
@@ -137,11 +203,23 @@ export default function UsersClient() {
 	const response = await fetch(`/api/admin/users/${detailUser.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editForm) });
     setBusy(false);
     if (!response.ok) { setFormError(await readError(response)); return; }
+    /**
+     * body 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const body = (await response.json()) as { user: UserRecord };
     setDetailUser(body.user); setMessage("用户资料已更新");
     await loadUsers();
   }
 
+  /**
+   * toggleStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function toggleStatus() {
     if (!statusUser) return;
     setBusy(true); setMessage("");
@@ -153,6 +231,12 @@ export default function UsersClient() {
     await loadUsers();
   }
 
+  /**
+   * applyBulkStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function applyBulkStatus() {
     if (!bulkStatus) return;
     setBusy(true);
@@ -169,6 +253,12 @@ export default function UsersClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * submitReset 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submitReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!resetUser) return;
@@ -179,6 +269,12 @@ export default function UsersClient() {
     setResetUser(null); setResetPassword(""); setMessage("密码已重置，该用户的原有会话已退出");
   }
 
+  /**
+   * openBalance 封装该名称对应的业务处理逻辑。
+   * @param record 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function openBalance(record: UserRecord) {
     setBalanceUser(record); setBalanceSummary(null); setBalanceLoading(true); setBalanceError("");
     const response = await fetch(`/api/admin/users/${record.id}/balance`, { cache: "no-store" });
@@ -187,6 +283,12 @@ export default function UsersClient() {
     setBalanceSummary((await response.json()) as BalanceSummary);
   }
 
+  /**
+   * adjustBalance 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function adjustBalance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!balanceUser) return;

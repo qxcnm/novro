@@ -41,15 +41,33 @@ type fakeAPIAuth struct {
 	loginIdentifier string
 }
 
+/**
+ * Login 用于校验用户凭据并建立登录会话。
+ * @param identifier 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIAuth) Login(_ context.Context, identifier, _ string) (auth.LoginResult, error) {
 	f.loginIdentifier = identifier
 	return f.login, f.authErr
 }
 
+/**
+ * LoginOIDC 用于校验用户凭据并建立登录会话。
+ * @param bool 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIAuth) LoginOIDC(context.Context, auth.OIDCUser, bool) (auth.LoginResult, error) {
 	return f.login, f.authErr
 }
 
+/**
+ * Authenticate 用于校验用户凭据并建立登录会话。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIAuth) Authenticate(context.Context, string) (user.Record, error) {
 	if f.authErr != nil {
 		return user.Record{}, f.authErr
@@ -57,6 +75,12 @@ func (f *fakeAPIAuth) Authenticate(context.Context, string) (user.Record, error)
 	return f.current, nil
 }
 
+/**
+ * Logout 用于撤销当前用户的登录会话。
+ * @param token 用于认证或继续操作的令牌。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIAuth) Logout(_ context.Context, token string) error {
 	f.logoutToken = token
 	return f.logoutErr
@@ -85,25 +109,56 @@ type fakeAPIEmailConfig struct {
 	err       error
 }
 
+/**
+ * AdminConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIEmailConfig) AdminConfig(context.Context) (email.AdminConfig, error) {
 	return f.config, f.err
 }
 
+/**
+ * UpdateConfig 用于更新指定的数据或状态。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIEmailConfig) UpdateConfig(_ context.Context, input email.ConfigInput) (email.AdminConfig, error) {
 	f.input = input
 	return f.config, f.err
 }
 
+/**
+ * Test 验证对应功能在指定场景下的行为。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIEmailConfig) Test(_ context.Context, recipient string) error {
 	f.recipient = recipient
 	return f.err
 }
 
+/**
+ * Send 用于发送对应消息或请求。
+ * @param email 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIEmailVerification) Send(_ context.Context, email string) error {
 	f.sentEmail = email
 	return f.sendErr
 }
 
+/**
+ * Verify 用于校验输入或运行状态是否满足要求。
+ * @param email 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIEmailVerification) Verify(_ context.Context, email, code string) error {
 	f.verifiedEmail, f.verifiedCode = email, code
 	return f.verifyErr
@@ -168,10 +223,22 @@ type fakeAnnouncements struct {
 	err     error
 }
 
+/**
+ * Config 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAnnouncements) Config(context.Context) (announcement.Config, error) {
 	return f.config, f.err
 }
 
+/**
+ * Public 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAnnouncements) Public(context.Context) (announcement.Public, error) {
 	if f.err != nil {
 		return announcement.Public{}, f.err
@@ -179,6 +246,12 @@ func (f *fakeAnnouncements) Public(context.Context) (announcement.Public, error)
 	return f.config.Public(), nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAnnouncements) Update(_ context.Context, config announcement.Config) (announcement.Config, error) {
 	f.updated = config
 	if f.err != nil {
@@ -196,32 +269,75 @@ type fakeAPIBilling struct {
 	err             error
 }
 
+/**
+ * Summary 用于计算并返回对应结果。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIBilling) Summary(context.Context, uuid.UUID) (billing.Summary, error) {
 	return billing.Summary{}, f.err
 }
 
+/**
+ * SummaryPage 用于计算并返回对应结果。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIBilling) SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error) {
 	return billing.Summary{}, f.err
 }
 
+/**
+ * Usage 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIBilling) Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error) {
 	return billing.UsagePage{}, f.err
 }
 
+/**
+ * UsageRate 封装该名称对应的业务处理逻辑。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIBilling) UsageRate(_ context.Context, userID uuid.UUID) (billing.UsageRate, error) {
 	f.rateUserID = userID
 	return f.rate, f.err
 }
 
+/**
+ * Adjust 用于更新指定的数据或状态。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIBilling) Adjust(_ context.Context, _, _, referenceID uuid.UUID, amount int64, _ string) (billing.Summary, error) {
 	f.adjustReference, f.adjustAmount = referenceID, amount
 	return billing.Summary{}, f.err
 }
 
+/**
+ * Config 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, error) {
 	return f.config, f.err
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeGatewaySettings) Update(_ context.Context, config gatewaysettings.Config) (gatewaysettings.Config, error) {
 	f.updated = config
 	if f.err != nil {
@@ -231,15 +347,33 @@ func (f *fakeGatewaySettings) Update(_ context.Context, config gatewaysettings.C
 	return config, nil
 }
 
+/**
+ * Summary 用于计算并返回对应结果。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeReferrals) Summary(_ context.Context, userID uuid.UUID) (referral.Summary, error) {
 	f.userID = userID
 	return f.summary, f.err
 }
 
+/**
+ * AdminConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeReferrals) AdminConfig(context.Context) (referral.AdminConfig, error) {
 	return f.config, f.err
 }
 
+/**
+ * UpdateRewardBPS 用于更新指定的数据或状态。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeReferrals) UpdateRewardBPS(_ context.Context, rewardBPS int64) (referral.AdminConfig, error) {
 	f.updatedRate = rewardBPS
 	if f.err != nil {
@@ -269,24 +403,75 @@ type fakeBillingGroups struct {
 	deleteErr   error
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) Create(context.Context, modelroute.CreateInput) (modelroute.Record, error) {
 	return modelroute.Record{}, f.err
 }
+
+/**
+ * List 用于筛选并返回数据列表。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error) {
 	return []modelroute.Record{}, f.err
 }
+
+/**
+ * ListActive 用于筛选并返回数据列表。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]modelroute.Record, error) {
 	f.listActiveGroupID = billingGroupID
 	return f.active, f.err
 }
+
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error) {
 	return modelroute.Record{}, f.err
 }
+
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error) {
 	return modelroute.Record{}, f.err
 }
+
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeModelRoutes) Delete(context.Context, uuid.UUID) error { return f.err }
 
+/**
+ * activeBillingGroup 封装该名称对应的业务处理逻辑。
+ * @param id 目标资源的唯一标识。
+ * @param code 用于标识或筛选目标的文本值。
+ * @param displayName 用于标识或筛选目标的文本值。
+ * @param multiplierBPS 本次操作需要使用的输入参数。
+ * @param isDefault 控制对应行为是否启用的布尔值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func activeBillingGroup(id uuid.UUID, code, displayName string, multiplierBPS int64, isDefault bool) billinggroup.Record {
 	return billinggroup.Record{
 		ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS,
@@ -294,10 +479,22 @@ func activeBillingGroup(id uuid.UUID, code, displayName string, multiplierBPS in
 	}
 }
 
+/**
+ * defaultBillingGroups 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func defaultBillingGroups() *fakeBillingGroups {
 	return &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(uuid.New(), billinggroup.DefaultCode, "默认", billinggroup.DefaultMultiplierBPS, true)}}
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBillingGroups) Create(_ context.Context, input billinggroup.CreateInput) (billinggroup.Record, error) {
 	f.createInput = input
 	if f.createErr != nil {
@@ -306,6 +503,12 @@ func (f *fakeBillingGroups) Create(_ context.Context, input billinggroup.CreateI
 	return activeBillingGroup(uuid.New(), input.Code, input.DisplayName, input.MultiplierBPS, false), nil
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBillingGroups) List(_ context.Context, filter billinggroup.ListFilter) ([]billinggroup.Record, error) {
 	f.listFilter = filter
 	if f.listErr != nil {
@@ -334,6 +537,13 @@ func (f *fakeBillingGroups) List(_ context.Context, filter billinggroup.ListFilt
 	return filtered, nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBillingGroups) Update(_ context.Context, id uuid.UUID, input billinggroup.UpdateInput) (billinggroup.Record, error) {
 	f.updateInput = input
 	if f.updateErr != nil {
@@ -349,6 +559,13 @@ func (f *fakeBillingGroups) Update(_ context.Context, id uuid.UUID, input billin
 	return record, nil
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBillingGroups) SetStatus(_ context.Context, id uuid.UUID, status billinggroup.Status) (billinggroup.Record, error) {
 	f.status = status
 	if f.statusErr != nil {
@@ -359,79 +576,193 @@ func (f *fakeBillingGroups) SetStatus(_ context.Context, id uuid.UUID, status bi
 	return record, nil
 }
 
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBillingGroups) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.deleteErr
 }
 
+/**
+ * Config 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) Config(context.Context) (payment.PublicConfig, error) {
 	return payment.PublicConfig{Enabled: true, Provider: "epay", Channels: []string{"alipay"}, MinMicros: payment.MinTopUpMicros, MaxMicros: payment.MaxTopUpMicros}, nil
 }
 
+/**
+ * AdminConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) AdminConfig(context.Context) (payment.AdminConfig, error) {
 	return payment.AdminConfig{Provider: payment.ProviderEPay, Enabled: true, Configured: true, MerchantID: "1000", SiteName: "Novro", Channels: []string{"alipay"}, HasMerchantKey: true}, nil
 }
 
+/**
+ * UpdateConfig 用于更新指定的数据或状态。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) UpdateConfig(_ context.Context, _ payment.ConfigInput) (payment.AdminConfig, error) {
 	return f.AdminConfig(context.Background())
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param userID 目标用户的唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param channel 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) Create(_ context.Context, userID uuid.UUID, amount int64, channel string) (payment.CreateResult, error) {
 	return payment.CreateResult{Order: payment.Order{ID: uuid.New(), UserID: userID, AmountMicros: amount, Channel: channel, Status: payment.StatusPending}}, f.err
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) List(_ context.Context, _ uuid.UUID, filter payment.ListFilter) (payment.Page, error) {
 	f.userListFilter = filter
 	return payment.Page{Orders: []payment.Order{}, Total: 0, Offset: filter.Offset, Limit: filter.Limit}, f.err
 }
 
+/**
+ * ReconcileForUser 封装该名称对应的业务处理逻辑。
+ * @param userID 目标用户的唯一标识。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) ReconcileForUser(_ context.Context, userID uuid.UUID, outTradeNo string) (payment.Order, error) {
 	f.reconcileUserID = userID
 	f.reconcileOrderNo = outTradeNo
 	return f.reconciled, f.err
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) ListAll(_ context.Context, filter payment.AdminListFilter) (payment.AdminPage, error) {
 	f.listFilter = filter
 	return payment.AdminPage{Orders: []payment.AdminOrder{{Order: payment.Order{ID: uuid.New(), OutTradeNo: "NVR1", Status: payment.StatusPaid}, Owner: payment.TopUpOwner{Username: "alice"}}}, Total: 1, Limit: filter.Limit}, f.err
 }
 
+/**
+ * HandleNotification 用于处理对应的 HTTP 请求并写入响应。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePayments) HandleNotification(_ context.Context, values url.Values) error {
 	f.notification = values
 	return f.err
 }
 
+/**
+ * Sync 封装该名称对应的业务处理逻辑。
+ * @param providerID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviderModels) Sync(_ context.Context, providerID uuid.UUID) ([]providersync.CatalogModel, error) {
 	f.syncProviderID = providerID
 	return f.syncModels, f.err
 }
 
+/**
+ * Link 封装该名称对应的业务处理逻辑。
+ * @param providerID 目标资源的一个或多个唯一标识。
+ * @param modelIDs 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (providersync.LinkResult, error) {
 	f.linkProviderID = providerID
 	f.modelIDs = modelIDs
 	return f.linkResult, f.err
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
 	f.createInput = input
 	return provider.Record{ID: uuid.New(), BillingGroupID: input.BillingGroupID, BillingGroup: billinggroup.Summary{ID: input.BillingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
 }
+
+/**
+ * List 用于筛选并返回数据列表。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviders) List(context.Context, provider.ListFilter) ([]provider.Record, error) {
 	return []provider.Record{}, f.err
 }
+
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviders) Update(_ context.Context, id uuid.UUID, input provider.UpdateInput) (provider.Record, error) {
 	f.updateInput = input
 	return provider.Record{ID: id}, f.err
 }
+
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviders) SetStatus(_ context.Context, id uuid.UUID, status provider.Status) (provider.Record, error) {
 	f.status = status
 	return provider.Record{ID: id, Status: status}, f.err
 }
+
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeProviders) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.err
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param userID 目标用户的唯一标识。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @param name 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) Create(_ context.Context, userID, billingGroupID uuid.UUID, name string) (apikey.CreateResult, error) {
 	f.createdUserID, f.createdGroupID, f.createdName = userID, billingGroupID, name
 	if f.err != nil {
@@ -443,10 +774,23 @@ func (f *fakeAPIKeys) Create(_ context.Context, userID, billingGroupID uuid.UUID
 	}, nil
 }
 
+/**
+ * ListForUser 用于筛选并返回数据列表。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error) {
 	return []apikey.Record{}, f.err
 }
 
+/**
+ * RevealForUser 封装该名称对应的业务处理逻辑。
+ * @param userID 目标用户的唯一标识。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) RevealForUser(_ context.Context, userID, id uuid.UUID) (string, error) {
 	f.secretUserID, f.secretID = userID, id
 	if f.err != nil {
@@ -455,16 +799,35 @@ func (f *fakeAPIKeys) RevealForUser(_ context.Context, userID, id uuid.UUID) (st
 	return "nvr_full-secret-returned-once", nil
 }
 
+/**
+ * RevokeForUser 用于删除、撤销或释放指定资源。
+ * @param userID 目标用户的唯一标识。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) RevokeForUser(_ context.Context, userID, id uuid.UUID) error {
 	f.revokedUserID, f.revokedID = userID, id
 	return f.err
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) ListAll(_ context.Context, filter apikey.ListFilter) (apikey.Page, error) {
 	f.listFilter = filter
 	return apikey.Page{APIKeys: []apikey.AdminRecord{}, Limit: filter.Limit}, f.err
 }
 
+/**
+ * Revoke 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIKeys) Revoke(_ context.Context, id uuid.UUID) error {
 	f.revokedID = id
 	return f.err
@@ -478,24 +841,56 @@ type fakeOIDCService struct {
 	completeErr  error
 }
 
+/**
+ * Start 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeOIDCService) Start() (auth.OIDCFlow, error) {
 	return f.flow, f.startErr
 }
 
+/**
+ * Complete 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @param string 本次操作需要使用的输入参数。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeOIDCService) Complete(context.Context, string, string, string) (auth.OIDCUser, bool, error) {
 	return f.identity, f.autoRegister, f.completeErr
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) Create(_ context.Context, input user.CreateInput) (user.Record, error) {
 	f.createInput = input
 	return user.Record{ID: uuid.New(), Username: input.Username, Role: input.Role, Status: user.StatusActive}, nil
 }
 
+/**
+ * Register 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) Register(_ context.Context, input user.RegisterInput) (user.Record, error) {
 	f.registerInput = input
 	return user.Record{ID: uuid.New(), Username: input.Username, Role: user.RoleMember, Status: user.StatusActive}, nil
 }
 
+/**
+ * EmailAvailable 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) EmailAvailable(context.Context, string) (bool, error) {
 	if f.emailCheckErr != nil {
 		return false, f.emailCheckErr
@@ -503,6 +898,12 @@ func (f *fakeAPIUsers) EmailAvailable(context.Context, string) (bool, error) {
 	return !f.emailTaken, nil
 }
 
+/**
+ * InitializeAdmin 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) InitializeAdmin(_ context.Context, input user.RegisterInput) (user.Record, error) {
 	if f.initializeErr != nil {
 		return user.Record{}, f.initializeErr
@@ -511,12 +912,31 @@ func (f *fakeAPIUsers) InitializeAdmin(_ context.Context, input user.RegisterInp
 	return user.Record{ID: uuid.New(), Username: input.Username, Role: user.RoleAdmin, Status: user.StatusActive}, nil
 }
 
+/**
+ * SetupRequired 用于更新指定的数据或状态。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) SetupRequired(context.Context) (bool, error) { return f.setupRequired, nil }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) List(context.Context, user.ListFilter) (user.Page, error) {
 	return user.Page{Users: []user.Record{}, Total: 0, Limit: 50}, nil
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) SetStatus(_ context.Context, id uuid.UUID, status user.Status) (user.Record, error) {
 	if f.statusErr != nil {
 		return user.Record{}, f.statusErr
@@ -524,6 +944,13 @@ func (f *fakeAPIUsers) SetStatus(_ context.Context, id uuid.UUID, status user.St
 	return user.Record{ID: id, Status: status}, nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) Update(_ context.Context, id uuid.UUID, input user.UpdateInput) (user.Record, error) {
 	f.updateInput = input
 	if f.statusErr != nil {
@@ -539,15 +966,43 @@ func (f *fakeAPIUsers) Update(_ context.Context, id uuid.UUID, input user.Update
 	return record, nil
 }
 
+/**
+ * ResetPassword 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) ResetPassword(context.Context, uuid.UUID, string) error { return nil }
+
+/**
+ * FindByUsername 用于查询并返回所需的数据。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAPIUsers) FindByUsername(context.Context, string) (user.Record, error) {
 	return user.Record{}, user.ErrNotFound
 }
 
+/**
+ * testAPI 封装该名称对应的业务处理逻辑。
+ * @param authService 本次操作需要使用的输入参数。
+ * @param users 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testAPI(authService *fakeAPIAuth, users *fakeAPIUsers) http.Handler {
 	return testAPIWithKeys(authService, users, &fakeAPIKeys{})
 }
 
+/**
+ * testAPIWithKeys 封装该名称对应的业务处理逻辑。
+ * @param authService 本次操作需要使用的输入参数。
+ * @param users 本次操作需要使用的输入参数。
+ * @param apiKeys 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fakeAPIKeys) http.Handler {
 	emailVerification := &fakeAPIEmailVerification{}
 	inner := New(Dependencies{
@@ -571,6 +1026,12 @@ func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fak
 	})
 }
 
+/**
+ * TestRegistrationCreatesMemberAndSetsSession 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 	users := &fakeAPIUsers{}
 	authService := &fakeAPIAuth{login: auth.LoginResult{
@@ -586,6 +1047,12 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 	}
 }
 
+/**
+ * TestReferralSummaryUsesAuthenticatedUser 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestReferralSummaryUsesAuthenticatedUser(t *testing.T) {
 	userID := uuid.New()
 	referrals := &fakeReferrals{summary: referral.Summary{
@@ -607,6 +1074,12 @@ func TestReferralSummaryUsesAuthenticatedUser(t *testing.T) {
 	}
 }
 
+/**
+ * TestUsageRateUsesAuthenticatedUser 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUsageRateUsesAuthenticatedUser(t *testing.T) {
 	userID := uuid.New()
 	billingService := &fakeAPIBilling{rate: billing.UsageRate{
@@ -627,6 +1100,12 @@ func TestUsageRateUsesAuthenticatedUser(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminReferralConfigRequiresAdminAndUpdates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminReferralConfigRequiresAdminAndUpdates(t *testing.T) {
 	referrals := &fakeReferrals{config: referral.AdminConfig{RewardBPS: 1_000}}
 	handler := New(Dependencies{
@@ -662,6 +1141,12 @@ func TestAdminReferralConfigRequiresAdminAndUpdates(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminReferralConfigRejectsInvalidRate 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminReferralConfigRejectsInvalidRate(t *testing.T) {
 	referrals := &fakeReferrals{err: referral.ErrInvalidInput}
 	handler := New(Dependencies{
@@ -678,6 +1163,12 @@ func TestAdminReferralConfigRejectsInvalidRate(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminGatewaySettingsRequiresAdminAndUpdates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminGatewaySettingsRequiresAdminAndUpdates(t *testing.T) {
 	settings := &fakeGatewaySettings{config: gatewaysettings.DefaultConfig()}
 	handler := New(Dependencies{
@@ -712,6 +1203,12 @@ func TestAdminGatewaySettingsRequiresAdminAndUpdates(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminGatewaySettingsRejectsInvalidValues 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminGatewaySettingsRejectsInvalidValues(t *testing.T) {
 	settings := &fakeGatewaySettings{err: gatewaysettings.ErrInvalidConfig}
 	handler := New(Dependencies{
@@ -727,6 +1224,12 @@ func TestAdminGatewaySettingsRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+/**
+ * TestAnnouncementPublicViewRequiresLoginAndHidesDraft 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAnnouncementPublicViewRequiresLoginAndHidesDraft(t *testing.T) {
 	announcements := &fakeAnnouncements{config: announcement.Config{Enabled: false, Title: "内部草稿", Body: "尚未发布"}}
 	handler := New(Dependencies{
@@ -750,6 +1253,12 @@ func TestAnnouncementPublicViewRequiresLoginAndHidesDraft(t *testing.T) {
 	}
 }
 
+/**
+ * TestPublicAnnouncementDoesNotRequireLoginAndHidesDraft 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestPublicAnnouncementDoesNotRequireLoginAndHidesDraft(t *testing.T) {
 	announcements := &fakeAnnouncements{config: announcement.Config{Enabled: false, Title: "内部草稿", Body: "尚未发布"}}
 	handler := New(Dependencies{
@@ -771,6 +1280,12 @@ func TestPublicAnnouncementDoesNotRequireLoginAndHidesDraft(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminAnnouncementRequiresAdminAndUpdates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminAnnouncementRequiresAdminAndUpdates(t *testing.T) {
 	announcements := &fakeAnnouncements{config: announcement.Config{Title: "旧公告", Body: "旧内容"}}
 	handler := New(Dependencies{
@@ -797,6 +1312,12 @@ func TestAdminAnnouncementRequiresAdminAndUpdates(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminAnnouncementRejectsInvalidInput 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminAnnouncementRejectsInvalidInput(t *testing.T) {
 	announcements := &fakeAnnouncements{err: announcement.ErrInvalidInput}
 	handler := New(Dependencies{
@@ -813,6 +1334,12 @@ func TestAdminAnnouncementRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminBalanceAdjustmentRequiresAndStabilizesIdempotencyKey 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminBalanceAdjustmentRequiresAndStabilizesIdempotencyKey(t *testing.T) {
 	admin := user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}
 	billingService := &fakeAPIBilling{}
@@ -839,6 +1366,12 @@ func TestAdminBalanceAdjustmentRequiresAndStabilizesIdempotencyKey(t *testing.T)
 	}
 }
 
+/**
+ * TestAdminBalanceAdjustmentReturnsConflictForChangedIdempotentRequest 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminBalanceAdjustmentReturnsConflictForChangedIdempotentRequest(t *testing.T) {
 	admin := user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}
 	billingService := &fakeAPIBilling{err: billing.ErrRequestConflict}
@@ -853,6 +1386,12 @@ func TestAdminBalanceAdjustmentReturnsConflictForChangedIdempotentRequest(t *tes
 	}
 }
 
+/**
+ * TestLogoutClearsCookieEvenWhenRevocationFails 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLogoutClearsCookieEvenWhenRevocationFails(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string
@@ -881,6 +1420,12 @@ func TestLogoutClearsCookieEvenWhenRevocationFails(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayNotificationBypassesBrowserOriginCheck 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayNotificationBypassesBrowserOriginCheck(t *testing.T) {
 	payments := &fakePayments{}
 	handler := New(Dependencies{
@@ -899,6 +1444,12 @@ func TestEPayNotificationBypassesBrowserOriginCheck(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayNotificationAcceptsBodyAboveFormerLimit 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayNotificationAcceptsBodyAboveFormerLimit(t *testing.T) {
 	payments := &fakePayments{}
 	handler := New(Dependencies{Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -912,6 +1463,12 @@ func TestEPayNotificationAcceptsBodyAboveFormerLimit(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayNotificationPrefersSignedFormBodyOverQueryValues 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayNotificationPrefersSignedFormBodyOverQueryValues(t *testing.T) {
 	payments := &fakePayments{}
 	handler := New(Dependencies{Payments: payments, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -924,6 +1481,12 @@ func TestEPayNotificationPrefersSignedFormBodyOverQueryValues(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayReturnCompletesSignedResultAndRemovesUIParameter 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayReturnCompletesSignedResultAndRemovesUIParameter(t *testing.T) {
 	payments := &fakePayments{}
 	handler := New(Dependencies{
@@ -942,6 +1505,12 @@ func TestEPayReturnCompletesSignedResultAndRemovesUIParameter(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserCanReconcileOnlyThroughAuthenticatedOrderFlow 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserCanReconcileOnlyThroughAuthenticatedOrderFlow(t *testing.T) {
 	userID := uuid.New()
 	payments := &fakePayments{reconciled: payment.Order{ID: uuid.New(), UserID: userID, OutTradeNo: "NVR1", Status: payment.StatusPaid}}
@@ -961,6 +1530,12 @@ func TestUserCanReconcileOnlyThroughAuthenticatedOrderFlow(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserListsTopUpsWithPagination 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserListsTopUpsWithPagination(t *testing.T) {
 	userID := uuid.New()
 	payments := &fakePayments{}
@@ -979,6 +1554,12 @@ func TestUserListsTopUpsWithPagination(t *testing.T) {
 	}
 }
 
+/**
+ * TestRegistrationHonorsConfigurationAndSetupState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegistrationHonorsConfigurationAndSetupState(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		handler := New(Dependencies{
@@ -1005,6 +1586,12 @@ func TestRegistrationHonorsConfigurationAndSetupState(t *testing.T) {
 	})
 }
 
+/**
+ * TestRegistrationEmailVerificationEndpoints 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegistrationEmailVerificationEndpoints(t *testing.T) {
 	users := &fakeAPIUsers{}
 	authService := &fakeAPIAuth{login: auth.LoginResult{Token: "nvs_registration-session", ExpiresAt: time.Now().Add(time.Hour)}}
@@ -1041,6 +1628,12 @@ func TestRegistrationEmailVerificationEndpoints(t *testing.T) {
 	}
 }
 
+/**
+ * TestRegistrationEmailAvailabilityRejectsTakenEmailBeforeSendingCode 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegistrationEmailAvailabilityRejectsTakenEmailBeforeSendingCode(t *testing.T) {
 	users := &fakeAPIUsers{emailTaken: true}
 	verification := &fakeAPIEmailVerification{}
@@ -1058,6 +1651,12 @@ func TestRegistrationEmailAvailabilityRejectsTakenEmailBeforeSendingCode(t *test
 	}
 }
 
+/**
+ * TestAuthOptionsExposeOnlyPublicAuthenticationState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAuthOptionsExposeOnlyPublicAuthenticationState(t *testing.T) {
 	users := &fakeAPIUsers{setupRequired: true}
 	handler := New(Dependencies{
@@ -1089,6 +1688,12 @@ func TestAuthOptionsExposeOnlyPublicAuthenticationState(t *testing.T) {
 	}
 }
 
+/**
+ * TestSetupRequiresServerTokenAndRejectsRepeat 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSetupRequiresServerTokenAndRejectsRepeat(t *testing.T) {
 	users := &fakeAPIUsers{setupRequired: true}
 	authService := &fakeAPIAuth{}
@@ -1115,6 +1720,12 @@ func TestSetupRequiresServerTokenAndRejectsRepeat(t *testing.T) {
 	}
 }
 
+/**
+ * TestSetupCreatesAdministratorAndSetsSession 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSetupCreatesAdministratorAndSetsSession(t *testing.T) {
 	created := user.Record{ID: uuid.New(), Username: "admin", Role: user.RoleAdmin, Status: user.StatusActive}
 	authService := &fakeAPIAuth{login: auth.LoginResult{
@@ -1142,6 +1753,12 @@ func TestSetupCreatesAdministratorAndSetsSession(t *testing.T) {
 	}
 }
 
+/**
+ * TestOIDCRoutesFailClosed 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOIDCRoutesFailClosed(t *testing.T) {
 	t.Run("disabled route", func(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/auth/oidc/start", nil)
@@ -1187,6 +1804,12 @@ func TestOIDCRoutesFailClosed(t *testing.T) {
 	})
 }
 
+/**
+ * TestLoginSetsProtectedSessionCookie 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoginSetsProtectedSessionCookie(t *testing.T) {
 	authService := &fakeAPIAuth{login: auth.LoginResult{
 		Token:     "nvs_test-token",
@@ -1209,6 +1832,12 @@ func TestLoginSetsProtectedSessionCookie(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoginAcceptsEmailIdentifier 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoginAcceptsEmailIdentifier(t *testing.T) {
 	authService := &fakeAPIAuth{login: auth.LoginResult{
 		Token: "nvs_test-token", ExpiresAt: time.Now().Add(time.Hour),
@@ -1222,6 +1851,12 @@ func TestLoginAcceptsEmailIdentifier(t *testing.T) {
 	}
 }
 
+/**
+ * TestEmailConflictUsesStableSafeError 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEmailConflictUsesStableSafeError(t *testing.T) {
 	response := httptest.NewRecorder()
 	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeUserError(response, "create user", fmt.Errorf("%w: internal constraint", user.ErrEmailTaken))
@@ -1230,6 +1865,12 @@ func TestEmailConflictUsesStableSafeError(t *testing.T) {
 	}
 }
 
+/**
+ * TestUnsafeRequestRejectsUnknownOrigin 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUnsafeRequestRejectsUnknownOrigin(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
 	request.Header.Set("Origin", "https://attacker.example")
@@ -1240,6 +1881,12 @@ func TestUnsafeRequestRejectsUnknownOrigin(t *testing.T) {
 	}
 }
 
+/**
+ * TestUnsafeAPIRequestRequiresAllowedOrigin 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUnsafeAPIRequestRequiresAllowedOrigin(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
 	response := httptest.NewRecorder()
@@ -1252,6 +1899,12 @@ func TestUnsafeAPIRequestRequiresAllowedOrigin(t *testing.T) {
 	}
 }
 
+/**
+ * TestGatewayRequestDoesNotUseBrowserOriginValidation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestGatewayRequestDoesNotUseBrowserOriginValidation(t *testing.T) {
 	called := false
 	handler := New(Dependencies{
@@ -1271,6 +1924,12 @@ func TestGatewayRequestDoesNotUseBrowserOriginValidation(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminRoutesRequireAdmin 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminRoutesRequireAdmin(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}}
 	id := uuid.New().String()
@@ -1295,6 +1954,12 @@ func TestAdminRoutesRequireAdmin(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminListsTopUpsWithFilters 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminListsTopUpsWithFilters(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	payments := &fakePayments{}
@@ -1310,6 +1975,12 @@ func TestAdminListsTopUpsWithFilters(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminPaymentConfigDoesNotReturnMerchantKey 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminPaymentConfigDoesNotReturnMerchantKey(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	handler := New(Dependencies{
@@ -1326,6 +1997,12 @@ func TestAdminPaymentConfigDoesNotReturnMerchantKey(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminPaymentConfigWithoutServiceReturnsWrappedEmptyChannels 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminPaymentConfigWithoutServiceReturnsWrappedEmptyChannels(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	handler := New(Dependencies{
@@ -1353,6 +2030,12 @@ func TestAdminPaymentConfigWithoutServiceReturnsWrappedEmptyChannels(t *testing.
 	}
 }
 
+/**
+ * TestAdminEmailConfigIsSecretSafeAndSupportsUpdateAndTest 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminEmailConfigIsSecretSafeAndSupportsUpdateAndTest(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	emailConfig := &fakeAPIEmailConfig{config: email.AdminConfig{
@@ -1390,6 +2073,12 @@ func TestAdminEmailConfigIsSecretSafeAndSupportsUpdateAndTest(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminEmailConfigRejectsInvalidInputWithoutLeakingDetails 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminEmailConfigRejectsInvalidInputWithoutLeakingDetails(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	handler := New(Dependencies{
@@ -1406,6 +2095,12 @@ func TestAdminEmailConfigRejectsInvalidInputWithoutLeakingDetails(t *testing.T) 
 	}
 }
 
+/**
+ * TestUserCreatesAndRevokesOnlyOwnAPIKeys 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	currentID := uuid.New()
 	groupID := uuid.New()
@@ -1429,6 +2124,12 @@ func TestUserCreatesAndRevokesOnlyOwnAPIKeys(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserCanReCopyCreatedAPIKeySecret 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserCanReCopyCreatedAPIKeySecret(t *testing.T) {
 	currentID := uuid.New()
 	keyID := uuid.New()
@@ -1444,6 +2145,12 @@ func TestUserCanReCopyCreatedAPIKeySecret(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	currentID := uuid.New()
 	groupID := uuid.New()
@@ -1496,6 +2203,12 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserListsActiveBillingGroups 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserListsActiveBillingGroups(t *testing.T) {
 	currentID := uuid.New()
 	activeID := uuid.New()
@@ -1525,6 +2238,12 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	}
 }
 
+/**
+ * TestAuthorizedUserListsHiddenBillingGroups 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAuthorizedUserListsHiddenBillingGroups(t *testing.T) {
 	userID := uuid.New()
 	partnerID := uuid.New()
@@ -1547,6 +2266,12 @@ func TestAuthorizedUserListsHiddenBillingGroups(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserModelListRejectsHiddenGroupWithoutPermission 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserModelListRejectsHiddenGroupWithoutPermission(t *testing.T) {
 	hiddenID := uuid.New()
 	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
@@ -1565,6 +2290,12 @@ func TestUserModelListRejectsHiddenGroupWithoutPermission(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserModelListRejectsUnavailableBillingGroup 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserModelListRejectsUnavailableBillingGroup(t *testing.T) {
 	currentID := uuid.New()
 	activeID := uuid.New()
@@ -1583,6 +2314,12 @@ func TestUserModelListRejectsUnavailableBillingGroup(t *testing.T) {
 	}
 }
 
+/**
+ * TestUserModelListAggregatesFailoverChannelsAtMaximumPrice 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	currentID := uuid.New()
 	groupID := uuid.New()
@@ -1620,6 +2357,12 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	}
 }
 
+/**
+ * TestAPIKeyErrorsAreStable 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAPIKeyErrorsAreStable(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}}
 	keys := &fakeAPIKeys{err: apikey.ErrLimitReached}
@@ -1631,6 +2374,12 @@ func TestAPIKeyErrorsAreStable(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	groupID := uuid.New()
@@ -1658,6 +2407,12 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminDeletesProvider 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminDeletesProvider(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providers := &fakeProviders{}
@@ -1675,6 +2430,12 @@ func TestAdminDeletesProvider(t *testing.T) {
 	}
 }
 
+/**
+ * TestBillingGroupDeleteConflictUsesSafeMessage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestBillingGroupDeleteConflictUsesSafeMessage(t *testing.T) {
 	response := httptest.NewRecorder()
 	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeBillingGroupError(response, "delete billing group", fmt.Errorf("%w: internal constraint", billinggroup.ErrInUse))
@@ -1683,6 +2444,12 @@ func TestBillingGroupDeleteConflictUsesSafeMessage(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
 	firstUserID := uuid.New()
 	secondUserID := uuid.New()
@@ -1708,6 +2475,12 @@ func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderValidationErrorIsStable 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderValidationErrorIsStable(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providers := &fakeProviders{err: provider.ErrCodeTaken}
@@ -1721,6 +2494,12 @@ func TestProviderValidationErrorIsStable(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminSyncsAndLinksProviderModels 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminSyncsAndLinksProviderModels(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providerID := uuid.New()
@@ -1751,6 +2530,12 @@ func TestAdminSyncsAndLinksProviderModels(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderModelSyncFailureUsesSafeError 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderModelSyncFailureUsesSafeError(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providerModels := &fakeProviderModels{err: fmt.Errorf("%w: secret upstream detail", providersync.ErrDiscoveryFailed)}
@@ -1767,6 +2552,12 @@ func TestProviderModelSyncFailureUsesSafeError(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderModelSyncFailureShowsUpstreamStatus 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderModelSyncFailureShowsUpstreamStatus(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providerModels := &fakeProviderModels{err: &providersync.DiscoveryError{StatusCode: http.StatusUnauthorized, Reason: "请检查模型列表路径和 API 密钥"}}
@@ -1783,6 +2574,12 @@ func TestProviderModelSyncFailureShowsUpstreamStatus(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminCreatesUserAndProtectsLastAdmin 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminCreatesUserAndProtectsLastAdmin(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	users := &fakeAPIUsers{}
@@ -1803,6 +2600,12 @@ func TestAdminCreatesUserAndProtectsLastAdmin(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminUpdatesEditableUserFields 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminUpdatesEditableUserFields(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	users := &fakeAPIUsers{}
@@ -1815,6 +2618,12 @@ func TestAdminUpdatesEditableUserFields(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminUpdateProtectsLastActiveAdministrator 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminUpdateProtectsLastActiveAdministrator(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	users := &fakeAPIUsers{statusErr: user.ErrLastActiveAdmin}
@@ -1827,6 +2636,12 @@ func TestAdminUpdateProtectsLastActiveAdministrator(t *testing.T) {
 	}
 }
 
+/**
+ * TestDecodeJSONAcceptsLargeBodyAndKeepsSchemaValidation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDecodeJSONAcceptsLargeBodyAndKeepsSchemaValidation(t *testing.T) {
 	type requestBody struct {
 		Value string `json:"value"`
@@ -1848,6 +2663,12 @@ func TestDecodeJSONAcceptsLargeBodyAndKeepsSchemaValidation(t *testing.T) {
 	}
 }
 
+/**
+ * TestAuthenticationErrorsAreStable 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAuthenticationErrorsAreStable(t *testing.T) {
 	authService := &fakeAPIAuth{authErr: auth.ErrUnauthenticated}
 	request := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
@@ -1865,6 +2686,12 @@ func TestAuthenticationErrorsAreStable(t *testing.T) {
 	}
 }
 
+/**
+ * TestResponsesIncludeServerGeneratedRequestID 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestResponsesIncludeServerGeneratedRequestID(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 	request.Header.Set("X-Novro-Request-ID", "00000000-0000-0000-0000-000000000001")

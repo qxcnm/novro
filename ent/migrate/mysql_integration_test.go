@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+/**
+ * TestMySQLMigrationChecksumsUpgradeAndRejectDrift 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLMigrationChecksumsUpgradeAndRejectDrift(t *testing.T) {
 	dsn := strings.TrimSpace(os.Getenv("NOVRO_TEST_MYSQL_DSN"))
 	if dsn == "" {
@@ -97,6 +103,12 @@ func TestMySQLMigrationChecksumsUpgradeAndRejectDrift(t *testing.T) {
 	}
 }
 
+/**
+ * TestUnifiedModelCatalogMigrationConsolidatesExistingReferences 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUnifiedModelCatalogMigrationConsolidatesExistingReferences(t *testing.T) {
 	t.Skip("legacy 0023 migration assets are not part of the current squashed migration chain")
 	database := openMigrationIntegrationDatabase(t)
@@ -195,6 +207,12 @@ func TestUnifiedModelCatalogMigrationConsolidatesExistingReferences(t *testing.T
 	}
 }
 
+/**
+ * TestGeneratedRouteRepairMigrationNormalizesRoutesCreatedAfterPriorMigrations 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestGeneratedRouteRepairMigrationNormalizesRoutesCreatedAfterPriorMigrations(t *testing.T) {
 	t.Skip("legacy 0025 migration assets are not part of the current squashed migration chain")
 	database := openMigrationIntegrationDatabase(t)
@@ -276,6 +294,12 @@ func TestGeneratedRouteRepairMigrationNormalizesRoutesCreatedAfterPriorMigration
 	}
 }
 
+/**
+ * TestMySQLGatewayBillingSafetyMigrationUpgradesExistingData 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLGatewayBillingSafetyMigrationUpgradesExistingData(t *testing.T) {
 	database := openMigrationIntegrationDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -395,6 +419,12 @@ VALUES (UUID(), ?, 'usage_compensation', ?, ?, 'legacy usage compensation', UTC_
 	}
 }
 
+/**
+ * openMigrationIntegrationDatabase 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func openMigrationIntegrationDatabase(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := strings.TrimSpace(os.Getenv("NOVRO_TEST_MYSQL_DSN"))
@@ -443,6 +473,14 @@ func openMigrationIntegrationDatabase(t *testing.T) *sql.DB {
 	return database
 }
 
+/**
+ * assertMigrationChecksums 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param database 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func assertMigrationChecksums(t *testing.T, ctx context.Context, database *sql.DB) {
 	t.Helper()
 	var total, valid int

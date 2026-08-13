@@ -17,16 +17,39 @@ type DataPaginationProps = {
   total: number;
 };
 
+/**
+ * DataPagination 渲染对应的 React 界面组件。
+ * @param loading 本次操作需要使用的输入参数。
+ * @param offset 本次操作使用的数值参数。
+ * @param onOffsetChange 本次操作需要使用的输入参数。
+ * @param onPageSizeChange 本次操作需要使用的输入参数。
+ * @param pageSize 本次操作使用的数值参数。
+ * @param total 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function DataPagination({ loading, offset, onOffsetChange, onPageSizeChange, pageSize, total }: DataPaginationProps) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(pages, Math.floor(offset / pageSize) + 1);
   const jumpInputID = useId();
 
+  /**
+   * goToPage 封装该名称对应的业务处理逻辑。
+   * @param page 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function goToPage(page: number) {
     const nextPage = Math.min(pages, Math.max(1, page));
     onOffsetChange((nextPage - 1) * pageSize);
   }
 
+  /**
+   * submitJump 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function submitJump(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const requested = Number.parseInt(String(new FormData(event.currentTarget).get("page") ?? ""), 10);

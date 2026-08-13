@@ -41,6 +41,16 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * Button 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param variant  本次操作需要使用的输入参数。
+ * @param size  本次操作需要使用的输入参数。
+ * @param asChild  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Button({
   className,
   variant = "default",

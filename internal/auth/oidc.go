@@ -43,6 +43,15 @@ type OIDCClient struct {
 	now          func() time.Time
 }
 
+/**
+ * NewOIDCClient 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param cfg 本次操作使用的配置。
+ * @param publicURL 本次操作需要使用的输入参数。
+ * @param sessionSecret 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewOIDCClient(ctx context.Context, cfg config.OIDCConfig, publicURL, sessionSecret string) (*OIDCClient, error) {
 	if !cfg.Enabled() {
 		return nil, nil
@@ -77,6 +86,12 @@ func NewOIDCClient(ctx context.Context, cfg config.OIDCConfig, publicURL, sessio
 	}, nil
 }
 
+/**
+ * Start 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c *OIDCClient) Start() (OIDCFlow, error) {
 	state, err := randomURLSafe(32)
 	if err != nil {
@@ -99,6 +114,15 @@ func (c *OIDCClient) Start() (OIDCFlow, error) {
 	}, nil
 }
 
+/**
+ * Complete 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param code 用于标识或筛选目标的文本值。
+ * @param state 本次操作需要使用的输入参数。
+ * @param cookieValue 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c *OIDCClient) Complete(ctx context.Context, code, state, cookieValue string) (OIDCUser, bool, error) {
 	flow, err := c.decryptState(cookieValue)
 	if err != nil || flow.ExpiresAt.Before(c.now()) || state == "" || state != flow.State || code == "" {
@@ -132,6 +156,12 @@ func (c *OIDCClient) Complete(ctx context.Context, code, state, cookieValue stri
 	}, c.autoRegister, nil
 }
 
+/**
+ * encryptState 封装该名称对应的业务处理逻辑。
+ * @param state 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c *OIDCClient) encryptState(state oidcFlowState) (string, error) {
 	plaintext, err := json.Marshal(state)
 	if err != nil {
@@ -145,6 +175,12 @@ func (c *OIDCClient) encryptState(state oidcFlowState) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
 
+/**
+ * decryptState 封装该名称对应的业务处理逻辑。
+ * @param encoded 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c *OIDCClient) decryptState(encoded string) (oidcFlowState, error) {
 	sealed, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil || len(sealed) <= c.aead.NonceSize() {
@@ -162,6 +198,12 @@ func (c *OIDCClient) decryptState(encoded string) (oidcFlowState, error) {
 	return state, nil
 }
 
+/**
+ * randomURLSafe 封装该名称对应的业务处理逻辑。
+ * @param size 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func randomURLSafe(size int) (string, error) {
 	value := make([]byte, size)
 	if _, err := rand.Read(value); err != nil {

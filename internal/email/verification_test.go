@@ -15,6 +15,15 @@ type fakeStore struct {
 	rateLimited bool
 }
 
+/**
+ * Issue 封装该名称对应的业务处理逻辑。
+ * @param email 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param expiresAt 本次操作需要使用的输入参数。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Issue(_ context.Context, email, hash string, expiresAt, now time.Time) error {
 	if f.rateLimited {
 		return ErrRateLimited
@@ -22,6 +31,15 @@ func (f *fakeStore) Issue(_ context.Context, email, hash string, expiresAt, now 
 	f.email, f.hash, f.expires, f.created = email, hash, expiresAt, now
 	return nil
 }
+
+/**
+ * Consume 封装该名称对应的业务处理逻辑。
+ * @param email 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Consume(_ context.Context, email, hash string, now time.Time) error {
 	if email != f.email || hash != f.hash {
 		return ErrInvalidCode
@@ -35,6 +53,14 @@ func (f *fakeStore) Consume(_ context.Context, email, hash string, now time.Time
 	f.consumed = true
 	return nil
 }
+
+/**
+ * DeleteIssue 用于删除、撤销或释放指定资源。
+ * @param string 本次操作需要使用的输入参数。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) DeleteIssue(context.Context, string, string) error { return nil }
 
 type fakeMailer struct {
@@ -42,11 +68,24 @@ type fakeMailer struct {
 	err             error
 }
 
+/**
+ * SendVerificationCode 用于发送对应消息或请求。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeMailer) SendVerificationCode(_ context.Context, recipient, code string) error {
 	f.recipient, f.code = recipient, code
 	return f.err
 }
 
+/**
+ * TestVerificationServiceNormalizesAndConsumesOnce 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestVerificationServiceNormalizesAndConsumesOnce(t *testing.T) {
 	store, mailer := &fakeStore{}, &fakeMailer{}
 	service, err := NewVerificationService(store, mailer, "01234567890123456789012345678901")
@@ -70,6 +109,12 @@ func TestVerificationServiceNormalizesAndConsumesOnce(t *testing.T) {
 	}
 }
 
+/**
+ * TestVerificationServiceRejectsInvalidAndExpiredCodes 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestVerificationServiceRejectsInvalidAndExpiredCodes(t *testing.T) {
 	store, mailer := &fakeStore{}, &fakeMailer{}
 	service, _ := NewVerificationService(store, mailer, "01234567890123456789012345678901")

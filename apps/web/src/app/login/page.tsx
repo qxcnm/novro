@@ -21,6 +21,12 @@ type AuthOptions = {
   oidc_enabled: boolean;
   oidc_display_name: string;
 };
+/**
+ * LoginPage 用于校验用户凭据并建立登录会话。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function LoginPage() {
   return (
     <Suspense fallback={<LoginPageShell />}>
@@ -29,6 +35,12 @@ export default function LoginPage() {
   );
 }
 
+/**
+ * LoginForm 用于校验用户凭据并建立登录会话。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,6 +73,12 @@ function LoginForm() {
 
   const displayedError = error || authErrorMessage(searchParams.get("error"));
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -73,6 +91,12 @@ function LoginForm() {
         body: JSON.stringify({ username: identifier, password }),
       });
       if (!response.ok) {
+        /**
+         * body 封装该名称对应的业务处理逻辑。
+         * @param await 本次操作需要使用的输入参数。
+         * @author Gao Hongshun
+         * @date 2026-08-13
+         */
         const body = (await response.json().catch(() => ({}))) as ErrorResponse;
         throw new Error(body.error?.message ?? "登录失败，请稍后重试");
       }
@@ -125,10 +149,22 @@ function LoginForm() {
   );
 }
 
+/**
+ * LoginPageShell 用于校验用户凭据并建立登录会话。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function LoginPageShell() {
   return <main className="min-h-screen bg-muted/30"><AuthHeader /></main>;
 }
 
+/**
+ * authErrorMessage 封装该名称对应的业务处理逻辑。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function authErrorMessage(code: string | null) {
   if (code === "oidc_not_provisioned") return "该企业账号尚未获得 Novro 访问权限";
   if (code === "oidc_failed") return "企业账号登录失败，请重试";
@@ -136,6 +172,12 @@ function authErrorMessage(code: string | null) {
   return "";
 }
 
+/**
+ * AuthHeader 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AuthHeader() {
   return <header className="flex h-16 items-center justify-between border-b bg-background px-6 lg:px-10"><Link className="flex items-center gap-3" href="/"><span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground"><ShieldCheck className="size-4" aria-hidden="true" /></span><span className="text-sm font-semibold">Novro Console</span></Link><ThemeToggle /></header>;
 }

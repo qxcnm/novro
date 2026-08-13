@@ -77,23 +77,53 @@ const iconOptions = [
   { value: "landmark", label: "银行" },
 ];
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatMoney(micros: number) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(micros / 1_000_000);
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value?: string) {
   return value ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "--";
 }
 
+/**
+ * moneyInput 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function moneyInput(micros: number) {
   return Number.isFinite(micros) ? String(micros / 1_000_000) : "";
 }
 
+/**
+ * parseMoneyMicros 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function parseMoneyMicros(value: string) {
   const normalized = value.trim();
   if (!/^\d{1,8}(\.\d{1,2})?$/.test(normalized)) return null;
@@ -102,6 +132,12 @@ function parseMoneyMicros(value: string) {
   return Number.isSafeInteger(cents) ? cents * 10_000 : null;
 }
 
+/**
+ * normalizePaymentConfig 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function normalizePaymentConfig(value?: PaymentConfigResponse | null): PaymentConfig {
   return {
     provider: value?.provider ?? "epay",
@@ -123,6 +159,12 @@ function normalizePaymentConfig(value?: PaymentConfigResponse | null): PaymentCo
   };
 }
 
+/**
+ * configToForm 封装该名称对应的业务处理逻辑。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function configToForm(config: PaymentConfig): ConfigForm {
   return {
     provider: config.provider,
@@ -142,6 +184,12 @@ function configToForm(config: PaymentConfig): ConfigForm {
   };
 }
 
+/**
+ * MethodIcon 渲染对应的 React 界面组件。
+ * @param icon 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function MethodIcon({ icon }: { icon: string }) {
   if (icon === "smartphone") return <Smartphone />;
   if (icon === "qr-code") return <QrCode />;
@@ -150,6 +198,12 @@ function MethodIcon({ icon }: { icon: string }) {
   return <WalletCards />;
 }
 
+/**
+ * PaymentsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function PaymentsClient() {
   const router = useRouter();
   const [config, setConfig] = useState<PaymentConfig | null>(null);
@@ -199,6 +253,12 @@ export default function PaymentsClient() {
     if (response.status === 401) { router.replace("/login"); return; }
     if (response.status === 403) { router.replace("/console"); return; }
     if (!response.ok) { setError(await readError(response)); setOrdersLoading(false); return; }
+    /**
+     * page 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const page = (await response.json()) as TopUpPage;
     setOrders(Array.isArray(page.orders) ? page.orders : []);
     setOrderTotal(page.total ?? 0);
@@ -216,6 +276,13 @@ export default function PaymentsClient() {
   const statusLabel = config?.enabled && config.configured ? "已启用" : config?.configured ? "已配置但停用" : "未配置";
   const statusVariant = config?.enabled && config.configured ? "default" : config?.configured ? "secondary" : "outline";
 
+  /**
+   * beginMethod 封装该名称对应的业务处理逻辑。
+   * @param index 本次操作需要使用的输入参数。
+   * @param template 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginMethod(index: number | null, template?: Partial<MethodForm>) {
     setMethodIndex(index);
     if (index === null) setMethodForm({ ...emptyMethod, ...template });
@@ -226,6 +293,12 @@ export default function PaymentsClient() {
     setMethodOpen(true);
   }
 
+  /**
+   * saveMethod 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function saveMethod(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const code = methodForm.code.trim().toLowerCase();
@@ -242,6 +315,12 @@ export default function PaymentsClient() {
     setError("");
   }
 
+  /**
+   * addPreset 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function addPreset() {
     const micros = parseMoneyMicros(presetInput);
     if (micros === null) { setError("预设充值金额需为人民币金额，最多保留 2 位小数"); return; }
@@ -251,12 +330,24 @@ export default function PaymentsClient() {
     setError("");
   }
 
+  /**
+   * beginBonus 封装该名称对应的业务处理逻辑。
+   * @param index 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginBonus(index: number | null) {
     setBonusIndex(index);
     setBonusForm(index === null ? emptyBonus : { threshold: moneyInput(form.bonus_tiers[index].threshold_micros), percent: String(form.bonus_tiers[index].bonus_bps / 100) });
     setBonusOpen(true);
   }
 
+  /**
+   * saveBonus 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function saveBonus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const thresholdMicros = parseMoneyMicros(bonusForm.threshold);
@@ -271,6 +362,12 @@ export default function PaymentsClient() {
     setError("");
   }
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const minMicros = parseMoneyMicros(form.min_amount);
@@ -296,6 +393,13 @@ export default function PaymentsClient() {
     setMessage("支付网关与充值规则已保存");
   }
 
+  /**
+   * copyAddress 封装该名称对应的业务处理逻辑。
+   * @param value 需要处理的输入值。
+   * @param label 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyAddress(value: string, label: string) {
     if (!value) return;
     if (await copyText(value)) {

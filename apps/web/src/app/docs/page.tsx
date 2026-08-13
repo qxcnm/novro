@@ -177,6 +177,12 @@ const errors = [
   ["502", "upstream_unavailable / upstream_error", "上游暂时不可用或响应无效", "指数退避并设置最大重试次数"],
 ];
 
+/**
+ * ApiDocumentation 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function ApiDocumentation() {
   return (
     <DocsFrame publicFooter={<SiteFooter />} publicHeader={<SiteHeader />}>
@@ -396,22 +402,61 @@ export function ApiDocumentation() {
   );
 }
 
+/**
+ * DocsPage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function DocsPage() {
   return <ApiDocumentation />;
 }
 
+/**
+ * SectionHeading 渲染对应的 React 界面组件。
+ * @param eyebrow 本次操作需要使用的输入参数。
+ * @param title 本次操作需要使用的输入参数。
+ * @param children React 组件包含的子元素。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SectionHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
   return <><p className="text-sm font-medium text-muted-foreground">{eyebrow}</p><h2 className="mt-3 text-3xl font-semibold">{title}</h2><p className="mt-4 leading-7 text-muted-foreground">{children}</p></>;
 }
 
+/**
+ * Step 渲染对应的 React 界面组件。
+ * @param icon 本次操作需要使用的输入参数。
+ * @param number 本次操作需要使用的输入参数。
+ * @param title 本次操作需要使用的输入参数。
+ * @param children React 组件包含的子元素。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Step({ icon: Icon, number, title, children }: { icon: typeof KeyRound; number: string; title: string; children: ReactNode }) {
   return <Card className="rounded-lg" size="sm"><CardHeader><div className="flex items-center justify-between"><Icon className="size-5" aria-hidden="true" /><span className="font-mono text-xs text-muted-foreground">{number}</span></div><CardTitle className="mt-3">{title}</CardTitle></CardHeader><CardContent className="leading-6 text-muted-foreground">{children}</CardContent></Card>;
 }
 
+/**
+ * InfoRow 渲染对应的 React 界面组件。
+ * @param label 本次操作需要使用的输入参数。
+ * @param children React 组件包含的子元素。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return <div className="grid gap-2 border-b px-4 py-4 last:border-b-0 sm:grid-cols-[10rem_minmax(0,1fr)]"><span className="text-sm text-muted-foreground">{label}</span><span className="min-w-0 break-all text-sm">{children}</span></div>;
 }
 
+/**
+ * CodeBlock 渲染对应的 React 界面组件。
+ * @param children React 组件包含的子元素。
+ * @param label 本次操作需要使用的输入参数。
+ * @param icon 本次操作需要使用的输入参数。
+ * @param flush  本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CodeBlock({ children, label, icon: Icon = Terminal, flush = false }: { children: string; label: string; icon?: typeof Terminal; flush?: boolean }) {
   return (
     <Card className={`${flush ? "mt-0" : "mt-6"} rounded-lg bg-foreground text-background ring-0 dark:bg-card dark:text-card-foreground dark:ring-1 dark:ring-foreground/10`}>

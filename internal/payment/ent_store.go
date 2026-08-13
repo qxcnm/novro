@@ -22,6 +22,13 @@ type EntStore struct {
 	defaultReferralRewardBPS int64
 }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @param referralRewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client, referralRewardBPS ...int64) *EntStore {
 	rate := int64(0)
 	if len(referralRewardBPS) > 0 && referralRewardBPS[0] >= 0 && referralRewardBPS[0] <= 10_000 {
@@ -30,6 +37,13 @@ func NewEntStore(client *ent.Client, referralRewardBPS ...int64) *EntStore {
 	return &EntStore{client: client, defaultReferralRewardBPS: rate}
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Create(ctx context.Context, params CreateParams) (Order, error) {
 	entity, err := s.client.TopUpOrder.Create().
 		SetID(params.ID).
@@ -46,6 +60,13 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Order, erro
 	return orderFromEnt(entity), nil
 }
 
+/**
+ * Get 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Get(ctx context.Context, outTradeNo string) (Order, error) {
 	entity, err := s.client.TopUpOrder.Query().Where(enttopuporder.OutTradeNoEQ(outTradeNo)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -57,6 +78,13 @@ func (s *EntStore) Get(ctx context.Context, outTradeNo string) (Order, error) {
 	return orderFromEnt(entity), nil
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListAll(ctx context.Context, filter AdminListFilter) (AdminPage, error) {
 	query := s.client.TopUpOrder.Query()
 	if filter.Search != "" {
@@ -98,6 +126,14 @@ func (s *EntStore) ListAll(ctx context.Context, filter AdminListFilter) (AdminPa
 	return AdminPage{Orders: orders, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) List(ctx context.Context, userID uuid.UUID, filter ListFilter) (Page, error) {
 	query := s.client.TopUpOrder.Query().Where(enttopuporder.UserIDEQ(userID))
 	total, err := query.Clone().Count(ctx)
@@ -115,6 +151,13 @@ func (s *EntStore) List(ctx context.Context, userID uuid.UUID, filter ListFilter
 	return Page{Orders: orders, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
 
+/**
+ * Complete 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Complete(ctx context.Context, params CompleteParams) (Order, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -181,6 +224,16 @@ func (s *EntStore) Complete(ctx context.Context, params CompleteParams) (Order, 
 	return orderFromEnt(updated), nil
 }
 
+/**
+ * creditReferralReward 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param tx 本次操作需要使用的输入参数。
+ * @param referredUserID 目标资源的一个或多个唯一标识。
+ * @param orderID 目标资源的一个或多个唯一标识。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) creditReferralReward(ctx context.Context, tx *ent.Tx, referredUserID, orderID uuid.UUID, amountMicros int64) error {
 	referredUser, err := tx.User.Query().Where(entuser.IDEQ(referredUserID)).Only(ctx)
 	if err != nil {
@@ -230,6 +283,13 @@ func (s *EntStore) creditReferralReward(ctx context.Context, tx *ent.Tx, referre
 	return nil
 }
 
+/**
+ * referralRewardBPS 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param tx 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) referralRewardBPS(ctx context.Context, tx *ent.Tx) (int64, error) {
 	setting, err := tx.SystemSetting.Query().Where(entsystemsetting.IDEQ(referral.RewardBPSSettingKey)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -245,6 +305,12 @@ func (s *EntStore) referralRewardBPS(ctx context.Context, tx *ent.Tx) (int64, er
 	return rewardBPS, nil
 }
 
+/**
+ * orderFromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func orderFromEnt(entity *ent.TopUpOrder) Order {
 	return Order{
 		ID: entity.ID, UserID: entity.UserID, OutTradeNo: entity.OutTradeNo, Provider: string(entity.Provider),
@@ -253,6 +319,13 @@ func orderFromEnt(entity *ent.TopUpOrder) Order {
 	}
 }
 
+/**
+ * topUpDescription 封装该名称对应的业务处理逻辑。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @param creditedMicros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func topUpDescription(amountMicros, creditedMicros int64) string {
 	if creditedMicros > amountMicros {
 		return "易支付充值（含赠送）"

@@ -14,6 +14,12 @@ type BillingGroup struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (BillingGroup) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -29,6 +35,12 @@ func (BillingGroup) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (BillingGroup) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("api_keys", APIKey.Type),
@@ -39,6 +51,12 @@ func (BillingGroup) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (BillingGroup) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status", "created_at"),

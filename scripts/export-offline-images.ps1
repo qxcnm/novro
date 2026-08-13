@@ -20,6 +20,12 @@ if (-not $OutputDirectory) {
     $OutputDirectory = Join-Path $repositoryDirectory 'dist'
 }
 
+# /**
+#  * Resolve-DockerExecutable 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Resolve-DockerExecutable {
     if ($DockerPath) {
         if (-not (Test-Path -LiteralPath $DockerPath -PathType Leaf)) {
@@ -48,6 +54,12 @@ function Resolve-DockerExecutable {
 
 $docker = Resolve-DockerExecutable
 
+# /**
+#  * Invoke-Docker 执行对应的运维辅助流程。
+#  * @param Arguments 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Invoke-Docker {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
 
@@ -57,6 +69,12 @@ function Invoke-Docker {
     }
 }
 
+# /**
+#  * Convert-ToTrimmedText 执行对应的运维辅助流程。
+#  * @param Value 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Convert-ToTrimmedText {
     param($Value)
 
@@ -69,6 +87,12 @@ function Convert-ToTrimmedText {
     return ([string]$Value).Trim()
 }
 
+# /**
+#  * Get-DockerOperatingSystem 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Get-DockerOperatingSystem {
     $output = Convert-ToTrimmedText (& $docker info --format '{{.OSType}}' 2>&1)
     if ($LASTEXITCODE -ne 0 -or -not $output) {

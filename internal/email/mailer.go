@@ -25,18 +25,49 @@ type Config struct {
 }
 
 type Mailer interface {
+	/**
+	 * SendVerificationCode 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SendVerificationCode(context.Context, string, string) error
 }
 
 type SMTPMailer struct{ config Config }
 
+/**
+ * NewSMTPMailer 用于创建并返回所需的对象或记录。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewSMTPMailer(config Config) *SMTPMailer { return &SMTPMailer{config: config} }
 
+/**
+ * SendVerificationCode 用于发送对应消息或请求。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (m *SMTPMailer) SendVerificationCode(ctx context.Context, recipient, code string) error {
 	body := fmt.Sprintf("您的 Novro 注册验证码是：%s\r\n验证码 10 分钟内有效，且只能使用一次。若不是您本人操作，请忽略此邮件。\r\n", code)
 	return m.SendMessage(ctx, recipient, "Novro 注册验证码", body)
 }
 
+/**
+ * SendMessage 用于发送对应消息或请求。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param subject 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (m *SMTPMailer) SendMessage(ctx context.Context, recipient, subject, body string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -124,16 +155,34 @@ type explicitPlainAuth struct {
 	password string
 }
 
+/**
+ * Start 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (a explicitPlainAuth) Start(*smtp.ServerInfo) (string, []byte, error) {
 	return "PLAIN", []byte("\x00" + a.username + "\x00" + a.password), nil
 }
 
+/**
+ * Next 封装该名称对应的业务处理逻辑。
+ * @param bool 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (explicitPlainAuth) Next([]byte, bool) ([]byte, error) {
 	return nil, nil
 }
 
 type LogMailer struct{ logger *slog.Logger }
 
+/**
+ * NewLogMailer 用于创建并返回所需的对象或记录。
+ * @param logger 用于记录结构化运行日志的日志器。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewLogMailer(logger *slog.Logger) *LogMailer {
 	if logger == nil {
 		logger = slog.Default()
@@ -141,6 +190,14 @@ func NewLogMailer(logger *slog.Logger) *LogMailer {
 	return &LogMailer{logger: logger}
 }
 
+/**
+ * SendVerificationCode 用于发送对应消息或请求。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (m *LogMailer) SendVerificationCode(ctx context.Context, recipient, code string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -149,6 +206,13 @@ func (m *LogMailer) SendVerificationCode(ctx context.Context, recipient, code st
 	return nil
 }
 
+/**
+ * ValidateConfig 用于校验输入或运行状态是否满足要求。
+ * @param config 本次操作使用的配置。
+ * @param production 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func ValidateConfig(config Config, production bool) error {
 	values := []string{config.Host, config.Username, config.Password, config.From}
 	configured := 0
@@ -189,6 +253,12 @@ func ValidateConfig(config Config, production bool) error {
 
 // NewTLSClient is kept small so callers that need implicit TLS can wrap SMTP
 // themselves without exposing credentials through this package.
+/**
+ * NewTLSClient 用于创建并返回所需的对象或记录。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewTLSClient(config Config) *tls.Config {
 	return &tls.Config{ServerName: config.Host, MinVersion: tls.VersionTLS12}
 }

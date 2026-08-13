@@ -60,6 +60,12 @@ type EPayConfig struct {
 	Channels    []string
 }
 
+/**
+ * Enabled 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c EPayConfig) Enabled() bool {
 	return c.APIURL != "" && c.MerchantID != "" && c.MerchantKey != ""
 }
@@ -79,6 +85,12 @@ type OIDCConfig struct {
 	AutoRegister bool
 }
 
+/**
+ * Enabled 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c OIDCConfig) Enabled() bool {
 	return c.Issuer != "" && c.ClientID != ""
 }
@@ -105,6 +117,12 @@ type SessionConfig struct {
 }
 
 // Load reads and validates process environment variables.
+/**
+ * Load 用于查询并返回所需的数据。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func Load() (Config, error) {
 	return loadEnv(func(key string) (string, bool) {
 		return lookupEnv(key)
@@ -117,6 +135,12 @@ var lookupEnv = func(key string) (string, bool) {
 
 // loadEnv is separated from os.LookupEnv so validation can be tested without
 // mutating process-global environment state.
+/**
+ * loadEnv 封装该名称对应的业务处理逻辑。
+ * @param get 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func loadEnv(get func(string) (string, bool)) (Config, error) {
 	getString := func(key, fallback string) string {
 		if value, ok := get(key); ok && strings.TrimSpace(value) != "" {
@@ -409,6 +433,12 @@ func loadEnv(get func(string) (string, bool)) (Config, error) {
 	}, nil
 }
 
+/**
+ * isPaymentChannel 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func isPaymentChannel(value string) bool {
 	if value == "" || len(value) > 32 {
 		return false
@@ -421,6 +451,13 @@ func isPaymentChannel(value string) bool {
 	return true
 }
 
+/**
+ * containsString 封装该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
@@ -430,6 +467,12 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+/**
+ * isLoopbackHost 封装该名称对应的业务处理逻辑。
+ * @param host 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func isLoopbackHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
@@ -438,16 +481,34 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+/**
+ * isHTTPOrigin 封装该名称对应的业务处理逻辑。
+ * @param parsed 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func isHTTPOrigin(parsed *url.URL) bool {
 	return parsed != nil && parsed.Host != "" && parsed.User == nil &&
 		(parsed.Scheme == "http" || parsed.Scheme == "https") &&
 		parsed.Path == "" && parsed.RawPath == "" && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
+/**
+ * DSN 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c DatabaseConfig) DSN() string {
 	return c.MySQLConfig().FormatDSN()
 }
 
+/**
+ * MySQLConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c DatabaseConfig) MySQLConfig() *mysql.Config {
 	tls := "false"
 	if c.TLS {

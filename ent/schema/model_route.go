@@ -14,6 +14,12 @@ type ModelRoute struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (ModelRoute) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -31,6 +37,12 @@ func (ModelRoute) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (ModelRoute) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("provider", Provider.Type).Ref("model_routes").Unique().Field("provider_id").Required(),
@@ -39,6 +51,12 @@ func (ModelRoute) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (ModelRoute) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("public_name", "provider_id", "upstream_model_id").Unique(),

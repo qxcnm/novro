@@ -3,6 +3,12 @@ import { connection } from "next/server";
 
 import { Separator } from "@/components/ui/separator";
 
+/**
+ * SiteFooter 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export async function SiteFooter() {
   await connection();
   const filingNumber = process.env.NOVRO_FILING_NUMBER?.trim();

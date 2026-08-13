@@ -18,6 +18,18 @@ type AnnouncementDialogProps = {
   open: boolean;
 };
 
+/**
+ * AnnouncementDialog 渲染对应的 React 界面组件。
+ * @param announcement 本次操作需要使用的输入参数。
+ * @param error 本次操作需要使用的输入参数。
+ * @param loading 本次操作需要使用的输入参数。
+ * @param onDismissForToday 本次操作需要使用的输入参数。
+ * @param onOpenChange 本次操作需要使用的输入参数。
+ * @param onRetry 本次操作需要使用的输入参数。
+ * @param open 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function AnnouncementDialog({ announcement, error, loading, onDismissForToday, onOpenChange, onRetry, open }: AnnouncementDialogProps) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>

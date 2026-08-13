@@ -14,6 +14,12 @@ import { checkCurrentSession } from "@/lib/auth-session";
 
 type ErrorResponse = { error?: { message?: string } };
 
+/**
+ * RegisterClient 渲染对应的 React 界面组件。
+ * @param initialReferralCode 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function RegisterClient({ initialReferralCode }: { initialReferralCode: string }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -59,6 +65,12 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
     return () => { active = false; };
   }, [router]);
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (form.password !== form.confirm) {
@@ -86,6 +98,12 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
         }),
       });
       if (!response.ok) {
+        /**
+         * body 封装该名称对应的业务处理逻辑。
+         * @param await 本次操作需要使用的输入参数。
+         * @author Gao Hongshun
+         * @date 2026-08-13
+         */
         const body = (await response.json().catch(() => ({}))) as ErrorResponse;
         throw new Error(body.error?.message ?? "注册失败，请稍后重试");
       }
@@ -105,6 +123,12 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
     }
   }
 
+  /**
+   * sendCode 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function sendCode() {
     if (!form.email || sendingCode || countdown > 0) return;
     setSendingCode(true);
@@ -117,6 +141,12 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
         body: JSON.stringify({ email: form.email }),
       });
       if (!response.ok) {
+        /**
+         * body 封装该名称对应的业务处理逻辑。
+         * @param await 本次操作需要使用的输入参数。
+         * @author Gao Hongshun
+         * @date 2026-08-13
+         */
         const body = (await response.json().catch(() => ({}))) as ErrorResponse;
         throw new Error(body.error?.message ?? "验证码发送失败，请稍后重试");
       }
@@ -219,6 +249,12 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
   );
 }
 
+/**
+ * AuthHeader 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AuthHeader() {
   return (
     <header className="flex h-16 items-center justify-between border-b bg-background px-6 lg:px-10">

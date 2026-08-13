@@ -22,6 +22,12 @@ const (
 	dialRetryDelay        = 750 * time.Millisecond
 )
 
+/**
+ * NewClient 用于创建并返回所需的对象或记录。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewClient() *http.Client {
 	dialer := &net.Dialer{Timeout: connectionTimeout, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
@@ -88,16 +94,35 @@ func NewClient() *http.Client {
 	}
 }
 
+/**
+ * UnsafeIP 封装该名称对应的业务处理逻辑。
+ * @param ip 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func UnsafeIP(ip net.IP) bool {
 	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() || isSyntheticIP(ip)
 }
 
 var syntheticIPRange = &net.IPNet{IP: net.ParseIP("198.18.0.0").To4(), Mask: net.CIDRMask(15, 32)}
 
+/**
+ * isSyntheticIP 封装该名称对应的业务处理逻辑。
+ * @param ip 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func isSyntheticIP(ip net.IP) bool {
 	return syntheticIPRange.Contains(ip)
 }
 
+/**
+ * resolveUpstreamIPs 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param host 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func resolveUpstreamIPs(ctx context.Context, host string) ([]net.IP, error) {
 	addresses, lookupErr := net.DefaultResolver.LookupIP(ctx, "ip", host)
 	public := make([]net.IP, 0, len(addresses))
@@ -133,6 +158,13 @@ func resolveUpstreamIPs(ctx context.Context, host string) ([]net.IP, error) {
 	return addresses, nil
 }
 
+/**
+ * resolveWithDoH 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param host 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func resolveWithDoH(ctx context.Context, host string) ([]net.IP, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -177,6 +209,15 @@ func resolveWithDoH(ctx context.Context, host string) ([]net.IP, error) {
 	return addresses, nil
 }
 
+/**
+ * resolveDoHRecord 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @param host 本次操作需要使用的输入参数。
+ * @param recordType 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func resolveDoHRecord(ctx context.Context, client *http.Client, host string, recordType int) ([]net.IP, error) {
 	endpoint := "https://1.1.1.1/dns-query?name=" + url.QueryEscape(host) + "&type=" + strconv.Itoa(recordType)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)

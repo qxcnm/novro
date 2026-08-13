@@ -17,10 +17,23 @@ type EntStore struct {
 	client *ent.Client
 }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -59,6 +72,13 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 	return fromEnt(created), nil
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	query := s.client.Provider.Query().Where(entprovider.DeletedAtIsNil())
 	if filter.Search != "" {
@@ -82,6 +102,14 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	return records, nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -133,6 +161,14 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	return s.get(ctx, updated.ID)
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
 	updated, err := s.client.Provider.UpdateOneID(id).Where(entprovider.DeletedAtIsNil()).SetStatus(entprovider.Status(status)).Save(ctx)
 	if ent.IsNotFound(err) {
@@ -144,6 +180,13 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 	return s.get(ctx, updated.ID)
 }
 
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -171,6 +214,12 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+/**
+ * fromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromEnt(entity *ent.Provider) Record {
 	record := Record{
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
@@ -186,6 +235,13 @@ func fromEnt(entity *ent.Provider) Record {
 	return record
 }
 
+/**
+ * get 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 	entity, err := s.client.Provider.Query().Where(entprovider.IDEQ(id), entprovider.DeletedAtIsNil()).WithBillingGroup().Only(ctx)
 	if ent.IsNotFound(err) {

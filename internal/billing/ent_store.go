@@ -22,8 +22,22 @@ import (
 
 type EntStore struct{ client *ent.Client }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
 
+/**
+ * GetSummary 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, filter EntryFilter) (Summary, error) {
 	walletEntity, err := s.client.Wallet.Query().Where(entwallet.UserIDEQ(userID)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -79,6 +93,14 @@ func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, filter Entr
 	}, nil
 }
 
+/**
+ * ListUsage 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
 	query := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID))
 	if filter.APIKeyID != uuid.Nil {
@@ -168,6 +190,14 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter Usage
 	return page, nil
 }
 
+/**
+ * GetUsageRate 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param since 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) GetUsageRate(ctx context.Context, userID uuid.UUID, since time.Time) (UsageRate, error) {
 	query := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID), entapiusage.CreatedAtGTE(since))
 	var aggregates []struct {
@@ -191,6 +221,17 @@ func (s *EntStore) GetUsageRate(ctx context.Context, userID uuid.UUID, since tim
 	return rate, nil
 }
 
+/**
+ * Adjust 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param actorID 目标资源的一个或多个唯一标识。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param note 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Adjust(ctx context.Context, userID, actorID, referenceID uuid.UUID, amount int64, note string) (Summary, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -236,6 +277,13 @@ func (s *EntStore) Adjust(ctx context.Context, userID, actorID, referenceID uuid
 	return s.GetSummary(ctx, updated.UserID, EntryFilter{Limit: 20})
 }
 
+/**
+ * StartOperation 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput) (OperationStartResult, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -287,6 +335,14 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
 	return OperationStartResult{Operation: operationFromEnt(created), Created: true}, nil
 }
 
+/**
+ * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requestID 目标资源的一个或多个唯一标识。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) MarkOperationPendingSettlement(ctx context.Context, requestID uuid.UUID, input UsageInput) error {
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -332,6 +388,14 @@ func (s *EntStore) MarkOperationPendingSettlement(ctx context.Context, requestID
 	return nil
 }
 
+/**
+ * MarkOperationPendingUnknown 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requestID 目标资源的一个或多个唯一标识。
+ * @param reason 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) MarkOperationPendingUnknown(ctx context.Context, requestID uuid.UUID, reason string) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -360,6 +424,13 @@ func (s *EntStore) MarkOperationPendingUnknown(ctx context.Context, requestID uu
 	return nil
 }
 
+/**
+ * CompleteOperation 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requestID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) CompleteOperation(ctx context.Context, requestID uuid.UUID) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -395,6 +466,14 @@ func (s *EntStore) CompleteOperation(ctx context.Context, requestID uuid.UUID) e
 	return nil
 }
 
+/**
+ * FailOperation 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requestID 目标资源的一个或多个唯一标识。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) FailOperation(ctx context.Context, requestID uuid.UUID, code string) error {
 	lookup, err := s.client.GatewayOperation.Query().Where(entgatewayoperation.IDEQ(requestID)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -469,6 +548,13 @@ func (s *EntStore) FailOperation(ctx context.Context, requestID uuid.UUID, code 
 	return nil
 }
 
+/**
+ * ListPendingSettlements 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param limit 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListPendingSettlements(ctx context.Context, limit int) ([]PendingSettlement, error) {
 	entities, err := s.client.GatewayOperation.Query().Where(entgatewayoperation.StatusEQ(entgatewayoperation.StatusPendingSettlement)).Order(ent.Asc(entgatewayoperation.FieldUpdatedAt)).Limit(limit).All(ctx)
 	if err != nil {
@@ -485,6 +571,16 @@ func (s *EntStore) ListPendingSettlements(ctx context.Context, limit int) ([]Pen
 	return result, nil
 }
 
+/**
+ * Reserve 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -528,14 +624,45 @@ func (s *EntStore) Reserve(ctx context.Context, userID, referenceID uuid.UUID, a
 	return nil
 }
 
+/**
+ * Refund 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Refund(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
 	return s.releaseReservation(ctx, userID, referenceID, amount, description, false)
 }
 
+/**
+ * ReleaseReservation 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ReleaseReservation(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string) error {
 	return s.releaseReservation(ctx, userID, referenceID, amount, description, true)
 }
 
+/**
+ * releaseReservation 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param referenceID 目标资源的一个或多个唯一标识。
+ * @param amount 本次操作使用的数值参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @param requireUnfinalized 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID uuid.UUID, amount int64, description string, requireUnfinalized bool) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -602,6 +729,13 @@ func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID u
 	return nil
 }
 
+/**
+ * Finalize 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -722,6 +856,14 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 	return nil
 }
 
+/**
+ * CompensateLegacyUsage 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requestID 目标资源的一个或多个唯一标识。
+ * @param actorID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) CompensateLegacyUsage(ctx context.Context, requestID, actorID uuid.UUID) (Summary, int64, error) {
 	usage, err := s.client.APIUsage.Query().Where(entapiusage.RequestIDEQ(requestID)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -780,6 +922,13 @@ func (s *EntStore) CompensateLegacyUsage(ctx context.Context, requestID, actorID
 	return summary, usage.CostMicros, err
 }
 
+/**
+ * durationMilliseconds 封装该名称对应的业务处理逻辑。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @param finishedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func durationMilliseconds(startedAt, finishedAt time.Time) int64 {
 	duration := finishedAt.Sub(startedAt).Milliseconds()
 	if duration < 0 {
@@ -788,6 +937,13 @@ func durationMilliseconds(startedAt, finishedAt time.Time) int64 {
 	return duration
 }
 
+/**
+ * RecordFailure 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) RecordFailure(ctx context.Context, input FailureInput) error {
 	existing, err := s.client.APIUsage.Query().Where(entapiusage.RequestIDEQ(input.RequestID)).Only(ctx)
 	if err == nil {
@@ -809,6 +965,13 @@ func (s *EntStore) RecordFailure(ctx context.Context, input FailureInput) error 
 	return nil
 }
 
+/**
+ * sameUsage 封装该名称对应的业务处理逻辑。
+ * @param existing 本次操作需要使用的输入参数。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func sameUsage(existing *ent.APIUsage, input UsageInput) bool {
 	return existing != nil && existing.UserID == input.UserID && existing.APIKeyID == input.APIKeyID &&
 		existing.ModelRouteID == input.ModelRouteID && string(existing.Endpoint) == input.Endpoint &&
@@ -819,6 +982,12 @@ func sameUsage(existing *ent.APIUsage, input UsageInput) bool {
 		existing.Estimated == input.Estimated && existing.UpstreamRequestID == input.UpstreamRequestID
 }
 
+/**
+ * operationFromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func operationFromEnt(entity *ent.GatewayOperation) Operation {
 	if entity == nil {
 		return Operation{}
@@ -831,9 +1000,22 @@ func operationFromEnt(entity *ent.GatewayOperation) Operation {
 	}
 }
 
+/**
+ * walletFromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func walletFromEnt(entity *ent.Wallet) Wallet {
 	return Wallet{ID: entity.ID, UserID: entity.UserID, BalanceMicros: entity.BalanceMicros, UpdatedAt: entity.UpdatedAt}
 }
+
+/**
+ * entriesFromEnt 封装该名称对应的业务处理逻辑。
+ * @param entities 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func entriesFromEnt(entities []*ent.WalletEntry) []Entry {
 	entries := make([]Entry, 0, len(entities))
 	for _, entity := range entities {
@@ -842,6 +1024,12 @@ func entriesFromEnt(entities []*ent.WalletEntry) []Entry {
 	return entries
 }
 
+/**
+ * limitDescription 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func limitDescription(value string) string {
 	if utf8.RuneCountInString(value) <= 255 {
 		return value

@@ -8,6 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
+/**
+ * TestMiddlewareGeneratesAndReusesRequestID 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMiddlewareGeneratesAndReusesRequestID(t *testing.T) {
 	wanted := uuid.New()
 	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +31,12 @@ func TestMiddlewareGeneratesAndReusesRequestID(t *testing.T) {
 	}
 }
 
+/**
+ * TestMiddlewareIgnoresClientRequestID 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMiddlewareIgnoresClientRequestID(t *testing.T) {
 	clientID := uuid.New().String()
 	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

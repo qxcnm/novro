@@ -12,6 +12,12 @@ type fakeConfigStore struct {
 	input  StoredConfigInput
 }
 
+/**
+ * Get 用于查询并返回所需的数据。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeConfigStore) Get(context.Context) (StoredConfig, error) {
 	if !f.exists {
 		return StoredConfig{}, ErrConfigNotFound
@@ -19,6 +25,12 @@ func (f *fakeConfigStore) Get(context.Context) (StoredConfig, error) {
 	return f.record, nil
 }
 
+/**
+ * Upsert 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeConfigStore) Upsert(_ context.Context, input StoredConfigInput) (StoredConfig, error) {
 	f.input = input
 	f.exists = true
@@ -32,7 +44,20 @@ func (f *fakeConfigStore) Upsert(_ context.Context, input StoredConfigInput) (St
 
 type fakeCipher struct{}
 
+/**
+ * Encrypt 用于对敏感数据执行安全转换。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakeCipher) Encrypt(value string) (string, error) { return "encrypted:" + value, nil }
+
+/**
+ * Decrypt 用于解密并返回受保护的数据。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakeCipher) Decrypt(value string) (string, error) {
 	if len(value) < len("encrypted:") || value[:len("encrypted:")] != "encrypted:" {
 		return "", errors.New("invalid ciphertext")
@@ -42,11 +67,24 @@ func (fakeCipher) Decrypt(value string) (string, error) {
 
 type countingMailer struct{ calls int }
 
+/**
+ * SendVerificationCode 用于发送对应消息或请求。
+ * @param string 本次操作需要使用的输入参数。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (m *countingMailer) SendVerificationCode(context.Context, string, string) error {
 	m.calls++
 	return nil
 }
 
+/**
+ * TestServiceEncryptsRuntimePasswordAndPreservesSavedPassword 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceEncryptsRuntimePasswordAndPreservesSavedPassword(t *testing.T) {
 	store := &fakeConfigStore{}
 	service := NewService(store, fakeCipher{}, Config{
@@ -78,6 +116,12 @@ func TestServiceEncryptsRuntimePasswordAndPreservesSavedPassword(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceHonorsExplicitDisableBeforeDevelopmentFallback 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceHonorsExplicitDisableBeforeDevelopmentFallback(t *testing.T) {
 	fallback := &countingMailer{}
 	store := &fakeConfigStore{exists: true, record: StoredConfig{
@@ -101,6 +145,12 @@ func TestServiceHonorsExplicitDisableBeforeDevelopmentFallback(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceReadsLatestStoredConfigForEveryMessage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceReadsLatestStoredConfigForEveryMessage(t *testing.T) {
 	store := &fakeConfigStore{exists: true, record: StoredConfig{
 		ID: configID, Enabled: true, Host: "smtp.one.example", Port: 587, Username: "verify@example.com",
@@ -124,6 +174,12 @@ func TestServiceReadsLatestStoredConfigForEveryMessage(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceRejectsInvalidConfigurationAndTestRecipient 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceRejectsInvalidConfigurationAndTestRecipient(t *testing.T) {
 	store := &fakeConfigStore{}
 	service := NewService(store, fakeCipher{}, Config{}, nil, false)
@@ -142,6 +198,12 @@ func TestServiceRejectsInvalidConfigurationAndTestRecipient(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceRejectsUnencryptedSMTPWhenProduction 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceRejectsUnencryptedSMTPWhenProduction(t *testing.T) {
 	store := &fakeConfigStore{}
 	service := NewService(store, fakeCipher{}, Config{}, nil, true)
@@ -155,6 +217,12 @@ func TestServiceRejectsUnencryptedSMTPWhenProduction(t *testing.T) {
 	}
 }
 
+/**
+ * TestValidateConfigSupportsSMTPTransportModes 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestValidateConfigSupportsSMTPTransportModes(t *testing.T) {
 	base := Config{Host: "smtp.example.com", Port: 587, Username: "verify@example.com", Password: "secret", From: "verify@example.com"}
 	for _, security := range []string{SecurityNone, SecuritySTARTTLS, SecuritySSL} {

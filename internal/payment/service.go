@@ -14,20 +14,81 @@ import (
 )
 
 type Store interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 CreateParams 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, CreateParams) (Order, error)
+	/**
+	 * Get 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Get(context.Context, string) (Order, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, uuid.UUID, ListFilter) (Page, error)
+	/**
+	 * ListAll 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 AdminListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListAll(context.Context, AdminListFilter) (AdminPage, error)
+	/**
+	 * Complete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 CompleteParams 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Complete(context.Context, CompleteParams) (Order, error)
 }
 
 type ConfigStore interface {
+	/**
+	 * Get 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Get(context.Context) (StoredConfig, error)
+	/**
+	 * Upsert 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 StoredConfigInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Upsert(context.Context, StoredConfigInput) (StoredConfig, error)
 }
 
 type SecretCipher interface {
+	/**
+	 * Encrypt 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Encrypt(string) (string, error)
+	/**
+	 * Decrypt 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Decrypt(string) (string, error)
 }
 
@@ -66,9 +127,34 @@ type StoredConfigInput struct {
 }
 
 type Gateway interface {
+	/**
+	 * Channels 声明该接口方法需要提供的业务能力。
+	 * @param none 无参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Channels() []string
+	/**
+	 * Checkout 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 Order 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Checkout(Order) (Checkout, error)
+	/**
+	 * ParseNotification 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 url.Values 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ParseNotification(url.Values) (Notification, error)
+	/**
+	 * Query 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Query(context.Context, string) (Notification, bool, error)
 }
 
@@ -82,10 +168,25 @@ type Service struct {
 
 var paymentChannelPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
+/**
+ * NewService 用于创建并返回所需的对象或记录。
+ * @param store 用于持久化和查询数据的存储实现。
+ * @param configStore 本次操作需要使用的输入参数。
+ * @param cipher 本次操作需要使用的输入参数。
+ * @param defaultConfig 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewService(store Store, configStore ConfigStore, cipher SecretCipher, defaultConfig EPayConfig) *Service {
 	return &Service{store: store, configStore: configStore, cipher: cipher, defaultConfig: defaultConfig, now: time.Now}
 }
 
+/**
+ * Config 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Config(ctx context.Context) (PublicConfig, error) {
 	config := publicConfigFromStored(defaultStoredConfig())
 	if s == nil {
@@ -112,6 +213,15 @@ func (s *Service) Config(ctx context.Context) (PublicConfig, error) {
 	return config, nil
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @param channel 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, amountMicros int64, channel string) (CreateResult, error) {
 	record, err := s.currentStoredConfig(ctx)
 	if err != nil {
@@ -142,6 +252,14 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, amountMicros int
 	return CreateResult{Order: created, Checkout: checkout}, nil
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) List(ctx context.Context, userID uuid.UUID, filter ListFilter) (Page, error) {
 	if userID == uuid.Nil || filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 {
 		return Page{}, ErrInvalidInput
@@ -149,6 +267,13 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID, filter ListFilter)
 	return s.store.List(ctx, userID, filter)
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) ListAll(ctx context.Context, filter AdminListFilter) (AdminPage, error) {
 	filter.Search = strings.TrimSpace(filter.Search)
 	filter.Channel = strings.ToLower(strings.TrimSpace(filter.Channel))
@@ -164,6 +289,13 @@ func (s *Service) ListAll(ctx context.Context, filter AdminListFilter) (AdminPag
 	return s.store.ListAll(ctx, filter)
 }
 
+/**
+ * HandleNotification 用于处理对应的 HTTP 请求并写入响应。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) HandleNotification(ctx context.Context, values url.Values) error {
 	gateway, err := s.gateway(ctx, false)
 	if err != nil {
@@ -183,6 +315,13 @@ func (s *Service) HandleNotification(ctx context.Context, values url.Values) err
 // Reconcile queries EPay for an existing order and runs the same idempotent
 // completion transaction used by signed callbacks. It never creates a new
 // payment and returns paid orders without querying the provider again.
+/**
+ * Reconcile 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Reconcile(ctx context.Context, outTradeNo string) (Order, error) {
 	outTradeNo = strings.TrimSpace(outTradeNo)
 	if s == nil || s.store == nil || outTradeNo == "" || len(outTradeNo) > 64 {
@@ -197,6 +336,14 @@ func (s *Service) Reconcile(ctx context.Context, outTradeNo string) (Order, erro
 
 // ReconcileForUser exposes the same provider query to an order owner without
 // revealing or touching another user's order.
+/**
+ * ReconcileForUser 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) ReconcileForUser(ctx context.Context, userID uuid.UUID, outTradeNo string) (Order, error) {
 	outTradeNo = strings.TrimSpace(outTradeNo)
 	if s == nil || s.store == nil || userID == uuid.Nil || outTradeNo == "" || len(outTradeNo) > 64 {
@@ -212,6 +359,13 @@ func (s *Service) ReconcileForUser(ctx context.Context, userID uuid.UUID, outTra
 	return s.reconcileOrder(ctx, order)
 }
 
+/**
+ * reconcileOrder 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param order 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) reconcileOrder(ctx context.Context, order Order) (Order, error) {
 	if order.Status == StatusPaid {
 		return order, nil
@@ -236,6 +390,12 @@ func (s *Service) reconcileOrder(ctx context.Context, order Order) (Order, error
 	})
 }
 
+/**
+ * AdminConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) AdminConfig(ctx context.Context) (AdminConfig, error) {
 	record, err := s.currentStoredConfig(ctx)
 	if err != nil {
@@ -247,6 +407,13 @@ func (s *Service) AdminConfig(ctx context.Context) (AdminConfig, error) {
 	return config, nil
 }
 
+/**
+ * UpdateConfig 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) UpdateConfig(ctx context.Context, input ConfigInput) (AdminConfig, error) {
 	if s == nil || s.configStore == nil || s.cipher == nil {
 		return AdminConfig{}, ErrInvalidInput
@@ -303,6 +470,12 @@ func (s *Service) UpdateConfig(ctx context.Context, input ConfigInput) (AdminCon
 
 // Bootstrap stores an environment configuration only when the database has
 // never had a payment configuration. Subsequent page edits are authoritative.
+/**
+ * Bootstrap 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Bootstrap(ctx context.Context) error {
 	if s == nil || s.configStore == nil || s.cipher == nil || !epayConfigEnabled(s.defaultConfig) {
 		return nil
@@ -326,6 +499,12 @@ func (s *Service) Bootstrap(ctx context.Context) error {
 	return err
 }
 
+/**
+ * currentStoredConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) currentStoredConfig(ctx context.Context) (StoredConfig, error) {
 	if s == nil || s.configStore == nil {
 		if s != nil && epayConfigEnabled(s.defaultConfig) {
@@ -346,6 +525,13 @@ func (s *Service) currentStoredConfig(ctx context.Context) (StoredConfig, error)
 	return normalizeStoredConfig(record), nil
 }
 
+/**
+ * gateway 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param requireEnabled 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) gateway(ctx context.Context, requireEnabled bool) (Gateway, error) {
 	record, err := s.currentStoredConfig(ctx)
 	if err != nil {
@@ -354,6 +540,13 @@ func (s *Service) gateway(ctx context.Context, requireEnabled bool) (Gateway, er
 	return s.gatewayFromStored(record, requireEnabled)
 }
 
+/**
+ * gatewayFromStored 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @param requireEnabled 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) gatewayFromStored(record StoredConfig, requireEnabled bool) (Gateway, error) {
 	if requireEnabled && !record.Enabled {
 		return nil, ErrDisabled
@@ -376,6 +569,13 @@ func (s *Service) gatewayFromStored(record StoredConfig, requireEnabled bool) (G
 	return NewEPayGateway(config)
 }
 
+/**
+ * normalizeConfigInput 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @param current 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeConfigInput(input ConfigInput, current StoredConfig) (normalizedConfig, error) {
 	result := normalizedConfig{
 		Enabled: input.Enabled, APIURL: strings.TrimRight(strings.TrimSpace(input.APIURL), "/"),
@@ -509,6 +709,12 @@ type normalizedConfig struct {
 	BonusTiers         []BonusTier
 }
 
+/**
+ * adminConfigFromStored 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func adminConfigFromStored(record StoredConfig) AdminConfig {
 	hasMerchantKey := record.EncryptedMerchantKey != "" || record.MerchantKey != ""
 	return AdminConfig{
@@ -522,6 +728,12 @@ func adminConfigFromStored(record StoredConfig) AdminConfig {
 	}
 }
 
+/**
+ * storedConfigFromEPay 封装该名称对应的业务处理逻辑。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func storedConfigFromEPay(config EPayConfig) StoredConfig {
 	methods := defaultPaymentMethods(config.Channels)
 	return StoredConfig{
@@ -531,6 +743,12 @@ func storedConfigFromEPay(config EPayConfig) StoredConfig {
 	}
 }
 
+/**
+ * defaultStoredConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func defaultStoredConfig() StoredConfig {
 	return StoredConfig{
 		Provider: ProviderEPay, SiteName: "Novro", Channels: []string{}, Methods: []PaymentMethod{},
@@ -539,6 +757,12 @@ func defaultStoredConfig() StoredConfig {
 	}
 }
 
+/**
+ * normalizeStoredConfig 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeStoredConfig(record StoredConfig) StoredConfig {
 	if record.Provider == "" {
 		record.Provider = ProviderEPay
@@ -576,10 +800,22 @@ func normalizeStoredConfig(record StoredConfig) StoredConfig {
 	return record
 }
 
+/**
+ * defaultPresetAmounts 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func defaultPresetAmounts() []int64 {
 	return []int64{10_000_000, 50_000_000, 100_000_000, 500_000_000}
 }
 
+/**
+ * defaultPaymentMethods 封装该名称对应的业务处理逻辑。
+ * @param channels 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func defaultPaymentMethods(channels []string) []PaymentMethod {
 	methods := make([]PaymentMethod, 0, len(channels))
 	seen := make(map[string]struct{}, len(channels))
@@ -608,6 +844,12 @@ func defaultPaymentMethods(channels []string) []PaymentMethod {
 	return methods
 }
 
+/**
+ * enabledMethodCodes 封装该名称对应的业务处理逻辑。
+ * @param methods 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func enabledMethodCodes(methods []PaymentMethod) []string {
 	codes := make([]string, 0, len(methods))
 	for _, method := range methods {
@@ -618,6 +860,13 @@ func enabledMethodCodes(methods []PaymentMethod) []string {
 	return codes
 }
 
+/**
+ * enabledMethod 封装该名称对应的业务处理逻辑。
+ * @param methods 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func enabledMethod(methods []PaymentMethod, code string) (PaymentMethod, bool) {
 	for _, method := range methods {
 		if method.Enabled && method.Code == code {
@@ -627,6 +876,12 @@ func enabledMethod(methods []PaymentMethod, code string) (PaymentMethod, bool) {
 	return PaymentMethod{}, false
 }
 
+/**
+ * validPaymentIcon 封装该名称对应的业务处理逻辑。
+ * @param icon 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validPaymentIcon(icon string) bool {
 	switch icon {
 	case "wallet", "smartphone", "qr-code", "card", "landmark":
@@ -636,6 +891,13 @@ func validPaymentIcon(icon string) bool {
 	}
 }
 
+/**
+ * creditedAmount 封装该名称对应的业务处理逻辑。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @param tiers 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func creditedAmount(amountMicros int64, tiers []BonusTier) int64 {
 	bonusBPS := 0
 	for _, tier := range tiers {
@@ -646,6 +908,12 @@ func creditedAmount(amountMicros int64, tiers []BonusTier) int64 {
 	return amountMicros + amountMicros*int64(bonusBPS)/10_000
 }
 
+/**
+ * publicConfigFromStored 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func publicConfigFromStored(record StoredConfig) PublicConfig {
 	methods := make([]PaymentMethod, 0, len(record.Methods))
 	for _, method := range record.Methods {
@@ -660,12 +928,25 @@ func publicConfigFromStored(record StoredConfig) PublicConfig {
 	}
 }
 
+/**
+ * epayConfigEnabled 封装该名称对应的业务处理逻辑。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func epayConfigEnabled(config EPayConfig) bool {
 	return strings.TrimSpace(config.APIURL) != "" && strings.TrimSpace(config.MerchantID) != "" && strings.TrimSpace(config.MerchantKey) != ""
 }
 
 const ProviderEPay = "epay"
 
+/**
+ * contains 封装该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func contains(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

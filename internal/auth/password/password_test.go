@@ -8,6 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+/**
+ * TestHashAndVerify 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestHashAndVerify(t *testing.T) {
 	hasher := Hasher{Cost: bcrypt.MinCost}
 	hash, err := hasher.Hash("a-long-test-password1")
@@ -22,6 +28,12 @@ func TestHashAndVerify(t *testing.T) {
 	}
 }
 
+/**
+ * TestValidatePasswordBounds 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestValidatePasswordBounds(t *testing.T) {
 	for _, value := range []string{"short1", "12345678", "abcdefgh", strings.Repeat("a", MaxPasswordBytes)} {
 		if err := Validate(value); !errors.Is(err, ErrInvalidPassword) {

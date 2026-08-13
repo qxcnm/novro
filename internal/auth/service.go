@@ -19,7 +19,20 @@ var (
 )
 
 type PasswordManager interface {
+	/**
+	 * Hash 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Hash(string) (string, error)
+	/**
+	 * Verify 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Verify(string, string) bool
 }
 
@@ -29,10 +42,51 @@ type LoginUser struct {
 }
 
 type Store interface {
+	/**
+	 * FindUserByUsername 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	FindUserByUsername(context.Context, string) (LoginUser, error)
+	/**
+	 * FindOrCreateOIDCUser 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 OIDCUser 的接口输入参数。
+	 * @param arg3 类型为 bool 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	FindOrCreateOIDCUser(context.Context, OIDCUser, bool) (user.Record, error)
+	/**
+	 * CreateSession 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @param arg4 类型为 time.Time 的接口输入参数。
+	 * @param arg5 类型为 time.Time 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	CreateSession(context.Context, uuid.UUID, string, time.Time, time.Time) error
+	/**
+	 * FindUserBySession 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 time.Time 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	FindUserBySession(context.Context, string, time.Time) (user.Record, error)
+	/**
+	 * RevokeSession 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 time.Time 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	RevokeSession(context.Context, string, time.Time) error
 }
 
@@ -60,6 +114,15 @@ type LoginResult struct {
 	User      user.Record
 }
 
+/**
+ * NewService 用于创建并返回所需的对象或记录。
+ * @param store 用于持久化和查询数据的存储实现。
+ * @param passwords 本次操作需要使用的输入参数。
+ * @param secret 本次操作需要使用的输入参数。
+ * @param ttl 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewService(store Store, passwords PasswordManager, secret string, ttl time.Duration) (*Service, error) {
 	dummyHash, err := passwords.Hash("novro-dummy-password-value1")
 	if err != nil {
@@ -76,6 +139,14 @@ func NewService(store Store, passwords PasswordManager, secret string, ttl time.
 	}, nil
 }
 
+/**
+ * Login 用于校验用户凭据并建立登录会话。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param identifier 本次操作需要使用的输入参数。
+ * @param plainTextPassword 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Login(ctx context.Context, identifier, plainTextPassword string) (LoginResult, error) {
 	identifier = strings.ToLower(strings.TrimSpace(identifier))
 	loginUser, err := s.store.FindUserByUsername(ctx, identifier)
@@ -99,6 +170,14 @@ func (s *Service) Login(ctx context.Context, identifier, plainTextPassword strin
 	return s.createLoginSession(ctx, loginUser.User)
 }
 
+/**
+ * LoginOIDC 用于校验用户凭据并建立登录会话。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param identity 本次操作需要使用的输入参数。
+ * @param autoRegister 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) LoginOIDC(ctx context.Context, identity OIDCUser, autoRegister bool) (LoginResult, error) {
 	record, err := s.store.FindOrCreateOIDCUser(ctx, identity, autoRegister)
 	if err != nil {
@@ -110,6 +189,13 @@ func (s *Service) LoginOIDC(ctx context.Context, identity OIDCUser, autoRegister
 	return s.createLoginSession(ctx, record)
 }
 
+/**
+ * createLoginSession 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) createLoginSession(ctx context.Context, record user.Record) (LoginResult, error) {
 	token, err := s.generateToken()
 	if err != nil {
@@ -127,6 +213,13 @@ func (s *Service) createLoginSession(ctx context.Context, record user.Record) (L
 	return LoginResult{Token: token, ExpiresAt: expiresAt, User: record}, nil
 }
 
+/**
+ * Authenticate 用于校验用户凭据并建立登录会话。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param token 用于认证或继续操作的令牌。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Authenticate(ctx context.Context, token string) (user.Record, error) {
 	if !strings.HasPrefix(token, "nvs_") || len(token) < 40 || len(token) > 128 {
 		return user.Record{}, ErrUnauthenticated
@@ -141,6 +234,13 @@ func (s *Service) Authenticate(ctx context.Context, token string) (user.Record, 
 	return record, nil
 }
 
+/**
+ * Logout 用于撤销当前用户的登录会话。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param token 用于认证或继续操作的令牌。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil

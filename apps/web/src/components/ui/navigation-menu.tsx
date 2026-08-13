@@ -5,6 +5,15 @@ import { NavigationMenu as NavigationMenuPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon } from "lucide-react"
 
+/**
+ * NavigationMenu 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param viewport  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenu({
   className,
   children,
@@ -29,6 +38,13 @@ function NavigationMenu({
   )
 }
 
+/**
+ * NavigationMenuList 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuList({
   className,
   ...props
@@ -45,6 +61,13 @@ function NavigationMenuList({
   )
 }
 
+/**
+ * NavigationMenuItem 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuItem({
   className,
   ...props
@@ -62,6 +85,14 @@ const navigationMenuTriggerStyle = cva(
   "group/navigation-menu-trigger inline-flex h-9 w-max items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all outline-none hover:bg-muted focus:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-popup-open:bg-muted/50 data-popup-open:hover:bg-muted data-open:bg-muted/50 data-open:hover:bg-muted data-open:focus:bg-muted"
 )
 
+/**
+ * NavigationMenuTrigger 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuTrigger({
   className,
   children,
@@ -79,6 +110,13 @@ function NavigationMenuTrigger({
   )
 }
 
+/**
+ * NavigationMenuContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuContent({
   className,
   ...props
@@ -95,6 +133,13 @@ function NavigationMenuContent({
   )
 }
 
+/**
+ * NavigationMenuViewport 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuViewport({
   className,
   ...props
@@ -117,6 +162,13 @@ function NavigationMenuViewport({
   )
 }
 
+/**
+ * NavigationMenuLink 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuLink({
   className,
   ...props
@@ -133,6 +185,13 @@ function NavigationMenuLink({
   )
 }
 
+/**
+ * NavigationMenuIndicator 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function NavigationMenuIndicator({
   className,
   ...props

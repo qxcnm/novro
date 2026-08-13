@@ -41,22 +41,112 @@ const (
 var errSettlementIntentNotPersisted = errors.New("billing settlement intent was not persisted")
 
 type KeyAuthenticator interface {
+
+	/**
+	 * Authenticate 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Authenticate(context.Context, string) (apikey.Actor, error)
 }
 type RouteService interface {
+
+	/**
+	 * ResolveCandidates 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ResolveCandidates(context.Context, string, uuid.UUID) ([]modelroute.Resolved, error)
+
+	/**
+	 * ListActive 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListActive(context.Context, uuid.UUID) ([]modelroute.Record, error)
 }
 type BillingService interface {
+
+	/**
+	 * Finalize 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 billing.UsageInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Finalize(context.Context, billing.UsageInput) error
+
+	/**
+	 * RecordFailure 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 billing.FailureInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	RecordFailure(context.Context, billing.FailureInput) error
+
+	/**
+	 * StartOperation 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 billing.OperationStartInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	StartOperation(context.Context, billing.OperationStartInput) (billing.OperationStartResult, error)
+
+	/**
+	 * MarkOperationPendingSettlement 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 billing.UsageInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	MarkOperationPendingSettlement(context.Context, uuid.UUID, billing.UsageInput) error
+
+	/**
+	 * MarkOperationPendingUnknown 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	MarkOperationPendingUnknown(context.Context, uuid.UUID, string) error
+
+	/**
+	 * CompleteOperation 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	CompleteOperation(context.Context, uuid.UUID) error
+
+	/**
+	 * FailOperation 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	FailOperation(context.Context, uuid.UUID, string) error
 }
 type SettingsService interface {
+	/**
+	 * Config 声明该接口方法需要提供的业务能力。
+	 * @param none 无参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Config(context.Context) (gatewaysettings.Config, error)
 }
 
@@ -81,6 +171,12 @@ type Handler struct {
 	upstreamRetryDelays   []time.Duration
 }
 
+/**
+ * New 执行该名称对应的业务处理逻辑。
+ * @param deps 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func New(deps Dependencies) *Handler {
 	client := deps.Client
 	if client == nil {
@@ -97,6 +193,13 @@ func New(deps Dependencies) *Handler {
 	}
 }
 
+/**
+ * ServeHTTP 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, id := requestid.Ensure(r.Context())
 	r = r.WithContext(ctx)
@@ -125,6 +228,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "not_found", "API 路径不存在")
 }
 
+/**
+ * authenticate 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (apikey.Actor, bool) {
 	token := strings.TrimSpace(r.Header.Get("X-API-Key"))
 	if authorization := strings.TrimSpace(r.Header.Get("Authorization")); authorization != "" {
@@ -146,6 +256,14 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (apikey.A
 	return actor, true
 }
 
+/**
+ * listModels 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, actor apikey.Actor) {
 	routes, err := h.routes.ListActive(r.Context(), actor.APIKey.BillingGroupID)
 	if err != nil {
@@ -169,6 +287,15 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, actor apike
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
 }
 
+/**
+ * proxy 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Actor, endpoint string) {
 	startedAt := h.now()
 	body, err := readLimited(r.Body, maxGatewayBodyBytes)
@@ -461,11 +588,24 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("所有上游渠道均暂时不可用：%s（%s）", failureMessage, failureCode))
 }
 
+/**
+ * doUpstream 执行该名称对应的业务处理逻辑。
+ * @param request 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) doUpstream(request *http.Request) (*http.Response, error) {
 	response, err, _ := h.doUpstreamWithRetries(request, h.upstreamRetryDelays)
 	return response, err
 }
 
+/**
+ * doUpstreamWithRetries 执行该名称对应的业务处理逻辑。
+ * @param request 本次操作需要使用的输入参数。
+ * @param retryDelays 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []time.Duration) (*http.Response, error, bool) {
 	for attempt := 0; ; attempt++ {
 		attemptRequest := request
@@ -512,6 +652,23 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
 	}
 }
 
+/**
+ * bufferedStreamResponse 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @param response 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param reserved 本次操作需要使用的输入参数。
+ * @param inputEstimate 本次操作需要使用的输入参数。
+ * @param outputMaximum 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
 		return
@@ -551,6 +708,14 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+/**
+ * writeBufferedChatEvents 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @param flusher 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) writeBufferedChatEvents(w http.ResponseWriter, body []byte, flusher http.Flusher) {
 	var root map[string]any
 	if json.Unmarshal(body, &root) != nil {
@@ -589,6 +754,13 @@ func (h *Handler) writeBufferedChatEvents(w http.ResponseWriter, body []byte, fl
 	}
 }
 
+/**
+ * writeSSEJSON 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeSSEJSON(w io.Writer, value any) {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -597,6 +769,12 @@ func writeSSEJSON(w io.Writer, value any) {
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 }
 
+/**
+ * retryableUpstreamConnectionError 执行该名称对应的业务处理逻辑。
+ * @param err 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func retryableUpstreamConnectionError(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
@@ -613,10 +791,33 @@ func retryableUpstreamConnectionError(err error) bool {
 }
 
 // Any response outside the success range counts as a failed provider attempt.
+/**
+ * retryableUpstreamStatus 执行该名称对应的业务处理逻辑。
+ * @param status 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func retryableUpstreamStatus(status int) bool {
 	return status < http.StatusOK || status >= http.StatusMultipleChoices
 }
 
+/**
+ * bufferedResponse 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @param response 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param reserved 本次操作需要使用的输入参数。
+ * @param inputEstimate 本次操作需要使用的输入参数。
+ * @param outputMaximum 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
 		return
@@ -646,6 +847,18 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	_, _ = w.Write(body)
 }
 
+/**
+ * acceptBufferedOutcome 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) acceptBufferedOutcome(w http.ResponseWriter, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, body []byte, startedAt time.Time) bool {
 	switch classifyBufferedOutcome(endpoint, body) {
 	case streamOutcomeBillable:
@@ -661,6 +874,13 @@ func (h *Handler) acceptBufferedOutcome(w http.ResponseWriter, actor apikey.Acto
 	return false
 }
 
+/**
+ * classifyBufferedOutcome 执行该名称对应的业务处理逻辑。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func classifyBufferedOutcome(endpoint string, body []byte) streamOutcome {
 	var root map[string]any
 	if json.Unmarshal(body, &root) != nil || root == nil {
@@ -683,6 +903,15 @@ func classifyBufferedOutcome(endpoint string, body []byte) streamOutcome {
 	return streamOutcomeBillable
 }
 
+/**
+ * buildUpstreamBody 执行该名称对应的业务处理逻辑。
+ * @param payload 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param stream 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoint string, stream bool) ([]byte, error) {
 	upstreamPayload := make(map[string]any, len(payload)+1)
 	for key, value := range payload {
@@ -709,6 +938,12 @@ func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoi
 // streaming chunk. Generate a buffered completion upstream and translate it
 // back to SSE below so clients with shorter HTTP/2 header deadlines can still
 // receive a complete response.
+/**
+ * bufferedUpstreamStream 执行该名称对应的业务处理逻辑。
+ * @param route 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func bufferedUpstreamStream(route modelroute.Resolved) bool {
 	if strings.EqualFold(strings.TrimSpace(route.Provider.Code), "reasonix") {
 		return true
@@ -717,6 +952,14 @@ func bufferedUpstreamStream(route modelroute.Resolved) bool {
 	return err == nil && strings.EqualFold(parsed.Hostname(), "1024token.net")
 }
 
+/**
+ * setUpstreamHeaders 执行该名称对应的业务处理逻辑。
+ * @param upstreamRequest 本次操作需要使用的输入参数。
+ * @param inboundRequest 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route modelroute.Resolved) {
 	upstreamRequest.Header.Set("Content-Type", "application/json")
 	upstreamRequest.Header.Set("Accept", "application/json, text/event-stream")
@@ -736,6 +979,13 @@ func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route mod
 	upstreamRequest.Header.Set("Authorization", "Bearer "+route.APIKey)
 }
 
+/**
+ * setUpstreamIdempotencyKey 执行该名称对应的业务处理逻辑。
+ * @param upstreamRequest 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func setUpstreamIdempotencyKey(upstreamRequest *http.Request, requestID uuid.UUID) {
 	upstreamRequest.Header.Set("Idempotency-Key", "novro-"+requestID.String())
 }
@@ -759,6 +1009,12 @@ const (
 	streamOutcomeFailed
 )
 
+/**
+ * Read 执行该名称对应的业务处理逻辑。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (r streamActivityReader) Read(target []byte) (int, error) {
 	read, err := r.reader.Read(target)
 	if read > 0 {
@@ -770,6 +1026,25 @@ func (r streamActivityReader) Read(target []byte) (int, error) {
 	return read, err
 }
 
+/**
+ * streamResponse 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param r 本次操作需要使用的输入参数。
+ * @param response 本次操作需要使用的输入参数。
+ * @param upstreamContext 本次操作需要使用的输入参数。
+ * @param cancelUpstream 本次操作需要使用的输入参数。
+ * @param settings 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param reserved 本次操作需要使用的输入参数。
+ * @param inputEstimate 本次操作需要使用的输入参数。
+ * @param outputMaximum 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, upstreamContext context.Context, cancelUpstream context.CancelFunc, settings gatewaysettings.Config, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
 	defer cancelUpstream()
 	copyResponseHeaders(w.Header(), response.Header)
@@ -995,6 +1270,20 @@ streamLoop:
 	}
 }
 
+/**
+ * settle 执行该名称对应的业务处理逻辑。
+ * @param ctx 本次操作需要使用的输入参数。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param reserved 本次操作需要使用的输入参数。
+ * @param quote 本次操作需要使用的输入参数。
+ * @param usage 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
 	input := h.usageInput(actor, route, requestID, endpoint, reserved, quote, usage, startedAt)
 	persistCtx, persistCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -1013,6 +1302,19 @@ func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelrou
 	return nil
 }
 
+/**
+ * usageInput 执行该名称对应的业务处理逻辑。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param reserved 本次操作需要使用的输入参数。
+ * @param quote 本次操作需要使用的输入参数。
+ * @param usage 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) usageInput(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) billing.UsageInput {
 	billingGroupID := actor.APIKey.BillingGroupID
 	return billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
@@ -1020,6 +1322,13 @@ func (h *Handler) usageInput(actor apikey.Actor, route modelroute.Resolved, requ
 		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 }
 
+/**
+ * classifyStreamEvent 执行该名称对应的业务处理逻辑。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param data 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, string) {
 	if bytes.Equal(data, []byte("[DONE]")) {
 		return streamOutcomeBillable, "", ""
@@ -1056,6 +1365,13 @@ func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, s
 	return streamOutcomeOpen, "", ""
 }
 
+/**
+ * finalizeInput 执行该名称对应的业务处理逻辑。
+ * @param ctx 本次操作需要使用的输入参数。
+ * @param input 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) finalizeInput(ctx context.Context, input billing.UsageInput) error {
 	finalizeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -1066,6 +1382,20 @@ func (h *Handler) finalizeInput(ctx context.Context, input billing.UsageInput) e
 	return err
 }
 
+/**
+ * recordFailure 执行该名称对应的业务处理逻辑。
+ * @param actor 本次操作需要使用的输入参数。
+ * @param route 本次操作需要使用的输入参数。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param statusCode 本次操作需要使用的输入参数。
+ * @param errorCode 本次操作需要使用的输入参数。
+ * @param errorMessage 本次操作需要使用的输入参数。
+ * @param modelName 本次操作需要使用的输入参数。
+ * @param startedAt 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, statusCode int, errorCode, errorMessage, modelName string, startedAt time.Time) {
 	if route.UpstreamModel == nil || route.UpstreamModelID == nil || actor.APIKey.BillingGroupID == uuid.Nil || actor.APIKey.BillingGroup.ID == uuid.Nil {
 		return
@@ -1089,6 +1419,13 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	}
 }
 
+/**
+ * failOperation 执行该名称对应的业务处理逻辑。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param code 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) failOperation(requestID uuid.UUID, code string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1097,6 +1434,13 @@ func (h *Handler) failOperation(requestID uuid.UUID, code string) {
 	}
 }
 
+/**
+ * markOperationPendingUnknown 执行该名称对应的业务处理逻辑。
+ * @param requestID 本次操作需要使用的输入参数。
+ * @param reason 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) markOperationPendingUnknown(requestID uuid.UUID, reason string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1105,6 +1449,13 @@ func (h *Handler) markOperationPendingUnknown(requestID uuid.UUID, reason string
 	}
 }
 
+/**
+ * retrySettlement 执行该名称对应的业务处理逻辑。
+ * @param ctx 本次操作需要使用的输入参数。
+ * @param operation 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *Handler) retrySettlement(ctx context.Context, operation func() error) (error, int) {
 	for attempt := 0; ; attempt++ {
 		err := operation()
@@ -1130,6 +1481,12 @@ func (h *Handler) retrySettlement(ctx context.Context, operation func() error) (
 	}
 }
 
+/**
+ * retryableSettlementError 执行该名称对应的业务处理逻辑。
+ * @param err 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func retryableSettlementError(err error) bool {
 	return err != nil &&
 		!errors.Is(err, billing.ErrInvalidInput) && !errors.Is(err, billing.ErrWalletNotFound) &&
@@ -1145,6 +1502,12 @@ type tokenUsage struct {
 	UpstreamID                                                        string
 }
 
+/**
+ * merge 执行该名称对应的业务处理逻辑。
+ * @param other 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (u *tokenUsage) merge(other tokenUsage) {
 	if other.InputInvalid {
 		u.Input, u.UncachedInput, u.CacheRead, u.CacheWrite, u.CacheWrite1h = 0, 0, 0, 0, 0
@@ -1186,6 +1549,13 @@ const (
 	usageSemanticsAnthropicAdditional
 )
 
+/**
+ * usageSemanticsFor 执行该名称对应的业务处理逻辑。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func usageSemanticsFor(endpoint string, protocol provider.Protocol) usageSemantics {
 	if endpoint == "messages" && protocol == provider.ProtocolAnthropic {
 		return usageSemanticsAnthropicAdditional
@@ -1193,6 +1563,13 @@ func usageSemanticsFor(endpoint string, protocol provider.Protocol) usageSemanti
 	return usageSemanticsOpenAITotal
 }
 
+/**
+ * parseUsage 执行该名称对应的业务处理逻辑。
+ * @param body 本次操作需要使用的输入参数。
+ * @param semantics 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 	var root map[string]any
 	if json.Unmarshal(body, &root) != nil {
@@ -1218,6 +1595,13 @@ func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 	return usage
 }
 
+/**
+ * parseUsageCandidate 执行该名称对应的业务处理逻辑。
+ * @param candidate 本次操作需要使用的输入参数。
+ * @param semantics 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tokenUsage {
 	promptTokens, hasPromptTokens := intField(candidate, "prompt_tokens")
 	inputTokens, hasInputTokens := intField(candidate, "input_tokens")
@@ -1303,6 +1687,12 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 	}
 }
 
+/**
+ * parseNewAPIBillingUsage 执行该名称对应的业务处理逻辑。
+ * @param candidate 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseNewAPIBillingUsage(candidate map[string]any) (tokenUsage, bool) {
 	billingUsage := mapValue(candidate["billing_usage"])
 	if billingUsage == nil {
@@ -1347,6 +1737,12 @@ func parseNewAPIBillingUsage(candidate map[string]any) (tokenUsage, bool) {
 	return usage, ok
 }
 
+/**
+ * parseNewAPIGeminiBillingUsage 执行该名称对应的业务处理逻辑。
+ * @param metadata 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseNewAPIGeminiBillingUsage(metadata map[string]any) (tokenUsage, bool) {
 	fields := []string{"promptTokenCount", "toolUsePromptTokenCount", "candidatesTokenCount", "thoughtsTokenCount", "cachedContentTokenCount", "totalTokenCount"}
 	for _, field := range fields {
@@ -1374,10 +1770,26 @@ func parseNewAPIGeminiBillingUsage(metadata map[string]any) (tokenUsage, bool) {
 	}, true
 }
 
+/**
+ * conflictingNonzeroAliases 执行该名称对应的业务处理逻辑。
+ * @param first 本次操作需要使用的输入参数。
+ * @param hasFirst 本次操作需要使用的输入参数。
+ * @param second 本次操作需要使用的输入参数。
+ * @param hasSecond 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func conflictingNonzeroAliases(first int, hasFirst bool, second int, hasSecond bool) bool {
 	return hasFirst && hasSecond && first > 0 && second > 0 && first != second
 }
 
+/**
+ * addTokenCounts 执行该名称对应的业务处理逻辑。
+ * @param first 本次操作需要使用的输入参数。
+ * @param second 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func addTokenCounts(first, second int) (int, bool) {
 	if first > maxInt()-second {
 		return 0, false
@@ -1385,10 +1797,22 @@ func addTokenCounts(first, second int) (int, bool) {
 	return first + second, true
 }
 
+/**
+ * breakdown 执行该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (u tokenUsage) breakdown() billing.TokenBreakdown {
 	return billing.TokenBreakdown{UncachedInput: u.UncachedInput, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheWrite1h: u.CacheWrite1h, Output: u.Output}
 }
 
+/**
+ * applyUsageFallback 执行该名称对应的业务处理逻辑。
+ * @param usage 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsage {
 	if !usage.InputReported {
 		usage.Input = 0
@@ -1405,6 +1829,12 @@ func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsa
 	return usage
 }
 
+/**
+ * estimateInputTokens 执行该名称对应的业务处理逻辑。
+ * @param body 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func estimateInputTokens(body []byte) int {
 	// JSON request bytes are a materially closer provisional estimate than the
 	// previous one-byte-per-token hold. Four bytes per token is intentionally a
@@ -1414,11 +1844,24 @@ func estimateInputTokens(body []byte) int {
 	return max(1, (len(body)+3)/4+protocolOverheadTokens)
 }
 
+/**
+ * sha256String 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func sha256String(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return fmt.Sprintf("%x", digest)
 }
 
+/**
+ * gatewayRequestHash 执行该名称对应的业务处理逻辑。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func gatewayRequestHash(endpoint string, body []byte) string {
 	digest := sha256.New()
 	_, _ = io.WriteString(digest, endpoint)
@@ -1427,6 +1870,13 @@ func gatewayRequestHash(endpoint string, body []byte) string {
 	return fmt.Sprintf("%x", digest.Sum(nil))
 }
 
+/**
+ * writeOperationReplay 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param operation 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeOperationReplay(w http.ResponseWriter, operation billing.Operation) {
 	w.Header().Set(requestid.Header, operation.RequestID.String())
 	switch operation.Status {
@@ -1442,11 +1892,24 @@ func writeOperationReplay(w http.ResponseWriter, operation billing.Operation) {
 	}
 }
 
+/**
+ * rateCardFor 执行该名称对应的业务处理逻辑。
+ * @param route 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func rateCardFor(route modelroute.Resolved) billing.RateCard {
 	prices := route.UpstreamModel.Prices
 	return billing.RateCard{InputMicros: prices.InputMicros, OutputMicros: prices.OutputMicros, CacheReadMicros: prices.CacheReadMicros, CacheWriteMicros: prices.CacheWriteMicros, CacheWrite1hMicros: prices.CacheWrite1hMicros, RequestMicros: prices.RequestMicros}
 }
 
+/**
+ * readMaxOutput 执行该名称对应的业务处理逻辑。
+ * @param payload 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func readMaxOutput(payload map[string]any, endpoint string) (int, bool) {
 	keys := []string{"max_tokens"}
 	if endpoint == "chat_completions" {
@@ -1469,6 +1932,13 @@ func readMaxOutput(payload map[string]any, endpoint string) (int, bool) {
 	return defaultMaxOutputTokens, true
 }
 
+/**
+ * protocolSupports 执行该名称对应的业务处理逻辑。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func protocolSupports(protocol provider.Protocol, endpoint string) bool {
 	if endpoint == "messages" {
 		return protocol == provider.ProtocolAnthropic
@@ -1476,6 +1946,14 @@ func protocolSupports(protocol provider.Protocol, endpoint string) bool {
 	return protocol == provider.ProtocolOpenAI
 }
 
+/**
+ * buildUpstreamURL 执行该名称对应的业务处理逻辑。
+ * @param base 本次操作需要使用的输入参数。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @param endpoint 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func buildUpstreamURL(base string, protocol provider.Protocol, endpoint string) (string, error) {
 	parsed, err := url.Parse(base)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
@@ -1497,6 +1975,13 @@ func buildUpstreamURL(base string, protocol provider.Protocol, endpoint string) 
 	return parsed.String(), nil
 }
 
+/**
+ * selfReferentialUpstream 执行该名称对应的业务处理逻辑。
+ * @param request 本次操作需要使用的输入参数。
+ * @param base 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func selfReferentialUpstream(request *http.Request, base string) bool {
 	if request == nil || strings.TrimSpace(request.Host) == "" {
 		return false
@@ -1514,14 +1999,33 @@ func selfReferentialUpstream(request *http.Request, base string) bool {
 	return strings.EqualFold(parsed.Hostname(), requestHost)
 }
 
+/**
+ * newOutboundClient 执行该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func newOutboundClient() *http.Client {
 	return upstreamhttp.NewClient()
 }
 
+/**
+ * unsafeUpstreamIP 执行该名称对应的业务处理逻辑。
+ * @param ip 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func unsafeUpstreamIP(ip net.IP) bool {
 	return upstreamhttp.UnsafeIP(ip)
 }
 
+/**
+ * readLimited 执行该名称对应的业务处理逻辑。
+ * @param reader 本次操作需要使用的输入参数。
+ * @param limit 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 	if limit <= 0 {
 		return io.ReadAll(reader)
@@ -1532,6 +2036,13 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 	}
 	return body, nil
 }
+/**
+ * copyResponseHeaders 执行该名称对应的业务处理逻辑。
+ * @param target 本次操作需要使用的输入参数。
+ * @param source 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func copyResponseHeaders(target, source http.Header) {
 	for _, key := range []string{"Content-Type", "Content-Encoding", "OpenAI-Processing-Ms", "X-Request-ID", "Request-ID"} {
 		if value := source.Get(key); value != "" {
@@ -1540,8 +2051,26 @@ func copyResponseHeaders(target, source http.Header) {
 	}
 	target.Set("Cache-Control", "no-store")
 }
+/**
+ * mapValue 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func mapValue(value any) map[string]any { result, _ := value.(map[string]any); return result }
+/**
+ * stringValue 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func stringValue(value any) string      { result, _ := value.(string); return result }
+/**
+ * intValue 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func intValue(value any) int {
 	number, ok := parseIntValue(value)
 	if !ok {
@@ -1550,6 +2079,13 @@ func intValue(value any) int {
 	return number
 }
 
+/**
+ * intField 执行该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param key 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func intField(values map[string]any, key string) (int, bool) {
 	value, exists := values[key]
 	if !exists {
@@ -1558,6 +2094,12 @@ func intField(values map[string]any, key string) (int, bool) {
 	return parseIntValue(value)
 }
 
+/**
+ * parseIntValue 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseIntValue(value any) (int, bool) {
 	if encoded, ok := value.(json.Number); ok {
 		if integer, err := strconv.ParseInt(encoded.String(), 10, 0); err == nil {
@@ -1579,10 +2121,23 @@ func parseIntValue(value any) (int, bool) {
 	return int(number), true
 }
 
+/**
+ * maxInt 执行该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func maxInt() int {
 	return int(^uint(0) >> 1)
 }
 
+/**
+ * hasInvalidIntField 执行该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param key 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func hasInvalidIntField(values map[string]any, key string) bool {
 	value, exists := values[key]
 	if !exists {
@@ -1592,6 +2147,13 @@ func hasInvalidIntField(values map[string]any, key string) bool {
 	return !valid
 }
 
+/**
+ * hasInvalidMapField 执行该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param key 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func hasInvalidMapField(values map[string]any, key string) bool {
 	value, exists := values[key]
 	if !exists || value == nil {
@@ -1601,6 +2163,13 @@ func hasInvalidMapField(values map[string]any, key string) bool {
 	return !valid
 }
 
+/**
+ * mapHasAny 执行该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @param keys 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func mapHasAny(values map[string]any, keys ...string) bool {
 	for _, key := range keys {
 		if _, exists := values[key]; exists {
@@ -1610,12 +2179,29 @@ func mapHasAny(values map[string]any, keys ...string) bool {
 	return false
 }
 
+/**
+ * writeJSON 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param status 本次操作需要使用的输入参数。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+/**
+ * writeError 执行该名称对应的业务处理逻辑。
+ * @param w 本次操作需要使用的输入参数。
+ * @param status 本次操作需要使用的输入参数。
+ * @param code 本次操作需要使用的输入参数。
+ * @param message 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	value := map[string]any{"error": map[string]any{"message": message, "type": "novro_error", "code": code}}
 	if id := requestid.ResponseID(w); id != uuid.Nil {

@@ -9,6 +9,12 @@ import (
 	"testing/fstest"
 )
 
+/**
+ * TestReadMigrationsSortsAndHashesFiles 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestReadMigrationsSortsAndHashesFiles(t *testing.T) {
 	source := fstest.MapFS{
 		"migrations/0002_second.sql": {Data: []byte("SELECT 2;")},
@@ -24,6 +30,12 @@ func TestReadMigrationsSortsAndHashesFiles(t *testing.T) {
 	}
 }
 
+/**
+ * TestVersionedSQLContainsExpectedMigrations 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	entries, err := fs.ReadDir(VersionedSQL, "migrations")
 	if err != nil {
@@ -40,6 +52,12 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	}
 }
 
+/**
+ * TestBillingGroupAuthorizationMigrationPreservesLegacyAccess 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestBillingGroupAuthorizationMigrationPreservesLegacyAccess(t *testing.T) {
 	contents, err := fs.ReadFile(VersionedSQL, "migrations/0010_billing_group_user_authorizations.sql")
 	if err != nil {
@@ -62,6 +80,12 @@ func TestBillingGroupAuthorizationMigrationPreservesLegacyAccess(t *testing.T) {
 	}
 }
 
+/**
+ * TestInitialMigrationContainsCurrentSchemaInvariants 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestInitialMigrationContainsCurrentSchemaInvariants(t *testing.T) {
 	contents, err := fs.ReadFile(VersionedSQL, "migrations/0001_initial_schema.sql")
 	if err != nil {
@@ -101,6 +125,12 @@ func TestInitialMigrationContainsCurrentSchemaInvariants(t *testing.T) {
 	}
 }
 
+/**
+ * TestInitialMigrationSeedsOnlyRequiredDefaults 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestInitialMigrationSeedsOnlyRequiredDefaults(t *testing.T) {
 	contents, err := fs.ReadFile(VersionedSQL, "migrations/0001_initial_schema.sql")
 	if err != nil {
@@ -122,6 +152,12 @@ func TestInitialMigrationSeedsOnlyRequiredDefaults(t *testing.T) {
 	}
 }
 
+/**
+ * TestValidateAppliedMigrationsRejectsDriftAndMissingFiles 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestValidateAppliedMigrationsRejectsDriftAndMissingFiles(t *testing.T) {
 	migrations := []migrationFile{{Version: "0001_first", Checksum: strings.Repeat("a", 64)}}
 	if _, err := validateAppliedMigrations(migrations, map[string]string{"0001_first": strings.Repeat("b", 64)}); err == nil || !strings.Contains(err.Error(), "checksum") {
@@ -132,6 +168,12 @@ func TestValidateAppliedMigrationsRejectsDriftAndMissingFiles(t *testing.T) {
 	}
 }
 
+/**
+ * TestValidateAppliedMigrationsReturnsLegacyBackfill 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestValidateAppliedMigrationsReturnsLegacyBackfill(t *testing.T) {
 	migrations := []migrationFile{
 		{Version: "0002_second", Checksum: strings.Repeat("b", 64)},
@@ -146,6 +188,13 @@ func TestValidateAppliedMigrationsReturnsLegacyBackfill(t *testing.T) {
 	}
 }
 
+/**
+ * migrationTableDefinition 封装该名称对应的业务处理逻辑。
+ * @param sql 本次操作需要使用的输入参数。
+ * @param table 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func migrationTableDefinition(sql, table string) (string, bool) {
 	marker := "CREATE TABLE IF NOT EXISTS " + table + " ("
 	start := strings.Index(sql, marker)

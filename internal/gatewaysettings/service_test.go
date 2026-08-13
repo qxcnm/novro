@@ -12,6 +12,12 @@ type memoryStore struct {
 	err    error
 }
 
+/**
+ * GatewayRequestConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *memoryStore) GatewayRequestConfig(context.Context) (StoredConfig, error) {
 	if s.err != nil {
 		return StoredConfig{}, s.err
@@ -19,6 +25,12 @@ func (s *memoryStore) GatewayRequestConfig(context.Context) (StoredConfig, error
 	return s.stored, nil
 }
 
+/**
+ * SaveGatewayRequestConfig 封装该名称对应的业务处理逻辑。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *memoryStore) SaveGatewayRequestConfig(_ context.Context, config Config) (StoredConfig, error) {
 	if s.err != nil {
 		return StoredConfig{}, s.err
@@ -28,6 +40,12 @@ func (s *memoryStore) SaveGatewayRequestConfig(_ context.Context, config Config)
 	return s.stored, nil
 }
 
+/**
+ * TestConfigReturnsDefaultsWhenNotStored 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestConfigReturnsDefaultsWhenNotStored(t *testing.T) {
 	config, err := NewService(&memoryStore{}).Config(context.Background())
 	if err != nil {
@@ -38,6 +56,12 @@ func TestConfigReturnsDefaultsWhenNotStored(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdatePersistsValidatedConfig 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdatePersistsValidatedConfig(t *testing.T) {
 	store := &memoryStore{}
 	want := Config{SSEHeartbeatEnabled: false, SSEHeartbeatIntervalMS: 30_000, UpstreamTimeoutMS: 120_000, UpstreamStreamIdleTimeoutMS: 45_000, ReservationInputTokenCap: 32_768, ReservationOutputTokenCap: 2048}
@@ -50,6 +74,12 @@ func TestUpdatePersistsValidatedConfig(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateRejectsInvalidConfig 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateRejectsInvalidConfig(t *testing.T) {
 	store := &memoryStore{}
 	_, err := NewService(store).Update(context.Background(), Config{SSEHeartbeatEnabled: true, SSEHeartbeatIntervalMS: 0})

@@ -1,3 +1,9 @@
+/**
+ * copyText 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export async function copyText(value: string): Promise<boolean> {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return false;

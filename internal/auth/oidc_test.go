@@ -22,6 +22,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
+/**
+ * TestOIDCClientAuthorizationCodeFlow 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOIDCClientAuthorizationCodeFlow(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -119,6 +125,12 @@ func TestOIDCClientAuthorizationCodeFlow(t *testing.T) {
 	}
 }
 
+/**
+ * TestOIDCClientRejectsExpiredAndTamperedFlowState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOIDCClientRejectsExpiredAndTamperedFlowState(t *testing.T) {
 	client := testOIDCStateClient(t)
 	client.now = func() time.Time { return time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC) }
@@ -144,6 +156,12 @@ func TestOIDCClientRejectsExpiredAndTamperedFlowState(t *testing.T) {
 	}
 }
 
+/**
+ * testOIDCStateClient 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testOIDCStateClient(t *testing.T) *OIDCClient {
 	t.Helper()
 	key := sha256.Sum256([]byte("test OIDC state key"))
@@ -165,6 +183,14 @@ func testOIDCStateClient(t *testing.T) *OIDCClient {
 	}
 }
 
+/**
+ * writeTestJSON 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param w HTTP 响应写入器。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeTestJSON(t *testing.T, w http.ResponseWriter, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")

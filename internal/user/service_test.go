@@ -20,32 +20,76 @@ type fakeStore struct {
 	resetHash     string
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Create(_ context.Context, params CreateParams) (Record, error) {
 	f.createParams = params
 	return Record{ID: uuid.New(), Username: params.Username, Role: params.Role, Status: StatusActive}, nil
 }
 
+/**
+ * CreateInitialAdmin 用于创建并返回所需的对象或记录。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) CreateInitialAdmin(_ context.Context, params CreateParams) (Record, error) {
 	f.initialParams = params
 	return Record{ID: uuid.New(), Username: params.Username, Role: RoleAdmin, Status: StatusActive}, nil
 }
 
+/**
+ * EmailExists 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) EmailExists(context.Context, string) (bool, error) {
 	return f.emailExists, f.emailCheckErr
 }
 
+/**
+ * IsInitialized 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) IsInitialized(context.Context) (bool, error) { return f.initialized, nil }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) List(_ context.Context, filter ListFilter) (Page, error) {
 	f.listFilter = filter
 	return Page{Limit: filter.Limit}, nil
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) SetStatus(_ context.Context, id uuid.UUID, status Status) (Record, error) {
 	f.status = status
 	return Record{ID: id, Status: status}, nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Update(_ context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
 	f.updateParams = params
 	record := Record{ID: id}
@@ -58,16 +102,35 @@ func (f *fakeStore) Update(_ context.Context, id uuid.UUID, params UpdateParams)
 	return record, nil
 }
 
+/**
+ * ResetPassword 封装该名称对应的业务处理逻辑。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) ResetPassword(_ context.Context, _ uuid.UUID, hash string) error {
 	f.resetHash = hash
 	return nil
 }
+
+/**
+ * FindByUsername 用于查询并返回所需的数据。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) FindByUsername(context.Context, string) (Record, error) {
 	return Record{}, ErrNotFound
 }
 
 type fakeHasher struct{}
 
+/**
+ * Hash 用于对敏感数据执行安全转换。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakeHasher) Hash(value string) (string, error) {
 	if value == "invalid" {
 		return "", errors.New("invalid password")
@@ -75,6 +138,12 @@ func (fakeHasher) Hash(value string) (string, error) {
 	return "hashed:" + value, nil
 }
 
+/**
+ * TestCreateNormalizesUserAndHashesPassword 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCreateNormalizesUserAndHashesPassword(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -93,6 +162,12 @@ func TestCreateNormalizesUserAndHashesPassword(t *testing.T) {
 	}
 }
 
+/**
+ * TestRegisterCannotCreateAdministrator 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegisterCannotCreateAdministrator(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -110,6 +185,12 @@ func TestRegisterCannotCreateAdministrator(t *testing.T) {
 	}
 }
 
+/**
+ * TestRegisterRejectsMalformedReferralCode 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRegisterRejectsMalformedReferralCode(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeHasher{})
 	_, err := service.Register(context.Background(), RegisterInput{
@@ -120,6 +201,12 @@ func TestRegisterRejectsMalformedReferralCode(t *testing.T) {
 	}
 }
 
+/**
+ * TestEmailAvailableNormalizesAndChecksStore 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEmailAvailableNormalizesAndChecksStore(t *testing.T) {
 	store := &fakeStore{emailExists: true}
 	service := NewService(store, fakeHasher{})
@@ -135,6 +222,12 @@ func TestEmailAvailableNormalizesAndChecksStore(t *testing.T) {
 	}
 }
 
+/**
+ * TestInitializeAdminUsesDedicatedStoreOperation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestInitializeAdminUsesDedicatedStoreOperation(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -149,12 +242,24 @@ func TestInitializeAdminUsesDedicatedStoreOperation(t *testing.T) {
 	}
 }
 
+/**
+ * TestProtectedAdminErrorIsDistinct 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProtectedAdminErrorIsDistinct(t *testing.T) {
 	if ErrProtectedAdmin == ErrLastActiveAdmin {
 		t.Fatal("protected administrator error must be distinct from last-admin invariant")
 	}
 }
 
+/**
+ * TestSetupRequiredUsesPermanentInstallationState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSetupRequiredUsesPermanentInstallationState(t *testing.T) {
 	service := NewService(&fakeStore{initialized: true}, fakeHasher{})
 	required, err := service.SetupRequired(context.Background())
@@ -163,6 +268,12 @@ func TestSetupRequiredUsesPermanentInstallationState(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceValidatesListAndStatus 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceValidatesListAndStatus(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -178,6 +289,12 @@ func TestServiceValidatesListAndStatus(t *testing.T) {
 	}
 }
 
+/**
+ * TestResetPasswordHashesBeforeStore 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestResetPasswordHashesBeforeStore(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -189,6 +306,12 @@ func TestResetPasswordHashesBeforeStore(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateNormalizesEditableFields 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateNormalizesEditableFields(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, fakeHasher{})
@@ -203,6 +326,12 @@ func TestUpdateNormalizesEditableFields(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateRejectsEmptyAndInvalidRole 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateRejectsEmptyAndInvalidRole(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeHasher{})
 	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{}); !errors.Is(err, ErrInvalidInput) {
@@ -214,6 +343,12 @@ func TestUpdateRejectsEmptyAndInvalidRole(t *testing.T) {
 	}
 }
 
+/**
+ * TestPasswordValidationMapsToInvalidInput 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestPasswordValidationMapsToInvalidInput(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeHasher{})
 	if _, err := service.Create(context.Background(), CreateInput{
@@ -228,6 +363,12 @@ func TestPasswordValidationMapsToInvalidInput(t *testing.T) {
 	}
 }
 
+/**
+ * TestCreateRejectsMissingOrInvalidEmail 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCreateRejectsMissingOrInvalidEmail(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeHasher{})
 	for _, email := range []string{"", "not-an-email", "user@example"} {

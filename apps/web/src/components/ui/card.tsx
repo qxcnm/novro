@@ -2,6 +2,14 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Card 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param size  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Card({
   className,
   size = "default",
@@ -20,6 +28,13 @@ function Card({
   )
 }
 
+/**
+ * CardHeader 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -33,6 +48,13 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * CardTitle 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -46,6 +68,13 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * CardDescription 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -56,6 +85,13 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * CardAction 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -69,6 +105,13 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * CardContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -79,6 +122,13 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * CardFooter 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

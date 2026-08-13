@@ -14,6 +14,12 @@ import (
 	"github.com/novro-gateway/novro/internal/provider"
 )
 
+/**
+ * TestDiscoverUsesConfiguredProviderNameAndCredentials 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDiscoverUsesConfiguredProviderNameAndCredentials(t *testing.T) {
 	var authorization string
 	var requestPath string
@@ -46,6 +52,12 @@ func TestDiscoverUsesConfiguredProviderNameAndCredentials(t *testing.T) {
 	}
 }
 
+/**
+ * TestDiscoverIgnoresUpstreamPricing 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDiscoverIgnoresUpstreamPricing(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -63,6 +75,12 @@ func TestDiscoverIgnoresUpstreamPricing(t *testing.T) {
 	}
 }
 
+/**
+ * TestDiscoverReportsContextDeadline 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDiscoverReportsContextDeadline(t *testing.T) {
 	service := NewService(nil, nil, &http.Client{Transport: blockingRoundTripper{}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -74,6 +92,12 @@ func TestDiscoverReportsContextDeadline(t *testing.T) {
 	}
 }
 
+/**
+ * TestDiscoverReportsUnauthorizedCredential 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDiscoverReportsUnauthorizedCredential(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -98,11 +122,23 @@ func TestDiscoverReportsUnauthorizedCredential(t *testing.T) {
 
 type blockingRoundTripper struct{}
 
+/**
+ * RoundTrip 封装该名称对应的业务处理逻辑。
+ * @param request 当前请求数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (blockingRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	<-request.Context().Done()
 	return nil, request.Context().Err()
 }
 
+/**
+ * TestModelListURLHandlesSupportedProtocols 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -133,6 +169,12 @@ func TestModelListURLHandlesSupportedProtocols(t *testing.T) {
 	}
 }
 
+/**
+ * TestCatalogProviderNameCanonicalizesOfficialChineseEndpoints 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCatalogProviderNameCanonicalizesOfficialChineseEndpoints(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -153,6 +195,12 @@ func TestCatalogProviderNameCanonicalizesOfficialChineseEndpoints(t *testing.T) 
 	}
 }
 
+/**
+ * TestCatalogProviderNameFollowsAggregatedModelVendor 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCatalogProviderNameFollowsAggregatedModelVendor(t *testing.T) {
 	configured := &ent.Provider{DisplayName: "1024token", BaseURL: "https://1024token.net/v1"}
 	for _, test := range []struct {
@@ -171,6 +219,12 @@ func TestCatalogProviderNameFollowsAggregatedModelVendor(t *testing.T) {
 	}
 }
 
+/**
+ * TestUniqueIDsAndAutomaticPublicNames 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUniqueIDsAndAutomaticPublicNames(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	ids := uniqueIDs([]uuid.UUID{first, uuid.Nil, first, second})

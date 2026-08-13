@@ -19,6 +19,14 @@ type EntStore struct {
 	client *ent.Client
 }
 
+/**
+ * AuthenticateHash 用于校验用户凭据并建立登录会话。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.Time) (Actor, error) {
 	entity, err := s.client.APIKey.Query().
 		Where(
@@ -58,10 +66,29 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 	return Actor{APIKey: fromEnt(entity), User: userRecord}, nil
 }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @param name 用于标识或筛选目标的文本值。
+ * @param prefix 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param encryptedSecret 本次操作需要使用的输入参数。
+ * @param maxActive 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID, name, prefix, hash, encryptedSecret string, maxActive int) (Record, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -117,6 +144,13 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 	return fromEnt(created), nil
 }
 
+/**
+ * ListByUser 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, error) {
 	entities, err := s.client.APIKey.Query().
 		Where(entapikey.UserIDEQ(userID), accessibleBillingGroup(userID)).
@@ -133,6 +167,14 @@ func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, 
 	return records, nil
 }
 
+/**
+ * GetByUser 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record, error) {
 	entity, err := s.client.APIKey.Query().
 		Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive), accessibleBillingGroup(userID)).
@@ -147,6 +189,15 @@ func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record,
 	return fromEnt(entity), nil
 }
 
+/**
+ * RevokeByUser 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param id 目标资源的唯一标识。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) RevokeByUser(ctx context.Context, userID, id uuid.UUID, now time.Time) error {
 	entity, err := s.client.APIKey.Query().Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), accessibleBillingGroup(userID)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -158,6 +209,13 @@ func (s *EntStore) RevokeByUser(ctx context.Context, userID, id uuid.UUID, now t
 	return s.revoke(ctx, entity, now)
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListAll(ctx context.Context, filter ListFilter) (Page, error) {
 	query := s.client.APIKey.Query()
 	if filter.Search != "" {
@@ -199,6 +257,14 @@ func (s *EntStore) ListAll(ctx context.Context, filter ListFilter) (Page, error)
 	return Page{APIKeys: records, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
 
+/**
+ * Revoke 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Revoke(ctx context.Context, id uuid.UUID, now time.Time) error {
 	entity, err := s.client.APIKey.Get(ctx, id)
 	if ent.IsNotFound(err) {
@@ -210,6 +276,14 @@ func (s *EntStore) Revoke(ctx context.Context, id uuid.UUID, now time.Time) erro
 	return s.revoke(ctx, entity, now)
 }
 
+/**
+ * revoke 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param entity 本次操作需要使用的输入参数。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) revoke(ctx context.Context, entity *ent.APIKey, now time.Time) error {
 	if entity.Status == entapikey.StatusRevoked {
 		return nil
@@ -220,6 +294,12 @@ func (s *EntStore) revoke(ctx context.Context, entity *ent.APIKey, now time.Time
 	return nil
 }
 
+/**
+ * fromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromEnt(entity *ent.APIKey) Record {
 	record := Record{
 		ID:                  entity.ID,
@@ -240,6 +320,12 @@ func fromEnt(entity *ent.APIKey) Record {
 	return record
 }
 
+/**
+ * accessibleBillingGroup 封装该名称对应的业务处理逻辑。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func accessibleBillingGroup(userID uuid.UUID) predicate.APIKey {
 	return entapikey.Or(
 		entapikey.HasBillingGroupWith(entbillinggroup.IsHiddenEQ(false)),

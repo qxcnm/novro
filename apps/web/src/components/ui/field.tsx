@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
+/**
+ * FieldSet 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
     <fieldset
@@ -20,6 +27,14 @@ function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   )
 }
 
+/**
+ * FieldLegend 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param variant  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldLegend({
   className,
   variant = "legend",
@@ -38,6 +53,13 @@ function FieldLegend({
   )
 }
 
+/**
+ * FieldGroup 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -69,6 +91,14 @@ const fieldVariants = cva(
   }
 )
 
+/**
+ * Field 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param orientation  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Field({
   className,
   orientation = "vertical",
@@ -85,6 +115,13 @@ function Field({
   )
 }
 
+/**
+ * FieldContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -98,6 +135,13 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * FieldLabel 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldLabel({
   className,
   ...props
@@ -115,6 +159,13 @@ function FieldLabel({
   )
 }
 
+/**
+ * FieldTitle 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -128,6 +179,13 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * FieldDescription 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
@@ -143,6 +201,14 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   )
 }
 
+/**
+ * FieldSeparator 渲染对应的 React 界面组件。
+ * @param children React 组件包含的子元素。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldSeparator({
   children,
   className,
@@ -173,6 +239,15 @@ function FieldSeparator({
   )
 }
 
+/**
+ * FieldError 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param errors 本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function FieldError({
   className,
   children,

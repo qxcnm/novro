@@ -13,10 +13,47 @@ import (
 var providerCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$`)
 
 type Store interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 CreateParams 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, CreateParams) (Record, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, ListFilter) ([]Record, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 UpdateParams 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, UpdateParams) (Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, Status) (Record, error)
+	/**
+	 * Delete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Delete(context.Context, uuid.UUID) error
 }
 
@@ -37,10 +74,24 @@ type Service struct {
 	cipher *Cipher
 }
 
+/**
+ * NewService 用于创建并返回所需的对象或记录。
+ * @param store 用于持久化和查询数据的存储实现。
+ * @param cipher 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewService(store Store, cipher *Cipher) *Service {
 	return &Service{store: store, cipher: cipher}
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error) {
 	code := strings.ToLower(strings.TrimSpace(input.Code))
 	displayName := strings.TrimSpace(input.DisplayName)
@@ -64,6 +115,13 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	})
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	filter.Search = strings.TrimSpace(filter.Search)
 	if filter.Status != "" && filter.Status != StatusActive && filter.Status != StatusDisabled {
@@ -72,6 +130,14 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 	return s.store.List(ctx, filter)
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
 	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil && input.BillingGroupID == nil) {
 		return Record{}, ErrInvalidInput
@@ -129,6 +195,14 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 	return s.store.Update(ctx, id, params)
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
 	if id == uuid.Nil || (status != StatusActive && status != StatusDisabled) {
 		return Record{}, ErrInvalidInput
@@ -136,6 +210,13 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (R
 	return s.store.SetStatus(ctx, id, status)
 }
 
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return ErrInvalidInput
@@ -143,10 +224,22 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.store.Delete(ctx, id)
 }
 
+/**
+ * validProtocol 封装该名称对应的业务处理逻辑。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validProtocol(protocol Protocol) bool {
 	return protocol == ProtocolOpenAI || protocol == ProtocolAnthropic
 }
 
+/**
+ * normalizeBaseURL 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeBaseURL(value string) (string, bool) {
 	value = strings.TrimRight(strings.TrimSpace(value), "/")
 	parsed, err := url.Parse(value)
@@ -156,6 +249,12 @@ func normalizeBaseURL(value string) (string, bool) {
 	return parsed.String(), true
 }
 
+/**
+ * normalizeModelListPath 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeModelListPath(value string) (string, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -167,6 +266,12 @@ func normalizeModelListPath(value string) (string, bool) {
 	return "/" + strings.Trim(value, "/"), true
 }
 
+/**
+ * secretHint 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func secretHint(value string) string {
 	runes := []rune(value)
 	if len(runes) <= 4 {

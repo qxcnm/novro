@@ -27,6 +27,13 @@ type migrationFile struct {
 
 // Apply runs each migration once and records it in a small metadata table. It
 // is shared by normal startup and the explicit deployment migration command.
+/**
+ * Apply 用于执行对应流程。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param db 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func Apply(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return fmt.Errorf("migration database is nil")
@@ -127,6 +134,12 @@ WHERE table_schema = DATABASE()
 	return nil
 }
 
+/**
+ * readMigrations 封装该名称对应的业务处理逻辑。
+ * @param source 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func readMigrations(source fs.FS) ([]migrationFile, error) {
 	files, err := fs.Glob(source, "migrations/*.sql")
 	if err != nil {
@@ -152,6 +165,13 @@ func readMigrations(source fs.FS) ([]migrationFile, error) {
 	return migrations, nil
 }
 
+/**
+ * validateAppliedMigrations 封装该名称对应的业务处理逻辑。
+ * @param migrations 本次操作需要使用的输入参数。
+ * @param applied 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validateAppliedMigrations(migrations []migrationFile, applied map[string]string) ([]migrationFile, error) {
 	available := make(map[string]migrationFile, len(migrations))
 	for _, migration := range migrations {

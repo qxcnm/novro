@@ -13,6 +13,12 @@ type Wallet struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (Wallet) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -23,6 +29,12 @@ func (Wallet) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (Wallet) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("user", User.Type).Ref("wallet").Unique().Field("user_id").Required(),

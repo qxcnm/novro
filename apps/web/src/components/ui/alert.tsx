@@ -19,6 +19,14 @@ const alertVariants = cva(
   }
 )
 
+/**
+ * Alert 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param variant 本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Alert({
   className,
   variant,
@@ -34,6 +42,13 @@ function Alert({
   )
 }
 
+/**
+ * AlertTitle 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -47,6 +62,13 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * AlertDescription 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDescription({
   className,
   ...props
@@ -63,6 +85,13 @@ function AlertDescription({
   )
 }
 
+/**
+ * AlertAction 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

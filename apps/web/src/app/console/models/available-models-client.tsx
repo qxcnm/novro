@@ -33,6 +33,12 @@ type BillingGroup = { id: string; code: string; display_name: string; multiplier
 
 type ErrorResponse = { error?: { message?: string } };
 
+/**
+ * formatPrice 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatPrice(micros: number) {
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
@@ -42,7 +48,19 @@ function formatPrice(micros: number) {
   }).format(micros / 1_000_000);
 }
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "可用模型加载失败，请稍后重试";
 }
@@ -56,6 +74,12 @@ const priceFields: Array<{ key: keyof Prices; label: string; unit: string }> = [
   { key: "request_price_micros", label: "请求固定费", unit: "/ 次" },
 ];
 
+/**
+ * AvailableModelsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function AvailableModelsClient() {
   const router = useRouter();
   const [models, setModels] = useState<AvailableModel[]>([]);
@@ -79,6 +103,12 @@ export default function AvailableModelsClient() {
       setLoading(false);
       return;
     }
+    /**
+     * groups 封装该名称对应的业务处理逻辑。
+     * @param none 无参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const groups = ((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups;
     setBillingGroups(groups);
     const nextBillingGroupID = requestedBillingGroupID ?? groups.find((group) => group.is_default)?.id ?? groups[0]?.id ?? "";
@@ -99,6 +129,12 @@ export default function AvailableModelsClient() {
       setLoading(false);
       return;
     }
+    /**
+     * body 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const body = (await response.json()) as { models: AvailableModel[]; billing_group: BillingGroup };
     setModels(body.models);
     setBillingGroup(body.billing_group);
@@ -127,6 +163,12 @@ export default function AvailableModelsClient() {
     });
   }, [models, protocol, provider, query]);
 
+  /**
+   * copyModelID 封装该名称对应的业务处理逻辑。
+   * @param id 目标资源的唯一标识。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyModelID(id: string) {
     const success = await copyText(id);
     if (success) {

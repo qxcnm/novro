@@ -14,6 +14,12 @@ type APIUsage struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (APIUsage) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -56,6 +62,12 @@ func (APIUsage) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (APIUsage) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("user", User.Type).Ref("api_usages").Unique().Field("user_id").Required(),
@@ -66,6 +78,12 @@ func (APIUsage) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (APIUsage) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id", "created_at"),

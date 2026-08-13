@@ -42,6 +42,14 @@ type fakeGatewaySettings struct {
 	err    error
 }
 
+
+
+/**
+ * Config 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, error) {
 	if f.err != nil {
 		return gatewaysettings.Config{}, f.err
@@ -49,6 +57,14 @@ func (f fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, er
 	return f.config, nil
 }
 
+
+
+/**
+ * Authenticate 用于校验用户凭据并建立登录会话。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f fakeKeys) Authenticate(context.Context, string) (apikey.Actor, error) { return f.actor, f.err }
 
 type fakeRoutes struct {
@@ -59,6 +75,14 @@ type fakeRoutes struct {
 	err             error
 }
 
+
+
+/**
+ * ResolveCandidates 封装该名称对应的业务处理逻辑。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f fakeRoutes) ResolveCandidates(_ context.Context, _ string, billingGroupID uuid.UUID) ([]modelroute.Resolved, error) {
 	if f.expectedGroupID != uuid.Nil && billingGroupID != f.expectedGroupID {
 		return nil, fmt.Errorf("unexpected billing group %s", billingGroupID)
@@ -71,6 +95,14 @@ func (f fakeRoutes) ResolveCandidates(_ context.Context, _ string, billingGroupI
 	}
 	return []modelroute.Resolved{f.route}, nil
 }
+
+
+/**
+ * ListActive 用于筛选并返回数据列表。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f fakeRoutes) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]modelroute.Record, error) {
 	if f.expectedGroupID != uuid.Nil && billingGroupID != f.expectedGroupID {
 		return nil, fmt.Errorf("unexpected billing group %s", billingGroupID)
@@ -99,6 +131,14 @@ type fakeBilling struct {
 	replayOperation  *billing.Operation
 }
 
+
+
+/**
+ * StartOperation 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) StartOperation(_ context.Context, input billing.OperationStartInput) (billing.OperationStartResult, error) {
 	if f.reserveErr != nil {
 		return billing.OperationStartResult{}, f.reserveErr
@@ -112,6 +152,14 @@ func (f *fakeBilling) StartOperation(_ context.Context, input billing.OperationS
 	f.operationCreated = true
 	return billing.OperationStartResult{Operation: f.operation, Created: true}, nil
 }
+
+
+/**
+ * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) MarkOperationPendingSettlement(_ context.Context, _ uuid.UUID, input billing.UsageInput) error {
 	f.pendingCalls++
 	if len(f.pendingErrors) > 0 {
@@ -125,16 +173,40 @@ func (f *fakeBilling) MarkOperationPendingSettlement(_ context.Context, _ uuid.U
 	f.usage = input
 	return nil
 }
+
+
+/**
+ * MarkOperationPendingUnknown 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) MarkOperationPendingUnknown(_ context.Context, _ uuid.UUID, _ string) error {
 	f.unknownCalls++
 	f.operation.Status = billing.OperationPendingUnknown
 	return nil
 }
+
+
+/**
+ * CompleteOperation 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) CompleteOperation(context.Context, uuid.UUID) error {
 	f.completeCalls++
 	f.operation.Status = billing.OperationCompleted
 	return nil
 }
+
+
+/**
+ * FailOperation 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) FailOperation(context.Context, uuid.UUID, string) error {
 	f.failCalls++
 	f.refundCalls++
@@ -143,11 +215,27 @@ func (f *fakeBilling) FailOperation(context.Context, uuid.UUID, string) error {
 	return nil
 }
 
+
+
+/**
+ * Reserve 封装该名称对应的业务处理逻辑。
+ * @param amount 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
 	f.reserveCalls++
 	f.reserved = amount
 	return f.reserveErr
 }
+
+
+/**
+ * Refund 封装该名称对应的业务处理逻辑。
+ * @param amount 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) Refund(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
 	f.refundCalls++
 	if len(f.refundErrors) > 0 {
@@ -160,11 +248,27 @@ func (f *fakeBilling) Refund(_ context.Context, _, _ uuid.UUID, amount int64, _ 
 	f.refunded += amount
 	return nil
 }
+
+
+/**
+ * ReleaseReservation 封装该名称对应的业务处理逻辑。
+ * @param amount 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) ReleaseReservation(_ context.Context, _, _ uuid.UUID, amount int64, _ string) error {
 	f.refundCalls++
 	f.refunded += amount
 	return nil
 }
+
+
+/**
+ * Finalize 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) error {
 	f.finalizeCalls++
 	if len(f.finalizeErrors) > 0 {
@@ -177,6 +281,14 @@ func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) erro
 	f.usage = input
 	return nil
 }
+
+
+/**
+ * RecordFailure 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeBilling) RecordFailure(_ context.Context, input billing.FailureInput) error {
 	f.failures = append(f.failures, input)
 	return nil
@@ -184,6 +296,14 @@ func (f *fakeBilling) RecordFailure(_ context.Context, input billing.FailureInpu
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
+
+
+/**
+ * RoundTrip 封装该名称对应的业务处理逻辑。
+ * @param request 当前请求数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 type blockingBody struct {
@@ -192,10 +312,26 @@ type blockingBody struct {
 	once    sync.Once
 }
 
+
+
+/**
+ * newBlockingBody 封装该名称对应的业务处理逻辑。
+ * @param prefix 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func newBlockingBody(prefix string) *blockingBody {
 	return &blockingBody{reader: strings.NewReader(prefix), release: make(chan struct{})}
 }
 
+
+
+/**
+ * Read 用于查询并返回所需的数据。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (b *blockingBody) Read(target []byte) (int, error) {
 	if b.reader.Len() > 0 {
 		return b.reader.Read(target)
@@ -204,6 +340,14 @@ func (b *blockingBody) Read(target []byte) (int, error) {
 	return 0, io.EOF
 }
 
+
+
+/**
+ * Close 用于删除、撤销或释放指定资源。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (b *blockingBody) Close() error {
 	b.once.Do(func() { close(b.release) })
 	return nil
@@ -211,16 +355,72 @@ func (b *blockingBody) Close() error {
 
 type noopBilling struct{}
 
+
+
+/**
+ * Finalize 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) Finalize(context.Context, billing.UsageInput) error        { return nil }
+
+
+/**
+ * RecordFailure 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error { return nil }
+
+
+/**
+ * StartOperation 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) StartOperation(_ context.Context, input billing.OperationStartInput) (billing.OperationStartResult, error) {
 	return billing.OperationStartResult{Created: true, Operation: billing.Operation{RequestID: input.RequestID, UserID: input.UserID, APIKeyID: input.APIKeyID, RequestHash: input.RequestHash, Endpoint: input.Endpoint, Status: billing.OperationProcessing, ReservedMicros: input.ReservedMicros}}, nil
 }
+
+
+/**
+ * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) MarkOperationPendingSettlement(context.Context, uuid.UUID, billing.UsageInput) error {
 	return nil
 }
+
+
+/**
+ * MarkOperationPendingUnknown 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) MarkOperationPendingUnknown(context.Context, uuid.UUID, string) error { return nil }
+
+
+/**
+ * CompleteOperation 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) CompleteOperation(context.Context, uuid.UUID) error                   { return nil }
+
+
+/**
+ * FailOperation 封装该名称对应的业务处理逻辑。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (noopBilling) FailOperation(context.Context, uuid.UUID, string) error               { return nil }
 
 type terminalErrorReader struct {
@@ -228,6 +428,14 @@ type terminalErrorReader struct {
 	err    error
 }
 
+
+
+/**
+ * Read 用于查询并返回所需的数据。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (r *terminalErrorReader) Read(target []byte) (int, error) {
 	if r.reader.Len() > 0 {
 		read, _ := r.reader.Read(target)
@@ -236,27 +444,69 @@ func (r *terminalErrorReader) Read(target []byte) (int, error) {
 	return 0, r.err
 }
 
+
+
+/**
+ * gatewayActor 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func gatewayActor() apikey.Actor {
 	groupID := uuid.New()
 	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New(), BillingGroupID: groupID, BillingGroup: billinggroup.Summary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
 }
 
+
+
+/**
+ * gatewayActorWithMultiplier 封装该名称对应的业务处理逻辑。
+ * @param multiplierBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
 	actor := gatewayActor()
 	actor.APIKey.BillingGroup.MultiplierBPS = multiplierBPS
 	return actor
 }
 
+
+
+/**
+ * openAIRoute 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func openAIRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
 	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Weight: 100, Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
 }
 
+
+
+/**
+ * anthropicRoute 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func anthropicRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
 	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocol: provider.ProtocolAnthropic}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "kimi-k3-upstream", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
 }
 
+
+
+/**
+ * openAIChannel 封装该名称对应的业务处理逻辑。
+ * @param code 用于标识或筛选目标的文本值。
+ * @param host 本次操作需要使用的输入参数。
+ * @param upstreamName 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func openAIChannel(code, host, upstreamName string) modelroute.Resolved {
 	route := openAIRoute()
 	route.ID = uuid.New()
@@ -271,6 +521,14 @@ func openAIChannel(code, host, upstreamName string) modelroute.Resolved {
 	return route
 }
 
+
+
+/**
+ * TestProxyRoutesModelAndFinalizesExactUsage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -303,6 +561,14 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyUsesConfiguredInputAndOutputReservationCaps 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyUsesConfiguredInputAndOutputReservationCaps(t *testing.T) {
 	biller := &fakeBilling{}
 	route := openAIRoute()
@@ -330,6 +596,14 @@ func TestProxyUsesConfiguredInputAndOutputReservationCaps(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain(t *testing.T) {
 	actor := gatewayActor()
 	requestID := uuid.New()
@@ -347,6 +621,14 @@ func TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyAppliesBillingGroupMultiplierToReservationAndCharge 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) {
 	actor := gatewayActorWithMultiplier(4_000)
 	route := openAIRoute()
@@ -390,6 +672,14 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 	}
 }
 
+
+
+/**
+ * TestProxySSEHeartbeatKeepsEstablishedStreamActive 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxySSEHeartbeatKeepsEstablishedStreamActive(t *testing.T) {
 	body := newBlockingBody("data: {\"id\":\"heartbeat\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -430,6 +720,14 @@ func TestProxySSEHeartbeatKeepsEstablishedStreamActive(t *testing.T) {
 	response.Body.Close()
 }
 
+
+
+/**
+ * TestProxyStopsIdleStream 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyStopsIdleStream(t *testing.T) {
 	body := newBlockingBody("data: {\"id\":\"idle\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -465,6 +763,14 @@ func TestProxyStopsIdleStream(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		<-request.Context().Done()
@@ -483,6 +789,14 @@ func TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testing.T) {
 	body := newBlockingBody("")
 	biller := &fakeBilling{}
@@ -509,6 +823,14 @@ func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testin
 	}
 }
 
+
+
+/**
+ * TestParseUsageRejectsMalformedReportedFields 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 	rates := rateCardFor(openAIRoute())
 	tests := []struct {
@@ -535,6 +857,14 @@ func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestParseIntValueRejectsNonFiniteAndInvalidNumbers 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseIntValueRejectsNonFiniteAndInvalidNumbers(t *testing.T) {
 	for _, value := range []any{"10", -1, 1.5, math.NaN(), math.Inf(1), json.Number("999999999999999999999999999999")} {
 		if parsed, ok := parseIntValue(value); ok {
@@ -549,6 +879,14 @@ func TestParseIntValueRejectsNonFiniteAndInvalidNumbers(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyAcceptsBodyAndOutputAboveFormerLimits 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyAcceptsBodyAndOutputAboveFormerLimits(t *testing.T) {
 	largeContent := strings.Repeat("x", (10<<20)+1024)
 	upstreamCalled := false
@@ -572,6 +910,14 @@ func TestProxyAcceptsBodyAndOutputAboveFormerLimits(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyAcceptsBufferedResponseAboveFormerLimit 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyAcceptsBufferedResponseAboveFormerLimit(t *testing.T) {
 	upstreamBody := `{"padding":"` + strings.Repeat("x", (32<<20)+1024) + `","usage":{"prompt_tokens":1,"completion_tokens":1}}`
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -586,6 +932,14 @@ func TestProxyAcceptsBufferedResponseAboveFormerLimit(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyAlwaysStartsWithHighestWeightProvider 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyAlwaysStartsWithHighestWeightProvider(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -612,6 +966,14 @@ func TestProxyAlwaysStartsWithHighestWeightProvider(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyWeightPriorityIsStableUnderConcurrentRequests 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyWeightPriorityIsStableUnderConcurrentRequests(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -653,6 +1015,14 @@ func TestProxyWeightPriorityIsStableUnderConcurrentRequests(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -686,6 +1056,14 @@ func TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyDoesNotReplayAfterSuccessfulResponseStarts 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyDoesNotReplayAfterSuccessfulResponseStarts(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -706,6 +1084,14 @@ func TestProxyDoesNotReplayAfterSuccessfulResponseStarts(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -733,6 +1119,14 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyUsesHighestWeightWithoutReplayingHTTPFailure 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyUsesHighestWeightWithoutReplayingHTTPFailure(t *testing.T) {
 	low := openAIChannel("low", "low.example.com", "low-upstream")
 	high := openAIChannel("high", "high.example.com", "high-upstream")
@@ -759,6 +1153,14 @@ func TestProxyUsesHighestWeightWithoutReplayingHTTPFailure(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyRetriesConnectionSetupBeforeRequestWrite 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 	biller := &fakeBilling{}
 	calls := 0
@@ -790,6 +1192,14 @@ func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyDoesNotRetryAfterConnectionWasAcquired 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyDoesNotRetryAfterConnectionWasAcquired(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -816,6 +1226,14 @@ func TestProxyDoesNotRetryAfterConnectionWasAcquired(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyDoesNotForwardRawClientIdempotencyKey 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyDoesNotForwardRawClientIdempotencyKey(t *testing.T) {
 	biller := &fakeBilling{}
 	var upstreamKey string
@@ -833,6 +1251,14 @@ func TestProxyDoesNotForwardRawClientIdempotencyKey(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	biller := &fakeBilling{}
 	calls := 0
@@ -852,6 +1278,14 @@ func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -882,6 +1316,14 @@ func TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyStreamRetriesTwiceThenFailsOverToNextChannel 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyStreamRetriesTwiceThenFailsOverToNextChannel(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -911,6 +1353,14 @@ func TestProxyStreamRetriesTwiceThenFailsOverToNextChannel(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest(t *testing.T) {
 	calls := 0
 	streamModes := make([]bool, 0, 2)
@@ -935,6 +1385,14 @@ func TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest(t *testin
 	}
 }
 
+
+
+/**
+ * TestProxyUsesBufferedUpstreamForReasonixStreams 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyUsesBufferedUpstreamForReasonixStreams(t *testing.T) {
 	route := openAIRoute()
 	route.Provider.Code = "reasonix"
@@ -960,6 +1418,14 @@ func TestProxyUsesBufferedUpstreamForReasonixStreams(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyRejectsSelfReferentialUpstream 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyRejectsSelfReferentialUpstream(t *testing.T) {
 	route := openAIRoute()
 	route.BaseURL = "https://gateway.example/v1"
@@ -982,6 +1448,14 @@ func TestProxyRejectsSelfReferentialUpstream(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestFinalizationRetriesTransientErrors 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestFinalizationRetriesTransientErrors(t *testing.T) {
 	biller := &fakeBilling{finalizeErrors: []error{errors.New("temporary database failure"), nil}}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -997,6 +1471,14 @@ func TestFinalizationRetriesTransientErrors(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestFinalizationDoesNotRetryBusinessConflict 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
 	biller := &fakeBilling{finalizeErrors: []error{billing.ErrRequestConflict}}
 	body := `{"id":"up-1","usage":{"prompt_tokens":10,"completion_tokens":20}}`
@@ -1017,6 +1499,14 @@ func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists(t *testing.T) {
 	biller := &fakeBilling{pendingErrors: []error{billing.ErrRequestConflict}}
 	upstreamBody := `{"id":"up-1","choices":[{"message":{"content":"must not be returned"}}],"usage":{"prompt_tokens":10,"completion_tokens":20}}`
@@ -1031,6 +1521,14 @@ func TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists(t *testing.
 	}
 }
 
+
+
+/**
+ * TestBufferedHTTP200FailureIsNotBilled 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestBufferedHTTP200FailureIsNotBilled(t *testing.T) {
 	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -1044,6 +1542,14 @@ func TestBufferedHTTP200FailureIsNotBilled(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestSettlementRetryStopsWhenContextIsCanceled 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSettlementRetryStopsWhenContextIsCanceled(t *testing.T) {
 	handler := New(Dependencies{})
 	handler.settlementRetryDelays = []time.Duration{time.Hour}
@@ -1059,6 +1565,14 @@ func TestSettlementRetryStopsWhenContextIsCanceled(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyRoutesResponsesAndAnthropicMessages 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -1136,6 +1650,14 @@ func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestProxyRejectsInsufficientBalanceBeforeUpstream 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProxyRejectsInsufficientBalanceBeforeUpstream(t *testing.T) {
 	biller := &fakeBilling{reserveErr: billing.ErrInsufficientBalance}
 	called := false
@@ -1149,6 +1671,14 @@ func TestProxyRejectsInsufficientBalanceBeforeUpstream(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestStreamingUsageIsCaptured 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingUsageIsCaptured(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-1\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":0}}\n\ndata: {\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
@@ -1167,6 +1697,14 @@ func TestStreamingUsageIsCaptured(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestStreamingFinalizationFailureKeepsSuccessfulResponse 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingFinalizationFailureKeepsSuccessfulResponse(t *testing.T) {
 	biller := &fakeBilling{finalizeErrors: []error{billing.ErrRequestConflict}}
 	stream := "data: {\"id\":\"stream-1\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
@@ -1186,6 +1724,14 @@ func TestStreamingFinalizationFailureKeepsSuccessfulResponse(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestStreamingSettlementIntentFailureKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingSettlementIntentFailureKeepsReservationForReconciliation(t *testing.T) {
 	biller := &fakeBilling{pendingErrors: []error{billing.ErrRequestConflict}}
 	stream := "data: {\"id\":\"stream-1\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
@@ -1210,6 +1756,14 @@ func TestStreamingSettlementIntentFailureKeepsReservationForReconciliation(t *te
 	}
 }
 
+
+
+/**
+ * TestStreamingLargeDataLineIsRelayedAndBilled 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
 	biller := &fakeBilling{}
 	padding := strings.Repeat("x", (4<<20)+1024)
@@ -1229,6 +1783,14 @@ func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestInvalidStreamedUsageKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestInvalidStreamedUsageKeepsReservationForReconciliation(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-invalid\",\"usage\":{\"prompt_tokens\":2147483648,\"completion_tokens\":1}}\n\ndata: [DONE]\n\n"
@@ -1244,6 +1806,14 @@ func TestInvalidStreamedUsageKeepsReservationForReconciliation(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestStreamingUsageAcrossResponsesAndMessages 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1294,6 +1864,14 @@ func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestResponsesIncompleteIsBillableTerminalState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestResponsesIncompleteIsBillableTerminalState(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "event: response.incomplete\n" +
@@ -1313,6 +1891,14 @@ func TestResponsesIncompleteIsBillableTerminalState(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestFailedStreamingTerminalStateReleasesReservation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestFailedStreamingTerminalStateReleasesReservation(t *testing.T) {
 	for _, endpoint := range []struct {
 		name, path, body, stream string
@@ -1339,6 +1925,14 @@ func TestFailedStreamingTerminalStateReleasesReservation(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestFailedStreamingTerminalStateCannotBeOverriddenByDone 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestFailedStreamingTerminalStateCannotBeOverriddenByDone(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\ndata: [DONE]\n\n"
@@ -1353,6 +1947,14 @@ func TestFailedStreamingTerminalStateCannotBeOverriddenByDone(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestInterruptedStreamingUsageKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestInterruptedStreamingUsageKeepsReservationForReconciliation(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-partial\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n"
@@ -1371,6 +1973,14 @@ func TestInterruptedStreamingUsageKeepsReservationForReconciliation(t *testing.T
 	}
 }
 
+
+
+/**
+ * TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage(t *testing.T) {
 	biller := &fakeBilling{}
 	stream := "data: {\"id\":\"stream-complete\",\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":9}}\n\ndata: [DONE]\n\n"
@@ -1395,6 +2005,14 @@ func TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestModelListRequiresAPIKey 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestModelListRequiresAPIKey(t *testing.T) {
 	handler := New(Dependencies{APIKeys: fakeKeys{err: apikey.ErrUnauthenticated}, Routes: fakeRoutes{}, Billing: &fakeBilling{}, Client: &http.Client{}})
 	response := httptest.NewRecorder()
@@ -1405,6 +2023,14 @@ func TestModelListRequiresAPIKey(t *testing.T) {
 	assertErrorRequestID(t, response)
 }
 
+
+
+/**
+ * TestModelListDeduplicatesFailoverRoutes 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestModelListDeduplicatesFailoverRoutes(t *testing.T) {
 	first := openAIChannel("first", "first.example.com", "first-upstream")
 	second := openAIChannel("second", "second.example.com", "second-upstream")
@@ -1428,6 +2054,14 @@ func TestModelListDeduplicatesFailoverRoutes(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestSingularModelListAliasUsesSelectedRoutes 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSingularModelListAliasUsesSelectedRoutes(t *testing.T) {
 	route := openAIChannel("selected", "selected.example.com", "selected-upstream")
 	route.UpstreamModel = &upstreammodel.Record{ProviderName: "Kimi", UpstreamName: "kimi-k3", DisplayName: "Kimi K3"}
@@ -1439,6 +2073,14 @@ func TestSingularModelListAliasUsesSelectedRoutes(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestGatewayErrorsIncludeRequestID 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestGatewayErrorsIncludeRequestID(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1476,6 +2118,15 @@ func TestGatewayErrorsIncludeRequestID(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * assertErrorRequestID 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func assertErrorRequestID(t *testing.T, response *httptest.ResponseRecorder) uuid.UUID {
 	t.Helper()
 	requestID := response.Header().Get("X-Novro-Request-ID")
@@ -1492,6 +2143,14 @@ func assertErrorRequestID(t *testing.T, response *httptest.ResponseRecorder) uui
 	return parsed
 }
 
+
+
+/**
+ * TestBuildUpstreamURLAndPrivateAddressGuard 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {
 	url, err := buildUpstreamURL("https://open.bigmodel.cn/api/paas/v4", provider.ProtocolOpenAI, "chat_completions")
 	if err != nil || url != "https://open.bigmodel.cn/api/paas/v4/chat/completions" {
@@ -1512,6 +2171,14 @@ func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestDefaultOutboundClientDoesNotFollowRedirects 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
 	client := newOutboundClient()
 	if client.CheckRedirect == nil {
@@ -1523,6 +2190,14 @@ func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestUpstreamFailureRefundsReservation 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpstreamFailureRefundsReservation(t *testing.T) {
 	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("timeout") })}
@@ -1537,6 +2212,14 @@ func TestUpstreamFailureRefundsReservation(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestParseUsageSupportsProviderCacheShapes 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 	tests := []struct {
 		name, body string
@@ -1561,6 +2244,14 @@ func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestUsageFallbackNeverChargesUnreportedDimensions 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUsageFallbackNeverChargesUnreportedDimensions(t *testing.T) {
 	rates := billing.RateCard{InputMicros: 1, CacheReadMicros: 2, CacheWriteMicros: 3, CacheWrite1hMicros: 4, OutputMicros: 5}
 
@@ -1580,6 +2271,14 @@ func TestUsageFallbackNeverChargesUnreportedDimensions(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestUsageRejectsConflictingAliasTotals 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1627,6 +2326,14 @@ func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestParseUsageSupportsNewAPIBillingUsage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseUsageSupportsNewAPIBillingUsage(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1665,6 +2372,14 @@ func TestParseUsageSupportsNewAPIBillingUsage(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestParseUsageIgnoresUnrecognizedBillingUsage 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseUsageIgnoresUnrecognizedBillingUsage(t *testing.T) {
 	body := `{"usage":{"prompt_tokens":10,"completion_tokens":2,"billing_usage":{"source":"unknown","semantic":"openai","openai_usage":{"prompt_tokens":100000,"completion_tokens":20000}}}}`
 	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
@@ -1673,6 +2388,14 @@ func TestParseUsageIgnoresUnrecognizedBillingUsage(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestParseUsagePreservesNewAPIEstimatedFlag 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestParseUsagePreservesNewAPIEstimatedFlag(t *testing.T) {
 	body := `{"usage":{"billing_usage":{"source":"oai_chat","semantic":"openai","estimated":true,"openai_usage":{"prompt_tokens":10,"completion_tokens":2}}}}`
 	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
@@ -1681,6 +2404,14 @@ func TestParseUsagePreservesNewAPIEstimatedFlag(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestOpenAIUsageRejectsCacheBreakdownAboveTotal 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOpenAIUsageRejectsCacheBreakdownAboveTotal(t *testing.T) {
 	for _, body := range []string{
 		`{"usage":{"input_tokens":100,"output_tokens":2,"input_tokens_details":{"cached_tokens":101}}}`,
@@ -1696,6 +2427,14 @@ func TestOpenAIUsageRejectsCacheBreakdownAboveTotal(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown(t *testing.T) {
 	body := `{"usage":{"input_tokens":10,"output_tokens":2,"cache_creation_input_tokens":100,"cache_creation":{"ephemeral_5m_input_tokens":80,"ephemeral_1h_input_tokens":30}}}`
 	usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsAnthropicAdditional), 500, 50, billing.RateCard{})
@@ -1704,6 +2443,14 @@ func TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestUsageMergeReplacesInputSnapshotAtomically 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUsageMergeReplacesInputSnapshotAtomically(t *testing.T) {
 	usage := tokenUsage{}
 	usage.merge(parseUsage([]byte(`{"usage":{"prompt_tokens":100,"completion_tokens":1}}`), usageSemanticsOpenAITotal))
@@ -1716,6 +2463,14 @@ func TestUsageMergeReplacesInputSnapshotAtomically(t *testing.T) {
 	}
 }
 
+
+
+/**
+ * TestEstimateInputTokensDoesNotTreatEveryByteAsToken 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEstimateInputTokensDoesNotTreatEveryByteAsToken(t *testing.T) {
 	body := bytes.Repeat([]byte("x"), 200_000)
 	got := estimateInputTokens(body)

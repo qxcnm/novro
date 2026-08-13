@@ -42,6 +42,12 @@ const (
 	defaultBootstrapDisplayName = "Novro"
 )
 
+/**
+ * main 初始化并启动 Novro 应用程序。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load()
@@ -290,9 +296,24 @@ func main() {
 }
 
 type pendingBillingRecoverer interface {
+	/**
+	 * RecoverPendingSettlements 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 int 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	RecoverPendingSettlements(context.Context, int) (int, error)
 }
 
+/**
+ * recoverPendingBilling 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recoverer 本次操作需要使用的输入参数。
+ * @param logger 用于记录结构化运行日志的日志器。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func recoverPendingBilling(ctx context.Context, recoverer pendingBillingRecoverer, logger *slog.Logger) {
 	recoverOnce := func() {
 		recoveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -319,6 +340,13 @@ func recoverPendingBilling(ctx context.Context, recoverer pendingBillingRecovere
 	}
 }
 
+/**
+ * envOrDefault 封装该名称对应的业务处理逻辑。
+ * @param key 本次操作需要使用的输入参数。
+ * @param fallback 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func envOrDefault(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -326,6 +354,12 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
+/**
+ * optionalOIDCService 封装该名称对应的业务处理逻辑。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func optionalOIDCService(client *auth.OIDCClient) httpapi.OIDCService {
 	if client == nil {
 		return nil
@@ -335,6 +369,14 @@ func optionalOIDCService(client *auth.OIDCClient) httpapi.OIDCService {
 
 type migrationApplier func(context.Context, *sql.DB) error
 
+/**
+ * applyPendingMigrations 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param db 本次操作需要使用的输入参数。
+ * @param apply 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func applyPendingMigrations(ctx context.Context, db *sql.DB, apply migrationApplier) error {
 	if err := apply(ctx, db); err != nil {
 		return fmt.Errorf("apply pending migrations: %w", err)

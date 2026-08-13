@@ -25,6 +25,12 @@ export const metadata: Metadata = {
   description: "一个地址，接入 Kimi、GLM、DeepSeek 等主流国产大模型。",
 };
 
+/**
+ * RootLayout 渲染对应的 React 界面组件。
+ * @param children React 组件包含的子元素。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html

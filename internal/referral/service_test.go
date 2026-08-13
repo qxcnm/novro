@@ -18,20 +18,44 @@ type fakeStore struct {
 	configError error
 }
 
+/**
+ * Stats 封装该名称对应的业务处理逻辑。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Stats(_ context.Context, _ uuid.UUID, rewardBPS int64) (Stats, error) {
 	f.rate = rewardBPS
 	return f.stats, f.err
 }
 
+/**
+ * RewardConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) RewardConfig(context.Context) (StoredConfig, error) {
 	return f.config, f.configError
 }
 
+/**
+ * SaveRewardBPS 封装该名称对应的业务处理逻辑。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) SaveRewardBPS(_ context.Context, rewardBPS int64) (StoredConfig, error) {
 	f.savedRate = rewardBPS
 	return StoredConfig{RewardBPS: rewardBPS, UpdatedAt: time.Unix(1_700_000_000, 0), Found: true}, f.configError
 }
 
+/**
+ * TestSummaryBuildsPublicInviteLink 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSummaryBuildsPublicInviteLink(t *testing.T) {
 	store := &fakeStore{stats: Stats{
 		InviteCode: "ABCD1234EF56", InvitedCount: 3,
@@ -52,6 +76,12 @@ func TestSummaryBuildsPublicInviteLink(t *testing.T) {
 	}
 }
 
+/**
+ * TestSummaryUsesDatabaseRewardRate 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSummaryUsesDatabaseRewardRate(t *testing.T) {
 	store := &fakeStore{stats: Stats{InviteCode: "ABCD1234EF56"}, config: StoredConfig{RewardBPS: 500, Found: true}}
 	service := NewService(store, 750, "https://app.example.invalid")
@@ -64,6 +94,12 @@ func TestSummaryUsesDatabaseRewardRate(t *testing.T) {
 	}
 }
 
+/**
+ * TestAdminConfigDefaultsAndUpdates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAdminConfigDefaultsAndUpdates(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, 750, "https://app.example.invalid")
@@ -82,6 +118,12 @@ func TestAdminConfigDefaultsAndUpdates(t *testing.T) {
 	}
 }
 
+/**
+ * TestSummaryValidatesDependenciesAndRate 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestSummaryValidatesDependenciesAndRate(t *testing.T) {
 	for _, service := range []*Service{
 		NewService(nil, 1_000, "https://app.example.invalid"),
@@ -95,6 +137,12 @@ func TestSummaryValidatesDependenciesAndRate(t *testing.T) {
 	}
 }
 
+/**
+ * TestRewardAmountRejectsOverflow 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestRewardAmountRejectsOverflow(t *testing.T) {
 	if reward, ok := rewardAmount(10_000_000, 1_000); !ok || reward != 1_000_000 {
 		t.Fatalf("reward=%d ok=%v", reward, ok)

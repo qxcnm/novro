@@ -23,10 +23,22 @@ type EntStore struct {
 
 const recentDetailLimit = 20
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
+/**
+ * RewardConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) RewardConfig(ctx context.Context) (StoredConfig, error) {
 	entity, err := s.client.SystemSetting.Query().Where(entsystemsetting.IDEQ(RewardBPSSettingKey)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -42,6 +54,13 @@ func (s *EntStore) RewardConfig(ctx context.Context) (StoredConfig, error) {
 	return StoredConfig{RewardBPS: rewardBPS, UpdatedAt: entity.UpdatedAt, Found: true}, nil
 }
 
+/**
+ * SaveRewardBPS 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) SaveRewardBPS(ctx context.Context, rewardBPS int64) (StoredConfig, error) {
 	if !ValidRewardBPS(rewardBPS) {
 		return StoredConfig{}, ErrInvalidInput
@@ -59,6 +78,14 @@ func (s *EntStore) SaveRewardBPS(ctx context.Context, rewardBPS int64) (StoredCo
 	return StoredConfig{RewardBPS: rewardBPS, UpdatedAt: entity.UpdatedAt, Found: true}, nil
 }
 
+/**
+ * Stats 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Stats(ctx context.Context, userID uuid.UUID, rewardBPS int64) (Stats, error) {
 	owner, err := s.client.User.Query().Where(entuser.IDEQ(userID)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -109,6 +136,13 @@ func (s *EntStore) Stats(ctx context.Context, userID uuid.UUID, rewardBPS int64)
 	}, nil
 }
 
+/**
+ * recentInvitations 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) recentInvitations(ctx context.Context, userID uuid.UUID) ([]Invitation, error) {
 	entities, err := s.client.User.Query().
 		Where(entuser.ReferredByUserIDEQ(userID)).
@@ -127,6 +161,13 @@ func (s *EntStore) recentInvitations(ctx context.Context, userID uuid.UUID) ([]I
 	return invitations, nil
 }
 
+/**
+ * recentRewards 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param userID 目标用户的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) recentRewards(ctx context.Context, userID uuid.UUID) ([]Reward, error) {
 	entries, err := s.client.WalletEntry.Query().Where(
 		entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeReferralReward),
@@ -173,6 +214,13 @@ func (s *EntStore) recentRewards(ctx context.Context, userID uuid.UUID) ([]Rewar
 	return rewards, nil
 }
 
+/**
+ * referralDisplayName 封装该名称对应的业务处理逻辑。
+ * @param displayName 用于标识或筛选目标的文本值。
+ * @param username 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func referralDisplayName(displayName, username string) string {
 	if trimmed := strings.TrimSpace(displayName); trimmed != "" {
 		return trimmed
@@ -180,6 +228,13 @@ func referralDisplayName(displayName, username string) string {
 	return username
 }
 
+/**
+ * sumTopUpAmounts 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param query 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func sumTopUpAmounts(ctx context.Context, query *ent.TopUpOrderQuery) (int64, error) {
 	var rows []struct {
 		Total sql.NullInt64 `json:"total"`
@@ -193,6 +248,13 @@ func sumTopUpAmounts(ctx context.Context, query *ent.TopUpOrderQuery) (int64, er
 	return rows[0].Total.Int64, nil
 }
 
+/**
+ * sumWalletEntries 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param query 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func sumWalletEntries(ctx context.Context, query *ent.WalletEntryQuery) (int64, error) {
 	var rows []struct {
 		Total sql.NullInt64 `json:"total"`
@@ -206,6 +268,13 @@ func sumWalletEntries(ctx context.Context, query *ent.WalletEntryQuery) (int64, 
 	return rows[0].Total.Int64, nil
 }
 
+/**
+ * rewardAmount 封装该名称对应的业务处理逻辑。
+ * @param amountMicros 本次操作需要使用的输入参数。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func rewardAmount(amountMicros, rewardBPS int64) (int64, bool) {
 	if amountMicros < 0 || rewardBPS < 0 || rewardBPS > 10_000 || (rewardBPS != 0 && amountMicros > math.MaxInt64/rewardBPS) {
 		return 0, false

@@ -19,14 +19,45 @@ type UsagePage = { usage: Usage[]; models: string[]; total: number; offset: numb
 type Key = { id: string; name: string };
 
 const PAGE_SIZE = 20;
+/**
+ * money 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 const money = (micros: number) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000);
+/**
+ * date 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 const date = (value: string) => new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(value));
+/**
+ * duration 封装该名称对应的业务处理逻辑。
+ * @param milliseconds 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 const duration = (milliseconds: number) => milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(milliseconds >= 10_000 ? 0 : 1)}s`;
 
+/**
+ * Metric 渲染对应的 React 界面组件。
+ * @param label 本次操作需要使用的输入参数。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="border-b py-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 break-all text-sm font-medium">{value}</p></div>;
 }
 
+/**
+ * LogsPage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function LogsPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -73,12 +104,24 @@ export default function LogsPage() {
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
+  /**
+   * submitSearch 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setOffset(0);
     setQuery(queryDraft.trim());
   }
 
+  /**
+   * clearFilters 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function clearFilters() {
     setOffset(0); setKeyId("all"); setModel(""); setStatus("all"); setTimeRange("all"); setQueryDraft(""); setQuery("");
   }

@@ -6,10 +6,23 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
+/**
+ * AlertDialog 渲染对应的 React 界面组件。
+ * @param props React 组件接收的属性。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialog(props: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
 }
 
+/**
+ * AlertDialogContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogContent({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
     <AlertDialogPrimitive.Portal>
@@ -19,26 +32,69 @@ function AlertDialogContent({ className, ...props }: React.ComponentProps<typeof
   )
 }
 
+/**
+ * AlertDialogHeader 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("flex flex-col gap-1.5 text-left", className)} data-slot="alert-dialog-header" {...props} />
 }
 
+/**
+ * AlertDialogFooter 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)} data-slot="alert-dialog-footer" {...props} />
 }
 
+/**
+ * AlertDialogTitle 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogTitle({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
   return <AlertDialogPrimitive.Title className={cn("text-base font-semibold", className)} data-slot="alert-dialog-title" {...props} />
 }
 
+/**
+ * AlertDialogDescription 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogDescription({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Description>) {
   return <AlertDialogPrimitive.Description className={cn("text-sm leading-6 text-muted-foreground", className)} data-slot="alert-dialog-description" {...props} />
 }
 
+/**
+ * AlertDialogAction 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param variant  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogAction({ className, variant = "destructive", ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Action> & { variant?: "default" | "destructive" }) {
   return <AlertDialogPrimitive.Action className={cn(buttonVariants({ variant }), className)} data-slot="alert-dialog-action" {...props} />
 }
 
+/**
+ * AlertDialogCancel 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AlertDialogCancel({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
   return <AlertDialogPrimitive.Cancel className={cn(buttonVariants({ variant: "outline" }), className)} data-slot="alert-dialog-cancel" {...props} />
 }

@@ -6,12 +6,24 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { emptyAnnouncement, normalizeAnnouncement, type Announcement } from "@/lib/announcement";
 
+/**
+ * HomeAnnouncement 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function HomeAnnouncement() {
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
 
   useEffect(() => {
     const controller = new AbortController();
 
+    /**
+     * loadAnnouncement 封装该名称对应的业务处理逻辑。
+     * @param none 无参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     async function loadAnnouncement() {
       try {
         const response = await fetch("/api/public/announcement", {
@@ -19,6 +31,12 @@ export function HomeAnnouncement() {
           signal: controller.signal,
         });
         if (!response.ok) return;
+        /**
+         * body 封装该名称对应的业务处理逻辑。
+         * @param await 本次操作需要使用的输入参数。
+         * @author Gao Hongshun
+         * @date 2026-08-13
+         */
         const body = (await response.json()) as { announcement?: Partial<Announcement> };
         setAnnouncement(normalizeAnnouncement(body.announcement));
       } catch {

@@ -23,12 +23,37 @@ var (
 )
 
 type SecretCipher interface {
+	/**
+	 * Encrypt 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Encrypt(string) (string, error)
+	/**
+	 * Decrypt 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Decrypt(string) (string, error)
 }
 
 type ConfigStore interface {
+	/**
+	 * Get 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Get(context.Context) (StoredConfig, error)
+	/**
+	 * Upsert 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 StoredConfigInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Upsert(context.Context, StoredConfigInput) (StoredConfig, error)
 }
 
@@ -89,10 +114,26 @@ type Service struct {
 	deliver       func(context.Context, StoredConfig, string, string, string) error
 }
 
+/**
+ * NewService 用于创建并返回所需的对象或记录。
+ * @param store 用于持久化和查询数据的存储实现。
+ * @param cipher 本次操作需要使用的输入参数。
+ * @param defaultConfig 本次操作需要使用的输入参数。
+ * @param fallback 本次操作需要使用的输入参数。
+ * @param production 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewService(store ConfigStore, cipher SecretCipher, defaultConfig Config, fallback Mailer, production bool) *Service {
 	return &Service{store: store, cipher: cipher, defaultConfig: defaultConfig, fallback: fallback, production: production}
 }
 
+/**
+ * AdminConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) AdminConfig(ctx context.Context) (AdminConfig, error) {
 	record, err := s.current(ctx)
 	if err != nil {
@@ -101,6 +142,13 @@ func (s *Service) AdminConfig(ctx context.Context) (AdminConfig, error) {
 	return adminConfig(record), nil
 }
 
+/**
+ * UpdateConfig 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) UpdateConfig(ctx context.Context, input ConfigInput) (AdminConfig, error) {
 	if s == nil || s.store == nil || s.cipher == nil {
 		return AdminConfig{}, ErrInvalidConfig
@@ -136,6 +184,13 @@ func (s *Service) UpdateConfig(ctx context.Context, input ConfigInput) (AdminCon
 	return adminConfig(updated), nil
 }
 
+/**
+ * Test 验证对应功能在指定场景下的行为。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Test(ctx context.Context, recipient string) error {
 	recipient = strings.TrimSpace(recipient)
 	parsed, err := mail.ParseAddress(recipient)
@@ -152,6 +207,14 @@ func (s *Service) Test(ctx context.Context, recipient string) error {
 	return s.sendMessage(ctx, record, recipient, "Novro SMTP 测试邮件", "这是一封来自 Novro 的 SMTP 测试邮件。\r\n如果你能看到这封邮件，注册验证码邮件配置已生效。\r\n")
 }
 
+/**
+ * SendVerificationCode 用于发送对应消息或请求。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param code 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) SendVerificationCode(ctx context.Context, recipient, code string) error {
 	record, err := s.current(ctx)
 	if err != nil {
@@ -166,6 +229,16 @@ func (s *Service) SendVerificationCode(ctx context.Context, recipient, code stri
 	return s.sendMessage(ctx, record, recipient, "Novro 注册验证码", fmt.Sprintf("您的 Novro 注册验证码是：%s\r\n验证码 10 分钟内有效，且只能使用一次。若不是您本人操作，请忽略此邮件。\r\n", code))
 }
 
+/**
+ * sendMessage 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param record 本次操作需要使用的输入参数。
+ * @param recipient 本次操作需要使用的输入参数。
+ * @param subject 本次操作需要使用的输入参数。
+ * @param body 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) sendMessage(ctx context.Context, record StoredConfig, recipient, subject, body string) error {
 	if s.deliver != nil {
 		return s.deliver(ctx, record, recipient, subject, body)
@@ -185,6 +258,12 @@ func (s *Service) sendMessage(ctx context.Context, record StoredConfig, recipien
 	return mailer.SendMessage(ctx, recipient, subject, body)
 }
 
+/**
+ * current 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) current(ctx context.Context) (StoredConfig, error) {
 	if s == nil {
 		return StoredConfig{}, ErrNotConfigured
@@ -211,6 +290,14 @@ type normalizedInput struct {
 	Security    string
 }
 
+/**
+ * normalizeInput 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @param current 本次操作需要使用的输入参数。
+ * @param production 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeInput(input ConfigInput, current StoredConfig, production bool) (normalizedInput, error) {
 	result := normalizedInput{
 		Enabled: input.Enabled, Host: strings.TrimSpace(input.Host), Port: input.Port,
@@ -253,6 +340,12 @@ func normalizeInput(input ConfigInput, current StoredConfig, production bool) (n
 	return result, nil
 }
 
+/**
+ * normalizeStored 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func normalizeStored(record StoredConfig) StoredConfig {
 	if record.ID == "" {
 		record.ID = configID
@@ -266,6 +359,12 @@ func normalizeStored(record StoredConfig) StoredConfig {
 	return record
 }
 
+/**
+ * fromRuntime 封装该名称对应的业务处理逻辑。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromRuntime(config Config) StoredConfig {
 	security := strings.ToLower(strings.TrimSpace(config.Security))
 	if security == "" {
@@ -282,10 +381,22 @@ func fromRuntime(config Config) StoredConfig {
 	return StoredConfig{ID: configID, Enabled: host != "", Host: host, Port: port, Username: strings.TrimSpace(config.Username), Password: config.Password, FromAddress: strings.TrimSpace(config.From), Security: security, useFallback: host == ""}
 }
 
+/**
+ * configured 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func configured(record StoredConfig) bool {
 	return strings.TrimSpace(record.Host) != "" && record.Port > 0 && strings.TrimSpace(record.FromAddress) != "" && strings.TrimSpace(record.Username) != "" && (record.Password != "" || record.EncryptedPassword != "")
 }
 
+/**
+ * adminConfig 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func adminConfig(record StoredConfig) AdminConfig {
 	var updatedAt *time.Time
 	if !record.UpdatedAt.IsZero() {

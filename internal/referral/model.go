@@ -60,6 +60,12 @@ type Reward struct {
 	CreditedAt       time.Time `json:"credited_at"`
 }
 
+/**
+ * ValidRewardBPS 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func ValidRewardBPS(value int64) bool {
 	return value >= 0 && value <= 10_000
 }

@@ -13,6 +13,12 @@ type EmailVerificationCode struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (EmailVerificationCode) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -24,6 +30,12 @@ func (EmailVerificationCode) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (EmailVerificationCode) Indexes() []ent.Index {
 	return []ent.Index{index.Fields("email").Unique()}
 }

@@ -16,8 +16,21 @@ import (
 
 type EntStore struct{ client *ent.Client }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client} }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
 	upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(input.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -47,6 +60,13 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 	return s.get(ctx, created.ID)
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error) {
 	query := s.client.ModelRoute.Query().Where(
 		entmodelroute.DeletedAtIsNil(),
@@ -66,6 +86,14 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	return fromEntList(entities), nil
 }
 
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
 	disableForUpstream := false
 	if params.UpstreamModelID != nil {
@@ -120,6 +148,14 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	return s.get(ctx, id)
 }
 
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
 	if status == StatusActive {
 		route, err := s.client.ModelRoute.Query().Where(entmodelroute.IDEQ(id), entmodelroute.DeletedAtIsNil()).WithUpstreamModel().Only(ctx)
@@ -147,6 +183,13 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 	return s.get(ctx, id)
 }
 
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil()).
 		SetStatus(entmodelroute.StatusDisabled).SetDeletedAt(time.Now().UTC()).Save(ctx)
@@ -159,6 +202,14 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+/**
+ * ResolveCandidates 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param publicName 用于标识或筛选目标的文本值。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, billingGroupID uuid.UUID) ([]Resolution, error) {
 	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.BillingGroupIDEQ(billingGroupID), entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
@@ -178,6 +229,13 @@ func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, bil
 	return resolutions, nil
 }
 
+/**
+ * ListActive 用于筛选并返回数据列表。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]Record, error) {
 	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.BillingGroupIDEQ(billingGroupID), entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
@@ -186,6 +244,13 @@ func (s *EntStore) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]
 	return fromEntList(entities), nil
 }
 
+/**
+ * get 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 	entity, err := s.client.ModelRoute.Query().Where(
 		entmodelroute.IDEQ(id),
@@ -202,6 +267,12 @@ func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 	return fromEnt(entity), nil
 }
 
+/**
+ * fromEntList 封装该名称对应的业务处理逻辑。
+ * @param entities 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromEntList(entities []*ent.ModelRoute) []Record {
 	records := make([]Record, 0, len(entities))
 	for _, entity := range entities {
@@ -210,6 +281,12 @@ func fromEntList(entities []*ent.ModelRoute) []Record {
 	return records
 }
 
+/**
+ * fromEnt 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromEnt(entity *ent.ModelRoute) Record {
 	p, _ := entity.Edges.ProviderOrErr()
 	summary := ProviderSummary{}

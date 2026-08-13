@@ -23,6 +23,12 @@ SELF_SIGNED=false
 OFFLINE_IMAGES_FILE=""
 OFFLINE_MODE=false
 
+# /**
+#  * usage 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 usage() {
     printf '%s\n' \
         "Usage: sudo bash scripts/deploy-docker.sh [options]" \
@@ -120,6 +126,12 @@ if [[ ! -f "${ENV_FILE}" ]]; then
     fi
 fi
 
+# /**
+#  * install_docker 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 install_docker() {
     if [[ "${OFFLINE_MODE}" == true ]]; then
         local required_command
@@ -192,6 +204,12 @@ install_docker() {
     docker compose version
 }
 
+# /**
+#  * read_env_value 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 read_env_value() {
     local key="$1"
     if [[ ! -f "${ENV_FILE}" ]]; then
@@ -200,6 +218,12 @@ read_env_value() {
     sed -n "s/^${key}=//p" "${ENV_FILE}" | tail -n 1
 }
 
+# /**
+#  * write_env_file 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 write_env_file() {
     if [[ -f "${ENV_FILE}" ]]; then
         return 0
@@ -267,6 +291,12 @@ write_env_file() {
     chmod 0600 "${ENV_FILE}"
 }
 
+# /**
+#  * set_env_value 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 set_env_value() {
     local key="$1"
     local value="$2"
@@ -277,6 +307,12 @@ set_env_value() {
     fi
 }
 
+# /**
+#  * sync_runtime_env 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 sync_runtime_env() {
     local public_url="${SCHEME}://${DOMAIN}"
     local environment="production"
@@ -293,6 +329,12 @@ sync_runtime_env() {
     chmod 0600 "${ENV_FILE}"
 }
 
+# /**
+#  * resolve_deployment_domain 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 resolve_deployment_domain() {
     local configured_url="$(read_env_value NOVRO_PUBLIC_URL)"
     if [[ ! "${configured_url}" =~ ^(http|https)://[A-Za-z0-9.-]+$ ]]; then
@@ -309,6 +351,12 @@ resolve_deployment_domain() {
     fi
 }
 
+# /**
+#  * prepare_tls 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 prepare_tls() {
     mkdir -p "${DATA_DIR}/mysql" "${TLS_DIR}"
     if [[ "${SCHEME}" == "http" ]]; then
@@ -347,6 +395,12 @@ prepare_tls() {
     SELF_SIGNED=true
 }
 
+# /**
+#  * certificate_matches_domain 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 certificate_matches_domain() {
     local certificate_file="$1"
     local expected_domain="$2"
@@ -367,6 +421,12 @@ certificate_matches_domain() {
     return 1
 }
 
+# /**
+#  * prepare_nginx_config 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 prepare_nginx_config() {
     mkdir -p "${DATA_DIR}"
     local template="${REPO_DIR}/deploy/nginx.conf"
@@ -380,6 +440,12 @@ prepare_nginx_config() {
     install -m 0644 "${template}" "${NGINX_CONF_FILE}"
 }
 
+# /**
+#  * compose 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 compose() {
     local compose_files=(-f "${REPO_DIR}/compose.yaml")
     if [[ "${SCHEME}" == "http" ]]; then
@@ -388,6 +454,12 @@ compose() {
     docker compose --project-directory "${REPO_DIR}" --env-file "${ENV_FILE}" "${compose_files[@]}" "$@"
 }
 
+# /**
+#  * load_offline_images 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 load_offline_images() {
     if [[ "${OFFLINE_MODE}" != true ]]; then
         return 0
@@ -429,6 +501,12 @@ load_offline_images() {
     done
 }
 
+# /**
+#  * wait_for_ready 执行对应的运维辅助流程。
+#  * @param none 无参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 wait_for_ready() {
     local public_url="$(read_env_value NOVRO_PUBLIC_URL)"
     local scheme="${public_url%%://*}"

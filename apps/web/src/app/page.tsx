@@ -35,6 +35,12 @@ const overviewStats = [
   { label: "统一入口", value: "/v1", detail: "接入地址保持稳定", icon: ShieldCheck },
 ];
 
+/**
+ * Home 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function Home() {
   return (
     <div className="min-h-screen bg-muted/30">

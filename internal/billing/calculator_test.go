@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+/**
+ * TestCalculateCostUsesAllTokenDimensionsAndMultiplier 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCalculateCostUsesAllTokenDimensionsAndMultiplier(t *testing.T) {
 	tokens := TokenBreakdown{UncachedInput: 500_000, CacheRead: 250_000, CacheWrite: 100_000, Output: 200_000}
 	rates := RateCard{InputMicros: 1_000_000, CacheReadMicros: 200_000, CacheWriteMicros: 1_250_000, OutputMicros: 3_000_000, RequestMicros: 1_000}
@@ -17,6 +23,12 @@ func TestCalculateCostUsesAllTokenDimensionsAndMultiplier(t *testing.T) {
 	}
 }
 
+/**
+ * TestCalculateCostRoundsOnceAfterSummingComponents 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCalculateCostRoundsOnceAfterSummingComponents(t *testing.T) {
 	quote, err := CalculateCost(TokenBreakdown{UncachedInput: 1, CacheRead: 1, CacheWrite: 1, Output: 1}, RateCard{InputMicros: 100_000, CacheReadMicros: 100_000, CacheWriteMicros: 100_000, OutputMicros: 100_000}, 10_000)
 	if err != nil {
@@ -27,6 +39,12 @@ func TestCalculateCostRoundsOnceAfterSummingComponents(t *testing.T) {
 	}
 }
 
+/**
+ * TestCalculateCostRoundsFinalCustomerChargeUp 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCalculateCostRoundsFinalCustomerChargeUp(t *testing.T) {
 	quote, err := CalculateCost(TokenBreakdown{UncachedInput: 1}, RateCard{InputMicros: 20_000}, 15_000)
 	if err != nil {
@@ -37,6 +55,12 @@ func TestCalculateCostRoundsFinalCustomerChargeUp(t *testing.T) {
 	}
 }
 
+/**
+ * TestEstimateReservationUsesHighestInputDimensionRate 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEstimateReservationUsesHighestInputDimensionRate(t *testing.T) {
 	quote, err := EstimateReservation(100, 10, RateCard{InputMicros: 1_000_000, CacheReadMicros: 100_000, CacheWriteMicros: 1_250_000, CacheWrite1hMicros: 2_000_000, OutputMicros: 5_000_000}, 10_000)
 	if err != nil {
@@ -47,6 +71,12 @@ func TestEstimateReservationUsesHighestInputDimensionRate(t *testing.T) {
 	}
 }
 
+/**
+ * TestEstimateReservationAppliesBillingGroupMultiplier 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEstimateReservationAppliesBillingGroupMultiplier(t *testing.T) {
 	quote, err := EstimateReservation(1_000_000, 0, RateCard{InputMicros: 3_000_000}, 4_000)
 	if err != nil {
@@ -57,6 +87,12 @@ func TestEstimateReservationAppliesBillingGroupMultiplier(t *testing.T) {
 	}
 }
 
+/**
+ * TestEstimateReservationCoversEveryActualInputDimension 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEstimateReservationCoversEveryActualInputDimension(t *testing.T) {
 	rates := RateCard{InputMicros: 1_000_000, CacheReadMicros: 100_000, CacheWriteMicros: 1_250_000, CacheWrite1hMicros: 2_000_000, OutputMicros: 5_000_000, RequestMicros: 7}
 	reservation, err := EstimateReservation(100, 20, rates, 12_500)
@@ -80,6 +116,12 @@ func TestEstimateReservationCoversEveryActualInputDimension(t *testing.T) {
 	}
 }
 
+/**
+ * TestCalculateCostRejectsDatabaseTokenOverflow 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCalculateCostRejectsDatabaseTokenOverflow(t *testing.T) {
 	for _, tokens := range []TokenBreakdown{
 		{UncachedInput: math.MaxInt32, CacheRead: 1},

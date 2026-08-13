@@ -39,6 +39,12 @@ type EPayGateway struct {
 	client      *http.Client
 }
 
+/**
+ * NewEPayGateway 用于创建并返回所需的对象或记录。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEPayGateway(config EPayConfig) (*EPayGateway, error) {
 	submitURL, err := epaySubmitURL(config.APIURL)
 	if err != nil || strings.TrimSpace(config.MerchantID) == "" || strings.TrimSpace(config.MerchantKey) == "" || strings.TrimSpace(config.SiteName) == "" {
@@ -62,10 +68,22 @@ func NewEPayGateway(config EPayConfig) (*EPayGateway, error) {
 	}, nil
 }
 
+/**
+ * Channels 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (g *EPayGateway) Channels() []string {
 	return append([]string(nil), g.channels...)
 }
 
+/**
+ * Checkout 用于校验输入或运行状态是否满足要求。
+ * @param order 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (g *EPayGateway) Checkout(order Order) (Checkout, error) {
 	if order.ID == uuid.Nil || order.OutTradeNo == "" || order.AmountMicros <= 0 || !contains(g.channels, order.Channel) {
 		return Checkout{}, ErrInvalidInput
@@ -93,6 +111,12 @@ func (g *EPayGateway) Checkout(order Order) (Checkout, error) {
 	return Checkout{Action: g.submitURL, Method: "POST", Fields: fields}, nil
 }
 
+/**
+ * ParseNotification 用于解析输入并转换为内部数据结构。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (g *EPayGateway) ParseNotification(values url.Values) (Notification, error) {
 	params := make(gopay.BodyMap, len(values))
 	for key, entries := range values {
@@ -128,6 +152,13 @@ func (g *EPayGateway) ParseNotification(values url.Values) (Notification, error)
 	}, nil
 }
 
+/**
+ * Query 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (g *EPayGateway) Query(ctx context.Context, outTradeNo string) (Notification, bool, error) {
 	outTradeNo = strings.TrimSpace(outTradeNo)
 	if outTradeNo == "" || len(outTradeNo) > 64 {
@@ -186,6 +217,12 @@ func (g *EPayGateway) Query(ctx context.Context, outTradeNo string) (Notificatio
 	}, true, nil
 }
 
+/**
+ * sign 封装该名称对应的业务处理逻辑。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (g *EPayGateway) sign(params gopay.BodyMap) string {
 	// GoPay provides the same sorted key=value canonicalization used by EPay.
 	payload := params.EncodeAliPaySignParams() + g.merchantKey
@@ -193,6 +230,12 @@ func (g *EPayGateway) sign(params gopay.BodyMap) string {
 	return fmt.Sprintf("%x", digest)
 }
 
+/**
+ * epaySubmitURL 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func epaySubmitURL(value string) (string, error) {
 	value = strings.TrimRight(strings.TrimSpace(value), "/")
 	parsed, err := url.Parse(value)
@@ -205,6 +248,12 @@ func epaySubmitURL(value string) (string, error) {
 	return parsed.String(), nil
 }
 
+/**
+ * epayAPIURL 封装该名称对应的业务处理逻辑。
+ * @param submitURL 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func epayAPIURL(submitURL string) (string, error) {
 	parsed, err := url.Parse(submitURL)
 	if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -216,6 +265,12 @@ func epayAPIURL(submitURL string) (string, error) {
 	return parsed.String(), nil
 }
 
+/**
+ * newEPayHTTPClient 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func newEPayHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
 	return &http.Client{
@@ -230,11 +285,23 @@ func newEPayHTTPClient() *http.Client {
 	}
 }
 
+/**
+ * validAbsoluteHTTPURL 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validAbsoluteHTTPURL(value string) bool {
 	parsed, err := url.Parse(value)
 	return err == nil && parsed.Host != "" && parsed.User == nil && (parsed.Scheme == "http" || parsed.Scheme == "https")
 }
 
+/**
+ * formatEPayMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func formatEPayMoney(micros int64) (string, error) {
 	if micros <= 0 || micros%10_000 != 0 {
 		return "", ErrInvalidInput
@@ -243,6 +310,12 @@ func formatEPayMoney(micros int64) (string, error) {
 	return fmt.Sprintf("%d.%02d", cents/100, cents%100), nil
 }
 
+/**
+ * parseEPayMoney 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseEPayMoney(value string) (int64, error) {
 	value = strings.TrimSpace(value)
 	parts := strings.Split(value, ".")
@@ -276,6 +349,12 @@ func parseEPayMoney(value string) (int64, error) {
 	return amount, nil
 }
 
+/**
+ * asciiDigits 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func asciiDigits(value string) bool {
 	for _, char := range value {
 		if char < '0' || char > '9' {
@@ -285,6 +364,13 @@ func asciiDigits(value string) bool {
 	return true
 }
 
+/**
+ * constantTimeEqual 封装该名称对应的业务处理逻辑。
+ * @param left 本次操作需要使用的输入参数。
+ * @param right 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func constantTimeEqual(left, right string) bool {
 	if len(left) != len(right) {
 		return false

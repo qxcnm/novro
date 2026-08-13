@@ -6,6 +6,14 @@ import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Tabs 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param orientation  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Tabs({
   className,
   orientation = "horizontal",
@@ -39,6 +47,14 @@ const tabsListVariants = cva(
   }
 )
 
+/**
+ * TabsList 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param variant  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function TabsList({
   className,
   variant = "default",
@@ -55,6 +71,13 @@ function TabsList({
   )
 }
 
+/**
+ * TabsTrigger 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function TabsTrigger({
   className,
   ...props
@@ -74,6 +97,13 @@ function TabsTrigger({
   )
 }
 
+/**
+ * TabsContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function TabsContent({
   className,
   ...props

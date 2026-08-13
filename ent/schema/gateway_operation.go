@@ -17,6 +17,12 @@ type GatewayOperation struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (GatewayOperation) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -34,6 +40,12 @@ func (GatewayOperation) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (GatewayOperation) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("user", User.Type).Ref("gateway_operations").Unique().Field("user_id").Required(),
@@ -41,6 +53,12 @@ func (GatewayOperation) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (GatewayOperation) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("api_key_id", "idempotency_key_hash").Unique(),

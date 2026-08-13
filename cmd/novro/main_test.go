@@ -9,6 +9,12 @@ import (
 	"github.com/novro-gateway/novro/internal/auth"
 )
 
+/**
+ * TestOptionalOIDCServicePreservesDisabledState 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOptionalOIDCServicePreservesDisabledState(t *testing.T) {
 	if service := optionalOIDCService(nil); service != nil {
 		t.Fatal("disabled OIDC client must remain a nil service")
@@ -20,6 +26,12 @@ func TestOptionalOIDCServicePreservesDisabledState(t *testing.T) {
 	}
 }
 
+/**
+ * TestApplyPendingMigrations 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestApplyPendingMigrations(t *testing.T) {
 	database := &sql.DB{}
 	called := false
@@ -38,6 +50,12 @@ func TestApplyPendingMigrations(t *testing.T) {
 	}
 }
 
+/**
+ * TestApplyPendingMigrationsWrapsFailure 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestApplyPendingMigrationsWrapsFailure(t *testing.T) {
 	expected := errors.New("migration failed")
 	err := applyPendingMigrations(context.Background(), nil, func(context.Context, *sql.DB) error {
@@ -48,6 +66,12 @@ func TestApplyPendingMigrationsWrapsFailure(t *testing.T) {
 	}
 }
 
+/**
+ * TestEnvOrDefault 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEnvOrDefault(t *testing.T) {
 	t.Setenv("NOVRO_TEST_DEFAULT", "")
 	if value := envOrDefault("NOVRO_TEST_DEFAULT", "fallback"); value != "fallback" {

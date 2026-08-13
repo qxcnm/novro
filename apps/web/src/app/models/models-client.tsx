@@ -52,6 +52,12 @@ const inputIcons = {
   视频: Video,
 };
 
+/**
+ * ModelsClient 渲染对应的 React 界面组件。
+ * @param initialModels 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function ModelsClient({ initialModels }: ModelsClientProps) {
   const [query, setQuery] = useState("");
   const [vendor, setVendor] = useState<"all" | ModelVendor>("all");
@@ -162,11 +168,23 @@ export function ModelsClient({ initialModels }: ModelsClientProps) {
   );
 }
 
+/**
+ * ModelCard 渲染对应的 React 界面组件。
+ * @param model 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function ModelCard({ model }: { model: ModelEntry }) {
   const vendorLogo = vendorLogos[model.vendor];
   const input = getStartingPrice(model, "input");
   const output = getStartingPrice(model, "output");
   const cachedInput = getStartingPrice(model, "cachedInput");
+  /**
+   * hasTieredPricing 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const hasTieredPricing = (model.pricing?.length ?? 0) > 1;
 
   return (
@@ -250,6 +268,15 @@ function ModelCard({ model }: { model: ModelEntry }) {
   );
 }
 
+/**
+ * Price 用于计算并返回对应结果。
+ * @param label 本次操作需要使用的输入参数。
+ * @param value 需要处理的输入值。
+ * @param suffix  本次操作需要使用的输入参数。
+ * @param bordered  本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Price({ label, value, suffix = "", bordered = false }: { label: string; value: number | null; suffix?: string; bordered?: boolean }) {
   return (
     <div className={`px-3 py-4 ${bordered ? "border-l" : ""}`}>
@@ -263,6 +290,15 @@ function Price({ label, value, suffix = "", bordered = false }: { label: string;
   );
 }
 
+/**
+ * Stat 渲染对应的 React 界面组件。
+ * @param label 本次操作需要使用的输入参数。
+ * @param value 需要处理的输入值。
+ * @param bordered  本次操作需要使用的输入参数。
+ * @param className  本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Stat({ label, value, bordered = false, className = "" }: { label: string; value: string; bordered?: boolean; className?: string }) {
   return (
     <div className={`px-3 py-3 ${bordered ? "border-l" : ""} ${className}`}>

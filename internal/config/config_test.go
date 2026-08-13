@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+/**
+ * testEnv 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testEnv() map[string]string {
 	return map[string]string{
 		"NOVRO_ENVIRONMENT":                "test",
@@ -31,11 +37,23 @@ func testEnv() map[string]string {
 	}
 }
 
+/**
+ * fromMap 封装该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func fromMap(values map[string]string) (string, bool) {
 	value, ok := values["_"]
 	return value, ok
 }
 
+/**
+ * loadMap 封装该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func loadMap(values map[string]string) (Config, error) {
 	return loadEnv(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -43,6 +61,12 @@ func loadMap(values map[string]string) (Config, error) {
 	})
 }
 
+/**
+ * TestLoadValidatesAndAppliesDefaults 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadValidatesAndAppliesDefaults(t *testing.T) {
 	cfg, err := loadMap(testEnv())
 	if err != nil {
@@ -68,6 +92,12 @@ func TestLoadValidatesAndAppliesDefaults(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadValidatesOIDCAndSetupConfiguration 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadValidatesOIDCAndSetupConfiguration(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_OIDC_ISSUER"] = "https://id.example.com"
@@ -106,6 +136,12 @@ func TestLoadValidatesOIDCAndSetupConfiguration(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadValidatesOptionalEPayConfiguration 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadValidatesOptionalEPayConfiguration(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_EPAY_API_URL"] = "https://pay.example.com"
@@ -135,6 +171,12 @@ func TestLoadValidatesOptionalEPayConfiguration(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadValidatesReferralRewardRate 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadValidatesReferralRewardRate(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_REFERRAL_REWARD_BPS"] = "750"
@@ -152,6 +194,12 @@ func TestLoadValidatesReferralRewardRate(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadRejectsMissingSecretAndInsecureProduction 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 	values := testEnv()
 	delete(values, "NOVRO_SESSION_SECRET")
@@ -181,6 +229,12 @@ func TestLoadRejectsMissingSecretAndInsecureProduction(t *testing.T) {
 
 }
 
+/**
+ * TestLoadRejectsInvalidPoolAndAddress 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadRejectsInvalidPoolAndAddress(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_HTTP_ADDR"] = "localhost"
@@ -195,6 +249,12 @@ func TestLoadRejectsInvalidPoolAndAddress(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadRestrictsProductionListenerAndAllowedOrigins 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 	production := func() map[string]string {
 		values := testEnv()
@@ -237,6 +297,12 @@ func TestLoadRestrictsProductionListenerAndAllowedOrigins(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadRequiresPublicURLOrigin 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadRequiresPublicURLOrigin(t *testing.T) {
 	for _, publicURL := range []string{
 		"https://user@app.example.invalid",
@@ -252,6 +318,12 @@ func TestLoadRequiresPublicURLOrigin(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoadAllowsDatabaseManagedSMTPInProduction 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoadAllowsDatabaseManagedSMTPInProduction(t *testing.T) {
 	values := testEnv()
 	values["NOVRO_ENVIRONMENT"] = "production"
@@ -270,6 +342,12 @@ func TestLoadAllowsDatabaseManagedSMTPInProduction(t *testing.T) {
 	}
 }
 
+/**
+ * redactDSN 封装该名称对应的业务处理逻辑。
+ * @param dsn 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func redactDSN(dsn string) string {
 	if index := strings.Index(dsn, "@tcp("); index >= 0 {
 		return "<redacted>" + dsn[index:]

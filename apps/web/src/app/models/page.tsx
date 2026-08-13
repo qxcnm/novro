@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   description: "查看 Novro 汇集的 Kimi、GLM、DeepSeek 模型、能力参数与厂商官方牌价。",
 };
 
+/**
+ * ModelsPage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ModelsPage() {
   return (
     <div className="min-h-screen bg-muted/30">

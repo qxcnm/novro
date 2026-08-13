@@ -34,16 +34,41 @@ type ErrorResponse = { error?: { message?: string } };
 
 const PAGE_SIZE = 20;
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @param empty 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string | null, empty = "从未使用") {
   if (!value) return empty;
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * AdminAPIKeysClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function AdminAPIKeysClient() {
   const router = useRouter();
   const [keys, setKeys] = useState<APIKeyRecord[]>([]);
@@ -68,6 +93,12 @@ export default function AdminAPIKeysClient() {
     if (response.status === 401) { router.replace("/login"); return; }
     if (response.status === 403) { router.replace("/console"); return; }
     if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
+    /**
+     * page 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const page = (await response.json()) as APIKeyPage;
     setKeys(page.api_keys);
     setTotal(page.total);
@@ -79,12 +110,24 @@ export default function AdminAPIKeysClient() {
     return () => window.clearTimeout(timer);
   }, [loadKeys]);
 
+  /**
+   * submitSearch 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setOffset(0);
     setSearch(searchDraft.trim());
   }
 
+  /**
+   * revoke 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function revoke() {
     if (!revokeKey) return;
     setBusy(true);
@@ -97,6 +140,12 @@ export default function AdminAPIKeysClient() {
     await loadKeys();
   }
 
+  /**
+   * revokeSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function revokeSelected() {
     const ids = selection.selectedIds;
     setBusy(true);

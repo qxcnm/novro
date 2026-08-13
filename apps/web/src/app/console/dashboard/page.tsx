@@ -15,9 +15,27 @@ type Balance = { wallet: { balance_micros: number } };
 type Key = { id: string; name: string; status: "active" | "revoked" };
 type UsageRate = { window_seconds: number; requests: number; input_tokens: number; output_tokens: number; total_tokens: number; rpm: number; tpm: number; calculated_at: string };
 
+/**
+ * money 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 const money = (micros: number) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000);
+/**
+ * dateKey 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 const dateKey = (value: string) => new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(value));
 
+/**
+ * DashboardPage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function DashboardPage() {
   const router = useRouter();
   const [usage, setUsage] = useState<Usage[]>([]);
@@ -58,6 +76,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let timer: number;
+    /**
+     * schedule 封装该名称对应的业务处理逻辑。
+     * @param none 无参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const schedule = () => {
       const now = new Date();
       const nextMidnight = new Date(now);

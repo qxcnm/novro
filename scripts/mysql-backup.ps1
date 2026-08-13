@@ -11,6 +11,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# /**
+#  * Get-RequiredEnvironmentValue 执行对应的运维辅助流程。
+#  * @param Name 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Get-RequiredEnvironmentValue {
     param([Parameter(Mandatory = $true)][string]$Name)
 
@@ -21,6 +27,12 @@ function Get-RequiredEnvironmentValue {
     return $value.Trim()
 }
 
+# /**
+#  * Resolve-NativeExecutable 执行对应的运维辅助流程。
+#  * @param Value 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Resolve-NativeExecutable {
     param([Parameter(Mandatory = $true)][string]$Value)
 
@@ -34,6 +46,12 @@ function Resolve-NativeExecutable {
     return $command.Source
 }
 
+# /**
+#  * New-MySQLClientOptionFile 执行对应的运维辅助流程。
+#  * @param Password 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function New-MySQLClientOptionFile {
     param([Parameter(Mandatory = $true)][string]$Password)
 
@@ -47,6 +65,13 @@ function New-MySQLClientOptionFile {
     return $path
 }
 
+# /**
+#  * Invoke-NativeCommand 执行对应的运维辅助流程。
+#  * @param Executable 本次运维操作使用的输入参数。
+#  * @param Arguments 本次运维操作使用的输入参数。
+#  * @author Gao Hongshun
+#  * @date 2026-08-13
+#  */
 function Invoke-NativeCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Executable,

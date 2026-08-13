@@ -4,6 +4,14 @@ import type { ReactNode } from "react";
 
 import { useOptionalCurrentUser } from "@/components/console-shell";
 
+/**
+ * DocsFrame 渲染对应的 React 界面组件。
+ * @param children React 组件包含的子元素。
+ * @param publicFooter 本次操作需要使用的输入参数。
+ * @param publicHeader 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function DocsFrame({
   children,
   publicFooter,

@@ -190,6 +190,13 @@ export const modelCatalog: ModelEntry[] = [
   },
 ];
 
+/**
+ * compareModelRelease 封装该名称对应的业务处理逻辑。
+ * @param left 本次操作需要使用的输入参数。
+ * @param right 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function compareModelRelease(left: ModelEntry, right: ModelEntry) {
   if (left.releasedAt === right.releasedAt) {
     return 0;
@@ -203,10 +210,23 @@ export function compareModelRelease(left: ModelEntry, right: ModelEntry) {
   return right.releasedAt.localeCompare(left.releasedAt);
 }
 
+/**
+ * formatPrice 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function formatPrice(value: number) {
   return Number.isInteger(value) ? String(value) : String(value);
 }
 
+/**
+ * getStartingPrice 封装该名称对应的业务处理逻辑。
+ * @param model 本次操作需要使用的输入参数。
+ * @param field 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function getStartingPrice(model: ModelEntry, field: keyof Omit<ModelPriceTier, "label">) {
   if (!model.pricing?.length) {
     return null;

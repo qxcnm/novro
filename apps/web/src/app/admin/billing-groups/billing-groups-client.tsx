@@ -45,16 +45,34 @@ type Form = { code: string; display_name: string; multiplier: string; is_hidden:
 
 const emptyForm: Form = { code: "", display_name: "", multiplier: "1", is_hidden: false, authorized_user_ids: [] };
 
+/**
+ * errorMessage 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * multiplierBPS 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function multiplierBPS(value: string) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 100 ? Math.round(parsed * 10_000) : null;
 }
 
+/**
+ * BillingGroupsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function BillingGroupsClient() {
   const router = useRouter();
   const [groups, setGroups] = useState<Group[]>([]);
@@ -101,6 +119,12 @@ export default function BillingGroupsClient() {
         setUserOptionsLoading(false);
         return;
       }
+      /**
+       * page 封装该名称对应的业务处理逻辑。
+       * @param await 本次操作需要使用的输入参数。
+       * @author Gao Hongshun
+       * @date 2026-08-13
+       */
       const page = (await response.json()) as UserPage;
       loaded.push(...page.users.filter((record) => record.role === "member"));
       total = page.total;
@@ -128,6 +152,12 @@ export default function BillingGroupsClient() {
   }, [userOptions, userQuery]);
   const selection = useListSelection(filtered.filter((group) => !group.is_default).map((group) => group.id));
 
+  /**
+   * beginEdit 封装该名称对应的业务处理逻辑。
+   * @param group 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginEdit(group: Group) {
     setEditing(group);
     setUserQuery("");
@@ -135,6 +165,12 @@ export default function BillingGroupsClient() {
     void loadUserOptions();
   }
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const bps = multiplierBPS(form.multiplier);
@@ -158,6 +194,12 @@ export default function BillingGroupsClient() {
     await load();
   }
 
+  /**
+   * toggleStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function toggleStatus() {
     if (!statusGroup) return;
     const next = statusGroup.status === "active" ? "disabled" : "active";
@@ -176,6 +218,12 @@ export default function BillingGroupsClient() {
     setStatusGroup(null);
   }
 
+  /**
+   * applyBulkStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function applyBulkStatus() {
     if (!bulkStatus) return;
     setBusy(true);
@@ -191,6 +239,12 @@ export default function BillingGroupsClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * deleteOneGroup 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteOneGroup() {
     if (!deletingGroup) return;
     setBusy(true);
@@ -204,6 +258,12 @@ export default function BillingGroupsClient() {
     setDeletingGroup(null);
   }
 
+  /**
+   * deleteSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/billing-groups/${id}`, { method: "DELETE" }));

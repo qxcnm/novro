@@ -19,31 +19,85 @@ type fakeStore struct {
 	err            error
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
 	f.created = input
 	return Record{PublicName: input.PublicName}, f.err
 }
+
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ListFilter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) List(context.Context, ListFilter) ([]Record, error) { return nil, f.err }
+
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, input UpdateParams) (Record, error) {
 	f.updated = input
 	return Record{}, f.err
 }
+
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param Status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) SetStatus(context.Context, uuid.UUID, Status) (Record, error) {
 	return Record{}, f.err
 }
+
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.err
 }
+
+/**
+ * ResolveCandidates 封装该名称对应的业务处理逻辑。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) ResolveCandidates(_ context.Context, _ string, billingGroupID uuid.UUID) ([]Resolution, error) {
 	f.billingGroupID = billingGroupID
 	return f.resolutions, f.err
 }
+
+/**
+ * ListActive 用于筛选并返回数据列表。
+ * @param billingGroupID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) ListActive(_ context.Context, billingGroupID uuid.UUID) ([]Record, error) {
 	f.billingGroupID = billingGroupID
 	return nil, f.err
 }
 
+/**
+ * TestCreateNormalizesAndValidatesModelRoute 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
 	store := &fakeStore{}
@@ -71,6 +125,12 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	}
 }
 
+/**
+ * TestResolveCandidatesDecryptsEveryProviderCredential 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestResolveCandidatesDecryptsEveryProviderCredential(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
 	firstEncrypted, _ := cipher.Encrypt("first-secret")
@@ -89,6 +149,12 @@ func TestResolveCandidatesDecryptsEveryProviderCredential(t *testing.T) {
 	}
 }
 
+/**
+ * TestResolveCandidatesSkipsOneInvalidProviderCredential 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestResolveCandidatesSkipsOneInvalidProviderCredential(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
 	encrypted, _ := cipher.Encrypt("healthy-secret")
@@ -102,6 +168,12 @@ func TestResolveCandidatesSkipsOneInvalidProviderCredential(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateRejectsNegativePrice 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateRejectsNegativePrice(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
 	value := int64(-1)
@@ -111,6 +183,12 @@ func TestUpdateRejectsNegativePrice(t *testing.T) {
 	}
 }
 
+/**
+ * TestDeleteValidatesIDAndDelegates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDeleteValidatesIDAndDelegates(t *testing.T) {
 	cipher, _ := provider.NewCipher("01234567890123456789012345678901")
 	store := &fakeStore{}

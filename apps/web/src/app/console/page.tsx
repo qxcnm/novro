@@ -19,20 +19,50 @@ type CreateResult = { api_key: APIKeyRecord; key: string };
 type BalanceSummary = { wallet: { balance_micros: number; updated_at: string } };
 type ErrorResponse = { error?: { message?: string } };
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatMoney(micros: number) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(micros / 1_000_000);
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string | null) {
   if (!value) return "从未使用";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * ConsolePage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ConsolePage() {
   const router = useRouter();
   const user = useCurrentUser();
@@ -79,6 +109,12 @@ export default function ConsolePage() {
     return () => window.clearTimeout(timer);
   }, [copiedKeyID]);
 
+  /**
+   * createKey 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function createKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -87,6 +123,12 @@ export default function ConsolePage() {
       const response = await fetch("/api/account/api-keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
       if (response.status === 401) { router.replace("/login"); return; }
       if (!response.ok) { setMessage(await readError(response)); return; }
+      /**
+       * result 封装该名称对应的业务处理逻辑。
+       * @param await 本次操作需要使用的输入参数。
+       * @author Gao Hongshun
+       * @date 2026-08-13
+       */
       const result = (await response.json()) as CreateResult;
       setCreated(result);
       setName("");
@@ -98,6 +140,12 @@ export default function ConsolePage() {
     }
   }
 
+  /**
+   * copyCreatedKey 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyCreatedKey() {
     if (!created) return;
     const success = await copyText(created.key);
@@ -105,6 +153,12 @@ export default function ConsolePage() {
     if (!success) setMessage("复制失败，请手动选择完整密钥");
   }
 
+  /**
+   * copyStoredKey 封装该名称对应的业务处理逻辑。
+   * @param key 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyStoredKey(key: APIKeyRecord) {
     if (!key.can_copy_secret) {
       setMessage("该 API Key 没有可重新复制的副本，请重新创建");
@@ -120,6 +174,12 @@ export default function ConsolePage() {
         setMessage(await readError(response));
         return;
       }
+      /**
+       * body 封装该名称对应的业务处理逻辑。
+       * @param await 本次操作需要使用的输入参数。
+       * @author Gao Hongshun
+       * @date 2026-08-13
+       */
       const body = (await response.json()) as { key?: string };
       if (!body.key) {
         setMessage("该 API Key 没有可重新复制的副本，请重新创建");
@@ -137,6 +197,12 @@ export default function ConsolePage() {
     }
   }
 
+  /**
+   * revoke 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function revoke() {
     if (!revokeKey) return;
     setBusy(true);

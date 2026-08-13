@@ -43,6 +43,12 @@ type DiscoveryError struct {
 	Reason     string
 }
 
+/**
+ * Error 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (e *DiscoveryError) Error() string {
 	if e.StatusCode > 0 {
 		return fmt.Sprintf("上游模型接口返回 HTTP %d：%s", e.StatusCode, e.Reason)
@@ -50,6 +56,12 @@ func (e *DiscoveryError) Error() string {
 	return e.Reason
 }
 
+/**
+ * Unwrap 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (e *DiscoveryError) Unwrap() error { return ErrDiscoveryFailed }
 
 type CatalogModel struct {
@@ -76,6 +88,14 @@ type Service struct {
 	http   *http.Client
 }
 
+/**
+ * NewService 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @param cipher 本次操作需要使用的输入参数。
+ * @param httpClient 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewService(client *ent.Client, cipher *provider.Cipher, httpClient *http.Client) *Service {
 	if httpClient == nil {
 		httpClient = upstreamhttp.NewClient()
@@ -83,6 +103,13 @@ func NewService(client *ent.Client, cipher *provider.Cipher, httpClient *http.Cl
 	return &Service{client: client, cipher: cipher, http: httpClient}
 }
 
+/**
+ * Sync 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param providerID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Sync(ctx context.Context, providerID uuid.UUID) ([]CatalogModel, error) {
 	if providerID == uuid.Nil {
 		return nil, ErrInvalidInput
@@ -194,6 +221,14 @@ func (s *Service) Sync(ctx context.Context, providerID uuid.UUID) ([]CatalogMode
 
 // A model ID has one global catalog record and one shared price card. Provider
 // discovery only reuses that record; it never owns or overwrites its pricing.
+/**
+ * findCatalogModel 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param tx 本次操作需要使用的输入参数。
+ * @param model 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func findCatalogModel(ctx context.Context, tx *ent.Tx, model discoveredModel) (*ent.UpstreamModel, error) {
 	entities, err := tx.UpstreamModel.Query().Where(
 		entupstreammodel.UpstreamNameEqualFold(model.UpstreamName),
@@ -215,6 +250,14 @@ func findCatalogModel(ctx context.Context, tx *ent.Tx, model discoveredModel) (*
 	return nil, nil
 }
 
+/**
+ * Link 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param providerID 目标资源的一个或多个唯一标识。
+ * @param modelIDs 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (LinkResult, error) {
 	modelIDs = uniqueIDs(modelIDs)
 	if providerID == uuid.Nil || len(modelIDs) == 0 || len(modelIDs) > maxLinkModels {
@@ -320,6 +363,14 @@ type discoveredModel struct {
 	DisplayName  string
 }
 
+/**
+ * discover 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param configured 本次操作需要使用的输入参数。
+ * @param apiKey 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey string) ([]discoveredModel, error) {
 	endpoint, err := modelListURL(configured.BaseURL, provider.Protocol(configured.Protocol), configured.ModelListPath)
 	if err != nil {
@@ -389,6 +440,13 @@ func (s *Service) discover(ctx context.Context, configured *ent.Provider, apiKey
 	return models, nil
 }
 
+/**
+ * trimError 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @param maximum 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func trimError(value string, maximum int) string {
 	value = strings.Join(strings.Fields(value), " ")
 	if len(value) <= maximum {
@@ -397,6 +455,12 @@ func trimError(value string, maximum int) string {
 	return value[:maximum] + "..."
 }
 
+/**
+ * catalogProviderName 封装该名称对应的业务处理逻辑。
+ * @param configured 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func catalogProviderName(configured *ent.Provider) string {
 	parsed, err := url.Parse(configured.BaseURL)
 	if err == nil {
@@ -412,6 +476,13 @@ func catalogProviderName(configured *ent.Provider) string {
 	return configured.DisplayName
 }
 
+/**
+ * catalogProviderNameForModel 封装该名称对应的业务处理逻辑。
+ * @param configured 本次操作需要使用的输入参数。
+ * @param modelID 目标资源的一个或多个唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func catalogProviderNameForModel(configured *ent.Provider, modelID string) string {
 	normalized := strings.ToLower(strings.TrimSpace(modelID))
 	switch {
@@ -426,6 +497,14 @@ func catalogProviderNameForModel(configured *ent.Provider, modelID string) strin
 	}
 }
 
+/**
+ * modelListURL 封装该名称对应的业务处理逻辑。
+ * @param base 本次操作需要使用的输入参数。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @param modelPath 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func modelListURL(base string, protocol provider.Protocol, modelPath string) (string, error) {
 	parsed, err := url.Parse(base)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
@@ -452,10 +531,24 @@ func modelListURL(base string, protocol provider.Protocol, modelPath string) (st
 	return parsed.String(), nil
 }
 
+/**
+ * catalogModel 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @param added 本次操作需要使用的输入参数。
+ * @param restored 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func catalogModel(entity *ent.UpstreamModel, added, restored bool) CatalogModel {
 	return CatalogModel{ID: entity.ID, ProviderName: entity.ProviderName, UpstreamName: entity.UpstreamName, DisplayName: entity.DisplayName, PricingConfigured: entity.PricingConfigured, Status: string(entity.Status), Added: added, Restored: restored}
 }
 
+/**
+ * uniqueIDs 封装该名称对应的业务处理逻辑。
+ * @param values 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func uniqueIDs(values []uuid.UUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(values))
 	result := make([]uuid.UUID, 0, len(values))
@@ -472,6 +565,12 @@ func uniqueIDs(values []uuid.UUID) []uuid.UUID {
 	return result
 }
 
+/**
+ * validAutomaticPublicName 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validAutomaticPublicName(value string) bool {
 	if len(value) < 2 || len(value) > 256 {
 		return false

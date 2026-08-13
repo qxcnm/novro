@@ -22,6 +22,12 @@ type AnnouncementConfig = Omit<Announcement, "available"> & {
 
 const emptyConfig: AnnouncementConfig = { enabled: false, title: "", body: "" };
 
+/**
+ * normalizeConfig 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function normalizeConfig(value?: Partial<AnnouncementConfig>): AnnouncementConfig {
   return {
     enabled: value?.enabled === true,
@@ -31,10 +37,22 @@ function normalizeConfig(value?: Partial<AnnouncementConfig>): AnnouncementConfi
   };
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value?: string) {
   return value ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "尚未保存";
 }
 
+/**
+ * AnnouncementSettingsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function AnnouncementSettingsClient() {
   const router = useRouter();
   const [config, setConfig] = useState<AnnouncementConfig>(emptyConfig);
@@ -68,6 +86,12 @@ export default function AnnouncementSettingsClient() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  /**
+   * save 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");

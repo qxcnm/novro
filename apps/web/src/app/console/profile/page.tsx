@@ -40,6 +40,12 @@ type ReferralSummary = {
 
 type ReferralResponse = { referral?: ReferralSummary };
 
+/**
+ * formatMoney 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatMoney(micros: number) {
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
@@ -49,14 +55,32 @@ function formatMoney(micros: number) {
   }).format(micros / 1_000_000);
 }
 
+/**
+ * formatRewardRate 封装该名称对应的业务处理逻辑。
+ * @param basisPoints 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatRewardRate(basisPoints: number) {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 2 }).format(basisPoints / 10_000);
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * ProfilePage 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ProfilePage() {
   const user = useCurrentUser();
   const [displayName, setDisplayName] = useState(user.display_name || user.username);
@@ -82,6 +106,12 @@ export default function ProfilePage() {
     return () => { active = false; };
   }, []);
 
+  /**
+   * save 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -107,6 +137,12 @@ export default function ProfilePage() {
     }
   }
 
+  /**
+   * copyInviteLink 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyInviteLink() {
     if (!referral?.invite_url) return;
     const success = await copyText(referral.invite_url);
@@ -237,6 +273,13 @@ export default function ProfilePage() {
   );
 }
 
+/**
+ * ReferralMetric 渲染对应的 React 界面组件。
+ * @param label 本次操作需要使用的输入参数。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function ReferralMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-20 min-w-0 flex-col justify-center px-2 py-3 text-center">
@@ -246,6 +289,12 @@ function ReferralMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * RewardList 渲染对应的 React 界面组件。
+ * @param items 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function RewardList({ items }: { items: ReferralReward[] }) {
   if (items.length === 0) {
     return <ReferralEmptyState icon={Gift} title="还没有返现记录" description="受邀好友完成充值后，返现会自动进入你的余额。" />;
@@ -271,6 +320,12 @@ function RewardList({ items }: { items: ReferralReward[] }) {
   );
 }
 
+/**
+ * InvitationList 渲染对应的 React 界面组件。
+ * @param items 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function InvitationList({ items }: { items: ReferralInvitation[] }) {
   if (items.length === 0) {
     return <ReferralEmptyState icon={UserPlus} title="还没有邀请记录" description="复制推荐链接发给好友，注册成功后会出现在这里。" />;
@@ -293,6 +348,14 @@ function InvitationList({ items }: { items: ReferralInvitation[] }) {
   );
 }
 
+/**
+ * ReferralEmptyState 渲染对应的 React 界面组件。
+ * @param icon 本次操作需要使用的输入参数。
+ * @param title 本次操作需要使用的输入参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function ReferralEmptyState({ icon: Icon, title, description }: { icon: typeof Gift; title: string; description: string }) {
   return (
     <div className="flex min-h-48 flex-col items-center justify-center px-6 text-center">

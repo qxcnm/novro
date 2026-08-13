@@ -17,24 +17,67 @@ type fakeStore struct {
 	err          error
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Create(_ context.Context, params CreateParams) (Record, error) {
 	f.createParams = params
 	return Record{ID: uuid.New(), Code: params.Code, APIKeyHint: params.APIKeyHint}, f.err
 }
+
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ListFilter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) List(context.Context, ListFilter) ([]Record, error) { return nil, f.err }
+
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Update(_ context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
 	f.updateParams = params
 	return Record{ID: id}, f.err
 }
+
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param id 目标资源的唯一标识。
+ * @param status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) SetStatus(_ context.Context, id uuid.UUID, status Status) (Record, error) {
 	f.status = status
 	return Record{ID: id, Status: status}, f.err
 }
+
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return f.err
 }
 
+/**
+ * testService 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param store 用于持久化和查询数据的存储实现。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testService(t *testing.T, store *fakeStore) *Service {
 	t.Helper()
 	cipher, err := NewCipher("01234567890123456789012345678901")
@@ -44,6 +87,12 @@ func testService(t *testing.T, store *fakeStore) *Service {
 	return NewService(store, cipher)
 }
 
+/**
+ * TestCreateEncryptsCredentialAndNormalizesProvider 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
@@ -62,6 +111,12 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderValidationRejectsInsecureOrInvalidInput 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 	service := testService(t, &fakeStore{})
 	inputs := []CreateInput{
@@ -77,6 +132,12 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderValidationAcceptsDottedProviderCode 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
@@ -92,6 +153,12 @@ func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderValidationAcceptsHTTPForSelfHostedUpstream 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
@@ -107,6 +174,12 @@ func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateReencryptsOnlyWhenCredentialProvided 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
@@ -126,6 +199,12 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 	}
 }
 
+/**
+ * TestProviderValidationRejectsNonPositiveWeight 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestProviderValidationRejectsNonPositiveWeight(t *testing.T) {
 	service := testService(t, &fakeStore{})
 	for _, weight := range []int{-1, MaxWeight + 1} {
@@ -141,6 +220,12 @@ func TestProviderValidationRejectsNonPositiveWeight(t *testing.T) {
 	}
 }
 
+/**
+ * TestCipherRoundTripAndRejectsWrongKey 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCipherRoundTripAndRejectsWrongKey(t *testing.T) {
 	cipher, _ := NewCipher("01234567890123456789012345678901")
 	encrypted, err := cipher.Encrypt("secret-value")
@@ -157,6 +242,12 @@ func TestCipherRoundTripAndRejectsWrongKey(t *testing.T) {
 	}
 }
 
+/**
+ * TestDeleteValidatesIDAndDelegates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDeleteValidatesIDAndDelegates(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)

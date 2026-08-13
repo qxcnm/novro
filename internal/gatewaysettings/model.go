@@ -39,6 +39,12 @@ type StoredConfig struct {
 	Found     bool
 }
 
+/**
+ * DefaultConfig 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func DefaultConfig() Config {
 	return Config{
 		SSEHeartbeatEnabled:         true,
@@ -50,6 +56,12 @@ func DefaultConfig() Config {
 	}
 }
 
+/**
+ * Validate 用于校验输入或运行状态是否满足要求。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c Config) Validate() bool {
 	if c.SSEHeartbeatIntervalMS < minimumConfiguredTimeoutMS || c.SSEHeartbeatIntervalMS > maximumHeartbeatIntervalMS {
 		return false
@@ -64,6 +76,12 @@ func (c Config) Validate() bool {
 	return true
 }
 
+/**
+ * withDefaults 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c Config) withDefaults() Config {
 	if c.ReservationInputTokenCap == 0 {
 		c.ReservationInputTokenCap = DefaultReservationInputTokenCap
@@ -74,18 +92,42 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
+/**
+ * validOptionalTimeout 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func validOptionalTimeout(value int) bool {
 	return value == 0 || (value >= minimumConfiguredTimeoutMS && value <= maximumConfiguredTimeoutMS)
 }
 
+/**
+ * HeartbeatInterval 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c Config) HeartbeatInterval() time.Duration {
 	return time.Duration(c.SSEHeartbeatIntervalMS) * time.Millisecond
 }
 
+/**
+ * UpstreamTimeout 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c Config) UpstreamTimeout() time.Duration {
 	return time.Duration(c.UpstreamTimeoutMS) * time.Millisecond
 }
 
+/**
+ * UpstreamStreamIdleTimeout 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (c Config) UpstreamStreamIdleTimeout() time.Duration {
 	return time.Duration(c.UpstreamStreamIdleTimeoutMS) * time.Millisecond
 }

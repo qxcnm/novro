@@ -24,11 +24,23 @@ type fakePaymentStore struct {
 	err         error
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentStore) Create(_ context.Context, params CreateParams) (Order, error) {
 	f.created = params
 	return Order{ID: params.ID, UserID: params.UserID, OutTradeNo: params.OutTradeNo, Provider: "epay", Channel: params.Channel, AmountMicros: params.AmountMicros, CreditedMicros: params.CreditedMicros, Status: StatusPending}, f.err
 }
 
+/**
+ * Get 用于查询并返回所需的数据。
+ * @param outTradeNo 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentStore) Get(_ context.Context, outTradeNo string) (Order, error) {
 	for _, order := range f.orders {
 		if order.OutTradeNo == outTradeNo {
@@ -38,16 +50,34 @@ func (f *fakePaymentStore) Get(_ context.Context, outTradeNo string) (Order, err
 	return Order{}, ErrOrderNotFound
 }
 
+/**
+ * List 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentStore) List(_ context.Context, _ uuid.UUID, filter ListFilter) (Page, error) {
 	f.listFilter = filter
 	return Page{Orders: f.orders, Total: len(f.orders), Offset: filter.Offset, Limit: filter.Limit}, f.err
 }
 
+/**
+ * ListAll 用于筛选并返回数据列表。
+ * @param filter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentStore) ListAll(_ context.Context, filter AdminListFilter) (AdminPage, error) {
 	f.adminFilter = filter
 	return AdminPage{Orders: []AdminOrder{}}, f.err
 }
 
+/**
+ * Complete 封装该名称对应的业务处理逻辑。
+ * @param params 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentStore) Complete(_ context.Context, params CompleteParams) (Order, error) {
 	f.completed = params
 	return Order{OutTradeNo: params.OutTradeNo, Status: StatusPaid}, f.err
@@ -55,13 +85,40 @@ func (f *fakePaymentStore) Complete(_ context.Context, params CompleteParams) (O
 
 type fakePaymentGateway struct{}
 
+/**
+ * Channels 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentGateway) Channels() []string { return []string{"alipay"} }
+
+/**
+ * Checkout 用于校验输入或运行状态是否满足要求。
+ * @param order 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentGateway) Checkout(order Order) (Checkout, error) {
 	return Checkout{Action: "https://pay.example.com/submit.php", Method: "POST", Fields: map[string]string{"out_trade_no": order.OutTradeNo}}, nil
 }
+
+/**
+ * ParseNotification 用于解析输入并转换为内部数据结构。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentGateway) ParseNotification(url.Values) (Notification, error) {
 	return Notification{OutTradeNo: "NVR1", ProviderTradeNo: "EPAY1", Channel: "alipay", AmountMicros: 10_000_000}, nil
 }
+
+/**
+ * Query 用于查询并返回所需的数据。
+ * @param string 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentGateway) Query(context.Context, string) (Notification, bool, error) {
 	return Notification{OutTradeNo: "NVR1", ProviderTradeNo: "EPAY1", Channel: "alipay", AmountMicros: 10_000_000}, true, nil
 }
@@ -71,6 +128,12 @@ type fakePaymentConfigStore struct {
 	found  bool
 }
 
+/**
+ * Get 用于查询并返回所需的数据。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentConfigStore) Get(context.Context) (StoredConfig, error) {
 	if !f.found {
 		return StoredConfig{}, ErrConfigNotFound
@@ -78,6 +141,12 @@ func (f *fakePaymentConfigStore) Get(context.Context) (StoredConfig, error) {
 	return f.record, nil
 }
 
+/**
+ * Upsert 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakePaymentConfigStore) Upsert(_ context.Context, input StoredConfigInput) (StoredConfig, error) {
 	f.found = true
 	f.record = StoredConfig{
@@ -91,13 +160,38 @@ func (f *fakePaymentConfigStore) Upsert(_ context.Context, input StoredConfigInp
 
 type fakePaymentCipher struct{}
 
+/**
+ * Encrypt 用于对敏感数据执行安全转换。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentCipher) Encrypt(value string) (string, error) { return "v1." + value, nil }
+
+/**
+ * Decrypt 用于解密并返回受保护的数据。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePaymentCipher) Decrypt(value string) (string, error) { return value[len("v1."):], nil }
 
+/**
+ * paymentTestDefaults 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func paymentTestDefaults() EPayConfig {
 	return EPayConfig{NotifyURL: "https://app.example.invalid/api/payments/epay/notify", ReturnURL: "https://app.example.invalid/console/billing"}
 }
 
+/**
+ * TestServiceReadsLatestStoredPaymentChannels 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceReadsLatestStoredPaymentChannels(t *testing.T) {
 	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{Provider: ProviderEPay, Enabled: true, APIURL: "https://pay.example.com", MerchantID: "1000", EncryptedMerchantKey: "v1.secret", SiteName: "Novro", Channels: []string{"alipay"}}}
 	service := NewService(&fakePaymentStore{}, configStore, fakePaymentCipher{}, paymentTestDefaults())
@@ -112,6 +206,12 @@ func TestServiceReadsLatestStoredPaymentChannels(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceAdminConfigReturnsEmptyChannelsAsArray 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceAdminConfigReturnsEmptyChannelsAsArray(t *testing.T) {
 	service := NewService(&fakePaymentStore{}, &fakePaymentConfigStore{}, fakePaymentCipher{}, paymentTestDefaults())
 	admin, err := service.AdminConfig(context.Background())
@@ -123,6 +223,12 @@ func TestServiceAdminConfigReturnsEmptyChannelsAsArray(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceRaisesLegacyStoredTopUpMinimum 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceRaisesLegacyStoredTopUpMinimum(t *testing.T) {
 	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{
 		Provider: ProviderEPay, SiteName: "Novro", Channels: []string{"alipay"},
@@ -142,6 +248,12 @@ func TestServiceRaisesLegacyStoredTopUpMinimum(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceUpdateEncryptsMerchantKeyAndReturnsSafeAdminConfig 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceUpdateEncryptsMerchantKeyAndReturnsSafeAdminConfig(t *testing.T) {
 	configStore := &fakePaymentConfigStore{}
 	service := NewService(&fakePaymentStore{}, configStore, fakePaymentCipher{}, paymentTestDefaults())
@@ -158,6 +270,12 @@ func TestServiceUpdateEncryptsMerchantKeyAndReturnsSafeAdminConfig(t *testing.T)
 	}
 }
 
+/**
+ * TestServiceCreatesCentAlignedTopUp 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceCreatesCentAlignedTopUp(t *testing.T) {
 	store := &fakePaymentStore{}
 	service := NewService(store, nil, nil, EPayConfig{
@@ -182,6 +300,12 @@ func TestServiceCreatesCentAlignedTopUp(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceAppliesHighestTopUpBonusWithoutChangingPaymentAmount 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceAppliesHighestTopUpBonusWithoutChangingPaymentAmount(t *testing.T) {
 	store := &fakePaymentStore{}
 	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{
@@ -207,6 +331,12 @@ func TestServiceAppliesHighestTopUpBonusWithoutChangingPaymentAmount(t *testing.
 	}
 }
 
+/**
+ * TestServiceEnforcesPaymentMethodMinimumAndAdminListFilter 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceEnforcesPaymentMethodMinimumAndAdminListFilter(t *testing.T) {
 	store := &fakePaymentStore{}
 	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{
@@ -230,6 +360,12 @@ func TestServiceEnforcesPaymentMethodMinimumAndAdminListFilter(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceListsUserTopUpsWithPagination 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceListsUserTopUpsWithPagination(t *testing.T) {
 	store := &fakePaymentStore{orders: []Order{{ID: uuid.New()}}}
 	service := NewService(store, nil, nil, EPayConfig{})
@@ -245,6 +381,12 @@ func TestServiceListsUserTopUpsWithPagination(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceCompletesVerifiedNotification 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceCompletesVerifiedNotification(t *testing.T) {
 	store := &fakePaymentStore{}
 	service := NewService(store, nil, nil, EPayConfig{
@@ -260,6 +402,12 @@ func TestServiceCompletesVerifiedNotification(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceReconcilesProviderPaidOrder 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceReconcilesProviderPaidOrder(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -285,6 +433,12 @@ func TestServiceReconcilesProviderPaidOrder(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceDoesNotQueryAlreadyPaidOrder 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceDoesNotQueryAlreadyPaidOrder(t *testing.T) {
 	paid := Order{ID: uuid.New(), OutTradeNo: "NVR1", Status: StatusPaid}
 	store := &fakePaymentStore{orders: []Order{paid}}
@@ -298,6 +452,12 @@ func TestServiceDoesNotQueryAlreadyPaidOrder(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceReconcileForUserRejectsAnotherUsersOrder 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceReconcileForUserRejectsAnotherUsersOrder(t *testing.T) {
 	ownerID := uuid.New()
 	store := &fakePaymentStore{orders: []Order{{ID: uuid.New(), UserID: ownerID, OutTradeNo: "NVR1", Status: StatusPending}}}
@@ -311,6 +471,12 @@ func TestServiceReconcileForUserRejectsAnotherUsersOrder(t *testing.T) {
 	}
 }
 
+/**
+ * TestServiceReconcileForUserReturnsOwnedPaidOrderWithoutQuery 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceReconcileForUserReturnsOwnedPaidOrderWithoutQuery(t *testing.T) {
 	ownerID := uuid.New()
 	paid := Order{ID: uuid.New(), UserID: ownerID, OutTradeNo: "NVR1", Status: StatusPaid}
@@ -326,6 +492,12 @@ func TestServiceReconcileForUserReturnsOwnedPaidOrderWithoutQuery(t *testing.T) 
 	}
 }
 
+/**
+ * TestServiceAcceptsPendingNotificationAfterPaymentsAreDisabled 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestServiceAcceptsPendingNotificationAfterPaymentsAreDisabled(t *testing.T) {
 	store := &fakePaymentStore{}
 	configStore := &fakePaymentConfigStore{found: true, record: StoredConfig{Provider: ProviderEPay, Enabled: false, APIURL: "https://pay.example.com", MerchantID: "1000", EncryptedMerchantKey: "v1.merchant-secret", SiteName: "Novro", Channels: []string{}}}
@@ -341,6 +513,12 @@ func TestServiceAcceptsPendingNotificationAfterPaymentsAreDisabled(t *testing.T)
 	}
 }
 
+/**
+ * signedServiceNotification 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func signedServiceNotification(t *testing.T) url.Values {
 	t.Helper()
 	gateway := testEPayGateway(t)

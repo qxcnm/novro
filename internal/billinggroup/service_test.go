@@ -14,19 +14,52 @@ type fakeStore struct {
 	updateInput UpdateInput
 }
 
+/**
+ * Create 用于创建并返回所需的对象或记录。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
 	f.createInput = input
 	return Record{}, nil
 }
+
+/**
+ * List 用于筛选并返回数据列表。
+ * @param ListFilter 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (*fakeStore) List(context.Context, ListFilter) ([]Record, error) { return nil, nil }
+
+/**
+ * Update 用于更新指定的数据或状态。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, input UpdateInput) (Record, error) {
 	f.updateInput = input
 	return Record{}, nil
 }
+
+/**
+ * SetStatus 用于更新指定的数据或状态。
+ * @param Status 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (*fakeStore) SetStatus(context.Context, uuid.UUID, Status) (Record, error) {
 	return Record{}, nil
 }
 
+/**
+ * TestCreateValidatesPerGroupAuthorizations 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestCreateValidatesPerGroupAuthorizations(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store)
@@ -52,6 +85,12 @@ func TestCreateValidatesPerGroupAuthorizations(t *testing.T) {
 	}
 }
 
+/**
+ * TestUpdateRejectsInvalidAuthorizedUserIDs 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestUpdateRejectsInvalidAuthorizedUserIDs(t *testing.T) {
 	service := NewService(&fakeStore{})
 	ids := []uuid.UUID{uuid.Nil}
@@ -59,11 +98,24 @@ func TestUpdateRejectsInvalidAuthorizedUserIDs(t *testing.T) {
 		t.Fatalf("expected nil authorization ID rejection, got %v", err)
 	}
 }
+
+/**
+ * Delete 用于删除、撤销或释放指定资源。
+ * @param id 目标资源的唯一标识。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeStore) Delete(_ context.Context, id uuid.UUID) error {
 	f.deletedID = id
 	return nil
 }
 
+/**
+ * TestDeleteValidatesIDAndDelegates 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestDeleteValidatesIDAndDelegates(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store)

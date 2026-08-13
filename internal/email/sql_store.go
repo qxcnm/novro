@@ -14,8 +14,24 @@ import (
 
 type SQLStore struct{ db *sql.DB }
 
+/**
+ * NewSQLStore 用于创建并返回所需的对象或记录。
+ * @param db 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
 
+/**
+ * Issue 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param email 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param expiresAt 本次操作需要使用的输入参数。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *SQLStore) Issue(ctx context.Context, email, hash string, expiresAt, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -49,6 +65,15 @@ func (s *SQLStore) Issue(ctx context.Context, email, hash string, expiresAt, now
 	return nil
 }
 
+/**
+ * Consume 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param email 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @param now 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *SQLStore) Consume(ctx context.Context, email, hash string, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -78,6 +103,14 @@ func (s *SQLStore) Consume(ctx context.Context, email, hash string, now time.Tim
 	return nil
 }
 
+/**
+ * DeleteIssue 用于删除、撤销或释放指定资源。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param email 本次操作需要使用的输入参数。
+ * @param hash 控制对应行为是否启用的布尔值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *SQLStore) DeleteIssue(ctx context.Context, email, hash string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM email_verification_codes WHERE email = ? AND code_hash = ?`, email, hash)
 	return err

@@ -14,6 +14,12 @@ type EmailSMTPConfig struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (EmailSMTPConfig) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").MaxLen(32).NotEmpty().Immutable(),

@@ -11,6 +11,12 @@ export type SessionCheck =
   | { status: "unauthenticated" }
   | { status: "unavailable" };
 
+/**
+ * checkCurrentSession 封装该名称对应的业务处理逻辑。
+ * @param fetcher 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export async function checkCurrentSession(fetcher: typeof fetch = fetch): Promise<SessionCheck> {
   try {
     const response = await fetcher("/api/auth/me", {

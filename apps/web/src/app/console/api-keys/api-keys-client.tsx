@@ -24,16 +24,40 @@ type CreateResult = { api_key: APIKeyRecord; key: string };
 type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
 type ErrorResponse = { error?: { message?: string } };
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string | null) {
   if (!value) return "从未使用";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * APIKeysClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function APIKeysClient() {
   const router = useRouter();
   const [keys, setKeys] = useState<APIKeyRecord[]>([]);
@@ -61,6 +85,12 @@ export default function APIKeysClient() {
     ]);
     if (response.status === 401) { router.replace("/login"); return; }
     if (!response.ok) { setMessage(await readError(response)); setLoading(false); return; }
+    /**
+     * body 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const body = (await response.json()) as { api_keys: APIKeyRecord[] };
     setKeys(body.api_keys);
     if (groupsResponse.ok) {
@@ -79,6 +109,12 @@ export default function APIKeysClient() {
     return () => window.clearTimeout(timer);
   }, [copiedKeyID]);
 
+  /**
+   * createKey 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function createKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!billingGroupID) {
@@ -89,10 +125,22 @@ export default function APIKeysClient() {
     const response = await fetch("/api/account/api-keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, billing_group_id: billingGroupID }) });
     setBusy(false);
     if (!response.ok) { setError(await readError(response)); return; }
+    /**
+     * result 封装该名称对应的业务处理逻辑。
+     * @param await 本次操作需要使用的输入参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const result = (await response.json()) as CreateResult;
     setCreated(result); setName(""); setBillingGroupID(""); await loadKeys();
   }
 
+  /**
+   * copyKey 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyKey() {
     if (!created) return;
     const success = await copyText(created.key);
@@ -105,6 +153,12 @@ export default function APIKeysClient() {
     }
   }
 
+  /**
+   * copyStoredKey 封装该名称对应的业务处理逻辑。
+   * @param key 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function copyStoredKey(key: APIKeyRecord) {
     if (!key.can_copy_secret) {
       setMessage("该 API Key 没有可重新复制的副本，请重新创建");
@@ -120,6 +174,12 @@ export default function APIKeysClient() {
         setMessage(await readError(response));
         return;
       }
+      /**
+       * body 封装该名称对应的业务处理逻辑。
+       * @param await 本次操作需要使用的输入参数。
+       * @author Gao Hongshun
+       * @date 2026-08-13
+       */
       const body = (await response.json()) as { key?: string };
       if (!body.key) {
         setMessage("该 API Key 没有可重新复制的副本，请重新创建");
@@ -137,6 +197,12 @@ export default function APIKeysClient() {
     }
   }
 
+  /**
+   * revoke 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function revoke() {
     if (!revokeKey) return;
     setBusy(true);
@@ -146,6 +212,12 @@ export default function APIKeysClient() {
     setMessage("API Key 已删除"); setRevokeKey(null); await loadKeys();
   }
 
+  /**
+   * revokeSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function revokeSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/account/api-keys/${id}`, { method: "DELETE" }));

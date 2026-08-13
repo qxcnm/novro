@@ -2,6 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+/**
+ * useListSelection 封装该名称对应的业务处理逻辑。
+ * @param ids 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function useListSelection(ids: readonly string[]) {
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
   const available = useMemo(() => new Set(ids), [ids]);

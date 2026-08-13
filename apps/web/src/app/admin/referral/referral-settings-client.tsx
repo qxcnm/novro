@@ -17,19 +17,43 @@ type ReferralConfig = {
 
 const defaultConfig: ReferralConfig = { reward_bps: 1_000 };
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatPercent 封装该名称对应的业务处理逻辑。
+ * @param rewardBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatPercent(rewardBPS: number) {
   return (rewardBPS / 100).toFixed(2);
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value?: string) {
   return value ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "使用环境默认值";
 }
 
+/**
+ * ReferralSettingsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ReferralSettingsClient() {
   const router = useRouter();
   const [config, setConfig] = useState<ReferralConfig>(defaultConfig);
@@ -46,6 +70,12 @@ export default function ReferralSettingsClient() {
     if (response.status === 401) { window.location.replace("/login"); return; }
     if (response.status === 403) { router.replace("/console"); return; }
     if (!response.ok) { setError(await readError(response)); setLoading(false); return; }
+    /**
+     * next 封装该名称对应的业务处理逻辑。
+     * @param none 无参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const next = ((await response.json()) as { referral_config?: ReferralConfig }).referral_config ?? defaultConfig;
     setConfig(next);
     setPercentage(formatPercent(next.reward_bps));
@@ -57,6 +87,12 @@ export default function ReferralSettingsClient() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  /**
+   * save 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
@@ -84,6 +120,12 @@ export default function ReferralSettingsClient() {
         setError(await readError(response));
         return;
       }
+      /**
+       * next 封装该名称对应的业务处理逻辑。
+       * @param none 无参数。
+       * @author Gao Hongshun
+       * @date 2026-08-13
+       */
       const next = ((await response.json()) as { referral_config?: ReferralConfig }).referral_config ?? { reward_bps: rewardBPS };
       setConfig(next);
       setPercentage(formatPercent(next.reward_bps));

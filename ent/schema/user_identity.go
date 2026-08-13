@@ -16,6 +16,12 @@ type UserIdentity struct {
 	ent.Schema
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UserIdentity) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -28,12 +34,24 @@ func (UserIdentity) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UserIdentity) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("user", User.Type).Ref("identities").Unique().Field("user_id").Required(),
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (UserIdentity) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("issuer", "subject").Unique(),

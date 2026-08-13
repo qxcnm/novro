@@ -29,6 +29,12 @@ import (
 
 const mysqlIntegrationDSNEnv = "NOVRO_TEST_MYSQL_DSN"
 
+/**
+ * TestMySQLConcurrentReservationsPreserveBalance 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLConcurrentReservationsPreserveBalance(t *testing.T) {
 	client := openMySQLIntegrationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -117,6 +123,12 @@ func TestMySQLConcurrentReservationsPreserveBalance(t *testing.T) {
 	}
 }
 
+/**
+ * TestMySQLUsageAccountingRetriesAreIdempotent 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	client := openMySQLIntegrationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -340,6 +352,12 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	}
 }
 
+/**
+ * TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent(t *testing.T) {
 	client := openMySQLIntegrationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -644,6 +662,14 @@ func TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent(t *testing.T) {
 	}
 }
 
+/**
+ * assertOneSuccessOneConflict 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param first 本次操作需要使用的输入参数。
+ * @param second 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func assertOneSuccessOneConflict(t *testing.T, first, second error) {
 	t.Helper()
 	successes, conflicts := 0, 0
@@ -662,6 +688,12 @@ func assertOneSuccessOneConflict(t *testing.T, first, second error) {
 	}
 }
 
+/**
+ * TestMySQLConcurrentTopUpNotificationsCreditOnce 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLConcurrentTopUpNotificationsCreditOnce(t *testing.T) {
 	client := openMySQLIntegrationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -728,6 +760,12 @@ func TestMySQLConcurrentTopUpNotificationsCreditOnce(t *testing.T) {
 	}
 }
 
+/**
+ * TestMySQLReferralCashbackCreditsInviterOnce 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestMySQLReferralCashbackCreditsInviterOnce(t *testing.T) {
 	client := openMySQLIntegrationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -806,6 +844,12 @@ func TestMySQLReferralCashbackCreditsInviterOnce(t *testing.T) {
 	}
 }
 
+/**
+ * openMySQLIntegrationClient 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func openMySQLIntegrationClient(t *testing.T) *ent.Client {
 	t.Helper()
 	dsn := strings.TrimSpace(os.Getenv(mysqlIntegrationDSNEnv))

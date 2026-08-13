@@ -8,11 +8,24 @@ export type BulkActionResult = {
   failed: BulkActionFailure[];
 };
 
+/**
+ * responseError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function responseError(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * runBulkAction 封装该名称对应的业务处理逻辑。
+ * @param ids 本次操作需要使用的输入参数。
+ * @param action 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export async function runBulkAction(
   ids: readonly string[],
   action: (id: string) => Promise<Response>,
@@ -22,6 +35,12 @@ export async function runBulkAction(
   const failed: BulkActionFailure[] = [];
   let cursor = 0;
 
+  /**
+   * worker 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function worker() {
     while (cursor < ids.length) {
       const id = ids[cursor];
@@ -45,6 +64,13 @@ export async function runBulkAction(
   return { succeeded, failed };
 }
 
+/**
+ * bulkResultMessage 封装该名称对应的业务处理逻辑。
+ * @param actionLabel 本次操作需要使用的输入参数。
+ * @param result 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function bulkResultMessage(actionLabel: string, result: BulkActionResult) {
   if (result.failed.length === 0) {
     return `已批量${actionLabel} ${result.succeeded.length} 项`;

@@ -21,6 +21,12 @@ import (
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
 )
 
+/**
+ * TestEntStoreListAppliesSearchAndStatusFilters 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 	client := openModelRouteIntegrationClient(t)
 	ctx := context.Background()
@@ -75,6 +81,12 @@ func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 	}
 }
 
+/**
+ * TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
 	client := openModelRouteIntegrationClient(t)
 	ctx := context.Background()
@@ -113,6 +125,12 @@ func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
 	}
 }
 
+/**
+ * TestEntStoreResolvesOrderedCandidatesForOnePublicModel 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	client := openModelRouteIntegrationClient(t)
 	ctx := context.Background()
@@ -163,6 +181,12 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	}
 }
 
+/**
+ * TestEntStoreFiltersActiveRoutesByBillingGroup 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	client := openModelRouteIntegrationClient(t)
 	ctx := context.Background()
@@ -238,6 +262,12 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	}
 }
 
+/**
+ * TestEntStoreRequiresCatalogPricingForActiveRoute 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEntStoreRequiresCatalogPricingForActiveRoute(t *testing.T) {
 	client := openModelRouteIntegrationClient(t)
 	ctx := context.Background()
@@ -280,6 +310,12 @@ func TestEntStoreRequiresCatalogPricingForActiveRoute(t *testing.T) {
 	}
 }
 
+/**
+ * openModelRouteIntegrationClient 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func openModelRouteIntegrationClient(t *testing.T) *ent.Client {
 	t.Helper()
 	dsn := strings.TrimSpace(os.Getenv("NOVRO_TEST_MYSQL_DSN"))

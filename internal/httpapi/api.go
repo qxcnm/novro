@@ -35,120 +35,632 @@ import (
 )
 
 type AuthService interface {
+	/**
+	 * Login 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Login(context.Context, string, string) (auth.LoginResult, error)
+	/**
+	 * LoginOIDC 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 auth.OIDCUser 的接口输入参数。
+	 * @param arg3 类型为 bool 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	LoginOIDC(context.Context, auth.OIDCUser, bool) (auth.LoginResult, error)
+	/**
+	 * Authenticate 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Authenticate(context.Context, string) (user.Record, error)
+	/**
+	 * Logout 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Logout(context.Context, string) error
 }
 
 type UserService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 user.CreateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, user.CreateInput) (user.Record, error)
+	/**
+	 * EmailAvailable 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	EmailAvailable(context.Context, string) (bool, error)
+	/**
+	 * Register 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 user.RegisterInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Register(context.Context, user.RegisterInput) (user.Record, error)
+	/**
+	 * InitializeAdmin 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 user.RegisterInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	InitializeAdmin(context.Context, user.RegisterInput) (user.Record, error)
+	/**
+	 * SetupRequired 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetupRequired(context.Context) (bool, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 user.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, user.ListFilter) (user.Page, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 user.UpdateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, user.UpdateInput) (user.Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 user.Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, user.Status) (user.Record, error)
+	/**
+	 * ResetPassword 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ResetPassword(context.Context, uuid.UUID, string) error
 }
 
 type APIKeyService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg4 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, uuid.UUID, uuid.UUID, string) (apikey.CreateResult, error)
+	/**
+	 * ListForUser 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListForUser(context.Context, uuid.UUID) ([]apikey.Record, error)
+	/**
+	 * RevealForUser 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	RevealForUser(context.Context, uuid.UUID, uuid.UUID) (string, error)
+	/**
+	 * RevokeForUser 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	RevokeForUser(context.Context, uuid.UUID, uuid.UUID) error
+	/**
+	 * ListAll 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 apikey.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListAll(context.Context, apikey.ListFilter) (apikey.Page, error)
+	/**
+	 * Revoke 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Revoke(context.Context, uuid.UUID) error
 }
 
 type ProviderService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 provider.CreateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, provider.CreateInput) (provider.Record, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 provider.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, provider.ListFilter) ([]provider.Record, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 provider.UpdateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, provider.UpdateInput) (provider.Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 provider.Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, provider.Status) (provider.Record, error)
+	/**
+	 * Delete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Delete(context.Context, uuid.UUID) error
 }
 
 type BillingService interface {
+	/**
+	 * Summary 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Summary(context.Context, uuid.UUID) (billing.Summary, error)
+	/**
+	 * SummaryPage 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 billing.EntryFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error)
+	/**
+	 * Usage 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 billing.UsageFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error)
+	/**
+	 * UsageRate 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	UsageRate(context.Context, uuid.UUID) (billing.UsageRate, error)
+	/**
+	 * Adjust 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg4 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg5 类型为 int64 的接口输入参数。
+	 * @param arg6 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Adjust(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, int64, string) (billing.Summary, error)
 }
 
 type PaymentService interface {
+	/**
+	 * Config 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Config(context.Context) (payment.PublicConfig, error)
+	/**
+	 * AdminConfig 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	AdminConfig(context.Context) (payment.AdminConfig, error)
+	/**
+	 * UpdateConfig 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 payment.ConfigInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	UpdateConfig(context.Context, payment.ConfigInput) (payment.AdminConfig, error)
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 int64 的接口输入参数。
+	 * @param arg4 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, uuid.UUID, int64, string) (payment.CreateResult, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 payment.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, uuid.UUID, payment.ListFilter) (payment.Page, error)
+	/**
+	 * ReconcileForUser 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ReconcileForUser(context.Context, uuid.UUID, string) (payment.Order, error)
+	/**
+	 * ListAll 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 payment.AdminListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListAll(context.Context, payment.AdminListFilter) (payment.AdminPage, error)
+	/**
+	 * HandleNotification 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 url.Values 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	HandleNotification(context.Context, url.Values) error
 }
 
 type ReferralService interface {
+	/**
+	 * Summary 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Summary(context.Context, uuid.UUID) (referral.Summary, error)
+	/**
+	 * AdminConfig 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	AdminConfig(context.Context) (referral.AdminConfig, error)
+	/**
+	 * UpdateRewardBPS 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 int64 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	UpdateRewardBPS(context.Context, int64) (referral.AdminConfig, error)
 }
 
 type GatewaySettingsService interface {
+	/**
+	 * Config 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Config(context.Context) (gatewaysettings.Config, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 gatewaysettings.Config 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, gatewaysettings.Config) (gatewaysettings.Config, error)
 }
 
 type AnnouncementService interface {
+	/**
+	 * Config 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Config(context.Context) (announcement.Config, error)
+	/**
+	 * Public 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Public(context.Context) (announcement.Public, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 announcement.Config 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, announcement.Config) (announcement.Config, error)
 }
 
 type ModelRouteService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 modelroute.CreateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 modelroute.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
+	/**
+	 * ListActive 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	ListActive(context.Context, uuid.UUID) ([]modelroute.Record, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 modelroute.UpdateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, modelroute.UpdateInput) (modelroute.Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 modelroute.Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, modelroute.Status) (modelroute.Record, error)
+	/**
+	 * Delete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Delete(context.Context, uuid.UUID) error
 }
 
 type UpstreamModelService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 upstreammodel.CreateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, upstreammodel.CreateInput) (upstreammodel.Record, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 upstreammodel.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, upstreammodel.ListFilter) ([]upstreammodel.Record, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 upstreammodel.UpdateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, upstreammodel.UpdateInput) (upstreammodel.Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 upstreammodel.Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, upstreammodel.Status) (upstreammodel.Record, error)
+	/**
+	 * Delete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Delete(context.Context, uuid.UUID) error
 }
 
 type ProviderModelService interface {
+	/**
+	 * Sync 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Sync(context.Context, uuid.UUID) ([]providersync.CatalogModel, error)
+	/**
+	 * Link 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 []uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Link(context.Context, uuid.UUID, []uuid.UUID) (providersync.LinkResult, error)
 }
 
 type BillingGroupService interface {
+	/**
+	 * Create 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 billinggroup.CreateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Create(context.Context, billinggroup.CreateInput) (billinggroup.Record, error)
+	/**
+	 * List 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 billinggroup.ListFilter 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	List(context.Context, billinggroup.ListFilter) ([]billinggroup.Record, error)
+	/**
+	 * Update 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 billinggroup.UpdateInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Update(context.Context, uuid.UUID, billinggroup.UpdateInput) (billinggroup.Record, error)
+	/**
+	 * SetStatus 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 billinggroup.Status 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	SetStatus(context.Context, uuid.UUID, billinggroup.Status) (billinggroup.Record, error)
+	/**
+	 * Delete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Delete(context.Context, uuid.UUID) error
 }
 
 type OIDCService interface {
+	/**
+	 * Start 声明该接口方法需要提供的业务能力。
+	 * @param none 无参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Start() (auth.OIDCFlow, error)
+	/**
+	 * Complete 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @param arg4 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Complete(context.Context, string, string, string) (auth.OIDCUser, bool, error)
 }
 
 type EmailVerificationService interface {
+	/**
+	 * Send 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Send(context.Context, string) error
+	/**
+	 * Verify 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @param arg3 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Verify(context.Context, string, string) error
 }
 
 type EmailConfigService interface {
+	/**
+	 * AdminConfig 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	AdminConfig(context.Context) (email.AdminConfig, error)
+	/**
+	 * UpdateConfig 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 email.ConfigInput 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	UpdateConfig(context.Context, email.ConfigInput) (email.AdminConfig, error)
+	/**
+	 * Test 声明该接口方法需要提供的业务能力。
+	 * @param arg1 类型为 context.Context 的接口输入参数。
+	 * @param arg2 类型为 string 的接口输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	Test(context.Context, string) error
 }
 
@@ -206,6 +718,12 @@ type apiHandler struct {
 	emailConfig         EmailConfigService
 }
 
+/**
+ * New 用于创建并返回所需的对象或记录。
+ * @param deps 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func New(deps Dependencies) http.Handler {
 	logger := deps.Logger
 	if logger == nil {
@@ -322,6 +840,13 @@ func New(deps Dependencies) http.Handler {
 	return requestid.Middleware(h.securityHeaders(h.validateOrigin(mux)))
 }
 
+/**
+ * authOptions 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) authOptions(w http.ResponseWriter, r *http.Request) {
 	setupRequired, err := h.users.SetupRequired(r.Context())
 	if err != nil {
@@ -337,6 +862,13 @@ func (h *apiHandler) authOptions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+/**
+ * setup 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setup(w http.ResponseWriter, r *http.Request) {
 	setupRequired, err := h.users.SetupRequired(r.Context())
 	if err != nil {
@@ -384,6 +916,13 @@ func (h *apiHandler) setup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": result.User})
 }
 
+/**
+ * register 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	if !h.registrationEnabled {
 		writeError(w, http.StatusForbidden, "registration_disabled", "用户注册未开放")
@@ -437,6 +976,13 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": result.User})
 }
 
+/**
+ * sendRegistrationCode 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) sendRegistrationCode(w http.ResponseWriter, r *http.Request) {
 	if !h.registrationEnabled {
 		writeError(w, http.StatusForbidden, "registration_disabled", "用户注册未开放")
@@ -482,6 +1028,13 @@ func (h *apiHandler) sendRegistrationCode(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true})
 }
 
+/**
+ * oidcStart 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) oidcStart(w http.ResponseWriter, r *http.Request) {
 	if h.oidc == nil {
 		http.NotFound(w, r)
@@ -505,6 +1058,13 @@ func (h *apiHandler) oidcStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, flow.AuthorizationURL, http.StatusFound)
 }
 
+/**
+ * oidcCallback 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	if h.oidc == nil {
 		http.NotFound(w, r)
@@ -541,6 +1101,13 @@ func (h *apiHandler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/console", http.StatusFound)
 }
 
+/**
+ * login 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) login(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Username string `json:"username"`
@@ -563,6 +1130,13 @@ func (h *apiHandler) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": result.User})
 }
 
+/**
+ * logout 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) logout(w http.ResponseWriter, r *http.Request) {
 	token := h.sessionToken(r)
 	h.clearSessionCookie(w)
@@ -573,6 +1147,13 @@ func (h *apiHandler) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * me 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) me(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -581,6 +1162,13 @@ func (h *apiHandler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": record})
 }
 
+/**
+ * updateProfile 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateProfile(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -602,6 +1190,13 @@ func (h *apiHandler) updateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
+/**
+ * myReferral 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) myReferral(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -619,6 +1214,13 @@ func (h *apiHandler) myReferral(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"referral": summary})
 }
 
+/**
+ * getReferralConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getReferralConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -635,6 +1237,13 @@ func (h *apiHandler) getReferralConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"referral_config": config})
 }
 
+/**
+ * updateReferralConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateReferralConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -658,6 +1267,13 @@ func (h *apiHandler) updateReferralConfig(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"referral_config": config})
 }
 
+/**
+ * getGatewaySettings 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getGatewaySettings(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -674,6 +1290,13 @@ func (h *apiHandler) getGatewaySettings(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"gateway_settings": config})
 }
 
+/**
+ * updateGatewaySettings 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateGatewaySettings(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -695,6 +1318,13 @@ func (h *apiHandler) updateGatewaySettings(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"gateway_settings": config})
 }
 
+/**
+ * getAnnouncement 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getAnnouncement(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
@@ -711,6 +1341,13 @@ func (h *apiHandler) getAnnouncement(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"announcement": public})
 }
 
+/**
+ * getPublicAnnouncement 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getPublicAnnouncement(w http.ResponseWriter, r *http.Request) {
 	if h.announcements == nil {
 		writeError(w, http.StatusServiceUnavailable, "announcement_unavailable", "系统公告暂不可用")
@@ -724,6 +1361,13 @@ func (h *apiHandler) getPublicAnnouncement(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"announcement": public})
 }
 
+/**
+ * getAnnouncementConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getAnnouncementConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -740,6 +1384,13 @@ func (h *apiHandler) getAnnouncementConfig(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"announcement": config})
 }
 
+/**
+ * updateAnnouncementConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateAnnouncementConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -761,6 +1412,13 @@ func (h *apiHandler) updateAnnouncementConfig(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]any{"announcement": config})
 }
 
+/**
+ * listMyAPIKeys 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -774,6 +1432,13 @@ func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"api_keys": keys})
 }
 
+/**
+ * createMyAPIKey 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createMyAPIKey(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -795,6 +1460,13 @@ func (h *apiHandler) createMyAPIKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
+/**
+ * revealMyAPIKeySecret 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) revealMyAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -813,6 +1485,13 @@ func (h *apiHandler) revealMyAPIKeySecret(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"key": key})
 }
 
+/**
+ * revokeMyAPIKey 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) revokeMyAPIKey(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -830,6 +1509,13 @@ func (h *apiHandler) revokeMyAPIKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * listUsers 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -857,6 +1543,13 @@ func (h *apiHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+/**
+ * createUser 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createUser(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -874,6 +1567,13 @@ func (h *apiHandler) createUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": created})
 }
 
+/**
+ * updateUser 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateUser(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -896,6 +1596,13 @@ func (h *apiHandler) updateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
+/**
+ * setUserStatus 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setUserStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -920,6 +1627,13 @@ func (h *apiHandler) setUserStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }
 
+/**
+ * resetUserPassword 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -943,6 +1657,13 @@ func (h *apiHandler) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * listAPIKeys 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -970,6 +1691,13 @@ func (h *apiHandler) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+/**
+ * revokeAPIKey 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -986,6 +1714,13 @@ func (h *apiHandler) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * listProviders 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listProviders(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1001,6 +1736,13 @@ func (h *apiHandler) listProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"providers": records})
 }
 
+/**
+ * createProvider 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createProvider(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1018,6 +1760,13 @@ func (h *apiHandler) createProvider(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"provider": created})
 }
 
+/**
+ * updateProvider 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateProvider(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1040,6 +1789,13 @@ func (h *apiHandler) updateProvider(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"provider": updated})
 }
 
+/**
+ * setProviderStatus 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setProviderStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1064,6 +1820,13 @@ func (h *apiHandler) setProviderStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"provider": updated})
 }
 
+/**
+ * deleteProvider 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) deleteProvider(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1080,6 +1843,13 @@ func (h *apiHandler) deleteProvider(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * syncProviderModels 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) syncProviderModels(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1097,6 +1867,13 @@ func (h *apiHandler) syncProviderModels(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"models": models})
 }
 
+/**
+ * linkProviderModels 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) linkProviderModels(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1121,6 +1898,13 @@ func (h *apiHandler) linkProviderModels(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, result)
 }
 
+/**
+ * listUpstreamModels 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listUpstreamModels(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1133,6 +1917,13 @@ func (h *apiHandler) listUpstreamModels(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"upstream_models": records})
 }
 
+/**
+ * createUpstreamModel 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createUpstreamModel(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1150,6 +1941,13 @@ func (h *apiHandler) createUpstreamModel(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, map[string]any{"upstream_model": created})
 }
 
+/**
+ * updateUpstreamModel 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateUpstreamModel(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1172,6 +1970,13 @@ func (h *apiHandler) updateUpstreamModel(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"upstream_model": updated})
 }
 
+/**
+ * setUpstreamModelStatus 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setUpstreamModelStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1196,6 +2001,13 @@ func (h *apiHandler) setUpstreamModelStatus(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"upstream_model": updated})
 }
 
+/**
+ * deleteUpstreamModel 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) deleteUpstreamModel(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1212,6 +2024,13 @@ func (h *apiHandler) deleteUpstreamModel(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * listBillingGroups 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listBillingGroups(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1224,6 +2043,13 @@ func (h *apiHandler) listBillingGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"billing_groups": records})
 }
 
+/**
+ * createBillingGroup 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createBillingGroup(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1241,6 +2067,13 @@ func (h *apiHandler) createBillingGroup(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, map[string]any{"billing_group": created})
 }
 
+/**
+ * updateBillingGroup 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateBillingGroup(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1263,6 +2096,13 @@ func (h *apiHandler) updateBillingGroup(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"billing_group": updated})
 }
 
+/**
+ * setBillingGroupStatus 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setBillingGroupStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1287,6 +2127,13 @@ func (h *apiHandler) setBillingGroupStatus(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"billing_group": updated})
 }
 
+/**
+ * deleteBillingGroup 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) deleteBillingGroup(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1303,6 +2150,13 @@ func (h *apiHandler) deleteBillingGroup(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * myBalance 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1335,6 +2189,13 @@ type availableModel struct {
 	Prices       billing.RateCard  `json:"prices"`
 }
 
+/**
+ * listAvailableModels 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1419,6 +2280,13 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+/**
+ * listMyBillingGroups 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1452,6 +2320,13 @@ type accountBillingGroup struct {
 	Status        billinggroup.Status `json:"status"`
 }
 
+/**
+ * maximumRateCard 封装该名称对应的业务处理逻辑。
+ * @param first 本次操作需要使用的输入参数。
+ * @param second 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func maximumRateCard(first, second billing.RateCard) billing.RateCard {
 	return billing.RateCard{
 		InputMicros:        max(first.InputMicros, second.InputMicros),
@@ -1463,6 +2338,13 @@ func maximumRateCard(first, second billing.RateCard) billing.RateCard {
 	}
 }
 
+/**
+ * priceWithMultiplier 封装该名称对应的业务处理逻辑。
+ * @param priceMicros 本次操作需要使用的输入参数。
+ * @param multiplierBPS 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func priceWithMultiplier(priceMicros, multiplierBPS int64) int64 {
 	if priceMicros == 0 {
 		return 0
@@ -1470,6 +2352,13 @@ func priceWithMultiplier(priceMicros, multiplierBPS int64) int64 {
 	return (priceMicros*multiplierBPS + billing.BasisPointsUnit - 1) / billing.BasisPointsUnit
 }
 
+/**
+ * myUsage 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1513,6 +2402,13 @@ func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, usage)
 }
 
+/**
+ * myUsageRate 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) myUsageRate(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1526,6 +2422,13 @@ func (h *apiHandler) myUsageRate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rate)
 }
 
+/**
+ * topUpConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) topUpConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
@@ -1546,6 +2449,13 @@ func (h *apiHandler) topUpConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, config)
 }
 
+/**
+ * getPaymentConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getPaymentConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1568,6 +2478,13 @@ func (h *apiHandler) getPaymentConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"payment_config": config})
 }
 
+/**
+ * updatePaymentConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updatePaymentConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1606,6 +2523,13 @@ func (h *apiHandler) updatePaymentConfig(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"payment_config": config})
 }
 
+/**
+ * getEmailConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) getEmailConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1622,6 +2546,13 @@ func (h *apiHandler) getEmailConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"email_config": config})
 }
 
+/**
+ * updateEmailConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateEmailConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1654,6 +2585,13 @@ func (h *apiHandler) updateEmailConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"email_config": config})
 }
 
+/**
+ * testEmailConfig 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) testEmailConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1676,6 +2614,13 @@ func (h *apiHandler) testEmailConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"sent": true})
 }
 
+/**
+ * listAllTopUps 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listAllTopUps(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1709,6 +2654,13 @@ func (h *apiHandler) listAllTopUps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+/**
+ * listMyTopUps 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listMyTopUps(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1740,6 +2692,13 @@ func (h *apiHandler) listMyTopUps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+/**
+ * createMyTopUp 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createMyTopUp(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1765,6 +2724,13 @@ func (h *apiHandler) createMyTopUp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, result)
 }
 
+/**
+ * reconcileMyTopUp 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) reconcileMyTopUp(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -1782,6 +2748,13 @@ func (h *apiHandler) reconcileMyTopUp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"order": order})
 }
 
+/**
+ * epayNotification 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -1816,6 +2789,13 @@ func (h *apiHandler) epayNotification(w http.ResponseWriter, r *http.Request) {
 // signed notification path as the server-to-server callback, so a successful
 // payment is credited even when the callback cannot reach a local URL. The
 // payment store keeps this operation transactional and idempotent.
+/**
+ * epayReturn 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) epayReturn(w http.ResponseWriter, r *http.Request) {
 	if h.payments == nil {
 		http.Redirect(w, r, "/console/billing?payment=unavailable", http.StatusSeeOther)
@@ -1835,6 +2815,13 @@ func (h *apiHandler) epayReturn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/console/billing?payment=returned", http.StatusSeeOther)
 }
 
+/**
+ * userBalance 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1852,6 +2839,13 @@ func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
+/**
+ * adjustUserBalance 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) adjustUserBalance(w http.ResponseWriter, r *http.Request) {
 	admin, ok := h.requireAdmin(w, r)
 	if !ok {
@@ -1883,10 +2877,25 @@ func (h *apiHandler) adjustUserBalance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
+/**
+ * stableAdjustmentReference 封装该名称对应的业务处理逻辑。
+ * @param actorID 目标资源的一个或多个唯一标识。
+ * @param userID 目标用户的唯一标识。
+ * @param key 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func stableAdjustmentReference(actorID, userID uuid.UUID, key string) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(actorID.String()+"\x00"+userID.String()+"\x00"+key))
 }
 
+/**
+ * listModelRoutes 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) listModelRoutes(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1899,6 +2908,13 @@ func (h *apiHandler) listModelRoutes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"model_routes": records})
 }
 
+/**
+ * createModelRoute 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) createModelRoute(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1916,6 +2932,13 @@ func (h *apiHandler) createModelRoute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"model_route": created})
 }
 
+/**
+ * updateModelRoute 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) updateModelRoute(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1938,6 +2961,13 @@ func (h *apiHandler) updateModelRoute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"model_route": updated})
 }
 
+/**
+ * setModelRouteStatus 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setModelRouteStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1962,6 +2992,13 @@ func (h *apiHandler) setModelRouteStatus(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"model_route": updated})
 }
 
+/**
+ * deleteModelRoute 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) deleteModelRoute(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -1978,6 +3015,13 @@ func (h *apiHandler) deleteModelRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/**
+ * requireUser 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) requireUser(w http.ResponseWriter, r *http.Request) (user.Record, bool) {
 	record, err := h.auth.Authenticate(r.Context(), h.sessionToken(r))
 	if err != nil {
@@ -1991,6 +3035,13 @@ func (h *apiHandler) requireUser(w http.ResponseWriter, r *http.Request) (user.R
 	return record, true
 }
 
+/**
+ * requireAdmin 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (user.Record, bool) {
 	record, ok := h.requireUser(w, r)
 	if !ok {
@@ -2003,6 +3054,12 @@ func (h *apiHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (user.
 	return record, true
 }
 
+/**
+ * billingGroupFilterForUser 封装该名称对应的业务处理逻辑。
+ * @param record 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func billingGroupFilterForUser(record user.Record) billinggroup.ListFilter {
 	filter := billinggroup.ListFilter{Status: billinggroup.StatusActive}
 	if record.Role == user.RoleAdmin {
@@ -2013,6 +3070,12 @@ func billingGroupFilterForUser(record user.Record) billinggroup.ListFilter {
 	return filter
 }
 
+/**
+ * sessionToken 封装该名称对应的业务处理逻辑。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) sessionToken(r *http.Request) string {
 	cookie, err := r.Cookie(h.cookieName)
 	if err != nil {
@@ -2021,6 +3084,14 @@ func (h *apiHandler) sessionToken(r *http.Request) string {
 	return cookie.Value
 }
 
+/**
+ * setSessionCookie 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param token 用于认证或继续操作的令牌。
+ * @param expires 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     h.cookieName,
@@ -2034,6 +3105,12 @@ func (h *apiHandler) setSessionCookie(w http.ResponseWriter, token string, expir
 	})
 }
 
+/**
+ * clearSessionCookie 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     h.cookieName,
@@ -2046,16 +3123,38 @@ func (h *apiHandler) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
+/**
+ * setOIDCFlowCookie 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param value 需要处理的输入值。
+ * @param expires 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) setOIDCFlowCookie(w http.ResponseWriter, value string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{Name: "novro_oidc_flow", Value: value, Path: "/api/auth/oidc", Expires: expires,
 		MaxAge: max(1, int(time.Until(expires).Seconds())), HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
 }
 
+/**
+ * clearOIDCFlowCookie 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) clearOIDCFlowCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: "novro_oidc_flow", Value: "", Path: "/api/auth/oidc", MaxAge: -1,
 		HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
 }
 
+/**
+ * writeUserError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, user.ErrInvalidInput):
@@ -2079,6 +3178,13 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 	}
 }
 
+/**
+ * writeVerificationError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeVerificationError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, user.ErrInvalidInput):
@@ -2096,6 +3202,14 @@ func (h *apiHandler) writeVerificationError(w http.ResponseWriter, err error) {
 	}
 }
 
+/**
+ * writeEmailConfigError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeEmailConfigError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, email.ErrInvalidConfig):
@@ -2107,6 +3221,14 @@ func (h *apiHandler) writeEmailConfigError(w http.ResponseWriter, operation stri
 	}
 }
 
+/**
+ * writeReferralConfigError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeReferralConfigError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, referral.ErrInvalidInput) {
 		writeError(w, http.StatusBadRequest, "invalid_referral_config", "返现比例必须在 0% 到 100% 之间")
@@ -2115,6 +3237,14 @@ func (h *apiHandler) writeReferralConfigError(w http.ResponseWriter, operation s
 	h.internalError(w, operation, err)
 }
 
+/**
+ * writeGatewaySettingsError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeGatewaySettingsError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, gatewaysettings.ErrInvalidConfig) {
 		writeError(w, http.StatusBadRequest, "invalid_gateway_settings", "请求设置无效，请检查时间范围")
@@ -2123,6 +3253,14 @@ func (h *apiHandler) writeGatewaySettingsError(w http.ResponseWriter, operation 
 	h.internalError(w, operation, err)
 }
 
+/**
+ * writeAnnouncementError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeAnnouncementError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, announcement.ErrInvalidInput) {
 		writeError(w, http.StatusBadRequest, "invalid_announcement", "系统公告无效，请检查标题、正文和启用状态")
@@ -2131,6 +3269,14 @@ func (h *apiHandler) writeAnnouncementError(w http.ResponseWriter, operation str
 	h.internalError(w, operation, err)
 }
 
+/**
+ * writeAPIKeyError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, apikey.ErrInvalidInput):
@@ -2148,6 +3294,14 @@ func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, e
 	}
 }
 
+/**
+ * writeProviderError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, provider.ErrInvalidInput):
@@ -2163,6 +3317,14 @@ func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string,
 	}
 }
 
+/**
+ * writeProviderModelError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeProviderModelError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, providersync.ErrInvalidInput):
@@ -2183,6 +3345,14 @@ func (h *apiHandler) writeProviderModelError(w http.ResponseWriter, operation st
 	}
 }
 
+/**
+ * writeBillingError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, billing.ErrInvalidInput):
@@ -2198,6 +3368,14 @@ func (h *apiHandler) writeBillingError(w http.ResponseWriter, operation string, 
 	}
 }
 
+/**
+ * writePaymentError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writePaymentError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, payment.ErrDisabled):
@@ -2217,6 +3395,14 @@ func (h *apiHandler) writePaymentError(w http.ResponseWriter, operation string, 
 	}
 }
 
+/**
+ * writePaymentConfigError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writePaymentConfigError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, payment.ErrInvalidInput) {
 		writeError(w, http.StatusBadRequest, "invalid_payment_config", "支付配置无效，请检查地址、商户信息和支付渠道")
@@ -2225,6 +3411,14 @@ func (h *apiHandler) writePaymentConfigError(w http.ResponseWriter, operation st
 	h.internalError(w, operation, err)
 }
 
+/**
+ * writeModelRouteError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, modelroute.ErrInvalidInput):
@@ -2240,6 +3434,14 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 	}
 }
 
+/**
+ * writeUpstreamModelError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, upstreammodel.ErrInvalidInput):
@@ -2255,6 +3457,14 @@ func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation st
 	}
 }
 
+/**
+ * writeBillingGroupError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) writeBillingGroupError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, billinggroup.ErrInvalidInput):
@@ -2272,11 +3482,25 @@ func (h *apiHandler) writeBillingGroupError(w http.ResponseWriter, operation str
 	}
 }
 
+/**
+ * internalError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param operation 本次操作需要使用的输入参数。
+ * @param err 需要处理或转换的错误。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) internalError(w http.ResponseWriter, operation string, err error) {
 	h.logger.Error(operation, "request_id", requestid.ResponseID(w), "error", err)
 	writeError(w, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 }
 
+/**
+ * validateOrigin 封装该名称对应的业务处理逻辑。
+ * @param next 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) validateOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/payments/epay/notify" && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
@@ -2290,6 +3514,12 @@ func (h *apiHandler) validateOrigin(next http.Handler) http.Handler {
 	})
 }
 
+/**
+ * securityHeaders 封装该名称对应的业务处理逻辑。
+ * @param next 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (h *apiHandler) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -2299,6 +3529,13 @@ func (h *apiHandler) securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+/**
+ * decodeJSON 封装该名称对应的业务处理逻辑。
+ * @param r 当前 HTTP 请求。
+ * @param target 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func decodeJSON(_ http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -2311,6 +3548,12 @@ func decodeJSON(_ http.ResponseWriter, r *http.Request, target any) error {
 	return nil
 }
 
+/**
+ * readFormValues 封装该名称对应的业务处理逻辑。
+ * @param r 当前 HTTP 请求。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func readFormValues(r *http.Request) (url.Values, error) {
 	queryValues := r.URL.Query()
 	if r.Body == nil {
@@ -2334,6 +3577,14 @@ func readFormValues(r *http.Request) (url.Values, error) {
 	return values, nil
 }
 
+/**
+ * parseQueryInt 封装该名称对应的业务处理逻辑。
+ * @param r 当前 HTTP 请求。
+ * @param key 本次操作需要使用的输入参数。
+ * @param fallback 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func parseQueryInt(r *http.Request, key string, fallback int) (int, error) {
 	raw := r.URL.Query().Get(key)
 	if raw == "" {
@@ -2342,6 +3593,14 @@ func parseQueryInt(r *http.Request, key string, fallback int) (int, error) {
 	return strconv.Atoi(raw)
 }
 
+/**
+ * writeJSON 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param status 用于标识或筛选目标的文本值。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -2349,6 +3608,15 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+/**
+ * writeError 封装该名称对应的业务处理逻辑。
+ * @param w HTTP 响应写入器。
+ * @param status 用于标识或筛选目标的文本值。
+ * @param code 用于标识或筛选目标的文本值。
+ * @param message 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	value := map[string]any{
 		"error": map[string]string{"code": code, "message": message, "type": "novro_error"},

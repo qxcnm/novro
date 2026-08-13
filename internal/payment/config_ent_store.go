@@ -15,10 +15,22 @@ type ConfigEntStore struct {
 	client *ent.Client
 }
 
+/**
+ * NewConfigEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewConfigEntStore(client *ent.Client) *ConfigEntStore {
 	return &ConfigEntStore{client: client}
 }
 
+/**
+ * Get 用于查询并返回所需的数据。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *ConfigEntStore) Get(ctx context.Context) (StoredConfig, error) {
 	entity, err := s.client.PaymentConfig.Get(ctx, paymentConfigID)
 	if ent.IsNotFound(err) {
@@ -30,6 +42,13 @@ func (s *ConfigEntStore) Get(ctx context.Context) (StoredConfig, error) {
 	return storedConfigFromEntity(entity)
 }
 
+/**
+ * Upsert 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *ConfigEntStore) Upsert(ctx context.Context, input StoredConfigInput) (StoredConfig, error) {
 	provider := strings.TrimSpace(input.Provider)
 	if provider == "" {
@@ -86,6 +105,12 @@ func (s *ConfigEntStore) Upsert(ctx context.Context, input StoredConfigInput) (S
 	return storedConfigFromEntity(updated)
 }
 
+/**
+ * storedConfigFromEntity 封装该名称对应的业务处理逻辑。
+ * @param entity 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func storedConfigFromEntity(entity *ent.PaymentConfig) (StoredConfig, error) {
 	channels := make([]string, 0)
 	for _, channel := range strings.Split(entity.Channels, ",") {
@@ -120,6 +145,12 @@ func storedConfigFromEntity(entity *ent.PaymentConfig) (StoredConfig, error) {
 	}, nil
 }
 
+/**
+ * encodeStoredCollections 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func encodeStoredCollections(input StoredConfigInput) (string, string, string, error) {
 	methods, err := json.Marshal(input.Methods)
 	if err != nil {

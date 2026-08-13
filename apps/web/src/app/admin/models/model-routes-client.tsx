@@ -65,15 +65,33 @@ type RouteForm = {
 const EMPTY_FORM: RouteForm = { provider_id: "", upstream_model_id: "", public_name: "", display_name: "" };
 const ALL_PROVIDERS = "__all__";
 
+/**
+ * money 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function money(micros: number) {
   return `¥${(micros / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 })}`;
 }
 
+/**
+ * errorMessage 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * ModelRoutesClient 渲染对应的 React 界面组件。
+ * @param refreshKey  本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: number }) {
   const router = useRouter();
   const [routes, setRoutes] = useState<ModelRoute[]>([]);
@@ -137,12 +155,24 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
   }, [activeProvider, query, routes]);
   const selection = useListSelection(filtered.map((route) => route.id));
 
+  /**
+   * beginCreate 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginCreate() {
     setEditing(null);
     setForm({ ...EMPTY_FORM, provider_id: activeProvider === ALL_PROVIDERS ? "" : activeProvider });
     setEditorOpen(true);
   }
 
+  /**
+   * beginEdit 封装该名称对应的业务处理逻辑。
+   * @param route 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginEdit(route: ModelRoute) {
     setEditing(route);
     setForm({
@@ -154,6 +184,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     setEditorOpen(true);
   }
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -175,6 +211,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     await load();
   }
 
+  /**
+   * toggleStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function toggleStatus() {
     if (!statusRoute) return;
     const next = statusRoute.status === "active" ? "disabled" : "active";
@@ -194,6 +236,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     setStatusRoute(null);
   }
 
+  /**
+   * applyBulkStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function applyBulkStatus() {
     if (!bulkStatus) return;
     setBusy(true);
@@ -209,6 +257,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * deleteOneRoute 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteOneRoute() {
     if (!deletingRoute) return;
     setBusy(true);
@@ -222,6 +276,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     setDeletingRoute(null);
   }
 
+  /**
+   * deleteSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/model-routes/${id}`, { method: "DELETE" }));

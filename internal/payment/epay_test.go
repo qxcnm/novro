@@ -12,6 +12,12 @@ import (
 	"github.com/google/uuid"
 )
 
+/**
+ * testEPayGateway 封装该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func testEPayGateway(t *testing.T) *EPayGateway {
 	t.Helper()
 	gateway, err := NewEPayGateway(EPayConfig{
@@ -26,6 +32,12 @@ func testEPayGateway(t *testing.T) *EPayGateway {
 	return gateway
 }
 
+/**
+ * TestEPayCheckoutUsesSignedSubmitForm 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayCheckoutUsesSignedSubmitForm(t *testing.T) {
 	gateway := testEPayGateway(t)
 	checkout, err := gateway.Checkout(Order{
@@ -47,6 +59,12 @@ func TestEPayCheckoutUsesSignedSubmitForm(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayNotificationRequiresValidSignatureAndExactMoney 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayNotificationRequiresValidSignatureAndExactMoney(t *testing.T) {
 	gateway := testEPayGateway(t)
 	values := url.Values{
@@ -76,6 +94,12 @@ func TestEPayNotificationRequiresValidSignatureAndExactMoney(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayNotificationRejectsAmbiguousAndImpreciseValues 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayNotificationRejectsAmbiguousAndImpreciseValues(t *testing.T) {
 	gateway := testEPayGateway(t)
 	if _, err := gateway.ParseNotification(url.Values{"pid": {"1000", "other"}}); err != ErrInvalidNotice {
@@ -88,6 +112,12 @@ func TestEPayNotificationRejectsAmbiguousAndImpreciseValues(t *testing.T) {
 	}
 }
 
+/**
+ * TestEPayQueryReturnsVerifiedPaidOrder 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestEPayQueryReturnsVerifiedPaidOrder(t *testing.T) {
 	var received url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

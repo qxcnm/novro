@@ -14,6 +14,12 @@ type Provider struct {
 	ent.Schema
 }
 
+/**
+ * Edges 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (Provider) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("billing_group", BillingGroup.Type).Ref("providers").Unique().Field("billing_group_id").Required(),
@@ -21,6 +27,12 @@ func (Provider) Edges() []ent.Edge {
 	}
 }
 
+/**
+ * Fields 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (Provider) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
@@ -40,6 +52,12 @@ func (Provider) Fields() []ent.Field {
 	}
 }
 
+/**
+ * Indexes 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (Provider) Indexes() []ent.Index {
 	return []ent.Index{index.Fields("billing_group_id", "status"), index.Fields("status", "created_at"), index.Fields("deleted_at")}
 }

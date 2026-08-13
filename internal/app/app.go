@@ -19,6 +19,13 @@ type App struct {
 	Ent    *ent.Client
 }
 
+/**
+ * New 用于创建并返回所需的对象或记录。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param cfg 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func New(ctx context.Context, cfg config.Config) (*App, error) {
 	db, err := database.Open(ctx, cfg.Database)
 	if err != nil {
@@ -32,6 +39,12 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}, nil
 }
 
+/**
+ * Close 用于删除、撤销或释放指定资源。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (a *App) Close() error {
 	if a == nil || a.Ent == nil {
 		return nil

@@ -63,30 +63,66 @@ const EMPTY_FORM: ModelForm = {
 const ALL_PROVIDERS = "__all__";
 const preferredProviderOrder = ["deepseek", "glm", "智谱", "kimi", "moonshot"];
 
+/**
+ * providerOrder 封装该名称对应的业务处理逻辑。
+ * @param name 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function providerOrder(name: string) {
   const normalized = name.toLowerCase();
   const index = preferredProviderOrder.findIndex((keyword) => normalized.includes(keyword));
   return index === -1 ? preferredProviderOrder.length : index;
 }
 
+/**
+ * money 封装该名称对应的业务处理逻辑。
+ * @param micros 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function money(micros: number) {
   return `¥${(micros / 1_000_000).toLocaleString("zh-CN", { maximumFractionDigits: 6 })}`;
 }
 
+/**
+ * toMicros 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function toMicros(value: string) {
   const parsed = Number(value || "0");
   return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 1_000_000) : null;
 }
 
+/**
+ * fromMicros 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function fromMicros(value: number) {
   return String(value / 1_000_000);
 }
 
+/**
+ * errorMessage 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function errorMessage(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * payload 封装该名称对应的业务处理逻辑。
+ * @param form 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function payload(form: ModelForm) {
   const values = [form.input, form.output, form.cacheRead, form.cacheWrite, form.cacheWrite1h, form.request].map(toMicros);
   if (values.some((value) => value === null)) return null;
@@ -103,6 +139,13 @@ function payload(form: ModelForm) {
   };
 }
 
+/**
+ * PriceFields 用于计算并返回对应结果。
+ * @param form 本次操作需要使用的输入参数。
+ * @param setForm 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function PriceFields({ form, setForm }: { form: ModelForm; setForm: (form: ModelForm) => void }) {
   const fields: Array<[keyof ModelForm, string, string]> = [
     ["input", "普通输入", "元 / 1M tokens"],
@@ -139,6 +182,12 @@ function PriceFields({ form, setForm }: { form: ModelForm; setForm: (form: Model
   );
 }
 
+/**
+ * UpstreamModelsClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function UpstreamModelsClient() {
   const router = useRouter();
   const [models, setModels] = useState<CatalogModel[]>([]);
@@ -193,17 +242,35 @@ export default function UpstreamModelsClient() {
   }, [activeProvider, models, query]);
   const selection = useListSelection(filtered.map((model) => model.id));
 
+  /**
+   * chooseProvider 封装该名称对应的业务处理逻辑。
+   * @param provider 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function chooseProvider(provider: string) {
     setSelectedProvider(provider);
     selection.clearSelection();
   }
 
+  /**
+   * beginCreate 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
     setEditorOpen(true);
   }
 
+  /**
+   * beginEdit 封装该名称对应的业务处理逻辑。
+   * @param model 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function beginEdit(model: CatalogModel) {
     setEditing(model);
     setForm({
@@ -220,6 +287,12 @@ export default function UpstreamModelsClient() {
     setEditorOpen(true);
   }
 
+  /**
+   * submit 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = payload(form);
@@ -239,6 +312,12 @@ export default function UpstreamModelsClient() {
     await load();
   }
 
+  /**
+   * toggleStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function toggleStatus() {
     if (!statusModel) return;
     setBusy(true);
@@ -258,6 +337,12 @@ export default function UpstreamModelsClient() {
     setStatusModel(null);
   }
 
+  /**
+   * applyBulkStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function applyBulkStatus() {
     if (!bulkStatus) return;
     setBusy(true);
@@ -273,6 +358,12 @@ export default function UpstreamModelsClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * deleteOneModel 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteOneModel() {
     if (!deletingModel) return;
     setBusy(true);
@@ -286,6 +377,12 @@ export default function UpstreamModelsClient() {
     setDeletingModel(null);
   }
 
+  /**
+   * deleteSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/upstream-models/${id}`, { method: "DELETE" }));

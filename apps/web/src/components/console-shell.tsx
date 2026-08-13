@@ -39,20 +39,45 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/admin/announcement": { title: "系统公告", description: "用户端通知内容与展示状态" },
 };
 
+/**
+ * isConsoleRoute 封装该名称对应的业务处理逻辑。
+ * @param pathname 用于标识或筛选目标的文本值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function isConsoleRoute(pathname: string) {
   return pathname === "/console" || pathname.startsWith("/console/") || pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+/**
+ * useCurrentUser 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function useCurrentUser() {
   const user = useContext(CurrentUserContext);
   if (!user) throw new Error("useCurrentUser must be used inside ConsoleShell");
   return user;
 }
 
+/**
+ * useOptionalCurrentUser 封装该名称对应的业务处理逻辑。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function useOptionalCurrentUser() {
   return useContext(CurrentUserContext);
 }
 
+/**
+ * ConsoleNavigation 渲染对应的 React 界面组件。
+ * @param user 本次操作需要使用的输入参数。
+ * @param onNavigate 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate?: () => void }) {
   const pathname = usePathname();
   const sections = [
@@ -101,6 +126,12 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
   );
 }
 
+/**
+ * Brand 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Brand() {
   return (
     <Link className="group flex h-16 items-center gap-3 px-5" href="/" title="返回主页">
@@ -110,6 +141,12 @@ function Brand() {
   );
 }
 
+/**
+ * ConsoleShell 渲染对应的 React 界面组件。
+ * @param children React 组件包含的子元素。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -182,17 +219,35 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [loadAnnouncement, user]);
 
+  /**
+   * openAnnouncement 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function openAnnouncement() {
     setAnnouncementOpen(true);
     void loadAnnouncement();
   }
 
+  /**
+   * dismissAnnouncementToday 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function dismissAnnouncementToday() {
     if (!user) return;
     dismissAnnouncementForToday(window.localStorage, user.id);
     setAnnouncementOpen(false);
   }
 
+  /**
+   * logout 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -204,6 +259,12 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * retrySessionCheck 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function retrySessionCheck() {
     setSessionUnavailable(false);
     setUser(null);

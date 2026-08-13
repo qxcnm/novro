@@ -13,10 +13,22 @@ type EntStore struct {
 	client *ent.Client
 }
 
+/**
+ * NewEntStore 用于创建并返回所需的对象或记录。
+ * @param client 用于访问外部或底层服务的客户端。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func NewEntStore(client *ent.Client) *EntStore {
 	return &EntStore{client: client}
 }
 
+/**
+ * GatewayRequestConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) GatewayRequestConfig(ctx context.Context) (StoredConfig, error) {
 	entity, err := s.client.SystemSetting.Query().Where(entsystemsetting.IDEQ(SettingKey)).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -33,6 +45,13 @@ func (s *EntStore) GatewayRequestConfig(ctx context.Context) (StoredConfig, erro
 	return StoredConfig{Config: config, UpdatedAt: entity.UpdatedAt, Found: true}, nil
 }
 
+/**
+ * SaveGatewayRequestConfig 封装该名称对应的业务处理逻辑。
+ * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
+ * @param config 本次操作使用的配置。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (s *EntStore) SaveGatewayRequestConfig(ctx context.Context, config Config) (StoredConfig, error) {
 	config = config.withDefaults()
 	if !config.Validate() {

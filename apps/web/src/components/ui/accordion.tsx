@@ -6,6 +6,13 @@ import { Accordion as AccordionPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
+/**
+ * Accordion 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Accordion({
   className,
   ...props
@@ -19,6 +26,13 @@ function Accordion({
   )
 }
 
+/**
+ * AccordionItem 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AccordionItem({
   className,
   ...props
@@ -32,6 +46,14 @@ function AccordionItem({
   )
 }
 
+/**
+ * AccordionTrigger 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AccordionTrigger({
   className,
   children,
@@ -55,6 +77,14 @@ function AccordionTrigger({
   )
 }
 
+/**
+ * AccordionContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function AccordionContent({
   className,
   children,

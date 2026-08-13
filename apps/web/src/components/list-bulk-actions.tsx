@@ -6,6 +6,14 @@ import { X } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
+/**
+ * ListBulkActions 用于筛选并返回数据列表。
+ * @param children React 组件包含的子元素。
+ * @param onClear 本次操作需要使用的输入参数。
+ * @param selectedCount 本次操作使用的数值参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function ListBulkActions({ children, onClear, selectedCount }: { children: ReactNode; onClear: () => void; selectedCount: number }) {
   if (selectedCount === 0) return null;
 
@@ -31,6 +39,19 @@ type BulkActionDialogProps = {
   title: string;
 };
 
+/**
+ * BulkActionDialog 渲染对应的 React 界面组件。
+ * @param busy 本次操作需要使用的输入参数。
+ * @param confirmLabel 本次操作需要使用的输入参数。
+ * @param description 本次操作需要使用的输入参数。
+ * @param destructive  本次操作需要使用的输入参数。
+ * @param onConfirm 本次操作需要使用的输入参数。
+ * @param onOpenChange 本次操作需要使用的输入参数。
+ * @param open 本次操作需要使用的输入参数。
+ * @param title 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export function BulkActionDialog({ busy, confirmLabel, description, destructive = false, onConfirm, onOpenChange, open, title }: BulkActionDialogProps) {
   return (
     <AlertDialog onOpenChange={onOpenChange} open={open}>

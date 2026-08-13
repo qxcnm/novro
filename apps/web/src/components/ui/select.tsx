@@ -6,12 +6,25 @@ import { Select as SelectPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
+/**
+ * Select 渲染对应的 React 界面组件。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 
+/**
+ * SelectGroup 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectGroup({
   className,
   ...props
@@ -25,12 +38,27 @@ function SelectGroup({
   )
 }
 
+/**
+ * SelectValue 渲染对应的 React 界面组件。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
+/**
+ * SelectTrigger 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param size  本次操作需要使用的输入参数。
+ * @param children React 组件包含的子元素。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectTrigger({
   className,
   size = "default",
@@ -57,6 +85,16 @@ function SelectTrigger({
   )
 }
 
+/**
+ * SelectContent 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param position  本次操作需要使用的输入参数。
+ * @param align  本次操作需要使用的输入参数。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectContent({
   className,
   children,
@@ -90,6 +128,13 @@ function SelectContent({
   )
 }
 
+/**
+ * SelectLabel 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectLabel({
   className,
   ...props
@@ -103,6 +148,14 @@ function SelectLabel({
   )
 }
 
+/**
+ * SelectItem 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param children React 组件包含的子元素。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectItem({
   className,
   children,
@@ -127,6 +180,13 @@ function SelectItem({
   )
 }
 
+/**
+ * SelectSeparator 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectSeparator({
   className,
   ...props
@@ -140,6 +200,13 @@ function SelectSeparator({
   )
 }
 
+/**
+ * SelectScrollUpButton 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectScrollUpButton({
   className,
   ...props
@@ -159,6 +226,13 @@ function SelectScrollUpButton({
   )
 }
 
+/**
+ * SelectScrollDownButton 渲染对应的 React 界面组件。
+ * @param className 用于标识或筛选目标的文本值。
+ * @param ...props 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function SelectScrollDownButton({
   className,
   ...props

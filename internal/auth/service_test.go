@@ -23,22 +23,47 @@ type fakeAuthStore struct {
 	identifier   string
 }
 
+/**
+ * FindUserByUsername 执行该名称对应的业务处理逻辑。
+ * @param identifier 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAuthStore) FindUserByUsername(_ context.Context, identifier string) (LoginUser, error) {
 	f.identifier = identifier
 	return f.loginUser, f.findErr
 }
 
+/**
+ * FindOrCreateOIDCUser 执行该名称对应的业务处理逻辑。
+ * @param identity 本次操作需要使用的输入参数。
+ * @param autoRegister 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAuthStore) FindOrCreateOIDCUser(_ context.Context, identity OIDCUser, autoRegister bool) (user.Record, error) {
 	f.oidcIdentity = identity
 	f.autoRegister = autoRegister
 	return f.oidcUser, f.findErr
 }
 
+/**
+ * CreateSession 执行该名称对应的业务处理逻辑。
+ * @param hash 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAuthStore) CreateSession(_ context.Context, _ uuid.UUID, hash string, _, _ time.Time) error {
 	f.sessionHash = hash
 	return nil
 }
 
+/**
+ * FindUserBySession 执行该名称对应的业务处理逻辑。
+ * @param hash 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAuthStore) FindUserBySession(_ context.Context, hash string, _ time.Time) (user.Record, error) {
 	f.sessionHash = hash
 	if f.findErr != nil {
@@ -47,6 +72,12 @@ func (f *fakeAuthStore) FindUserBySession(_ context.Context, hash string, _ time
 	return f.sessionUser, nil
 }
 
+/**
+ * RevokeSession 执行该名称对应的业务处理逻辑。
+ * @param hash 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (f *fakeAuthStore) RevokeSession(_ context.Context, hash string, _ time.Time) error {
 	f.revokedHash = hash
 	return nil
@@ -54,9 +85,29 @@ func (f *fakeAuthStore) RevokeSession(_ context.Context, hash string, _ time.Tim
 
 type fakePasswords struct{}
 
+/**
+ * Hash 执行该名称对应的业务处理逻辑。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePasswords) Hash(value string) (string, error) { return "hash:" + value, nil }
+/**
+ * Verify 执行该名称对应的业务处理逻辑。
+ * @param hash 本次操作需要使用的输入参数。
+ * @param value 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func (fakePasswords) Verify(hash, value string) bool    { return hash == "hash:"+value }
 
+/**
+ * newTestService 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @param store 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func newTestService(t *testing.T, store *fakeAuthStore) *Service {
 	t.Helper()
 	service, err := NewService(store, fakePasswords{}, "01234567890123456789012345678901", time.Hour)
@@ -68,6 +119,12 @@ func newTestService(t *testing.T, store *fakeAuthStore) *Service {
 	return service
 }
 
+/**
+ * TestLoginCreatesHashedSession 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoginCreatesHashedSession(t *testing.T) {
 	hash := "hash:correct-password"
 	store := &fakeAuthStore{loginUser: LoginUser{
@@ -87,6 +144,12 @@ func TestLoginCreatesHashedSession(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoginNormalizesUsernameOrEmailIdentifier 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoginNormalizesUsernameOrEmailIdentifier(t *testing.T) {
 	hash := "hash:correct-password"
 	store := &fakeAuthStore{loginUser: LoginUser{
@@ -102,6 +165,12 @@ func TestLoginNormalizesUsernameOrEmailIdentifier(t *testing.T) {
 	}
 }
 
+/**
+ * TestLoginHidesMissingDisabledAndWrongPassword 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestLoginHidesMissingDisabledAndWrongPassword(t *testing.T) {
 	hash := "hash:correct"
 	for _, store := range []*fakeAuthStore{
@@ -117,6 +186,12 @@ func TestLoginHidesMissingDisabledAndWrongPassword(t *testing.T) {
 	}
 }
 
+/**
+ * TestOIDCLoginCreatesLocalSession 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestOIDCLoginCreatesLocalSession(t *testing.T) {
 	store := &fakeAuthStore{oidcUser: user.Record{ID: uuid.New(), Username: "oidc-user", Status: user.StatusActive}}
 	service := newTestService(t, store)
@@ -130,6 +205,12 @@ func TestOIDCLoginCreatesLocalSession(t *testing.T) {
 	}
 }
 
+/**
+ * TestAuthenticateAndLogoutHashTokens 执行该名称对应的业务处理逻辑。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 func TestAuthenticateAndLogoutHashTokens(t *testing.T) {
 	store := &fakeAuthStore{sessionUser: user.Record{ID: uuid.New(), Status: user.StatusActive}}
 	service := newTestService(t, store)

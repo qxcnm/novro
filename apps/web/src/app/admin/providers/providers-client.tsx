@@ -72,6 +72,14 @@ const INITIAL_CREATE: CreateForm = {
 
 const MODEL_SYNC_TIMEOUT_MS = 35_000;
 
+/**
+ * fetchWithTimeout 封装该名称对应的业务处理逻辑。
+ * @param input 需要处理的输入数据。
+ * @param init 本次操作需要使用的输入参数。
+ * @param timeoutMs 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = MODEL_SYNC_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -82,23 +90,59 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   }
 }
 
+/**
+ * readError 封装该名称对应的业务处理逻辑。
+ * @param response 当前响应数据。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 async function readError(response: Response) {
+  /**
+   * body 封装该名称对应的业务处理逻辑。
+   * @param await 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   const body = (await response.json().catch(() => ({}))) as ErrorResponse;
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+/**
+ * formatDate 封装该名称对应的业务处理逻辑。
+ * @param value 需要处理的输入值。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+/**
+ * protocolLabel 封装该名称对应的业务处理逻辑。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function protocolLabel(protocol: Protocol) {
   return protocol === "openai" ? "OpenAI 兼容" : "Anthropic";
 }
 
+/**
+ * defaultBaseURL 封装该名称对应的业务处理逻辑。
+ * @param protocol 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 function defaultBaseURL(protocol: Protocol) {
   return protocol === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com";
 }
 
+/**
+ * ProvidersClient 渲染对应的 React 界面组件。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
 export default function ProvidersClient() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("providers");
@@ -164,18 +208,37 @@ export default function ProvidersClient() {
       : pickerModels;
   }, [pickerModels, pickerQuery]);
 
+  /**
+   * submitSearch 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     selection.clearSelection();
     setSearch(searchDraft.trim());
   }
 
+  /**
+   * openEditor 封装该名称对应的业务处理逻辑。
+   * @param record 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
     setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "", billing_group_id: record.billing_group_id });
     setFormError("");
   }
 
+  /**
+   * loadPickerData 封装该名称对应的业务处理逻辑。
+   * @param record 本次操作需要使用的输入参数。
+   * @param sync 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function loadPickerData(record: ProviderRecord, sync: boolean) {
     setPickerProvider(record);
     setPickerOpen(true);
@@ -193,6 +256,12 @@ export default function ProvidersClient() {
 	    try {
 	      const syncResponse = await fetchWithTimeout(`/api/admin/providers/${record.id}/models/sync`, { method: "POST" });
 	      if (syncResponse.ok) {
+				/**
+				 * body 封装该名称对应的业务处理逻辑。
+				 * @param await 本次操作需要使用的输入参数。
+				 * @author Gao Hongshun
+				 * @date 2026-08-13
+				 */
 				const body = (await syncResponse.json()) as { models: PickerModel[] };
 				syncedModels = body.models;
 				syncedIDs = new Set(body.models.map((model) => model.id));
@@ -217,6 +286,12 @@ export default function ProvidersClient() {
 				setPickerNotice("加载模型路由失败，请稍后重试");
 				return;
 			}
+			/**
+			 * routes 封装该名称对应的业务处理逻辑。
+			 * @param none 无参数。
+			 * @author Gao Hongshun
+			 * @date 2026-08-13
+			 */
 			const routes = ((await routesResponse.json()) as { model_routes: RouteRecord[] }).model_routes;
 			const linked = new Set(routes.filter((route) => route.provider_id === record.id && route.upstream_model_id).map((route) => route.upstream_model_id as string));
 			if (syncedModels !== null) {
@@ -238,6 +313,12 @@ export default function ProvidersClient() {
     }
   }
 
+  /**
+   * createProvider 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function createProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!createForm.billing_group_id) {
@@ -254,6 +335,12 @@ export default function ProvidersClient() {
     });
     setBusy(false);
     if (!response.ok) { setFormError(await readError(response)); return; }
+    /**
+     * created 封装该名称对应的业务处理逻辑。
+     * @param none 无参数。
+     * @author Gao Hongshun
+     * @date 2026-08-13
+     */
     const created = ((await response.json()) as { provider: ProviderRecord }).provider;
     setCreateForm(INITIAL_CREATE);
     setCreateOpen(false);
@@ -262,6 +349,12 @@ export default function ProvidersClient() {
     await loadPickerData(created, true);
   }
 
+  /**
+   * updateProvider 封装该名称对应的业务处理逻辑。
+   * @param event 触发当前处理流程的事件。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function updateProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingProvider) return;
@@ -289,6 +382,12 @@ export default function ProvidersClient() {
     await loadProviders();
   }
 
+  /**
+   * toggleStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function toggleStatus() {
     if (!statusProvider) return;
     setBusy(true);
@@ -310,6 +409,12 @@ export default function ProvidersClient() {
     await loadProviders();
   }
 
+  /**
+   * applyBulkStatus 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function applyBulkStatus() {
     if (!bulkStatus) return;
     setBusy(true);
@@ -325,6 +430,12 @@ export default function ProvidersClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * syncSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function syncSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/providers/${id}/models/sync`, { method: "POST" }));
@@ -336,6 +447,12 @@ export default function ProvidersClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * deleteOneProvider 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteOneProvider() {
     if (!deletingProvider) return;
     setBusy(true);
@@ -352,6 +469,12 @@ export default function ProvidersClient() {
     await loadProviders();
   }
 
+  /**
+   * deleteSelected 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function deleteSelected() {
     setBusy(true);
     const result = await runBulkAction(selection.selectedIds, (id) => fetch(`/api/admin/providers/${id}`, { method: "DELETE" }));
@@ -363,6 +486,13 @@ export default function ProvidersClient() {
     selection.replaceSelection(result.failed.map((failure) => failure.id));
   }
 
+  /**
+   * toggleModel 封装该名称对应的业务处理逻辑。
+   * @param modelID 目标资源的一个或多个唯一标识。
+   * @param checked 本次操作需要使用的输入参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function toggleModel(modelID: string, checked: boolean) {
     setSelectedModelIDs((current) => {
       const next = new Set(current);
@@ -371,10 +501,22 @@ export default function ProvidersClient() {
     });
   }
 
+  /**
+   * selectAllAvailable 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   function selectAllAvailable() {
     setSelectedModelIDs(new Set(visiblePickerModels.filter((model) => !linkedModelIDs.has(model.id)).map((model) => model.id)));
   }
 
+  /**
+   * linkSelectedModels 封装该名称对应的业务处理逻辑。
+   * @param none 无参数。
+   * @author Gao Hongshun
+   * @date 2026-08-13
+   */
   async function linkSelectedModels() {
     if (!pickerProvider || selectedModelIDs.size === 0) {
       setPickerNotice("请选择至少一个模型");
@@ -388,6 +530,12 @@ export default function ProvidersClient() {
     });
     setBusy(false);
     if (!response.ok) { setPickerNotice(await readError(response)); return; }
+	/**
+	 * result 封装该名称对应的业务处理逻辑。
+	 * @param await 本次操作需要使用的输入参数。
+	 * @author Gao Hongshun
+	 * @date 2026-08-13
+	 */
 	const result = (await response.json()) as { created: number; existing: number; reenabled: number; disabled: number };
 	setPickerOpen(false);
 	setMessage(`已创建 ${result.created} 条模型路由${result.reenabled > 0 ? `，恢复 ${result.reenabled} 条` : ""}${result.disabled > 0 ? `，其中 ${result.disabled} 条等待模型定价或启用` : ""}`);
