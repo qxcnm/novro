@@ -89,20 +89,7 @@ func (_u *SystemSettingUpdate) defaults() {
 	}
 }
 
-// check runs all checks and user-defined validators on the builder.
-func (_u *SystemSettingUpdate) check() error {
-	if v, ok := _u.mutation.Value(); ok {
-		if err := systemsetting.ValueValidator(v); err != nil {
-			return &ValidationError{Name: "value", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.value": %w`, err)}
-		}
-	}
-	return nil
-}
-
 func (_u *SystemSettingUpdate) sqlSave(ctx context.Context) (_node int, err error) {
-	if err := _u.check(); err != nil {
-		return _node, err
-	}
 	_spec := sqlgraph.NewUpdateSpec(systemsetting.Table, systemsetting.Columns, sqlgraph.NewFieldSpec(systemsetting.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -211,20 +198,7 @@ func (_u *SystemSettingUpdateOne) defaults() {
 	}
 }
 
-// check runs all checks and user-defined validators on the builder.
-func (_u *SystemSettingUpdateOne) check() error {
-	if v, ok := _u.mutation.Value(); ok {
-		if err := systemsetting.ValueValidator(v); err != nil {
-			return &ValidationError{Name: "value", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.value": %w`, err)}
-		}
-	}
-	return nil
-}
-
 func (_u *SystemSettingUpdateOne) sqlSave(ctx context.Context) (_node *SystemSetting, err error) {
-	if err := _u.check(); err != nil {
-		return _node, err
-	}
 	_spec := sqlgraph.NewUpdateSpec(systemsetting.Table, systemsetting.Columns, sqlgraph.NewFieldSpec(systemsetting.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {

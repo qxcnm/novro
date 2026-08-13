@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/migrate"
+	"github.com/novro-gateway/novro/internal/announcement"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/app"
 	"github.com/novro-gateway/novro/internal/auth"
@@ -101,6 +102,7 @@ func main() {
 	billingGroupService := billinggroup.NewService(billinggroup.NewEntStore(application.Ent))
 	referralService := referral.NewService(referral.NewEntStore(application.Ent), cfg.Referral.RewardBPS, cfg.Auth.PublicURL)
 	gatewaySettingsService := gatewaysettings.NewService(gatewaysettings.NewEntStore(application.Ent))
+	announcementService := announcement.NewService(announcement.NewEntStore(application.Ent))
 	paymentService := payment.NewService(
 		payment.NewEntStore(application.Ent, cfg.Referral.RewardBPS), payment.NewConfigEntStore(application.Ent), providerCipher,
 		payment.EPayConfig{
@@ -246,6 +248,7 @@ func main() {
 			ProviderModels:      providerModelService,
 			BillingGroups:       billingGroupService,
 			GatewaySettings:     gatewaySettingsService,
+			Announcements:       announcementService,
 			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,

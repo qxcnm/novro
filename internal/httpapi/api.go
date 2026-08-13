@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/novro-gateway/novro/internal/announcement"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/billing"
@@ -99,6 +100,12 @@ type GatewaySettingsService interface {
 	Update(context.Context, gatewaysettings.Config) (gatewaysettings.Config, error)
 }
 
+type AnnouncementService interface {
+	Config(context.Context) (announcement.Config, error)
+	Public(context.Context) (announcement.Public, error)
+	Update(context.Context, announcement.Config) (announcement.Config, error)
+}
+
 type ModelRouteService interface {
 	Create(context.Context, modelroute.CreateInput) (modelroute.Record, error)
 	List(context.Context, modelroute.ListFilter) ([]modelroute.Record, error)
@@ -155,6 +162,7 @@ type Dependencies struct {
 	Payments            PaymentService
 	Referrals           ReferralService
 	GatewaySettings     GatewaySettingsService
+	Announcements       AnnouncementService
 	ModelRoutes         ModelRouteService
 	UpstreamModels      UpstreamModelService
 	ProviderModels      ProviderModelService
@@ -181,6 +189,7 @@ type apiHandler struct {
 	payments            PaymentService
 	referrals           ReferralService
 	gatewaySettings     GatewaySettingsService
+	announcements       AnnouncementService
 	modelRoutes         ModelRouteService
 	upstreamModels      UpstreamModelService
 	providerModels      ProviderModelService
@@ -211,6 +220,7 @@ func New(deps Dependencies) http.Handler {
 		payments:            deps.Payments,
 		referrals:           deps.Referrals,
 		gatewaySettings:     deps.GatewaySettings,
+		announcements:       deps.Announcements,
 		modelRoutes:         deps.ModelRoutes,
 		upstreamModels:      deps.UpstreamModels,
 		providerModels:      deps.ProviderModels,
@@ -249,6 +259,9 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("PUT /api/admin/referral", h.updateReferralConfig)
 	mux.HandleFunc("GET /api/admin/gateway-settings", h.getGatewaySettings)
 	mux.HandleFunc("PUT /api/admin/gateway-settings", h.updateGatewaySettings)
+	mux.HandleFunc("GET /api/account/announcement", h.getAnnouncement)
+	mux.HandleFunc("GET /api/admin/announcement", h.getAnnouncementConfig)
+	mux.HandleFunc("PUT /api/admin/announcement", h.updateAnnouncementConfig)
 	mux.HandleFunc("GET /api/account/api-keys", h.listMyAPIKeys)
 	mux.HandleFunc("POST /api/account/api-keys", h.createMyAPIKey)
 	mux.HandleFunc("GET /api/account/api-keys/{id}/secret", h.revealMyAPIKeySecret)
@@ -679,6 +692,59 @@ func (h *apiHandler) updateGatewaySettings(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"gateway_settings": config})
+}
+
+func (h *apiHandler) getAnnouncement(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireUser(w, r); !ok {
+		return
+	}
+	if h.announcements == nil {
+		writeError(w, http.StatusServiceUnavailable, "announcement_unavailable", "系统公告暂不可用")
+		return
+	}
+	public, err := h.announcements.Public(r.Context())
+	if err != nil {
+		h.writeAnnouncementError(w, "read system announcement", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"announcement": public})
+}
+
+func (h *apiHandler) getAnnouncementConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.announcements == nil {
+		writeError(w, http.StatusServiceUnavailable, "announcement_unavailable", "系统公告暂不可用")
+		return
+	}
+	config, err := h.announcements.Config(r.Context())
+	if err != nil {
+		h.writeAnnouncementError(w, "read system announcement configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"announcement": config})
+}
+
+func (h *apiHandler) updateAnnouncementConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if h.announcements == nil {
+		writeError(w, http.StatusServiceUnavailable, "announcement_unavailable", "系统公告暂不可用")
+		return
+	}
+	var request announcement.Config
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "系统公告格式无效")
+		return
+	}
+	config, err := h.announcements.Update(r.Context(), request)
+	if err != nil {
+		h.writeAnnouncementError(w, "update system announcement configuration", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"announcement": config})
 }
 
 func (h *apiHandler) listMyAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -2038,6 +2104,14 @@ func (h *apiHandler) writeReferralConfigError(w http.ResponseWriter, operation s
 func (h *apiHandler) writeGatewaySettingsError(w http.ResponseWriter, operation string, err error) {
 	if errors.Is(err, gatewaysettings.ErrInvalidConfig) {
 		writeError(w, http.StatusBadRequest, "invalid_gateway_settings", "请求设置无效，请检查时间范围")
+		return
+	}
+	h.internalError(w, operation, err)
+}
+
+func (h *apiHandler) writeAnnouncementError(w http.ResponseWriter, operation string, err error) {
+	if errors.Is(err, announcement.ErrInvalidInput) {
+		writeError(w, http.StatusBadRequest, "invalid_announcement", "系统公告无效，请检查标题、正文和启用状态")
 		return
 	}
 	h.internalError(w, operation, err)

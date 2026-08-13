@@ -1,15 +1,17 @@
 "use client";
 
-import { BookOpen, Bot, Boxes, ChartNoAxesCombined, CreditCard, House, KeyRound, LayoutDashboard, LogOut, Mail, Menu, Network, Percent, Radio, RefreshCw, ScrollText, ShieldCheck, UserRound, Users, UsersRound, WalletCards } from "lucide-react";
+import { Bell, BookOpen, Bot, Boxes, ChartNoAxesCombined, CreditCard, House, KeyRound, LayoutDashboard, LogOut, Mail, Menu, Network, Percent, Radio, RefreshCw, ScrollText, ShieldCheck, UserRound, Users, UsersRound, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AnnouncementDialog } from "@/components/announcement-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { checkCurrentSession, type CurrentUser } from "@/lib/auth-session";
+import { dismissAnnouncementForToday, emptyAnnouncement, isAnnouncementDismissedToday, normalizeAnnouncement, readAnnouncementError, type Announcement } from "@/lib/announcement";
 import { cn } from "@/lib/utils";
 
 export type { CurrentUser } from "@/lib/auth-session";
@@ -34,6 +36,7 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/admin/referral": { title: "推荐设置", description: "邀请返现比例与生效规则" },
   "/admin/gateway": { title: "请求设置", description: "SSE 保活与上游请求生命周期" },
   "/admin/email": { title: "邮件设置", description: "注册验证码的 SMTP 发送配置" },
+  "/admin/announcement": { title: "系统公告", description: "用户端通知内容与展示状态" },
 };
 
 export function isConsoleRoute(pathname: string) {
@@ -75,6 +78,7 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
       { href: "/admin/gateway", label: "请求设置", icon: Radio },
       { href: "/admin/payments", label: "支付配置", icon: CreditCard },
       { href: "/admin/email", label: "邮件设置", icon: Mail },
+      { href: "/admin/announcement", label: "系统公告", icon: Bell },
     ] : [] },
   ];
 
@@ -114,6 +118,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const [sessionAttempt, setSessionAttempt] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
+  const [announcementError, setAnnouncementError] = useState("");
+  const [announcementLoading, setAnnouncementLoading] = useState(false);
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const announcementLoaded = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -137,6 +146,52 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     const memberRoutes = ["/console/dashboard", "/console/logs", "/console/models", "/console/api-keys", "/console/docs", "/console/profile", "/console/billing"];
     if (!memberRoutes.includes(pathname)) router.replace("/console/dashboard");
   }, [pathname, router, user]);
+
+  const loadAnnouncement = useCallback(async (autoOpenForUserID?: string) => {
+    const shouldAutoOpen = autoOpenForUserID !== undefined && !isAnnouncementDismissedToday(window.localStorage, autoOpenForUserID);
+    setAnnouncementLoading(true);
+    setAnnouncementError("");
+    try {
+      const response = await fetch("/api/account/announcement", { cache: "no-store", credentials: "same-origin" });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!response.ok) {
+        setAnnouncement(emptyAnnouncement);
+        setAnnouncementError(await readAnnouncementError(response));
+        if (shouldAutoOpen) setAnnouncementOpen(true);
+        return;
+      }
+      const next = normalizeAnnouncement(((await response.json()) as { announcement?: Partial<Announcement> }).announcement);
+      setAnnouncement(next);
+      if (shouldAutoOpen && next.available) setAnnouncementOpen(true);
+    } catch {
+      setAnnouncement(emptyAnnouncement);
+      setAnnouncementError("系统公告加载失败，请稍后重试");
+      if (shouldAutoOpen) setAnnouncementOpen(true);
+    } finally {
+      setAnnouncementLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!user || announcementLoaded.current) return;
+    announcementLoaded.current = true;
+    const timer = window.setTimeout(() => void loadAnnouncement(user.id), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAnnouncement, user]);
+
+  function openAnnouncement() {
+    setAnnouncementOpen(true);
+    void loadAnnouncement();
+  }
+
+  function dismissAnnouncementToday() {
+    if (!user) return;
+    dismissAnnouncementForToday(window.localStorage, user.id);
+    setAnnouncementOpen(false);
+  }
 
   async function logout() {
     if (loggingOut) return;
@@ -193,6 +248,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <div className="min-w-0"><h1 className="truncate text-base font-semibold sm:text-lg">{details.title}</h1><p className="hidden truncate text-xs text-muted-foreground sm:block">{details.description}</p></div>
             </div>
             <div className="flex items-center gap-1">
+              <Button aria-label="查看系统公告" onClick={openAnnouncement} size="icon" title="系统公告" variant="ghost"><Bell /></Button>
               <Button asChild className="gap-2" size="sm" title="返回主页" variant="ghost">
                 <Link href="/"><House aria-hidden="true" /><span className="hidden sm:inline">返回主页</span></Link>
               </Button>
@@ -203,6 +259,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <main className="w-full p-4 sm:p-6 lg:p-8">{children}</main>
         </div>
       </div>
+      <AnnouncementDialog announcement={announcement} error={announcementError} loading={announcementLoading} onDismissForToday={dismissAnnouncementToday} onOpenChange={setAnnouncementOpen} onRetry={() => void loadAnnouncement()} open={announcementOpen} />
     </CurrentUserContext.Provider>
   );
 }

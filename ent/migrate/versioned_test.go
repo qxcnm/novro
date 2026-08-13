@@ -29,7 +29,7 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}

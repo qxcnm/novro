@@ -24,6 +24,9 @@
 | `PUT` | `/api/admin/referral` | 管理员 | 保存全局邀请返现比例并立即用于新的充值到账 |
 | `GET` | `/api/admin/gateway-settings` | 管理员 | 读取 SSE 心跳和上游超时设置 |
 | `PUT` | `/api/admin/gateway-settings` | 管理员 | 保存请求生命周期设置并立即用于新的模型请求 |
+| `GET` | `/api/account/announcement` | 登录 | 读取当前启用的系统公告；没有公告时返回 `available: false` |
+| `GET` | `/api/admin/announcement` | 管理员 | 读取系统公告内容、启用状态和最近更新时间 |
+| `PUT` | `/api/admin/announcement` | 管理员 | 保存纯文本系统公告及启用状态 |
 | `GET` | `/api/admin/users` | 管理员 | 分页、搜索和状态筛选 |
 | `POST` | `/api/admin/users` | 管理员 | 创建管理员或成员 |
 | `PATCH` | `/api/admin/users/{id}` | 管理员 | 修改显示名称或角色 |

@@ -822,8 +822,6 @@ func init() {
 	systemsettingDescValue := systemsettingFields[1].Descriptor()
 	// systemsetting.DefaultValue holds the default value on creation for the value field.
 	systemsetting.DefaultValue = systemsettingDescValue.Default.(string)
-	// systemsetting.ValueValidator is a validator for the "value" field. It is called by the builders before save.
-	systemsetting.ValueValidator = systemsettingDescValue.Validators[0].(func(string) error)
 	// systemsettingDescCreatedAt is the schema descriptor for created_at field.
 	systemsettingDescCreatedAt := systemsettingFields[2].Descriptor()
 	// systemsetting.DefaultCreatedAt holds the default value on creation for the created_at field.

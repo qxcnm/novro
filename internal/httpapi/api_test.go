@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/novro-gateway/novro/internal/announcement"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/auth"
 	"github.com/novro-gateway/novro/internal/billing"
@@ -159,6 +160,32 @@ type fakeGatewaySettings struct {
 	config  gatewaysettings.Config
 	updated gatewaysettings.Config
 	err     error
+}
+
+type fakeAnnouncements struct {
+	config  announcement.Config
+	updated announcement.Config
+	err     error
+}
+
+func (f *fakeAnnouncements) Config(context.Context) (announcement.Config, error) {
+	return f.config, f.err
+}
+
+func (f *fakeAnnouncements) Public(context.Context) (announcement.Public, error) {
+	if f.err != nil {
+		return announcement.Public{}, f.err
+	}
+	return f.config.Public(), nil
+}
+
+func (f *fakeAnnouncements) Update(_ context.Context, config announcement.Config) (announcement.Config, error) {
+	f.updated = config
+	if f.err != nil {
+		return announcement.Config{}, f.err
+	}
+	f.config = config
+	return config, nil
 }
 
 type fakeAPIBilling struct {
@@ -696,6 +723,71 @@ func TestAdminGatewaySettingsRejectsInvalidValues(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_gateway_settings") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAnnouncementPublicViewRequiresLoginAndHidesDraft(t *testing.T) {
+	announcements := &fakeAnnouncements{config: announcement.Config{Enabled: false, Title: "内部草稿", Body: "尚未发布"}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Announcements: announcements, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/announcement", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"available":false`) || strings.Contains(response.Body.String(), "内部草稿") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	unauthenticated := New(Dependencies{
+		Auth: &fakeAPIAuth{authErr: auth.ErrUnauthenticated}, Users: &fakeAPIUsers{}, Announcements: announcements,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response = httptest.NewRecorder()
+	unauthenticated.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/announcement", nil))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminAnnouncementRequiresAdminAndUpdates(t *testing.T) {
+	announcements := &fakeAnnouncements{config: announcement.Config{Title: "旧公告", Body: "旧内容"}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Announcements: announcements, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPut, "/api/admin/announcement", strings.NewReader(`{"enabled":true,"title":"维护通知","body":"今晚进行例行维护"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !announcements.updated.Enabled || announcements.updated.Title != "维护通知" || !strings.Contains(response.Body.String(), "今晚进行例行维护") {
+		t.Fatalf("status=%d config=%+v body=%s", response.Code, announcements.updated, response.Body.String())
+	}
+
+	memberHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Announcements: announcements, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response = httptest.NewRecorder()
+	memberHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/admin/announcement", nil))
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("member status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminAnnouncementRejectsInvalidInput(t *testing.T) {
+	announcements := &fakeAnnouncements{err: announcement.ErrInvalidInput}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Announcements: announcements, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPut, "/api/admin/announcement", strings.NewReader(`{"enabled":true,"title":"","body":""}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_announcement") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

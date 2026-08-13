@@ -439,7 +439,7 @@ var (
 	// SystemSettingsColumns holds the columns for the "system_settings" table.
 	SystemSettingsColumns = []*schema.Column{
 		{Name: "key", Type: field.TypeString, Size: 128},
-		{Name: "value", Type: field.TypeString, Size: 1024, Default: ""},
+		{Name: "value", Type: field.TypeString, Size: 2147483647, Default: "", SchemaType: map[string]string{"mysql": "text"}},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

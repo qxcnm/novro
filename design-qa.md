@@ -1,65 +1,73 @@
-# Hidden Billing Group Authorization Design QA
+# System Announcement Design QA
 
 ## Comparison Target
 
-- Source visual truth: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-1e4c54d1-c12f-42b4-9fbf-38d618356d09.png`
-- Browser-rendered desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\billing-groups-desktop-final.png`
-- Source-size desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\billing-groups-desktop-2048-final.png`
-- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\billing-groups-mobile-final.png`
-- Full-view comparison: `C:\Users\qxnm\Data\Code\novro\tmp\billing-groups-reference-comparison.png`
-- Focused drawer comparison: `C:\Users\qxnm\Data\Code\novro\tmp\billing-groups-drawer-comparison.png`
-- Route: `/admin/billing-groups`
-- Viewports: 1280 x 720 desktop, 2048 x 1132 source-size desktop, and 390 x 844 mobile
-- State: authenticated administrator, light theme, hidden proxy group edit drawer open, two ordinary members authorized in the reversible QA mock
+- Source visual truth, announcement modal: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-101a1cd2-b6ce-473b-85b6-f9a5bda7c0f1.png`
+- Source visual truth, today-close action: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-b7912db0-34cf-410a-8bd0-b7e1f93b9f1a.png`
+- Source visual truth, empty state: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-7c7bd420-ec76-4ff1-b520-06bab42abad8.png`
+- Source visual truth, header bell: `C:\Users\qxnm\AppData\Local\Temp\codex-clipboard-f1173967-8abf-4c11-8110-f40138f04e73.png`
+- Browser-rendered desktop implementation: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-desktop-final.png`
+- Browser-rendered mobile implementation: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-mobile-final.png`
+- Browser-rendered empty state: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-desktop-empty.png`
+- Browser-rendered dark state: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-mobile-dark.png`
+- Browser-rendered today-close desktop state: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-today-close-desktop.png`
+- Browser-rendered today-close mobile state: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-today-close-mobile.png`
+- Full-view comparison: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-reference-comparison.png`
+- Today-close comparison: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-today-close-comparison.png`
+- Focused empty-state comparison: `C:\Users\qxnm\Data\Code\novro\tmp\announcement-empty-comparison.png`
+- Route: `/admin/announcement`
+- Viewports: 1440 x 900 desktop and 390 x 844 mobile
+- State: active plain-text announcement, empty announcement, light and dark themes, today-close and manual-reopen interactions. The latest button QA used a temporary component-only page with no mock authentication API or user identity response; it was removed before the final build.
 
 ## Full-View Comparison Evidence
 
-The source and browser-rendered implementation were opened together in the full-view comparison. Both use the existing Novro administration shell, a right-side `编辑计费分组` drawer, the same group fields, a hidden-group control, an authorization region, and a persistent bottom save action.
+The source and final implementation were combined in the same images. Both place a wide white announcement surface in the upper part of a dimmed application, use a compact title region, keep the announcement body as the dominant content, and expose close controls in the top-right and footer. The latest comparison confirms that `今日关闭` appears immediately to the left of the ordinary close action, matching the supplied interaction reference.
 
-The source only annotates the intended authorization region with placeholder user names. The implementation realizes that region as a searchable, keyboard-accessible checkbox list with a selected-user count. This is an intentional functional completion of the source rather than visual drift.
+The implementation intentionally uses Novro's existing Geist typography, semantic light/dark tokens, shadcn Dialog primitive, and Lucide Bell icon. It omits the source site's notification/system-announcement tabs because Novro has one current announcement rather than two content feeds.
 
 ## Focused Region Evidence
 
-The focused comparison normalizes the right-side drawer to 448 px. The source and implementation have matching drawer proportions and preserve the same top-to-bottom hierarchy. The implementation's authorization rows remain legible at this width and show both display name and account identity.
+The empty-state source and implementation were combined in a focused comparison. Both use a centered bell, `目前暂无公告`, large clear whitespace, and a persistent close action. The Novro implementation adds one short explanatory sentence so the empty state is self-contained.
 
-No additional crop was needed for the mobile state because the complete 390 x 844 drawer, user rows, and save footer are all legible in the saved mobile screenshot.
+No image-focused crop was needed because the target contains no product photography, illustrations, logos, or custom raster assets. All visible symbols are standard UI icons.
 
 ## Findings
 
 - No actionable P0, P1, or P2 visual, responsive, accessibility, or interaction findings remain.
-- The mock source does not specify search, selected count, disabled-user treatment, or empty/loading states. The implementation uses existing Novro shadcn/ui patterns for these production-required states.
-- The source shows a sample multiplier of 0.1 while the QA mock uses 0.5. This is test data, not a visual or behavioral mismatch.
+- The source's tabs are intentionally absent because the current product scope defines one active system announcement and no timeline model.
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: existing Geist typography, weights, line heights, zero letter spacing, label hierarchy, muted helper text, truncation, and Chinese wrapping are preserved. The compact drawer uses form-scale type rather than display headings.
-- Spacing and layout rhythm: the final desktop drawer is 448 px wide, matches the source proportion, and uses fixed header, independently scrolling form content, and fixed footer rows. At 390 x 844 the drawer fills the viewport, reports no horizontal overflow, and leaves a clear gap between the last user row and the save footer.
-- Colors and visual tokens: background, foreground, muted text, borders, overlay, focus ring, checkbox, badge, and primary button use the existing shadcn/ui semantic tokens and remain compatible with the existing light/dark theme system.
-- Image quality and asset fidelity: the source and implementation contain no product imagery or custom raster assets. Search, edit, close, user, and checkbox controls use the repository's existing icon and primitive libraries; no placeholder graphics or handcrafted SVG substitutes were added.
-- Copy and content: `隐藏分组`, `授权用户`, independent-authorization guidance, selected count, search placeholder, and user identities clearly express that each hidden group has its own authorized-user list and that administrators do not require assignment.
+- Fonts and typography: Novro's existing Geist family, zero letter spacing, compact modal heading, readable 14-16 px body type, 28-32 px line height, Chinese wrapping, and plain-text line breaks were verified in desktop and mobile captures.
+- Spacing and layout rhythm: the latest desktop dialog is approximately 749 x 458 px at 1440 x 900 with a 90 px top offset, matching the source's upper wide-modal composition. Both footer actions remain visible and right-aligned. At 390 x 844 the dialog keeps safe side margins and stacks the two actions without clipping or overlap.
+- Colors and visual tokens: the overlay, surfaces, borders, muted text, focus rings, and button states use existing semantic tokens. Light and dark theme captures both retain contrast without custom one-off colors.
+- Image quality and asset fidelity: there are no imagery assets in scope. Bell, close, refresh, preview, and save controls use the repository's configured Lucide library; no handcrafted SVG, CSS art, placeholder image, or emoji was introduced.
+- Copy and content: `系统公告`, `最新平台更新和通知`, `今日关闭`, `关闭公告`, `目前暂无公告`, administrator labels, enable-state guidance, and pure-text safety wording are coherent with Novro. Draft content is not present in the public empty state.
 
 ## Primary Interactions Checked
 
-- Opened the proxy-group edit drawer and changed its reversible in-memory QA selection from only `proxy.user` to `proxy.user` plus `business.user`.
-- Saved the change, confirmed the table's proxy-group authorization count changed from 1 to 2, reopened the drawer, and confirmed both checkboxes remained selected in the QA mock.
-- Confirmed the B-side group and proxy group are represented as separate hidden groups with independent authorization lists.
-- Confirmed the save action remains fully visible at 1280 x 720 and 390 x 844.
-- Confirmed the 390 x 844 drawer is full width and has no horizontal overflow or footer/user-row overlap.
-- Opened `创建用户` and the ordinary-member edit drawer on `/admin/users`; neither contains `允许访问隐藏分组`, related hidden-access text, or the former permission checkbox.
-- Browser console and exception events were collected after a fresh reload; no warnings or errors were present.
+- Confirmed an enabled announcement automatically opens after a full console load.
+- Closed the modal and reopened it through the header bell after the client fetched the latest content.
+- Clicked `今日关闭`, confirmed the dialog closed, and confirmed the header bell remained available and reopened the dialog immediately.
+- Added unit coverage confirming today-close is isolated by current user, expires on the next local calendar day, and degrades safely when browser storage is unavailable.
+- Edited the title and multiline body, saved them, and confirmed the reopened dialog showed the new content.
+- Disabled the announcement, saved it, and confirmed the header bell opened the empty state without exposing draft title or body.
+- Re-enabled the announcement and confirmed automatic display again after reload.
+- Verified desktop, 390 x 844 mobile, light theme, dark theme, body scrolling constraints, close button visibility, and no horizontal document overflow.
+- Confirmed the header bell has the accessible name `查看系统公告`; all dialog close controls and administrator form fields have accessible labels.
+- Checked browser warnings and errors after the final reload and interactions; none were reported.
 
 ## Comparison History
 
-- Pass 1 finding [P2]: the initial desktop edit drawer used a normal flex column, so `保存修改` was pushed below the 720 px viewport.
-- Pass 1 fix: changed the drawer to fixed header, `minmax(0, 1fr)` scrolling form content, and fixed footer rows. Post-fix evidence showed the save button at top 672 px and bottom 704 px in the 720 px viewport.
-- Pass 2 finding [P2]: the shared Sheet primitive's mobile `w-3/4` left about 98 px of the underlying page visible at 390 px.
-- Pass 2 fix: added a billing-group-specific full-width mobile override. Post-fix evidence shows dialog left 0 px, width about 390 px, no horizontal overflow, and a fully visible save button.
-- Pass 3 finding [P2]: the initial desktop override remained 384 px wide, narrower than the approximately 448 px reference drawer, reducing authorization-list readability.
-- Pass 3 fix: set a scoped 448 px desktop width with explicit Tailwind priority while retaining the full-width mobile rule. Final evidence shows 448 px at 1280 x 720 and 2048 x 1132, and about 390 px at 390 x 844.
-- Final comparison: the full-view and focused source/implementation artifacts were opened and reviewed after all fixes. No actionable P0/P1/P2 difference remains.
+- Pass 1 finding [P2]: the initial desktop modal was vertically centered and used a wider fixed maximum, drifting from the source's upper-half composition.
+- Pass 1 fix: changed the desktop dialog to `top: 10dvh`, `width: 52vw`, and a 1024 px maximum while preserving the centered mobile rule. Removed the muted footer fill so the modal reads as one white surface.
+- Pass 2 evidence: the revised desktop dialog measured approximately 749 x 458 px at 1440 x 900, with top 90 px and no horizontal overflow. The same 390 x 844 mobile state measured approximately 340 x 409 px with safe margins and a visible footer button.
+- Pass 3 change: added the requested `今日关闭` secondary action while preserving the existing ordinary close and top-right close controls. The behavior stores only the current user's local-calendar date and does not disable manual access through the bell.
+- Pass 3 evidence: the revised desktop dialog remained approximately 749 x 458 px at 1440 x 900 with both footer actions fully visible and no horizontal overflow. At 390 x 844 both actions remained fully visible in a stacked footer. Browser logs contained no warnings or errors.
+- Final comparison: the supplied today-close reference and revised implementation were opened together in `announcement-today-close-comparison.png`. Button order and footer placement match the reference while colors, type, radii, and primary-action treatment intentionally remain within Novro's existing design system. No actionable P0/P1/P2 mismatch remains.
 
 ## Follow-up Polish
 
-- None required for handoff. Additional user rows will scroll inside the bounded authorization list without moving the persistent save footer.
+- None required for handoff. Long announcement bodies scroll inside the bounded modal without moving the page behind it.
 
 final result: passed

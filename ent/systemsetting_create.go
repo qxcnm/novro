@@ -122,11 +122,6 @@ func (_c *SystemSettingCreate) check() error {
 	if _, ok := _c.mutation.Value(); !ok {
 		return &ValidationError{Name: "value", err: errors.New(`ent: missing required field "SystemSetting.value"`)}
 	}
-	if v, ok := _c.mutation.Value(); ok {
-		if err := systemsetting.ValueValidator(v); err != nil {
-			return &ValidationError{Name: "value", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.value": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "SystemSetting.created_at"`)}
 	}

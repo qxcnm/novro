@@ -44,8 +44,6 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultValue holds the default value on creation for the "value" field.
 	DefaultValue string
-	// ValueValidator is a validator for the "value" field. It is called by the builders before save.
-	ValueValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
