@@ -24,6 +24,12 @@ type EmailVerificationCode func(*sql.Selector)
 // GatewayOperation is the predicate function for gatewayoperation builders.
 type GatewayOperation func(*sql.Selector)
 
+// ModelPricePlan is the predicate function for modelpriceplan builders.
+type ModelPricePlan func(*sql.Selector)
+
+// ModelPriceWindow is the predicate function for modelpricewindow builders.
+type ModelPriceWindow func(*sql.Selector)
+
 // ModelRoute is the predicate function for modelroute builders.
 type ModelRoute func(*sql.Selector)
 

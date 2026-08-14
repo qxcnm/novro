@@ -58,9 +58,11 @@ type UpstreamModelEdges struct {
 	ModelRoutes []*ModelRoute `json:"model_routes,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// PricePlans holds the value of the price_plans edge.
+	PricePlans []*ModelPricePlan `json:"price_plans,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // ModelRoutesOrErr returns the ModelRoutes value or an error if the edge
@@ -79,6 +81,15 @@ func (e UpstreamModelEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
+}
+
+// PricePlansOrErr returns the PricePlans value or an error if the edge
+// was not loaded in eager-loading.
+func (e UpstreamModelEdges) PricePlansOrErr() ([]*ModelPricePlan, error) {
+	if e.loadedTypes[2] {
+		return e.PricePlans, nil
+	}
+	return nil, &NotLoadedError{edge: "price_plans"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -223,6 +234,11 @@ func (_m *UpstreamModel) QueryModelRoutes() *ModelRouteQuery {
 // QueryAPIUsages queries the "api_usages" edge of the UpstreamModel entity.
 func (_m *UpstreamModel) QueryAPIUsages() *APIUsageQuery {
 	return NewUpstreamModelClient(_m.config).QueryAPIUsages(_m)
+}
+
+// QueryPricePlans queries the "price_plans" edge of the UpstreamModel entity.
+func (_m *UpstreamModel) QueryPricePlans() *ModelPricePlanQuery {
+	return NewUpstreamModelClient(_m.config).QueryPricePlans(_m)
 }
 
 // Update returns a builder for updating this UpstreamModel.

@@ -23,6 +23,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/email"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
+	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
@@ -387,6 +388,66 @@ type fakeModelRoutes struct {
 	active            []modelroute.Record
 	listActiveGroupID uuid.UUID
 	err               error
+}
+
+type fakeModelPricing struct {
+	plans             []modelpricing.Plan
+	created           modelpricing.Plan
+	resolution        modelpricing.Resolution
+	listModelID       uuid.UUID
+	createModelID     uuid.UUID
+	createInput       modelpricing.PlanInput
+	updatedPlanID     uuid.UUID
+	publishedPlanID   uuid.UUID
+	republishedPlanID uuid.UUID
+	republishResult   modelpricing.RepublishResult
+	deletedPlanID     uuid.UUID
+	resolvedModelID   uuid.UUID
+	listErr           error
+	createErr         error
+	updateErr         error
+	publishErr        error
+	deleteErr         error
+	resolveErr        error
+}
+
+func (f *fakeModelPricing) List(_ context.Context, modelID uuid.UUID) ([]modelpricing.Plan, error) {
+	f.listModelID = modelID
+	return f.plans, f.listErr
+}
+
+func (f *fakeModelPricing) CreateDraft(_ context.Context, modelID uuid.UUID, input modelpricing.PlanInput) (modelpricing.Plan, error) {
+	f.createModelID = modelID
+	f.createInput = input
+	return f.created, f.createErr
+}
+
+func (f *fakeModelPricing) UpdateDraft(_ context.Context, planID uuid.UUID, _ modelpricing.PlanInput) (modelpricing.Plan, error) {
+	f.updatedPlanID = planID
+	return f.created, f.updateErr
+}
+
+func (f *fakeModelPricing) Publish(_ context.Context, planID uuid.UUID) (modelpricing.Plan, error) {
+	f.publishedPlanID = planID
+	return f.created, f.publishErr
+}
+
+func (f *fakeModelPricing) Republish(_ context.Context, planID uuid.UUID) (modelpricing.RepublishResult, error) {
+	f.republishedPlanID = planID
+	if f.republishResult.Plan.ID == uuid.Nil {
+		f.republishResult.Plan = f.created
+	}
+	return f.republishResult, f.publishErr
+}
+
+func (f *fakeModelPricing) DeleteDraft(_ context.Context, planID uuid.UUID) error {
+	f.deletedPlanID = planID
+	return f.deleteErr
+}
+
+func (f *fakeModelPricing) Resolve(_ context.Context, modelID uuid.UUID, _ time.Time) (modelpricing.Resolution, error) {
+	f.resolvedModelID = modelID
+	return f.resolution, f.resolveErr
 }
 
 type fakeBillingGroups struct {
@@ -1024,6 +1085,82 @@ func testAPIWithKeys(authService *fakeAPIAuth, users *fakeAPIUsers, apiKeys *fak
 		}
 		inner.ServeHTTP(w, r)
 	})
+}
+
+func TestAdminCreatesAndPublishesModelPricePlan(t *testing.T) {
+	modelID := uuid.New()
+	planID := uuid.New()
+	pricing := &fakeModelPricing{
+		plans:   []modelpricing.Plan{{ID: planID, UpstreamModelID: modelID, Status: modelpricing.StatusDraft}},
+		created: modelpricing.Plan{ID: planID, UpstreamModelID: modelID, Status: modelpricing.StatusDraft},
+	}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, ModelPricing: pricing,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	body := `{"mode":"scheduled","timezone":"Asia/Shanghai","effective_from":"2026-08-17T00:00:00Z","default_rates":{"input_price_micros":1000000,"output_price_micros":4000000},"windows":[{"label":"晚高峰","weekday_mask":62,"start_minute":1080,"end_minute":1320,"rates":{"input_price_micros":2000000,"output_price_micros":8000000}}]}`
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans", strings.NewReader(body))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || pricing.createModelID != modelID || pricing.createInput.Mode != modelpricing.ModeScheduled || len(pricing.createInput.Windows) != 1 {
+		t.Fatalf("status=%d model=%s input=%+v body=%s", response.Code, pricing.createModelID, pricing.createInput, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans/"+planID.String()+"/publish", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || pricing.listModelID != modelID || pricing.publishedPlanID != planID {
+		t.Fatalf("status=%d listedModel=%s publishedPlan=%s body=%s", response.Code, pricing.listModelID, pricing.publishedPlanID, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans/"+planID.String()+"/republish", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || pricing.republishedPlanID != planID {
+		t.Fatalf("republish status=%d republishedPlan=%s body=%s", response.Code, pricing.republishedPlanID, response.Body.String())
+	}
+}
+
+func TestModelPricePlanEndpointsEnforceAuthorizationAndSafeErrors(t *testing.T) {
+	modelID := uuid.New()
+	pricing := &fakeModelPricing{}
+	memberHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, ModelPricing: pricing, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response := httptest.NewRecorder()
+	memberHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/admin/upstream-models/"+modelID.String()+"/price-plans", nil))
+	if response.Code != http.StatusForbidden || pricing.listModelID != uuid.Nil {
+		t.Fatalf("member status=%d listModel=%s body=%s", response.Code, pricing.listModelID, response.Body.String())
+	}
+
+	pricing.createErr = modelpricing.ErrInvalidInput
+	adminHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, ModelPricing: pricing,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans", strings.NewReader(`{"mode":"fixed"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	adminHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_price_plan") {
+		t.Fatalf("invalid status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	pricing.listErr = errors.New("database unavailable")
+	planID := uuid.New()
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans/"+planID.String()+"/publish", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	adminHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "internal_error") {
+		t.Fatalf("ownership error status=%d body=%s", response.Code, response.Body.String())
+	}
 }
 
 /**
@@ -2200,6 +2337,40 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	}
 	if model.Prices.InputMicros != 2_500_000 || model.Prices.OutputMicros != 10_000_000 || model.Prices.CacheReadMicros != 250_000 || model.Prices.RequestMicros != 1_250 {
 		t.Fatalf("unexpected customer prices: %+v", model.Prices)
+	}
+}
+
+func TestUserModelListUsesCurrentlyResolvedScheduledPrice(t *testing.T) {
+	currentID := uuid.New()
+	groupID := uuid.New()
+	modelID := uuid.New()
+	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 12_500, true)}}
+	routes := &fakeModelRoutes{active: []modelroute.Record{{
+		PublicName: "scheduled-chat", DisplayName: "Scheduled Chat",
+		Provider:      modelroute.ProviderSummary{DisplayName: "Provider", Protocol: provider.ProtocolOpenAI},
+		UpstreamModel: &upstreammodel.Record{ID: modelID, Prices: upstreammodel.Prices{InputMicros: 1_000_000, OutputMicros: 2_000_000}},
+	}}}
+	pricing := &fakeModelPricing{resolution: modelpricing.Resolution{Rates: billing.RateCard{InputMicros: 4_000_000, OutputMicros: 10_000_000}}}
+	handler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, BillingGroups: groups, ModelRoutes: routes, ModelPricing: pricing,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models", nil))
+	var body struct {
+		Models []struct {
+			Prices billing.RateCard `json:"prices"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || len(body.Models) != 1 || pricing.resolvedModelID != modelID {
+		t.Fatalf("status=%d models=%+v resolvedModel=%s body=%s", response.Code, body.Models, pricing.resolvedModelID, response.Body.String())
+	}
+	if body.Models[0].Prices.InputMicros != 5_000_000 || body.Models[0].Prices.OutputMicros != 12_500_000 {
+		t.Fatalf("expected scheduled price with group multiplier, got %+v", body.Models[0].Prices)
 	}
 }
 

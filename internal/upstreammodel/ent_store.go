@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entmodelpriceplan "github.com/novro-gateway/novro/ent/modelpriceplan"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
 )
@@ -29,7 +30,12 @@ func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client
  * @date 2026-08-13
  */
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
-	created, err := s.client.UpstreamModel.Create().SetProviderName(input.ProviderName).SetUpstreamName(input.UpstreamName).
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin upstream model creation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	created, err := tx.UpstreamModel.Create().SetProviderName(input.ProviderName).SetUpstreamName(input.UpstreamName).
 		SetDisplayName(input.DisplayName).SetInputPriceMicros(input.InputMicros).SetOutputPriceMicros(input.OutputMicros).
 		SetCacheReadPriceMicros(input.CacheReadMicros).SetCacheWritePriceMicros(input.CacheWriteMicros).
 		SetCacheWrite1hPriceMicros(input.CacheWrite1hMicros).SetRequestPriceMicros(input.RequestMicros).
@@ -39,6 +45,18 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create upstream model: %w", err)
+	}
+	// 新模型同步创建版本 1 的固定价方案，保证当前计费链路优先使用统一价格来源。
+	if _, err := tx.ModelPricePlan.Create().SetID(created.ID).SetUpstreamModelID(created.ID).SetVersion(1).
+		SetMode(entmodelpriceplan.ModeFixed).SetTimezone("Asia/Shanghai").SetEffectiveFrom(time.Unix(0, 0).UTC()).
+		SetStatus(entmodelpriceplan.StatusPublished).SetDefaultInputPriceMicros(input.InputMicros).
+		SetDefaultOutputPriceMicros(input.OutputMicros).SetDefaultCacheReadPriceMicros(input.CacheReadMicros).
+		SetDefaultCacheWritePriceMicros(input.CacheWriteMicros).SetDefaultCacheWrite1hPriceMicros(input.CacheWrite1hMicros).
+		SetDefaultRequestPriceMicros(input.RequestMicros).Save(ctx); err != nil {
+		return Record{}, fmt.Errorf("create initial model price plan: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit upstream model creation: %w", err)
 	}
 	return s.get(ctx, created.ID)
 }

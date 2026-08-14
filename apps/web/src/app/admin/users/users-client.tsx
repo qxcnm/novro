@@ -394,19 +394,19 @@ export default function UsersClient() {
           </DialogContent>
         </Dialog>
 
-        <Sheet onOpenChange={(open) => { setFormError(""); if (!open) setDetailUser(null); }} open={detailUser !== null}>
-          <SheetContent className="w-full overflow-y-auto sm:max-w-md" side="right">
-            {detailUser ? <><SheetHeader className="border-b px-6 py-5"><SheetTitle>{detailUser.display_name || detailUser.username}</SheetTitle><SheetDescription>@{detailUser.username}{detailUser.email ? ` · ${detailUser.email}` : " · 未设置邮箱"}</SheetDescription></SheetHeader>
-              <form className="space-y-6 px-6" id="edit-user-form" onSubmit={updateUser}>
+        <Dialog onOpenChange={(open) => { setFormError(""); if (!open) setDetailUser(null); }} open={detailUser !== null}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            {detailUser ? <><DialogHeader><DialogTitle>{detailUser.display_name || detailUser.username}</DialogTitle><DialogDescription>@{detailUser.username}{detailUser.email ? ` · ${detailUser.email}` : " · 未设置邮箱"}</DialogDescription></DialogHeader>
+              <form className="flex flex-col gap-5" id="edit-user-form" onSubmit={updateUser}>
                 <div className="grid grid-cols-2 gap-4 border-b pb-5 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={detailUser.status === "active" ? "outline" : "destructive"}>{detailUser.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">最近登录</p><p className="mt-2 leading-5">{formatDate(detailUser.last_login_at)}</p></div><div><p className="text-xs text-muted-foreground">创建时间</p><p className="mt-2 leading-5">{formatDate(detailUser.created_at)}</p></div><div><p className="text-xs text-muted-foreground">最近更新</p><p className="mt-2 leading-5">{formatDate(detailUser.updated_at)}</p></div></div>
                 <div className="space-y-2"><Label htmlFor="edit-display-name">显示名称</Label><Input id="edit-display-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} value={editForm.display_name} /></div>
                 <div className="space-y-2"><Label htmlFor="edit-email">邮箱</Label><Input disabled id="edit-email" value={detailUser.email || "未设置邮箱"} /></div>
 				<div className="space-y-2"><Label htmlFor="edit-role">角色</Label><Select onValueChange={(role: "admin" | "member") => setEditForm({ ...editForm, role })} value={editForm.role}><SelectTrigger id="edit-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="member">成员</SelectItem><SelectItem value="admin">管理员</SelectItem></SelectContent></Select><p className="text-xs leading-5 text-muted-foreground">最后一个启用的管理员不能降级为普通成员。</p></div>
 				{formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
               </form>
-              <SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-user-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button><Button onClick={() => { setDetailUser(null); setResetUser(detailUser); }} type="button" variant="outline"><KeyRound />重置密码</Button></SheetFooter></> : null}
-          </SheetContent>
-        </Sheet>
+              <DialogFooter><Button onClick={() => { setDetailUser(null); setResetUser(detailUser); }} type="button" variant="outline"><KeyRound />重置密码</Button><Button disabled={busy} form="edit-user-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button></DialogFooter></> : null}
+          </DialogContent>
+        </Dialog>
 
         <Sheet onOpenChange={(open) => { if (!open) { setBalanceUser(null); setBalanceSummary(null); setBalanceError(""); setAdjustmentAmount(""); setAdjustmentNote(""); setAdjustmentIdempotencyKey(""); } }} open={balanceUser !== null}>
           <SheetContent className="w-full overflow-y-auto sm:max-w-lg" side="right">

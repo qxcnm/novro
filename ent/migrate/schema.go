@@ -303,6 +303,93 @@ var (
 			},
 		},
 	}
+	// ModelPricePlansColumns holds the columns for the "model_price_plans" table.
+	ModelPricePlansColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "mode", Type: field.TypeEnum, Enums: []string{"fixed", "scheduled"}, Default: "fixed"},
+		{Name: "timezone", Type: field.TypeString, Size: 64, Default: "Asia/Shanghai"},
+		{Name: "effective_from", Type: field.TypeTime},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"draft", "published", "retired"}, Default: "draft"},
+		{Name: "default_input_price_micros", Type: field.TypeInt64},
+		{Name: "default_output_price_micros", Type: field.TypeInt64},
+		{Name: "default_cache_read_price_micros", Type: field.TypeInt64},
+		{Name: "default_cache_write_price_micros", Type: field.TypeInt64},
+		{Name: "default_cache_write_1h_price_micros", Type: field.TypeInt64},
+		{Name: "default_request_price_micros", Type: field.TypeInt64},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "upstream_model_id", Type: field.TypeUUID},
+	}
+	// ModelPricePlansTable holds the schema information for the "model_price_plans" table.
+	ModelPricePlansTable = &schema.Table{
+		Name:       "model_price_plans",
+		Columns:    ModelPricePlansColumns,
+		PrimaryKey: []*schema.Column{ModelPricePlansColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "model_price_plans_upstream_models_price_plans",
+				Columns:    []*schema.Column{ModelPricePlansColumns[15]},
+				RefColumns: []*schema.Column{UpstreamModelsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "modelpriceplan_upstream_model_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{ModelPricePlansColumns[15], ModelPricePlansColumns[1]},
+			},
+			{
+				Name:    "modelpriceplan_upstream_model_id_status_effective_from",
+				Unique:  false,
+				Columns: []*schema.Column{ModelPricePlansColumns[15], ModelPricePlansColumns[6], ModelPricePlansColumns[4]},
+			},
+			{
+				Name:    "modelpriceplan_status_effective_from",
+				Unique:  false,
+				Columns: []*schema.Column{ModelPricePlansColumns[6], ModelPricePlansColumns[4]},
+			},
+		},
+	}
+	// ModelPriceWindowsColumns holds the columns for the "model_price_windows" table.
+	ModelPriceWindowsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "label", Type: field.TypeString, Size: 64},
+		{Name: "weekday_mask", Type: field.TypeInt},
+		{Name: "start_minute", Type: field.TypeInt},
+		{Name: "end_minute", Type: field.TypeInt},
+		{Name: "input_price_micros", Type: field.TypeInt64},
+		{Name: "output_price_micros", Type: field.TypeInt64},
+		{Name: "cache_read_price_micros", Type: field.TypeInt64},
+		{Name: "cache_write_price_micros", Type: field.TypeInt64},
+		{Name: "cache_write_1h_price_micros", Type: field.TypeInt64},
+		{Name: "request_price_micros", Type: field.TypeInt64},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "price_plan_id", Type: field.TypeUUID},
+	}
+	// ModelPriceWindowsTable holds the schema information for the "model_price_windows" table.
+	ModelPriceWindowsTable = &schema.Table{
+		Name:       "model_price_windows",
+		Columns:    ModelPriceWindowsColumns,
+		PrimaryKey: []*schema.Column{ModelPriceWindowsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "model_price_windows_model_price_plans_windows",
+				Columns:    []*schema.Column{ModelPriceWindowsColumns[12]},
+				RefColumns: []*schema.Column{ModelPricePlansColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "modelpricewindow_price_plan_id_weekday_mask_start_minute_end_minute",
+				Unique:  false,
+				Columns: []*schema.Column{ModelPriceWindowsColumns[12], ModelPriceWindowsColumns[2], ModelPriceWindowsColumns[3], ModelPriceWindowsColumns[4]},
+			},
+		},
+	}
 	// ModelRoutesColumns holds the columns for the "model_routes" table.
 	ModelRoutesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -747,6 +834,8 @@ var (
 		EmailSMTPConfigsTable,
 		EmailVerificationCodesTable,
 		GatewayOperationsTable,
+		ModelPricePlansTable,
+		ModelPriceWindowsTable,
 		ModelRoutesTable,
 		PaymentConfigsTable,
 		ProvidersTable,
@@ -772,6 +861,8 @@ func init() {
 	APIUsagesTable.ForeignKeys[4].RefTable = UsersTable
 	GatewayOperationsTable.ForeignKeys[0].RefTable = APIKeysTable
 	GatewayOperationsTable.ForeignKeys[1].RefTable = UsersTable
+	ModelPricePlansTable.ForeignKeys[0].RefTable = UpstreamModelsTable
+	ModelPriceWindowsTable.ForeignKeys[0].RefTable = ModelPricePlansTable
 	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
 	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
 	ProvidersTable.ForeignKeys[0].RefTable = BillingGroupsTable

@@ -22,6 +22,8 @@ import (
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
+	"github.com/novro-gateway/novro/ent/modelpricewindow"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -52,6 +54,10 @@ type Client struct {
 	EmailVerificationCode *EmailVerificationCodeClient
 	// GatewayOperation is the client for interacting with the GatewayOperation builders.
 	GatewayOperation *GatewayOperationClient
+	// ModelPricePlan is the client for interacting with the ModelPricePlan builders.
+	ModelPricePlan *ModelPricePlanClient
+	// ModelPriceWindow is the client for interacting with the ModelPriceWindow builders.
+	ModelPriceWindow *ModelPriceWindowClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
 	// PaymentConfig is the client for interacting with the PaymentConfig builders.
@@ -91,6 +97,8 @@ func (c *Client) init() {
 	c.EmailSMTPConfig = NewEmailSMTPConfigClient(c.config)
 	c.EmailVerificationCode = NewEmailVerificationCodeClient(c.config)
 	c.GatewayOperation = NewGatewayOperationClient(c.config)
+	c.ModelPricePlan = NewModelPricePlanClient(c.config)
+	c.ModelPriceWindow = NewModelPriceWindowClient(c.config)
 	c.ModelRoute = NewModelRouteClient(c.config)
 	c.PaymentConfig = NewPaymentConfigClient(c.config)
 	c.Provider = NewProviderClient(c.config)
@@ -200,6 +208,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
 		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
 		GatewayOperation:      NewGatewayOperationClient(cfg),
+		ModelPricePlan:        NewModelPricePlanClient(cfg),
+		ModelPriceWindow:      NewModelPriceWindowClient(cfg),
 		ModelRoute:            NewModelRouteClient(cfg),
 		PaymentConfig:         NewPaymentConfigClient(cfg),
 		Provider:              NewProviderClient(cfg),
@@ -236,6 +246,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
 		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
 		GatewayOperation:      NewGatewayOperationClient(cfg),
+		ModelPricePlan:        NewModelPricePlanClient(cfg),
+		ModelPriceWindow:      NewModelPriceWindowClient(cfg),
 		ModelRoute:            NewModelRouteClient(cfg),
 		PaymentConfig:         NewPaymentConfigClient(cfg),
 		Provider:              NewProviderClient(cfg),
@@ -277,9 +289,10 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.GatewayOperation, c.ModelRoute, c.PaymentConfig,
-		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
-		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+		c.EmailVerificationCode, c.GatewayOperation, c.ModelPricePlan,
+		c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig, c.Provider, c.SystemSetting,
+		c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity, c.UserSession, c.Wallet,
+		c.WalletEntry,
 	} {
 		n.Use(hooks...)
 	}
@@ -290,9 +303,10 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.GatewayOperation, c.ModelRoute, c.PaymentConfig,
-		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
-		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
+		c.EmailVerificationCode, c.GatewayOperation, c.ModelPricePlan,
+		c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig, c.Provider, c.SystemSetting,
+		c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity, c.UserSession, c.Wallet,
+		c.WalletEntry,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -313,6 +327,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.EmailVerificationCode.mutate(ctx, m)
 	case *GatewayOperationMutation:
 		return c.GatewayOperation.mutate(ctx, m)
+	case *ModelPricePlanMutation:
+		return c.ModelPricePlan.mutate(ctx, m)
+	case *ModelPriceWindowMutation:
+		return c.ModelPriceWindow.mutate(ctx, m)
 	case *ModelRouteMutation:
 		return c.ModelRoute.mutate(ctx, m)
 	case *PaymentConfigMutation:
@@ -1378,6 +1396,320 @@ func (c *GatewayOperationClient) mutate(ctx context.Context, m *GatewayOperation
 	}
 }
 
+// ModelPricePlanClient is a client for the ModelPricePlan schema.
+type ModelPricePlanClient struct {
+	config
+}
+
+// NewModelPricePlanClient returns a client for the ModelPricePlan from the given config.
+func NewModelPricePlanClient(c config) *ModelPricePlanClient {
+	return &ModelPricePlanClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `modelpriceplan.Hooks(f(g(h())))`.
+func (c *ModelPricePlanClient) Use(hooks ...Hook) {
+	c.hooks.ModelPricePlan = append(c.hooks.ModelPricePlan, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `modelpriceplan.Intercept(f(g(h())))`.
+func (c *ModelPricePlanClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ModelPricePlan = append(c.inters.ModelPricePlan, interceptors...)
+}
+
+// Create returns a builder for creating a ModelPricePlan entity.
+func (c *ModelPricePlanClient) Create() *ModelPricePlanCreate {
+	mutation := newModelPricePlanMutation(c.config, OpCreate)
+	return &ModelPricePlanCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ModelPricePlan entities.
+func (c *ModelPricePlanClient) CreateBulk(builders ...*ModelPricePlanCreate) *ModelPricePlanCreateBulk {
+	return &ModelPricePlanCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ModelPricePlanClient) MapCreateBulk(slice any, setFunc func(*ModelPricePlanCreate, int)) *ModelPricePlanCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ModelPricePlanCreateBulk{err: fmt.Errorf("calling to ModelPricePlanClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ModelPricePlanCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ModelPricePlanCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ModelPricePlan.
+func (c *ModelPricePlanClient) Update() *ModelPricePlanUpdate {
+	mutation := newModelPricePlanMutation(c.config, OpUpdate)
+	return &ModelPricePlanUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ModelPricePlanClient) UpdateOne(_m *ModelPricePlan) *ModelPricePlanUpdateOne {
+	mutation := newModelPricePlanMutation(c.config, OpUpdateOne, withModelPricePlan(_m))
+	return &ModelPricePlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ModelPricePlanClient) UpdateOneID(id uuid.UUID) *ModelPricePlanUpdateOne {
+	mutation := newModelPricePlanMutation(c.config, OpUpdateOne, withModelPricePlanID(id))
+	return &ModelPricePlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ModelPricePlan.
+func (c *ModelPricePlanClient) Delete() *ModelPricePlanDelete {
+	mutation := newModelPricePlanMutation(c.config, OpDelete)
+	return &ModelPricePlanDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ModelPricePlanClient) DeleteOne(_m *ModelPricePlan) *ModelPricePlanDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ModelPricePlanClient) DeleteOneID(id uuid.UUID) *ModelPricePlanDeleteOne {
+	builder := c.Delete().Where(modelpriceplan.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ModelPricePlanDeleteOne{builder}
+}
+
+// Query returns a query builder for ModelPricePlan.
+func (c *ModelPricePlanClient) Query() *ModelPricePlanQuery {
+	return &ModelPricePlanQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeModelPricePlan},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ModelPricePlan entity by its id.
+func (c *ModelPricePlanClient) Get(ctx context.Context, id uuid.UUID) (*ModelPricePlan, error) {
+	return c.Query().Where(modelpriceplan.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ModelPricePlanClient) GetX(ctx context.Context, id uuid.UUID) *ModelPricePlan {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUpstreamModel queries the upstream_model edge of a ModelPricePlan.
+func (c *ModelPricePlanClient) QueryUpstreamModel(_m *ModelPricePlan) *UpstreamModelQuery {
+	query := (&UpstreamModelClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelpriceplan.Table, modelpriceplan.FieldID, id),
+			sqlgraph.To(upstreammodel.Table, upstreammodel.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, modelpriceplan.UpstreamModelTable, modelpriceplan.UpstreamModelColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryWindows queries the windows edge of a ModelPricePlan.
+func (c *ModelPricePlanClient) QueryWindows(_m *ModelPricePlan) *ModelPriceWindowQuery {
+	query := (&ModelPriceWindowClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelpriceplan.Table, modelpriceplan.FieldID, id),
+			sqlgraph.To(modelpricewindow.Table, modelpricewindow.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, modelpriceplan.WindowsTable, modelpriceplan.WindowsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ModelPricePlanClient) Hooks() []Hook {
+	return c.hooks.ModelPricePlan
+}
+
+// Interceptors returns the client interceptors.
+func (c *ModelPricePlanClient) Interceptors() []Interceptor {
+	return c.inters.ModelPricePlan
+}
+
+func (c *ModelPricePlanClient) mutate(ctx context.Context, m *ModelPricePlanMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ModelPricePlanCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ModelPricePlanUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ModelPricePlanUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ModelPricePlanDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ModelPricePlan mutation op: %q", m.Op())
+	}
+}
+
+// ModelPriceWindowClient is a client for the ModelPriceWindow schema.
+type ModelPriceWindowClient struct {
+	config
+}
+
+// NewModelPriceWindowClient returns a client for the ModelPriceWindow from the given config.
+func NewModelPriceWindowClient(c config) *ModelPriceWindowClient {
+	return &ModelPriceWindowClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `modelpricewindow.Hooks(f(g(h())))`.
+func (c *ModelPriceWindowClient) Use(hooks ...Hook) {
+	c.hooks.ModelPriceWindow = append(c.hooks.ModelPriceWindow, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `modelpricewindow.Intercept(f(g(h())))`.
+func (c *ModelPriceWindowClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ModelPriceWindow = append(c.inters.ModelPriceWindow, interceptors...)
+}
+
+// Create returns a builder for creating a ModelPriceWindow entity.
+func (c *ModelPriceWindowClient) Create() *ModelPriceWindowCreate {
+	mutation := newModelPriceWindowMutation(c.config, OpCreate)
+	return &ModelPriceWindowCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ModelPriceWindow entities.
+func (c *ModelPriceWindowClient) CreateBulk(builders ...*ModelPriceWindowCreate) *ModelPriceWindowCreateBulk {
+	return &ModelPriceWindowCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ModelPriceWindowClient) MapCreateBulk(slice any, setFunc func(*ModelPriceWindowCreate, int)) *ModelPriceWindowCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ModelPriceWindowCreateBulk{err: fmt.Errorf("calling to ModelPriceWindowClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ModelPriceWindowCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ModelPriceWindowCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ModelPriceWindow.
+func (c *ModelPriceWindowClient) Update() *ModelPriceWindowUpdate {
+	mutation := newModelPriceWindowMutation(c.config, OpUpdate)
+	return &ModelPriceWindowUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ModelPriceWindowClient) UpdateOne(_m *ModelPriceWindow) *ModelPriceWindowUpdateOne {
+	mutation := newModelPriceWindowMutation(c.config, OpUpdateOne, withModelPriceWindow(_m))
+	return &ModelPriceWindowUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ModelPriceWindowClient) UpdateOneID(id uuid.UUID) *ModelPriceWindowUpdateOne {
+	mutation := newModelPriceWindowMutation(c.config, OpUpdateOne, withModelPriceWindowID(id))
+	return &ModelPriceWindowUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ModelPriceWindow.
+func (c *ModelPriceWindowClient) Delete() *ModelPriceWindowDelete {
+	mutation := newModelPriceWindowMutation(c.config, OpDelete)
+	return &ModelPriceWindowDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ModelPriceWindowClient) DeleteOne(_m *ModelPriceWindow) *ModelPriceWindowDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ModelPriceWindowClient) DeleteOneID(id uuid.UUID) *ModelPriceWindowDeleteOne {
+	builder := c.Delete().Where(modelpricewindow.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ModelPriceWindowDeleteOne{builder}
+}
+
+// Query returns a query builder for ModelPriceWindow.
+func (c *ModelPriceWindowClient) Query() *ModelPriceWindowQuery {
+	return &ModelPriceWindowQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeModelPriceWindow},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ModelPriceWindow entity by its id.
+func (c *ModelPriceWindowClient) Get(ctx context.Context, id uuid.UUID) (*ModelPriceWindow, error) {
+	return c.Query().Where(modelpricewindow.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ModelPriceWindowClient) GetX(ctx context.Context, id uuid.UUID) *ModelPriceWindow {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryPricePlan queries the price_plan edge of a ModelPriceWindow.
+func (c *ModelPriceWindowClient) QueryPricePlan(_m *ModelPriceWindow) *ModelPricePlanQuery {
+	query := (&ModelPricePlanClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(modelpricewindow.Table, modelpricewindow.FieldID, id),
+			sqlgraph.To(modelpriceplan.Table, modelpriceplan.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, modelpricewindow.PricePlanTable, modelpricewindow.PricePlanColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ModelPriceWindowClient) Hooks() []Hook {
+	return c.hooks.ModelPriceWindow
+}
+
+// Interceptors returns the client interceptors.
+func (c *ModelPriceWindowClient) Interceptors() []Interceptor {
+	return c.inters.ModelPriceWindow
+}
+
+func (c *ModelPriceWindowClient) mutate(ctx context.Context, m *ModelPriceWindowMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ModelPriceWindowCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ModelPriceWindowUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ModelPriceWindowUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ModelPriceWindowDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ModelPriceWindow mutation op: %q", m.Op())
+	}
+}
+
 // ModelRouteClient is a client for the ModelRoute schema.
 type ModelRouteClient struct {
 	config
@@ -2272,6 +2604,22 @@ func (c *UpstreamModelClient) QueryAPIUsages(_m *UpstreamModel) *APIUsageQuery {
 			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, id),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.APIUsagesTable, upstreammodel.APIUsagesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPricePlans queries the price_plans edge of a UpstreamModel.
+func (c *UpstreamModelClient) QueryPricePlans(_m *UpstreamModel) *ModelPricePlanQuery {
+	query := (&ModelPricePlanClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, id),
+			sqlgraph.To(modelpriceplan.Table, modelpriceplan.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.PricePlansTable, upstreammodel.PricePlansColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3245,14 +3593,14 @@ func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) 
 type (
 	hooks struct {
 		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		GatewayOperation, ModelRoute, PaymentConfig, Provider, SystemSetting,
-		TopUpOrder, UpstreamModel, User, UserIdentity, UserSession, Wallet,
-		WalletEntry []ent.Hook
+		GatewayOperation, ModelPricePlan, ModelPriceWindow, ModelRoute, PaymentConfig,
+		Provider, SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity,
+		UserSession, Wallet, WalletEntry []ent.Hook
 	}
 	inters struct {
 		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		GatewayOperation, ModelRoute, PaymentConfig, Provider, SystemSetting,
-		TopUpOrder, UpstreamModel, User, UserIdentity, UserSession, Wallet,
-		WalletEntry []ent.Interceptor
+		GatewayOperation, ModelPricePlan, ModelPriceWindow, ModelRoute, PaymentConfig,
+		Provider, SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity,
+		UserSession, Wallet, WalletEntry []ent.Interceptor
 	}
 )

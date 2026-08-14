@@ -27,6 +27,7 @@ import (
 	"github.com/novro-gateway/novro/internal/gateway"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/httpapi"
+	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
@@ -104,6 +105,8 @@ func main() {
 	billingService := billing.NewService(billing.NewEntStore(application.Ent))
 	modelRouteService := modelroute.NewService(modelroute.NewEntStore(application.Ent), providerCipher)
 	upstreamModelService := upstreammodel.NewService(upstreammodel.NewEntStore(application.Ent))
+	// modelPricingService 维护已发布价格方案的共享内存快照，并在发布后替换模型快照。
+	modelPricingService := modelpricing.NewService(modelpricing.NewEntStore(application.Ent))
 	providerModelService := providersync.NewService(application.Ent, providerCipher, nil)
 	billingGroupService := billinggroup.NewService(billinggroup.NewEntStore(application.Ent))
 	referralService := referral.NewService(referral.NewEntStore(application.Ent), cfg.Referral.RewardBPS, cfg.Auth.PublicURL)
@@ -251,11 +254,12 @@ func main() {
 			Referrals:           referralService,
 			ModelRoutes:         modelRouteService,
 			UpstreamModels:      upstreamModelService,
+			ModelPricing:        modelPricingService,
 			ProviderModels:      providerModelService,
 			BillingGroups:       billingGroupService,
 			GatewaySettings:     gatewaySettingsService,
 			Announcements:       announcementService,
-			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Logger: logger}),
+			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Pricing: modelPricingService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,
 			CookieSecure:        cfg.Session.CookieSecure,

@@ -74,10 +74,20 @@ type ListFilter struct {
 	Status Status
 }
 
+/**
+ * Resolved 表示已完成提供商解析并附带本次请求价格快照的路由。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
 type Resolved struct {
 	Record
-	BaseURL string
-	APIKey  string
+	BaseURL            string
+	APIKey             string
+	ResolvedPrices     *upstreammodel.Prices
+	PricingPlanID      *uuid.UUID
+	PricingWindowID    *uuid.UUID
+	PricingWindowLabel string
 }
 
 type Resolution struct {

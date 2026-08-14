@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, LayoutGrid, Pencil, Plus, Power, PowerOff, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Boxes, Clock3, LayoutGrid, Pencil, Plus, Power, PowerOff, RefreshCw, RotateCcw, Save, Search, Send, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -48,6 +50,46 @@ type ModelForm = {
   request: string;
 };
 
+type RateForm = Omit<ModelForm, "providerName" | "upstreamName" | "displayName">;
+
+type PriceWindow = {
+  id: string;
+  label: string;
+  weekday_mask: number;
+  start_minute: number;
+  end_minute: number;
+  rates: Prices;
+};
+
+type PricePlan = {
+  id: string;
+  version: number;
+  mode: "fixed" | "scheduled";
+  timezone: string;
+  effective_from: string;
+  effective_to?: string;
+  status: "draft" | "published" | "retired";
+  default_rates: Prices;
+  windows: PriceWindow[];
+};
+
+type PricingWindowForm = {
+  label: string;
+  weekdayMask: number;
+  start: string;
+  end: string;
+  rates: RateForm;
+};
+
+type PricingForm = {
+  mode: "fixed" | "scheduled";
+  timezone: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  defaultRates: RateForm;
+  windows: PricingWindowForm[];
+};
+
 const EMPTY_FORM: ModelForm = {
   providerName: "",
   upstreamName: "",
@@ -59,6 +101,16 @@ const EMPTY_FORM: ModelForm = {
   output: "",
   request: "",
 };
+
+function nowForDateTimeInput() {
+  const value = new Date(Date.now() + 5 * 60 * 1000);
+  const offset = value.getTimezoneOffset() * 60 * 1000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+const EMPTY_RATE_FORM: RateForm = { input: "", cacheRead: "", cacheWrite: "", cacheWrite1h: "", output: "", request: "" };
+const EMPTY_PRICING_FORM: PricingForm = { mode: "fixed", timezone: "Asia/Shanghai", effectiveFrom: nowForDateTimeInput(), effectiveTo: "", defaultRates: EMPTY_RATE_FORM, windows: [] };
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
 const ALL_PROVIDERS = "__all__";
 const preferredProviderOrder = ["deepseek", "glm", "智谱", "kimi", "moonshot"];
@@ -104,6 +156,139 @@ function toMicros(value: string) {
  */
 function fromMicros(value: number) {
   return String(value / 1_000_000);
+}
+
+function rateFormFromPrices(prices: Prices): RateForm {
+  return {
+    input: fromMicros(prices.input_price_micros),
+    cacheRead: fromMicros(prices.cache_read_price_micros),
+    cacheWrite: fromMicros(prices.cache_write_price_micros),
+    cacheWrite1h: fromMicros(prices.cache_write_1h_price_micros),
+    output: fromMicros(prices.output_price_micros),
+    request: fromMicros(prices.request_price_micros),
+  };
+}
+
+function dateTimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return nowForDateTimeInput();
+  const offset = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function minuteTime(value: number) {
+  if (value === 1440) return "00:00";
+  const hours = Math.floor(value / 60).toString().padStart(2, "0");
+  const minutes = (value % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function parseMinute(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return Number.isInteger(hours) && Number.isInteger(minutes) && hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 ? hours * 60 + minutes : null;
+}
+
+function ratePayload(rate: RateForm): Prices | null {
+  const values = [rate.input, rate.output, rate.cacheRead, rate.cacheWrite, rate.cacheWrite1h, rate.request].map(toMicros);
+  if (values.some((value) => value === null)) return null;
+  return {
+    input_price_micros: values[0] as number,
+    output_price_micros: values[1] as number,
+    cache_read_price_micros: values[2] as number,
+    cache_write_price_micros: values[3] as number,
+    cache_write_1h_price_micros: values[4] as number,
+    request_price_micros: values[5] as number,
+  };
+}
+
+function planPayload(form: PricingForm) {
+  const defaultRates = ratePayload(form.defaultRates);
+  if (!defaultRates) return null;
+  const windows = [] as Array<{ label: string; weekday_mask: number; start_minute: number; end_minute: number; rates: Prices }>;
+  for (const window of form.windows) {
+    const rates = ratePayload(window.rates);
+    const start = parseMinute(window.start);
+    const parsedEnd = parseMinute(window.end);
+    const end = parsedEnd === 0 && start !== null && start > 0 ? 1440 : parsedEnd;
+    if (!rates || start === null || end === null) return null;
+    windows.push({
+      label: window.label,
+      weekday_mask: window.weekdayMask,
+      start_minute: start,
+      end_minute: end,
+      rates,
+    });
+  }
+  const effectiveFrom = new Date(form.effectiveFrom);
+  const effectiveTo = form.effectiveTo ? new Date(form.effectiveTo) : null;
+  if (Number.isNaN(effectiveFrom.getTime()) || (effectiveTo && Number.isNaN(effectiveTo.getTime()))) return null;
+  return {
+    mode: form.mode,
+    timezone: form.timezone,
+    effective_from: effectiveFrom.toISOString(),
+    ...(effectiveTo ? { effective_to: effectiveTo.toISOString() } : {}),
+    default_rates: defaultRates,
+    windows,
+  };
+}
+
+function pricingFormFromModel(model: CatalogModel): PricingForm {
+  return { ...EMPTY_PRICING_FORM, defaultRates: rateFormFromPrices(model.prices) };
+}
+
+function pricingFormFromPlan(plan: PricePlan): PricingForm {
+  return {
+    mode: plan.mode,
+    timezone: plan.timezone,
+    effectiveFrom: dateTimeInput(plan.effective_from),
+    effectiveTo: plan.effective_to ? dateTimeInput(plan.effective_to) : "",
+    defaultRates: rateFormFromPrices(plan.default_rates),
+    windows: plan.windows.map((window) => ({
+      label: window.label,
+      weekdayMask: window.weekday_mask,
+      start: minuteTime(window.start_minute),
+      end: minuteTime(window.end_minute),
+      rates: rateFormFromPrices(window.rates),
+    })),
+  };
+}
+
+/**
+ * sortPricePlans 按版本号从新到旧整理价格方案，保证发布新版本后历史版本仍稳定展示。
+ * @param plans 待整理的价格方案列表。
+ * @return 不修改原数组的版本排序结果。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+function sortPricePlans(plans: PricePlan[]) {
+  return [...plans].sort((left, right) => right.version - left.version);
+}
+
+/**
+ * formatPlanDate 展示价格版本的生效时间，并将初始化哨兵时间转换为业务可读文案。
+ * @param value 价格版本的 ISO 时间字符串。
+ * @return 面向管理员展示的本地化时间文本。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+function formatPlanDate(value: string) {
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "时间无效";
+  if (timestamp <= new Date("1971-01-01T00:00:00Z").getTime()) return "系统初始化";
+  return new Date(value).toLocaleString("zh-CN");
+}
+
+/**
+ * planStatusLabel 将数据库状态转换为管理员能直接理解的版本状态。
+ * @param plan 当前价格版本。
+ * @return 版本状态和是否仍是当前生效版本。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+function planStatusLabel(plan: PricePlan) {
+  const label = plan.status === "draft" ? "草稿" : plan.status === "retired" ? "已退役" : plan.effective_to ? "历史版本" : "已发布";
+  const current = plan.status === "published" && !plan.effective_to;
+  return { label, current };
 }
 
 /**
@@ -182,6 +367,47 @@ function PriceFields({ form, setForm }: { form: ModelForm; setForm: (form: Model
   );
 }
 
+function PricingRateFields({ rate, setRate, prefix }: { rate: RateForm; setRate: (rate: RateForm) => void; prefix: string }) {
+  const fields: Array<[keyof RateForm, string, string]> = [
+    ["input", "普通输入", "元 / 1M"],
+    ["cacheRead", "缓存命中", "元 / 1M"],
+    ["cacheWrite", "缓存创建（5 分钟）", "元 / 1M"],
+    ["cacheWrite1h", "缓存创建（1 小时）", "元 / 1M"],
+    ["output", "输出", "元 / 1M"],
+    ["request", "请求固定费", "元 / 次"],
+  ];
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {fields.map(([key, label, suffix]) => (
+        <div className="flex flex-col gap-2" key={key}>
+          <Label htmlFor={`${prefix}-${key}`}>{label}</Label>
+          <div className="relative">
+            <Input className="pr-20" id={`${prefix}-${key}`} inputMode="decimal" min="0" onChange={(event) => setRate({ ...rate, [key]: event.target.value })} placeholder="0" required step="0.000001" title={`${label}价格必须是非负数字，可保留到 6 位小数`} type="number" value={rate[key]} />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WeekdayFields({ mask, onChange, prefix }: { mask: number; onChange: (mask: number) => void; prefix: string }) {
+  return (
+    <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
+      <legend className="mb-2 text-sm font-medium">重复星期</legend>
+      {WEEKDAYS.map((day, index) => {
+        const id = `${prefix}-${index}`;
+        return (
+          <label className="flex items-center gap-2 text-sm" htmlFor={id} key={day}>
+            <Checkbox checked={(mask & (1 << index)) !== 0} id={id} onCheckedChange={(checked) => onChange(checked === true ? mask | (1 << index) : mask & ~(1 << index))} />
+            周{day}
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
 /**
  * UpstreamModelsClient 渲染对应的 React 界面组件。
  * @param none 无参数。
@@ -201,6 +427,13 @@ export default function UpstreamModelsClient() {
   const [statusModel, setStatusModel] = useState<CatalogModel | null>(null);
   const [deletingModel, setDeletingModel] = useState<CatalogModel | null>(null);
   const [form, setForm] = useState<ModelForm>(EMPTY_FORM);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [pricingModel, setPricingModel] = useState<CatalogModel | null>(null);
+  const [pricingPlans, setPricingPlans] = useState<PricePlan[]>([]);
+  const [pricingDraftID, setPricingDraftID] = useState<string | null>(null);
+  const [pricingForm, setPricingForm] = useState<PricingForm>(EMPTY_PRICING_FORM);
+  const [pricingBusy, setPricingBusy] = useState(false);
+  const [pricingMessage, setPricingMessage] = useState("");
   const [bulkStatus, setBulkStatus] = useState<"active" | "disabled" | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
@@ -287,6 +520,105 @@ export default function UpstreamModelsClient() {
     setEditorOpen(true);
   }
 
+  async function beginPricing(model: CatalogModel) {
+    setPricingModel(model);
+    setPricingPlans([]);
+    setPricingDraftID(null);
+    setPricingForm(pricingFormFromModel(model));
+    setPricingMessage("");
+    setPricingBusy(true);
+    setPricingOpen(true);
+    const response = await fetch(`/api/admin/upstream-models/${model.id}/price-plans`, { cache: "no-store" });
+    setPricingBusy(false);
+    if (response.status === 401) { router.replace("/login"); return; }
+    if (response.status === 403) { router.replace("/console"); return; }
+    if (!response.ok) { setPricingMessage("加载价格方案失败"); return; }
+    const plans = sortPricePlans(((await response.json()) as { price_plans: PricePlan[] }).price_plans);
+    const draft = plans.find((plan) => plan.status === "draft");
+    const source = draft ?? plans[0];
+    setPricingPlans(plans);
+    setPricingDraftID(draft?.id ?? null);
+    if (draft) setPricingForm(pricingFormFromPlan(draft));
+    else if (source) setPricingForm({ ...pricingFormFromPlan(source), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+  }
+
+  function addPricingWindow() {
+    setPricingForm((current) => ({
+      ...current,
+      mode: "scheduled",
+      windows: [...current.windows, { label: `高峰时段 ${current.windows.length + 1}`, weekdayMask: 127, start: "09:00", end: "12:00", rates: { ...current.defaultRates } }],
+    }));
+  }
+
+  function removePricingWindow(index: number) {
+    setPricingForm((current) => ({ ...current, windows: current.windows.filter((_, itemIndex) => itemIndex !== index) }));
+  }
+
+  async function submitPricing(publish: boolean) {
+    if (!pricingModel) return;
+    const body = planPayload(pricingForm);
+    if (!body) { setPricingMessage("请检查价格、生效时间和时段填写"); return; }
+    if (pricingForm.mode === "scheduled" && pricingForm.windows.length === 0) { setPricingMessage("分时价格至少需要一个特殊时段"); return; }
+    setPricingBusy(true);
+    const endpoint = pricingDraftID ? `/api/admin/upstream-models/${pricingModel.id}/price-plans/${pricingDraftID}` : `/api/admin/upstream-models/${pricingModel.id}/price-plans`;
+    const response = await fetch(endpoint, { method: pricingDraftID ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!response.ok) { setPricingBusy(false); setPricingMessage(await errorMessage(response)); return; }
+    const created = ((await response.json()) as { price_plan: PricePlan }).price_plan;
+    setPricingDraftID(created.id);
+    if (publish) {
+      const published = await fetch(`/api/admin/upstream-models/${pricingModel.id}/price-plans/${created.id}/publish`, { method: "POST" });
+      if (!published.ok) { setPricingBusy(false); setPricingMessage(await errorMessage(published)); return; }
+      setPricingMessage("价格方案已发布");
+      setPricingDraftID(null);
+    } else {
+      setPricingMessage("价格方案草稿已保存");
+    }
+    const refreshed = await fetch(`/api/admin/upstream-models/${pricingModel.id}/price-plans`, { cache: "no-store" });
+    if (refreshed.ok) {
+      const plans = sortPricePlans(((await refreshed.json()) as { price_plans: PricePlan[] }).price_plans);
+      setPricingPlans(plans);
+      if (publish) {
+        const publishedPlan = plans.find((plan) => plan.id === created.id);
+        if (publishedPlan) setPricingForm({ ...pricingFormFromPlan(publishedPlan), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+        await load();
+      }
+    }
+    setPricingBusy(false);
+  }
+
+  /**
+   * republishPricingPlan 切换历史价格版本的生效区间，不创建新的价格版本。
+   * @param plan 要切换到的历史价格版本。
+   * @return none 无返回值。
+   * @author Gao Hongshun
+   * @date 2026-08-14
+   */
+  async function republishPricingPlan(plan: PricePlan) {
+    if (!pricingModel || pricingBusy) return;
+    setPricingBusy(true);
+    setPricingMessage(`正在切换到版本 ${plan.version}...`);
+    const response = await fetch(`/api/admin/upstream-models/${pricingModel.id}/price-plans/${plan.id}/republish`, { method: "POST" });
+    if (!response.ok) {
+      setPricingBusy(false);
+      setPricingMessage(await errorMessage(response));
+      return;
+    }
+    await response.json();
+    const refreshed = await fetch(`/api/admin/upstream-models/${pricingModel.id}/price-plans`, { cache: "no-store" });
+    if (refreshed.ok) {
+      const plans = sortPricePlans(((await refreshed.json()) as { price_plans: PricePlan[] }).price_plans);
+      setPricingPlans(plans);
+      const current = plans.find((item) => item.status === "published" && !item.effective_to);
+      if (current) {
+        setPricingForm({ ...pricingFormFromPlan(current), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+        setPricingDraftID(null);
+      }
+    }
+    setPricingMessage(`已切换到版本 ${plan.version}，未生成新版本`);
+    await load();
+    setPricingBusy(false);
+  }
+
   /**
    * submit 封装该名称对应的业务处理逻辑。
    * @param event 触发当前处理流程的事件。
@@ -295,7 +627,7 @@ export default function UpstreamModelsClient() {
    */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const body = payload(form);
+    const body = editing ? { provider_name: form.providerName, upstream_name: form.upstreamName, display_name: form.displayName } : payload(form);
     if (!body) { setMessage("价格必须是非负数字，可保留到 6 位小数"); return; }
     setBusy(true);
     const response = await fetch(editing ? `/api/admin/upstream-models/${editing.id}` : "/api/admin/upstream-models", {
@@ -443,7 +775,7 @@ export default function UpstreamModelsClient() {
                       <TableCell>{money(model.prices.output_price_micros)}</TableCell>
                       <TableCell>{money(model.prices.request_price_micros)}</TableCell>
                       <TableCell>{!model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : <Badge variant={model.status === "active" ? "outline" : "secondary"}>{model.status === "active" ? "启用" : "停用"}</Badge>}</TableCell>
-                      <TableCell><div className="flex justify-end gap-1"><Button aria-label={`编辑 ${model.display_name}`} onClick={() => beginEdit(model)} size="icon-sm" title="编辑" variant="ghost"><Pencil /></Button><Button aria-label={`${model.status === "active" ? "停用" : "启用"} ${model.display_name}`} onClick={() => setStatusModel(model)} size="icon-sm" title={model.status === "active" ? "停用" : "启用"} variant="ghost">{model.status === "active" ? <PowerOff /> : <Power />}</Button><Button aria-label={`删除 ${model.display_name}`} onClick={() => setDeletingModel(model)} size="icon-sm" title="删除目录模型" variant="ghost"><Trash2 /></Button></div></TableCell>
+                      <TableCell><div className="flex justify-end gap-1"><Button aria-label={`配置 ${model.display_name} 的价格方案`} onClick={() => void beginPricing(model)} size="icon-sm" title="价格方案" variant="ghost"><Clock3 /></Button><Button aria-label={`编辑 ${model.display_name}`} onClick={() => beginEdit(model)} size="icon-sm" title="编辑" variant="ghost"><Pencil /></Button><Button aria-label={`${model.status === "active" ? "停用" : "启用"} ${model.display_name}`} onClick={() => setStatusModel(model)} size="icon-sm" title={model.status === "active" ? "停用" : "启用"} variant="ghost">{model.status === "active" ? <PowerOff /> : <Power />}</Button><Button aria-label={`删除 ${model.display_name}`} onClick={() => setDeletingModel(model)} size="icon-sm" title="删除目录模型" variant="ghost"><Trash2 /></Button></div></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -454,22 +786,128 @@ export default function UpstreamModelsClient() {
       </div>
       </div>
 
-      <Sheet onOpenChange={(open) => { setEditorOpen(open); if (!open) { setEditing(null); setForm(EMPTY_FORM); } }} open={editorOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl" side="right">
-          <SheetHeader className="border-b px-6 py-5">
-            <SheetTitle>{editing ? "编辑目录模型" : "新增目录模型"}</SheetTitle>
-            <SheetDescription>模型 ID 全局唯一，所有提供商关联同一份目录价格；厂商标签仅用于分类，不绑定具体提供商配置。</SheetDescription>
-          </SheetHeader>
-          <form className="space-y-5 px-6" id="catalog-model-form" onSubmit={submit}>
+      {editing ? <Dialog onOpenChange={(open) => { setEditorOpen(open); if (!open) { setEditing(null); setForm(EMPTY_FORM); } }} open={editorOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>编辑目录模型</DialogTitle><DialogDescription>模型 ID 全局唯一，厂商标签仅用于分类，不绑定具体提供商配置。</DialogDescription></DialogHeader>
+          <form className="flex flex-col gap-5" id="catalog-model-form" onSubmit={submit}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2"><Label htmlFor="catalog-provider-name">厂商标签</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required title="厂商标签不能为空，最长 128 个字符" value={form.providerName} /></div>
               <div className="space-y-2"><Label htmlFor="catalog-upstream-name">模型 ID</Label><Input id="catalog-upstream-name" maxLength={256} onChange={(event) => setForm({ ...form, upstreamName: event.target.value })} placeholder="例如 deepseek-chat" required title="模型 ID 不能为空，最长 256 个字符；需要与客户端请求或上游返回的模型 ID 保持一致" value={form.upstreamName} /><p className="text-xs text-muted-foreground">填写客户端请求使用的模型 ID 或上游同步返回的模型 ID，最长 256 个字符。</p></div>
             </div>
             <div className="space-y-2"><Label htmlFor="catalog-display-name">显示名称</Label><Input id="catalog-display-name" maxLength={128} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.displayName} /></div>
-            <p className="border-y py-3 text-sm text-muted-foreground">上游同步只发现模型 ID，不会导入上游价格。下面的价格是 Novro 的全局定价，所有提供商关联同一模型 ID 时共用这一份价格；价格需为非负数字，最多保留 6 位小数。</p>
+            <p className="border-y py-3 text-sm text-muted-foreground">价格通过模型列表中的价格方案入口单独维护。</p>
+          </form>
+          <DialogFooter><Button disabled={busy} form="catalog-model-form" type="submit"><Boxes />{busy ? "正在保存..." : "保存目录模型"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog> : <Sheet onOpenChange={(open) => { setEditorOpen(open); if (!open) setForm(EMPTY_FORM); }} open={editorOpen}>
+        <SheetContent className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden data-[side=right]:w-full! sm:data-[side=right]:w-[min(48rem,calc(100vw-2rem))]! sm:data-[side=right]:max-w-none!" side="right">
+          <SheetHeader className="border-b px-6 py-5">
+            <SheetTitle>新增目录模型</SheetTitle>
+            <SheetDescription>模型 ID 全局唯一，所有提供商关联同一份目录价格；厂商标签仅用于分类，不绑定具体提供商配置。</SheetDescription>
+          </SheetHeader>
+          <form className="flex flex-col gap-5 overflow-y-auto px-6 py-5" id="catalog-model-form" onSubmit={submit}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2"><Label htmlFor="catalog-provider-name">厂商标签</Label><Input id="catalog-provider-name" maxLength={128} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="例如 DeepSeek" required title="厂商标签不能为空，最长 128 个字符" value={form.providerName} /></div>
+              <div className="space-y-2"><Label htmlFor="catalog-upstream-name">模型 ID</Label><Input id="catalog-upstream-name" maxLength={256} onChange={(event) => setForm({ ...form, upstreamName: event.target.value })} placeholder="例如 deepseek-chat" required title="模型 ID 不能为空，最长 256 个字符；需要与客户端请求或上游返回的模型 ID 保持一致" value={form.upstreamName} /><p className="text-xs text-muted-foreground">填写客户端请求使用的模型 ID 或上游同步返回的模型 ID，最长 256 个字符。</p></div>
+            </div>
+            <div className="space-y-2"><Label htmlFor="catalog-display-name">显示名称</Label><Input id="catalog-display-name" maxLength={128} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.displayName} /></div>
             <PriceFields form={form} setForm={setForm} />
           </form>
-          <SheetFooter className="border-t px-6"><Button disabled={busy} form="catalog-model-form" type="submit"><Boxes />{busy ? "正在保存..." : "保存目录模型"}</Button></SheetFooter>
+          <SheetFooter className="border-t px-6 py-4"><Button disabled={busy} form="catalog-model-form" type="submit"><Boxes />{busy ? "正在保存..." : "保存目录模型"}</Button></SheetFooter>
+        </SheetContent>
+      </Sheet>}
+
+      <Sheet onOpenChange={(open) => { setPricingOpen(open); if (!open) { setPricingModel(null); setPricingPlans([]); setPricingDraftID(null); setPricingForm(EMPTY_PRICING_FORM); setPricingMessage(""); } }} open={pricingOpen}>
+        <SheetContent className="w-full! overflow-y-auto data-[side=right]:w-full! sm:data-[side=right]:w-[min(64rem,calc(100vw-2rem))]! sm:data-[side=right]:max-w-none!" side="right">
+          <SheetHeader className="border-b px-6 py-5">
+            <SheetTitle>{pricingModel ? `${pricingModel.display_name} 价格方案` : "价格方案"}</SheetTitle>
+            <SheetDescription>这里配置 Novro 对客户结算使用的价格。草稿发布后生效，已发布版本不可编辑。</SheetDescription>
+          </SheetHeader>
+          <form className="flex flex-col gap-6 px-6" id="model-pricing-form" onSubmit={(event) => { event.preventDefault(); void submitPricing(false); }}>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="pricing-mode">计价方式</Label>
+                <Select value={pricingForm.mode} onValueChange={(value) => setPricingForm((current) => ({ ...current, mode: value as PricingForm["mode"], windows: value === "fixed" ? [] : current.windows }))}>
+                  <SelectTrigger id="pricing-mode"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="fixed">固定价格</SelectItem><SelectItem value="scheduled">分时价格</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="pricing-timezone">计价时区</Label>
+                <Input id="pricing-timezone" list="pricing-timezones" maxLength={64} onChange={(event) => setPricingForm((current) => ({ ...current, timezone: event.target.value }))} required value={pricingForm.timezone} />
+                <datalist id="pricing-timezones"><option value="Asia/Shanghai" /><option value="UTC" /><option value="America/Los_Angeles" /><option value="Europe/London" /></datalist>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="pricing-effective-from">生效时间</Label>
+                <Input id="pricing-effective-from" onChange={(event) => setPricingForm((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={pricingForm.effectiveFrom} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="pricing-effective-to">失效时间</Label>
+                <Input id="pricing-effective-to" onChange={(event) => setPricingForm((current) => ({ ...current, effectiveTo: event.target.value }))} type="datetime-local" value={pricingForm.effectiveTo} />
+              </div>
+            </div>
+
+            <section className="flex flex-col gap-4 border-t pt-5" aria-labelledby="default-pricing-title">
+              <div><h3 className="text-sm font-semibold" id="default-pricing-title">默认价格</h3><p className="mt-1 text-xs text-muted-foreground">固定计价直接使用此价格；分时计价在未命中特殊时段时使用此价格。</p></div>
+              <PricingRateFields prefix="pricing-default" rate={pricingForm.defaultRates} setRate={(defaultRates) => setPricingForm((current) => ({ ...current, defaultRates }))} />
+            </section>
+
+            {pricingForm.mode === "scheduled" ? (
+              <section className="flex flex-col gap-4 border-t pt-5" aria-labelledby="pricing-windows-title">
+                <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold" id="pricing-windows-title">特殊时段</h3><Button onClick={addPricingWindow} size="sm" type="button" variant="outline"><Plus />添加时段</Button></div>
+                {pricingForm.windows.map((window, index) => (
+                  <fieldset className="flex flex-col gap-4 rounded-md border p-4" key={`pricing-window-${index}`}>
+                    <legend className="sr-only">特殊时段 {index + 1}</legend>
+                    <div className="flex items-end gap-3">
+                      <div className="flex flex-1 flex-col gap-2"><Label htmlFor={`pricing-window-${index}-label`}>时段名称</Label><Input id={`pricing-window-${index}-label`} maxLength={64} onChange={(event) => setPricingForm((current) => ({ ...current, windows: current.windows.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) }))} required value={window.label} /></div>
+                      <Button aria-label={`删除特殊时段 ${index + 1}`} onClick={() => removePricingWindow(index)} size="icon" title="删除时段" type="button" variant="ghost"><X /></Button>
+                    </div>
+                    <WeekdayFields mask={window.weekdayMask} onChange={(weekdayMask) => setPricingForm((current) => ({ ...current, windows: current.windows.map((item, itemIndex) => itemIndex === index ? { ...item, weekdayMask } : item) }))} prefix={`pricing-window-${index}-weekday`} />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="flex flex-col gap-2"><Label htmlFor={`pricing-window-${index}-start`}>开始时间</Label><Input id={`pricing-window-${index}-start`} onChange={(event) => setPricingForm((current) => ({ ...current, windows: current.windows.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.target.value } : item) }))} required type="time" value={window.start} /></div>
+                      <div className="flex flex-col gap-2"><Label htmlFor={`pricing-window-${index}-end`}>结束时间</Label><Input id={`pricing-window-${index}-end`} onChange={(event) => setPricingForm((current) => ({ ...current, windows: current.windows.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.target.value } : item) }))} required type="time" value={window.end} /></div>
+                    </div>
+                    <PricingRateFields prefix={`pricing-window-${index}-rate`} rate={window.rates} setRate={(rates) => setPricingForm((current) => ({ ...current, windows: current.windows.map((item, itemIndex) => itemIndex === index ? { ...item, rates } : item) }))} />
+                  </fieldset>
+                ))}
+                {pricingForm.windows.length === 0 ? <p className="border-y py-4 text-sm text-muted-foreground">尚未添加特殊时段。</p> : null}
+              </section>
+            ) : null}
+
+            <section className="flex flex-col gap-3 border-t pt-5" aria-labelledby="pricing-history-title">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold" id="pricing-history-title">版本记录</h3>
+                {pricingPlans.length > 0 ? <span className="text-xs text-muted-foreground">共 {pricingPlans.length} 个版本，历史版本不会删除</span> : null}
+              </div>
+              <p className="text-xs text-muted-foreground">切换历史版本会直接调整已有版本的生效区间，不会生成新版本。</p>
+              {pricingPlans.length === 0 ? <p className="text-sm text-muted-foreground">{pricingBusy ? "正在加载..." : "暂无价格版本"}</p> : (
+                <div className="max-h-80 divide-y overflow-y-auto rounded-md border">
+                  {pricingPlans.map((plan) => {
+                    const status = planStatusLabel(plan);
+                    return <article className="flex flex-col gap-2 px-4 py-3 text-sm" data-testid={`pricing-version-${plan.version}`} key={plan.id}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">版本 {plan.version} · {plan.mode === "fixed" ? "固定价格" : "分时价格"}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">生效区间：{formatPlanDate(plan.effective_from)} 至 {plan.effective_to ? formatPlanDate(plan.effective_to) : "持续生效"}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={plan.status === "draft" ? "secondary" : "outline"}>{status.label}</Badge>
+                          {status.current ? <Badge>当前生效</Badge> : null}
+                          {plan.status === "published" && plan.effective_to ? <Button aria-label={`切换并发布版本 ${plan.version}`} data-icon="inline-start" disabled={pricingBusy} onClick={() => void republishPricingPlan(plan)} size="sm" title="直接调整此版本的生效区间，不创建新版本" type="button" variant="outline"><RotateCcw />切换并发布</Button> : null}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">默认输入 {money(plan.default_rates.input_price_micros)} · 输出 {money(plan.default_rates.output_price_micros)}{plan.mode === "scheduled" ? ` · 特殊时段 ${plan.windows.length} 个` : ""}</p>
+                    </article>;
+                  })}
+                </div>
+              )}
+            </section>
+            {pricingMessage ? <p className="border-y bg-background px-4 py-3 text-sm" role="status">{pricingMessage}</p> : null}
+          </form>
+          <SheetFooter className="border-t px-6">
+            <Button disabled={pricingBusy || !pricingModel} form="model-pricing-form" type="submit" variant="outline"><Save />{pricingBusy ? "正在保存..." : "保存草稿"}</Button>
+            <Button disabled={pricingBusy || !pricingModel} onClick={() => void submitPricing(true)} type="button"><Send />保存并发布</Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
 

@@ -331,7 +331,7 @@ export default function BillingGroupsClient() {
       </Dialog>
 
       <Sheet onOpenChange={(open) => { if (!open) { setEditing(null); setForm(emptyForm); setUserQuery(""); } }} open={editing !== null}>
-        <SheetContent className="grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden data-[side=right]:w-full! sm:data-[side=right]:w-[28rem]! sm:data-[side=right]:max-w-none!" side="right"><SheetHeader className="border-b px-6 py-5"><SheetTitle>编辑计费分组</SheetTitle></SheetHeader><form className="space-y-5 overflow-y-auto px-6" id="edit-group-form" onSubmit={submit}>{fields}</form><SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-group-form" type="submit"><Pencil />保存修改</Button></SheetFooter></SheetContent>
+        <SheetContent className="grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden data-[side=right]:w-full! sm:data-[side=right]:w-[min(48rem,calc(100vw-2rem))]! sm:data-[side=right]:max-w-none!" side="right"><SheetHeader className="border-b px-6 py-5"><SheetTitle>编辑计费分组</SheetTitle></SheetHeader><form className="space-y-5 overflow-y-auto px-6" id="edit-group-form" onSubmit={submit}>{fields}</form><SheetFooter className="border-t px-6"><Button disabled={busy} form="edit-group-form" type="submit"><Pencil />保存修改</Button></SheetFooter></SheetContent>
       </Sheet>
 
       <AlertDialog onOpenChange={(open) => { if (!open) setStatusGroup(null); }} open={statusGroup !== null}>

@@ -24,6 +24,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/email"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
+	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/payment"
 	"github.com/novro-gateway/novro/internal/provider"
@@ -533,6 +534,22 @@ type UpstreamModelService interface {
 	Delete(context.Context, uuid.UUID) error
 }
 
+/**
+ * ModelPricingService 定义管理端价格方案和网关价格解析的应用服务能力。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+type ModelPricingService interface {
+	List(context.Context, uuid.UUID) ([]modelpricing.Plan, error)
+	CreateDraft(context.Context, uuid.UUID, modelpricing.PlanInput) (modelpricing.Plan, error)
+	UpdateDraft(context.Context, uuid.UUID, modelpricing.PlanInput) (modelpricing.Plan, error)
+	Publish(context.Context, uuid.UUID) (modelpricing.Plan, error)
+	Republish(context.Context, uuid.UUID) (modelpricing.RepublishResult, error)
+	DeleteDraft(context.Context, uuid.UUID) error
+	Resolve(context.Context, uuid.UUID, time.Time) (modelpricing.Resolution, error)
+}
+
 type ProviderModelService interface {
 	/**
 	 * Sync 声明该接口方法需要提供的业务能力。
@@ -677,6 +694,7 @@ type Dependencies struct {
 	Announcements       AnnouncementService
 	ModelRoutes         ModelRouteService
 	UpstreamModels      UpstreamModelService
+	ModelPricing        ModelPricingService
 	ProviderModels      ProviderModelService
 	BillingGroups       BillingGroupService
 	Gateway             http.Handler
@@ -704,6 +722,7 @@ type apiHandler struct {
 	announcements       AnnouncementService
 	modelRoutes         ModelRouteService
 	upstreamModels      UpstreamModelService
+	modelPricing        ModelPricingService
 	providerModels      ProviderModelService
 	billingGroups       BillingGroupService
 	logger              *slog.Logger
@@ -741,6 +760,7 @@ func New(deps Dependencies) http.Handler {
 		announcements:       deps.Announcements,
 		modelRoutes:         deps.ModelRoutes,
 		upstreamModels:      deps.UpstreamModels,
+		modelPricing:        deps.ModelPricing,
 		providerModels:      deps.ProviderModels,
 		billingGroups:       deps.BillingGroups,
 		logger:              logger,
@@ -824,6 +844,12 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("PATCH /api/admin/upstream-models/{id}", h.updateUpstreamModel)
 	mux.HandleFunc("DELETE /api/admin/upstream-models/{id}", h.deleteUpstreamModel)
 	mux.HandleFunc("PATCH /api/admin/upstream-models/{id}/status", h.setUpstreamModelStatus)
+	mux.HandleFunc("GET /api/admin/upstream-models/{id}/price-plans", h.listModelPricePlans)
+	mux.HandleFunc("POST /api/admin/upstream-models/{id}/price-plans", h.createModelPricePlan)
+	mux.HandleFunc("PATCH /api/admin/upstream-models/{id}/price-plans/{plan_id}", h.updateModelPricePlan)
+	mux.HandleFunc("DELETE /api/admin/upstream-models/{id}/price-plans/{plan_id}", h.deleteModelPricePlan)
+	mux.HandleFunc("POST /api/admin/upstream-models/{id}/price-plans/{plan_id}/publish", h.publishModelPricePlan)
+	mux.HandleFunc("POST /api/admin/upstream-models/{id}/price-plans/{plan_id}/republish", h.republishModelPricePlan)
 	mux.HandleFunc("GET /api/admin/billing-groups", h.listBillingGroups)
 	mux.HandleFunc("POST /api/admin/billing-groups", h.createBillingGroup)
 	mux.HandleFunc("PATCH /api/admin/billing-groups/{id}", h.updateBillingGroup)
@@ -1914,6 +1940,26 @@ func (h *apiHandler) listUpstreamModels(w http.ResponseWriter, r *http.Request) 
 		h.writeUpstreamModelError(w, "list upstream models", err)
 		return
 	}
+	if h.modelPricing != nil {
+		resolvedAt := time.Now().UTC()
+		for index := range records {
+			resolution, resolveErr := h.modelPricing.Resolve(r.Context(), records[index].ID, resolvedAt)
+			if errors.Is(resolveErr, modelpricing.ErrNoPrice) {
+				records[index].PricingConfigured = false
+				continue
+			}
+			if resolveErr != nil {
+				h.internalError(w, "resolve admin model pricing", resolveErr)
+				return
+			}
+			records[index].Prices = upstreammodel.Prices{
+				InputMicros: resolution.Rates.InputMicros, OutputMicros: resolution.Rates.OutputMicros,
+				CacheReadMicros: resolution.Rates.CacheReadMicros, CacheWriteMicros: resolution.Rates.CacheWriteMicros,
+				CacheWrite1hMicros: resolution.Rates.CacheWrite1hMicros, RequestMicros: resolution.Rates.RequestMicros,
+			}
+			records[index].PricingConfigured = true
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"upstream_models": records})
 }
 
@@ -2022,6 +2068,213 @@ func (h *apiHandler) deleteUpstreamModel(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) listModelPricePlans(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, ok := parseModelPricingID(w, r.PathValue("id"), "上游模型 ID")
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "list model price plans", errors.New("model pricing service is unavailable"))
+		return
+	}
+	plans, err := h.modelPricing.List(r.Context(), modelID)
+	if err != nil {
+		h.writeModelPricingError(w, "list model price plans", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"price_plans": plans})
+}
+
+func (h *apiHandler) createModelPricePlan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, ok := parseModelPricingID(w, r.PathValue("id"), "上游模型 ID")
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "create model price plan", errors.New("model pricing service is unavailable"))
+		return
+	}
+	var input modelpricing.PlanInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "价格方案格式无效")
+		return
+	}
+	plan, err := h.modelPricing.CreateDraft(r.Context(), modelID, input)
+	if err != nil {
+		h.writeModelPricingError(w, "create model price plan", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"price_plan": plan})
+}
+
+func (h *apiHandler) updateModelPricePlan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, planID, ok := parseModelPricingPair(w, r.PathValue("id"), r.PathValue("plan_id"))
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "update model price plan", errors.New("model pricing service is unavailable"))
+		return
+	}
+	belongs, err := h.modelPricePlanBelongsTo(r.Context(), modelID, planID)
+	if err != nil {
+		h.writeModelPricingError(w, "check model price plan ownership", err)
+		return
+	}
+	if !belongs {
+		writeError(w, http.StatusNotFound, "not_found", "价格方案不存在")
+		return
+	}
+	var input modelpricing.PlanInput
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "价格方案格式无效")
+		return
+	}
+	plan, err := h.modelPricing.UpdateDraft(r.Context(), planID, input)
+	if err != nil {
+		h.writeModelPricingError(w, "update model price plan", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"price_plan": plan})
+}
+
+func (h *apiHandler) deleteModelPricePlan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, planID, ok := parseModelPricingPair(w, r.PathValue("id"), r.PathValue("plan_id"))
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "delete model price plan", errors.New("model pricing service is unavailable"))
+		return
+	}
+	belongs, err := h.modelPricePlanBelongsTo(r.Context(), modelID, planID)
+	if err != nil {
+		h.writeModelPricingError(w, "check model price plan ownership", err)
+		return
+	}
+	if !belongs {
+		writeError(w, http.StatusNotFound, "not_found", "价格方案不存在")
+		return
+	}
+	if err := h.modelPricing.DeleteDraft(r.Context(), planID); err != nil {
+		h.writeModelPricingError(w, "delete model price plan", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *apiHandler) publishModelPricePlan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, planID, ok := parseModelPricingPair(w, r.PathValue("id"), r.PathValue("plan_id"))
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "publish model price plan", errors.New("model pricing service is unavailable"))
+		return
+	}
+	belongs, err := h.modelPricePlanBelongsTo(r.Context(), modelID, planID)
+	if err != nil {
+		h.writeModelPricingError(w, "check model price plan ownership", err)
+		return
+	}
+	if !belongs {
+		writeError(w, http.StatusNotFound, "not_found", "价格方案不存在")
+		return
+	}
+	plan, err := h.modelPricing.Publish(r.Context(), planID)
+	if err != nil {
+		h.writeModelPricingError(w, "publish model price plan", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"price_plan": plan})
+}
+
+/**
+ * republishModelPricePlan 切换到历史价格版本的生效区间，不创建新的价格版本。
+ * @param w HTTP 响应写入器。
+ * @param r 当前 HTTP 请求。
+ * @return none 无返回值。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+func (h *apiHandler) republishModelPricePlan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	modelID, planID, ok := parseModelPricingPair(w, r.PathValue("id"), r.PathValue("plan_id"))
+	if !ok {
+		return
+	}
+	if h.modelPricing == nil {
+		h.internalError(w, "republish model price plan", errors.New("model pricing service is unavailable"))
+		return
+	}
+	belongs, err := h.modelPricePlanBelongsTo(r.Context(), modelID, planID)
+	if err != nil {
+		h.writeModelPricingError(w, "check model price plan ownership", err)
+		return
+	}
+	if !belongs {
+		writeError(w, http.StatusNotFound, "not_found", "价格方案不存在")
+		return
+	}
+	result, err := h.modelPricing.Republish(r.Context(), planID)
+	if err != nil {
+		h.writeModelPricingError(w, "republish model price plan", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"price_plan": result.Plan, "created": result.Created})
+}
+
+func (h *apiHandler) modelPricePlanBelongsTo(ctx context.Context, modelID, planID uuid.UUID) (bool, error) {
+	plans, err := h.modelPricing.List(ctx, modelID)
+	if err != nil {
+		return false, err
+	}
+	for _, plan := range plans {
+		if plan.ID == planID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func parseModelPricingID(w http.ResponseWriter, value, label string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", label+"无效")
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func parseModelPricingPair(w http.ResponseWriter, modelValue, planValue string) (uuid.UUID, uuid.UUID, bool) {
+	modelID, ok := parseModelPricingID(w, modelValue, "上游模型 ID")
+	if !ok {
+		return uuid.Nil, uuid.Nil, false
+	}
+	planID, ok := parseModelPricingID(w, planValue, "价格方案 ID")
+	if !ok {
+		return uuid.Nil, uuid.Nil, false
+	}
+	return modelID, planID, true
 }
 
 /**
@@ -2239,11 +2492,27 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	}
 	models := make([]availableModel, 0, len(routes))
 	modelIndexes := make(map[string]int, len(routes))
+	resolvedAt := time.Now().UTC()
 	for _, route := range routes {
 		if route.UpstreamModel == nil {
 			continue
 		}
 		prices := route.UpstreamModel.Prices
+		if h.modelPricing != nil {
+			resolution, resolveErr := h.modelPricing.Resolve(r.Context(), route.UpstreamModel.ID, resolvedAt)
+			if errors.Is(resolveErr, modelpricing.ErrNoPrice) {
+				continue
+			}
+			if resolveErr != nil {
+				h.internalError(w, "resolve account model pricing", resolveErr)
+				return
+			}
+			prices = upstreammodel.Prices{
+				InputMicros: resolution.Rates.InputMicros, OutputMicros: resolution.Rates.OutputMicros,
+				CacheReadMicros: resolution.Rates.CacheReadMicros, CacheWriteMicros: resolution.Rates.CacheWriteMicros,
+				CacheWrite1hMicros: resolution.Rates.CacheWrite1hMicros, RequestMicros: resolution.Rates.RequestMicros,
+			}
+		}
 		providerName := route.UpstreamModel.ProviderName
 		if strings.TrimSpace(providerName) == "" {
 			providerName = route.Provider.DisplayName
@@ -3452,6 +3721,21 @@ func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation st
 		writeError(w, http.StatusConflict, "upstream_model_taken", "该模型 ID 已存在于全局目录")
 	case errors.Is(err, upstreammodel.ErrPricingRequired):
 		writeError(w, http.StatusConflict, "model_pricing_required", "请先完成模型定价，再启用模型")
+	default:
+		h.internalError(w, operation, err)
+	}
+}
+
+func (h *apiHandler) writeModelPricingError(w http.ResponseWriter, operation string, err error) {
+	switch {
+	case errors.Is(err, modelpricing.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_price_plan", "价格方案无效，请检查时区、生效时间、价格和时段")
+	case errors.Is(err, modelpricing.ErrModelMissing), errors.Is(err, modelpricing.ErrNotFound), errors.Is(err, modelpricing.ErrNoPrice):
+		writeError(w, http.StatusNotFound, "not_found", "价格方案或模型不存在")
+	case errors.Is(err, modelpricing.ErrImmutable):
+		writeError(w, http.StatusConflict, "price_plan_immutable", "已发布价格方案不可修改")
+	case errors.Is(err, modelpricing.ErrConflict):
+		writeError(w, http.StatusConflict, "price_plan_conflict", "价格方案与已有生效版本冲突")
 	default:
 		h.internalError(w, operation, err)
 	}

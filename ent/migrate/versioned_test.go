@@ -41,7 +41,7 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}
@@ -76,6 +76,26 @@ func TestBillingGroupAuthorizationMigrationPreservesLegacyAccess(t *testing.T) {
 	} {
 		if !strings.Contains(sql, expected) {
 			t.Fatalf("billing group authorization migration is missing %q", expected)
+		}
+	}
+}
+
+func TestModelPricingMigrationPreservesUnpricedCatalogState(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0012_model_price_plans.sql")
+	if err != nil {
+		t.Fatalf("read model pricing migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS model_price_plans",
+		"CREATE TABLE IF NOT EXISTS model_price_windows",
+		"WHEN deleted_at IS NOT NULL THEN 'retired'",
+		"WHEN pricing_configured = TRUE THEN 'published'",
+		"ELSE 'draft'",
+		"existing.upstream_model_id = upstream_models.id AND existing.version = 1",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("model pricing migration is missing %q", expected)
 		}
 	}
 }

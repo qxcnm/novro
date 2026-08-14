@@ -24,7 +24,11 @@ BillingGroup
 
 UpstreamModel
 ├── ModelRoute[]
+├── ModelPricePlan[]
 └── APIUsage[]
+
+ModelPricePlan
+└── ModelPriceWindow[]
 
 Wallet
 └── WalletEntry[]
@@ -100,8 +104,9 @@ EmailVerificationCode
 
 当前迁移从 `0001_initial_schema.sql` 开始，并通过后续有序迁移演进。`0009_gateway_billing_safety.sql`
 新增持久化网关 operation 和计费补偿流水类型；`0010_billing_group_user_authorizations.sql` 新增隐藏
-计费分组与普通成员的多对多授权表；`0011_system_announcement.sql` 将全局设置值扩为 `TEXT`，
-用于保存受服务层长度限制的公告正文。部署包含本功能的代码前必须先成功执行到 `0011`。
+计费分组与普通成员的多对多授权表；`0011_system_announcement.sql` 将全局设置值扩为 `TEXT`；
+`0012_model_price_plans.sql` 新增版本化固定价和分时价方案，并把已有目录价格回填为版本 1。
+部署包含本功能的代码前必须先成功执行到 `0012`。
 迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
 邮件、邀请返现、系统公告、用量审计和结算恢复相关表，并写入默认计费分组与默认邀请返现比例。
 服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
@@ -252,23 +257,54 @@ EmailVerificationCode
 
 - `provider_name`，普通厂商标签，不绑定提供商凭据配置，也不决定价格归属
 - `upstream_name`，全局唯一的精确模型 ID；`display_name` 为管理界面显示名称
-- `input_price_micros`、`output_price_micros`
-- `cache_read_price_micros`、`cache_write_price_micros`、`cache_write_1h_price_micros`
-- `request_price_micros`，按次固定费用
-- `pricing_configured`，新同步模型默认为 `false`；只有管理员在目录定价页保存价格后才会设为 `true`
+- 旧版六个价格字段和 `pricing_configured` 暂时保留，用于无价格版本的兼容回退和滚动升级
 - `status`、`created_at`、`updated_at`
 
-所有单价是人民币微元 / 百万 tokens，固定费用是人民币微元 / 次。同一模型 ID 无论被多少
-提供商暴露都只维护这一套价格。同步只发现精确 ID，不读取或导入上游返回的 `pricing` 字段；管理员
-必须在目录定价页维护价格，未知模型默认停用且不能在未完成定价时启用，避免把未知成本按零价格结算
-或复制价格卡。自动关联路由的对外名称
+同一模型 ID 无论被多少提供商暴露都只维护一组 Novro 自定义价格版本。同步只发现精确 ID，
+不读取或导入上游返回的 `pricing` 字段；管理员必须在目录价格方案入口维护并发布价格。未知模型
+默认停用且不能在未完成定价时启用，避免把未知成本按零价格结算。自动关联路由的对外名称
 与精确上游 ID 一致，历史的提供商前缀和数字后缀由后续迁移修复。
 
-初始化迁移不再内置官方模型目录。管理员通过供应商同步发现模型后，在模型目录维护价格并启用。
-GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不应写入固定价格，避免按
-最低档少扣或按最高档多扣；支持阶梯价格前只能保持待定价状态。
+初始化迁移不再内置官方模型目录。管理员通过供应商同步发现模型后，在模型目录发布价格并启用。
+固定价和按星期、时段重复的分时价已经支持；按输入/输出长度分档的阶梯计价仍不在当前规则范围内，
+这类模型在支持阶梯价格前应保持待定价状态。
 
-## 15. api_usages
+## 15. model_price_plans 和 model_price_windows
+
+`model_price_plans` 是模型价格的版本化来源：
+
+```mermaid
+flowchart LR
+    Model["UpstreamModel"] --> Plan["ModelPricePlan 版本"]
+    Plan --> Default["默认六维费率"]
+    Plan --> Window["ModelPriceWindow 峰谷时段"]
+    Request["请求开始时间"] --> Resolver["价格解析器"]
+    Plan --> Resolver
+    Window --> Resolver
+    Resolver --> Pinned["固定本次费率"]
+    Pinned --> Reserve["余额预占"]
+    Pinned --> Settle["最终结算"]
+```
+
+- `upstream_model_id + version` 唯一，`mode` 为 `fixed` 或 `scheduled`
+- `timezone` 使用 IANA 时区名，`effective_from` 和可选 `effective_to` 定义版本生效区间
+- `status` 为 `draft`、`published` 或 `retired`
+- 默认费率包含普通输入、输出、缓存命中、两种缓存创建和按次固定费六个维度
+
+`scheduled` 方案必须有一个或多个 `model_price_windows`。窗口用 `weekday_mask`、
+`start_minute` 和 `end_minute` 表示不跨日的周重复时段，并保存完整六维费率；未命中窗口时使用
+方案默认费率。同一星期内窗口不能重叠，结束分钟不属于当前窗口。管理员只能修改或删除草稿；
+发布新版本时，服务会自动把前一个已发布版本的失效时间收口到新版本生效时间。
+历史版本切换直接调整已有版本的生效区间：目标版本从当前时间开始生效，当前版本在该时刻失效，
+版本号和完整价格定义保持不变，因此不会生成新版本。若目标版本已经是当前生效版本，切换操作幂等完成。
+
+网关在请求开始时按方案时区解析一次价格，并把结果固定到本次预占和最终结算。请求执行期间即使
+跨过时段边界或管理员发布新版本，也不会改变本次调用价格。只有模型完全没有已发布版本时才允许
+读取旧版价格字段；已有已发布版本但当前处于生效空档时返回无有效价格，不静默回退。
+网关服务会将每个模型的已发布方案和窗口作为共享内存快照复用，首次访问该模型时加载一次；发布新版本
+后主动淘汰旧快照，下一次请求重新加载，因此高并发请求不会逐个查询价格表，时间边界仍按请求开始时间计算。
+
+## 16. api_usages
 
 - `user_id`、`api_key_id`、`model_route_id`
 - `request_id`、`endpoint`
@@ -285,7 +321,7 @@ GLM-5、GLM-5.1 和 GLM-4.7 等按输入/输出长度分档计费的模型不应
 Token 维度；缺失维度保持 0 并设置 `estimated`，保守请求预占只用于余额校验，不能作为最终费用。
 预占和最终费用都应用 API Key 请求时绑定的 `multiplier_bps`。
 
-## 16. gateway_operations
+## 17. gateway_operations
 
 - `id`，也是对外 `request_id`
 - `user_id`、`api_key_id`
@@ -307,7 +343,7 @@ API Key、endpoint、预占金额和对应预占流水，最后写 `api_usages`�
 保留预占且不自动重放或退款，必须根据提供商请求记录和 `request_id` 人工核对。长期
 `processing` 也需要运维核查，不能仅凭超时自动释放。
 
-## 17. 数据库扩展
+## 18. 数据库扩展
 
 使用 Ent 生成数据访问层，以 MySQL 为默认数据库，同时避免在业务代码中散落只适用于
 MySQL 的 SQL，让后续更换数据库时只需要替换驱动和迁移细节。

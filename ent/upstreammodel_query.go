@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -29,6 +30,7 @@ type UpstreamModelQuery struct {
 	predicates      []predicate.UpstreamModel
 	withModelRoutes *ModelRouteQuery
 	withAPIUsages   *APIUsageQuery
+	withPricePlans  *ModelPricePlanQuery
 	modifiers       []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -103,6 +105,28 @@ func (_q *UpstreamModelQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.APIUsagesTable, upstreammodel.APIUsagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPricePlans chains the current query on the "price_plans" edge.
+func (_q *UpstreamModelQuery) QueryPricePlans() *ModelPricePlanQuery {
+	query := (&ModelPricePlanClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(upstreammodel.Table, upstreammodel.FieldID, selector),
+			sqlgraph.To(modelpriceplan.Table, modelpriceplan.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, upstreammodel.PricePlansTable, upstreammodel.PricePlansColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -304,6 +328,7 @@ func (_q *UpstreamModelQuery) Clone() *UpstreamModelQuery {
 		predicates:      append([]predicate.UpstreamModel{}, _q.predicates...),
 		withModelRoutes: _q.withModelRoutes.Clone(),
 		withAPIUsages:   _q.withAPIUsages.Clone(),
+		withPricePlans:  _q.withPricePlans.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -329,6 +354,17 @@ func (_q *UpstreamModelQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *Upstr
 		opt(query)
 	}
 	_q.withAPIUsages = query
+	return _q
+}
+
+// WithPricePlans tells the query-builder to eager-load the nodes that are connected to
+// the "price_plans" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UpstreamModelQuery) WithPricePlans(opts ...func(*ModelPricePlanQuery)) *UpstreamModelQuery {
+	query := (&ModelPricePlanClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPricePlans = query
 	return _q
 }
 
@@ -410,9 +446,10 @@ func (_q *UpstreamModelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 	var (
 		nodes       = []*UpstreamModel{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withModelRoutes != nil,
 			_q.withAPIUsages != nil,
+			_q.withPricePlans != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -447,6 +484,13 @@ func (_q *UpstreamModelQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *UpstreamModel) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *UpstreamModel, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPricePlans; query != nil {
+		if err := _q.loadPricePlans(ctx, query, nodes,
+			func(n *UpstreamModel) { n.Edges.PricePlans = []*ModelPricePlan{} },
+			func(n *UpstreamModel, e *ModelPricePlan) { n.Edges.PricePlans = append(n.Edges.PricePlans, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -514,6 +558,36 @@ func (_q *UpstreamModelQuery) loadAPIUsages(ctx context.Context, query *APIUsage
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "upstream_model_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UpstreamModelQuery) loadPricePlans(ctx context.Context, query *ModelPricePlanQuery, nodes []*UpstreamModel, init func(*UpstreamModel), assign func(*UpstreamModel, *ModelPricePlan)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*UpstreamModel)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(modelpriceplan.FieldUpstreamModelID)
+	}
+	query.Where(predicate.ModelPricePlan(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(upstreammodel.PricePlansColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UpstreamModelID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "upstream_model_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

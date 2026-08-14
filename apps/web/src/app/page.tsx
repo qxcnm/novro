@@ -50,7 +50,7 @@ export default function Home() {
           <div className="mx-auto w-full max-w-7xl px-5 py-10 sm:px-8 sm:py-14 lg:px-10 lg:py-16">
             <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl lg:min-w-0 lg:flex-1 lg:max-w-4xl">
-                <Badge variant="outline">Novro Gateway · 客户主页</Badge>
+                <Badge variant="outline">Novro Gateway</Badge>
                 <h1 className="mt-5 max-w-none text-xl leading-tight font-semibold tracking-tight sm:text-2xl xl:text-3xl">
                   一个入口，连接你的模型工作流
                 </h1>

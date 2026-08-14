@@ -50,6 +50,7 @@ func (UpstreamModel) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("model_routes", ModelRoute.Type),
 		edge.To("api_usages", APIUsage.Type),
+		edge.To("price_plans", ModelPricePlan.Type),
 	}
 }
 

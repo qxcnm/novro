@@ -25,6 +25,7 @@ import (
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
+	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/requestid"
@@ -42,7 +43,18 @@ type fakeGatewaySettings struct {
 	err    error
 }
 
+type fakePricing struct {
+	resolution modelpricing.Resolution
+	modelID    uuid.UUID
+	at         time.Time
+	err        error
+}
 
+func (f *fakePricing) Resolve(_ context.Context, modelID uuid.UUID, at time.Time) (modelpricing.Resolution, error) {
+	f.modelID = modelID
+	f.at = at
+	return f.resolution, f.err
+}
 
 /**
  * Config 封装该名称对应的业务处理逻辑。
@@ -56,8 +68,6 @@ func (f fakeGatewaySettings) Config(context.Context) (gatewaysettings.Config, er
 	}
 	return f.config, nil
 }
-
-
 
 /**
  * Authenticate 用于校验用户凭据并建立登录会话。
@@ -74,8 +84,6 @@ type fakeRoutes struct {
 	expectedGroupID uuid.UUID
 	err             error
 }
-
-
 
 /**
  * ResolveCandidates 封装该名称对应的业务处理逻辑。
@@ -95,7 +103,6 @@ func (f fakeRoutes) ResolveCandidates(_ context.Context, _ string, billingGroupI
 	}
 	return []modelroute.Resolved{f.route}, nil
 }
-
 
 /**
  * ListActive 用于筛选并返回数据列表。
@@ -131,8 +138,6 @@ type fakeBilling struct {
 	replayOperation  *billing.Operation
 }
 
-
-
 /**
  * StartOperation 封装该名称对应的业务处理逻辑。
  * @param input 需要处理的输入数据。
@@ -152,7 +157,6 @@ func (f *fakeBilling) StartOperation(_ context.Context, input billing.OperationS
 	f.operationCreated = true
 	return billing.OperationStartResult{Operation: f.operation, Created: true}, nil
 }
-
 
 /**
  * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
@@ -174,7 +178,6 @@ func (f *fakeBilling) MarkOperationPendingSettlement(_ context.Context, _ uuid.U
 	return nil
 }
 
-
 /**
  * MarkOperationPendingUnknown 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -187,7 +190,6 @@ func (f *fakeBilling) MarkOperationPendingUnknown(_ context.Context, _ uuid.UUID
 	return nil
 }
 
-
 /**
  * CompleteOperation 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -199,7 +201,6 @@ func (f *fakeBilling) CompleteOperation(context.Context, uuid.UUID) error {
 	f.operation.Status = billing.OperationCompleted
 	return nil
 }
-
 
 /**
  * FailOperation 封装该名称对应的业务处理逻辑。
@@ -215,8 +216,6 @@ func (f *fakeBilling) FailOperation(context.Context, uuid.UUID, string) error {
 	return nil
 }
 
-
-
 /**
  * Reserve 封装该名称对应的业务处理逻辑。
  * @param amount 本次操作使用的数值参数。
@@ -228,7 +227,6 @@ func (f *fakeBilling) Reserve(_ context.Context, _, _ uuid.UUID, amount int64, _
 	f.reserved = amount
 	return f.reserveErr
 }
-
 
 /**
  * Refund 封装该名称对应的业务处理逻辑。
@@ -249,7 +247,6 @@ func (f *fakeBilling) Refund(_ context.Context, _, _ uuid.UUID, amount int64, _ 
 	return nil
 }
 
-
 /**
  * ReleaseReservation 封装该名称对应的业务处理逻辑。
  * @param amount 本次操作使用的数值参数。
@@ -261,7 +258,6 @@ func (f *fakeBilling) ReleaseReservation(_ context.Context, _, _ uuid.UUID, amou
 	f.refunded += amount
 	return nil
 }
-
 
 /**
  * Finalize 封装该名称对应的业务处理逻辑。
@@ -282,7 +278,6 @@ func (f *fakeBilling) Finalize(_ context.Context, input billing.UsageInput) erro
 	return nil
 }
 
-
 /**
  * RecordFailure 封装该名称对应的业务处理逻辑。
  * @param input 需要处理的输入数据。
@@ -295,8 +290,6 @@ func (f *fakeBilling) RecordFailure(_ context.Context, input billing.FailureInpu
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
-
-
 
 /**
  * RoundTrip 封装该名称对应的业务处理逻辑。
@@ -312,8 +305,6 @@ type blockingBody struct {
 	once    sync.Once
 }
 
-
-
 /**
  * newBlockingBody 封装该名称对应的业务处理逻辑。
  * @param prefix 本次操作需要使用的输入参数。
@@ -323,8 +314,6 @@ type blockingBody struct {
 func newBlockingBody(prefix string) *blockingBody {
 	return &blockingBody{reader: strings.NewReader(prefix), release: make(chan struct{})}
 }
-
-
 
 /**
  * Read 用于查询并返回所需的数据。
@@ -340,8 +329,6 @@ func (b *blockingBody) Read(target []byte) (int, error) {
 	return 0, io.EOF
 }
 
-
-
 /**
  * Close 用于删除、撤销或释放指定资源。
  * @param none 无参数。
@@ -355,16 +342,13 @@ func (b *blockingBody) Close() error {
 
 type noopBilling struct{}
 
-
-
 /**
  * Finalize 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (noopBilling) Finalize(context.Context, billing.UsageInput) error        { return nil }
-
+func (noopBilling) Finalize(context.Context, billing.UsageInput) error { return nil }
 
 /**
  * RecordFailure 封装该名称对应的业务处理逻辑。
@@ -373,7 +357,6 @@ func (noopBilling) Finalize(context.Context, billing.UsageInput) error        { 
  * @date 2026-08-13
  */
 func (noopBilling) RecordFailure(context.Context, billing.FailureInput) error { return nil }
-
 
 /**
  * StartOperation 封装该名称对应的业务处理逻辑。
@@ -385,7 +368,6 @@ func (noopBilling) StartOperation(_ context.Context, input billing.OperationStar
 	return billing.OperationStartResult{Created: true, Operation: billing.Operation{RequestID: input.RequestID, UserID: input.UserID, APIKeyID: input.APIKeyID, RequestHash: input.RequestHash, Endpoint: input.Endpoint, Status: billing.OperationProcessing, ReservedMicros: input.ReservedMicros}}, nil
 }
 
-
 /**
  * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -396,7 +378,6 @@ func (noopBilling) MarkOperationPendingSettlement(context.Context, uuid.UUID, bi
 	return nil
 }
 
-
 /**
  * MarkOperationPendingUnknown 封装该名称对应的业务处理逻辑。
  * @param string 本次操作需要使用的输入参数。
@@ -405,15 +386,13 @@ func (noopBilling) MarkOperationPendingSettlement(context.Context, uuid.UUID, bi
  */
 func (noopBilling) MarkOperationPendingUnknown(context.Context, uuid.UUID, string) error { return nil }
 
-
 /**
  * CompleteOperation 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (noopBilling) CompleteOperation(context.Context, uuid.UUID) error                   { return nil }
-
+func (noopBilling) CompleteOperation(context.Context, uuid.UUID) error { return nil }
 
 /**
  * FailOperation 封装该名称对应的业务处理逻辑。
@@ -421,14 +400,12 @@ func (noopBilling) CompleteOperation(context.Context, uuid.UUID) error          
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (noopBilling) FailOperation(context.Context, uuid.UUID, string) error               { return nil }
+func (noopBilling) FailOperation(context.Context, uuid.UUID, string) error { return nil }
 
 type terminalErrorReader struct {
 	reader *strings.Reader
 	err    error
 }
-
-
 
 /**
  * Read 用于查询并返回所需的数据。
@@ -444,8 +421,6 @@ func (r *terminalErrorReader) Read(target []byte) (int, error) {
 	return 0, r.err
 }
 
-
-
 /**
  * gatewayActor 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -456,8 +431,6 @@ func gatewayActor() apikey.Actor {
 	groupID := uuid.New()
 	return apikey.Actor{APIKey: apikey.Record{ID: uuid.New(), BillingGroupID: groupID, BillingGroup: billinggroup.Summary{ID: groupID, Code: "default", DisplayName: "默认", MultiplierBPS: 10_000}}, User: user.Record{ID: uuid.New(), Status: user.StatusActive}}
 }
-
-
 
 /**
  * gatewayActorWithMultiplier 封装该名称对应的业务处理逻辑。
@@ -471,8 +444,6 @@ func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
 	return actor
 }
 
-
-
 /**
  * openAIRoute 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -484,8 +455,6 @@ func openAIRoute() modelroute.Resolved {
 	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Weight: 100, Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
 }
 
-
-
 /**
  * anthropicRoute 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -496,8 +465,6 @@ func anthropicRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
 	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocol: provider.ProtocolAnthropic}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "kimi-k3-upstream", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
 }
-
-
 
 /**
  * openAIChannel 封装该名称对应的业务处理逻辑。
@@ -520,8 +487,6 @@ func openAIChannel(code, host, upstreamName string) modelroute.Resolved {
 	route.UpstreamModel.UpstreamName = upstreamName
 	return route
 }
-
-
 
 /**
  * TestProxyRoutesModelAndFinalizesExactUsage 验证对应功能在指定场景下的行为。
@@ -561,7 +526,52 @@ func TestProxyRoutesModelAndFinalizesExactUsage(t *testing.T) {
 	}
 }
 
-
+func TestProxyPinsResolvedScheduledPriceForReservationAndSettlement(t *testing.T) {
+	biller := &fakeBilling{}
+	pricing := &fakePricing{resolution: modelpricing.Resolution{
+		Rates: billing.RateCard{InputMicros: 3_000_000, OutputMicros: 9_000_000},
+	}}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	route := openAIRoute()
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Pricing: pricing, Client: client})
+	startedAt := time.Date(2026, time.August, 17, 1, 0, 0, 0, time.UTC)
+	handler.now = func() time.Time { return startedAt }
+	body := `{"model":"deepseek-chat","messages":[],"max_tokens":100}`
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatal(err)
+	}
+	upstreamBody, err := buildUpstreamBody(payload, route, "chat_completions", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantReservation, err := billing.EstimateReservation(
+		estimateInputTokens(upstreamBody),
+		100,
+		pricing.resolution.Rates,
+		10_000,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if pricing.modelID != *route.UpstreamModelID || !pricing.at.Equal(startedAt) {
+		t.Fatalf("pricing was not resolved at request start: model=%s at=%s", pricing.modelID, pricing.at)
+	}
+	if biller.usage.Rates.InputMicros != 3_000_000 || biller.usage.Rates.OutputMicros != 9_000_000 || biller.usage.CostMicros != 210 {
+		t.Fatalf("scheduled price was not pinned through settlement: %+v", biller.usage)
+	}
+	if biller.reserved != wantReservation.CostMicros {
+		t.Fatalf("scheduled price was not pinned through reservation: got=%d want=%d", biller.reserved, wantReservation.CostMicros)
+	}
+}
 
 /**
  * TestProxyUsesConfiguredInputAndOutputReservationCaps 验证对应功能在指定场景下的行为。
@@ -596,8 +606,6 @@ func TestProxyUsesConfiguredInputAndOutputReservationCaps(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -620,8 +628,6 @@ func TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain(t *testing.T) {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestProxyAppliesBillingGroupMultiplierToReservationAndCharge 验证对应功能在指定场景下的行为。
@@ -672,8 +678,6 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 	}
 }
 
-
-
 /**
  * TestProxySSEHeartbeatKeepsEstablishedStreamActive 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -720,8 +724,6 @@ func TestProxySSEHeartbeatKeepsEstablishedStreamActive(t *testing.T) {
 	response.Body.Close()
 }
 
-
-
 /**
  * TestProxyStopsIdleStream 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -763,8 +765,6 @@ func TestProxyStopsIdleStream(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -788,8 +788,6 @@ func TestProxyReturnsGatewayTimeoutForUpstreamTotalTimeout(t *testing.T) {
 		t.Fatalf("status=%d body=%s, want 504", response.Code, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout 验证对应功能在指定场景下的行为。
@@ -823,8 +821,6 @@ func TestProxyReturnsGatewayTimeoutWhenBufferedBodyExceedsTotalTimeout(t *testin
 	}
 }
 
-
-
 /**
  * TestParseUsageRejectsMalformedReportedFields 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -857,8 +853,6 @@ func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestParseIntValueRejectsNonFiniteAndInvalidNumbers 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -878,8 +872,6 @@ func TestParseIntValueRejectsNonFiniteAndInvalidNumbers(t *testing.T) {
 		t.Fatalf("large valid integer was rejected: parsed=%d ok=%v", parsed, ok)
 	}
 }
-
-
 
 /**
  * TestProxyAcceptsBodyAndOutputAboveFormerLimits 验证对应功能在指定场景下的行为。
@@ -910,8 +902,6 @@ func TestProxyAcceptsBodyAndOutputAboveFormerLimits(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyAcceptsBufferedResponseAboveFormerLimit 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -931,8 +921,6 @@ func TestProxyAcceptsBufferedResponseAboveFormerLimit(t *testing.T) {
 		t.Fatalf("status=%d response_bytes=%d want=%d", response.Code, response.Body.Len(), len(upstreamBody))
 	}
 }
-
-
 
 /**
  * TestProxyAlwaysStartsWithHighestWeightProvider 验证对应功能在指定场景下的行为。
@@ -965,8 +953,6 @@ func TestProxyAlwaysStartsWithHighestWeightProvider(t *testing.T) {
 		t.Fatalf("weighted hosts=%v want=%v", hosts, want)
 	}
 }
-
-
 
 /**
  * TestProxyWeightPriorityIsStableUnderConcurrentRequests 验证对应功能在指定场景下的行为。
@@ -1015,8 +1001,6 @@ func TestProxyWeightPriorityIsStableUnderConcurrentRequests(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1056,8 +1040,6 @@ func TestProxyDoesNotReplayAcrossChannelsAfterHTTPResponse(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyDoesNotReplayAfterSuccessfulResponseStarts 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1083,8 +1065,6 @@ func TestProxyDoesNotReplayAfterSuccessfulResponseStarts(t *testing.T) {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail 验证对应功能在指定场景下的行为。
@@ -1119,8 +1099,6 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyUsesHighestWeightWithoutReplayingHTTPFailure 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1152,8 +1130,6 @@ func TestProxyUsesHighestWeightWithoutReplayingHTTPFailure(t *testing.T) {
 		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
-
-
 
 /**
  * TestProxyRetriesConnectionSetupBeforeRequestWrite 验证对应功能在指定场景下的行为。
@@ -1192,8 +1168,6 @@ func TestProxyRetriesConnectionSetupBeforeRequestWrite(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyDoesNotRetryAfterConnectionWasAcquired 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1226,8 +1200,6 @@ func TestProxyDoesNotRetryAfterConnectionWasAcquired(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyDoesNotForwardRawClientIdempotencyKey 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1250,8 +1222,6 @@ func TestProxyDoesNotForwardRawClientIdempotencyKey(t *testing.T) {
 		t.Fatalf("status=%d upstream_key=%q operation=%+v body=%s", response.Code, upstreamKey, biller.operation, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart 验证对应功能在指定场景下的行为。
@@ -1277,8 +1247,6 @@ func TestProxyBuffersChatStreamWhenUpstreamStreamCannotStart(t *testing.T) {
 		t.Fatalf("status=%d calls=%d billing=%+v body=%s", response.Code, calls, biller, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten 验证对应功能在指定场景下的行为。
@@ -1316,8 +1284,6 @@ func TestProxyDoesNotFailOverAfterBufferedFallbackWasWritten(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyStreamRetriesTwiceThenFailsOverToNextChannel 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1353,8 +1319,6 @@ func TestProxyStreamRetriesTwiceThenFailsOverToNextChannel(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1384,8 +1348,6 @@ func TestProxyStreamDoesNotReplayTemporaryHTTPFailureAsBufferedRequest(t *testin
 		t.Fatalf("unexpected billing state: %+v", biller)
 	}
 }
-
-
 
 /**
  * TestProxyUsesBufferedUpstreamForReasonixStreams 验证对应功能在指定场景下的行为。
@@ -1418,8 +1380,6 @@ func TestProxyUsesBufferedUpstreamForReasonixStreams(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyRejectsSelfReferentialUpstream 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1448,8 +1408,6 @@ func TestProxyRejectsSelfReferentialUpstream(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestFinalizationRetriesTransientErrors 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1470,8 +1428,6 @@ func TestFinalizationRetriesTransientErrors(t *testing.T) {
 		t.Fatalf("status=%d finalize_calls=%d usage=%+v", response.Code, biller.finalizeCalls, biller.usage)
 	}
 }
-
-
 
 /**
  * TestFinalizationDoesNotRetryBusinessConflict 验证对应功能在指定场景下的行为。
@@ -1499,8 +1455,6 @@ func TestFinalizationDoesNotRetryBusinessConflict(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1521,8 +1475,6 @@ func TestBufferedResponseIsNotReturnedBeforeSettlementIntentPersists(t *testing.
 	}
 }
 
-
-
 /**
  * TestBufferedHTTP200FailureIsNotBilled 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1541,8 +1493,6 @@ func TestBufferedHTTP200FailureIsNotBilled(t *testing.T) {
 		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestSettlementRetryStopsWhenContextIsCanceled 验证对应功能在指定场景下的行为。
@@ -1564,8 +1514,6 @@ func TestSettlementRetryStopsWhenContextIsCanceled(t *testing.T) {
 		t.Fatalf("err=%v attempts=%d calls=%d", err, attempts, calls)
 	}
 }
-
-
 
 /**
  * TestProxyRoutesResponsesAndAnthropicMessages 验证对应功能在指定场景下的行为。
@@ -1650,8 +1598,6 @@ func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestProxyRejectsInsufficientBalanceBeforeUpstream 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1670,8 +1616,6 @@ func TestProxyRejectsInsufficientBalanceBeforeUpstream(t *testing.T) {
 		t.Fatalf("status=%d upstream_called=%v", response.Code, called)
 	}
 }
-
-
 
 /**
  * TestStreamingUsageIsCaptured 验证对应功能在指定场景下的行为。
@@ -1697,8 +1641,6 @@ func TestStreamingUsageIsCaptured(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestStreamingFinalizationFailureKeepsSuccessfulResponse 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1723,8 +1665,6 @@ func TestStreamingFinalizationFailureKeepsSuccessfulResponse(t *testing.T) {
 		t.Fatalf("stream finalization failure was not logged: %s", logs.String())
 	}
 }
-
-
 
 /**
  * TestStreamingSettlementIntentFailureKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
@@ -1756,8 +1696,6 @@ func TestStreamingSettlementIntentFailureKeepsReservationForReconciliation(t *te
 	}
 }
 
-
-
 /**
  * TestStreamingLargeDataLineIsRelayedAndBilled 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1783,8 +1721,6 @@ func TestStreamingLargeDataLineIsRelayedAndBilled(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestInvalidStreamedUsageKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1805,8 +1741,6 @@ func TestInvalidStreamedUsageKeepsReservationForReconciliation(t *testing.T) {
 		t.Fatalf("status=%d finalize_calls=%d refund_calls=%d refunded=%d reserved=%d", response.Code, biller.finalizeCalls, biller.refundCalls, biller.refunded, biller.reserved)
 	}
 }
-
-
 
 /**
  * TestStreamingUsageAcrossResponsesAndMessages 验证对应功能在指定场景下的行为。
@@ -1864,8 +1798,6 @@ func TestStreamingUsageAcrossResponsesAndMessages(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestResponsesIncompleteIsBillableTerminalState 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1890,8 +1822,6 @@ func TestResponsesIncompleteIsBillableTerminalState(t *testing.T) {
 		t.Fatalf("unexpected incomplete response usage: %+v", biller.usage)
 	}
 }
-
-
 
 /**
  * TestFailedStreamingTerminalStateReleasesReservation 验证对应功能在指定场景下的行为。
@@ -1925,8 +1855,6 @@ func TestFailedStreamingTerminalStateReleasesReservation(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestFailedStreamingTerminalStateCannotBeOverriddenByDone 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -1946,8 +1874,6 @@ func TestFailedStreamingTerminalStateCannotBeOverriddenByDone(t *testing.T) {
 		t.Fatalf("status=%d billing=%+v body=%s", response.Code, biller, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestInterruptedStreamingUsageKeepsReservationForReconciliation 验证对应功能在指定场景下的行为。
@@ -1972,8 +1898,6 @@ func TestInterruptedStreamingUsageKeepsReservationForReconciliation(t *testing.T
 		t.Fatalf("interrupted stream was automatically settled: %+v", biller)
 	}
 }
-
-
 
 /**
  * TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage 验证对应功能在指定场景下的行为。
@@ -2005,8 +1929,6 @@ func TestStreamingReadErrorIsLoggedWithoutChangingCompletedUsage(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestModelListRequiresAPIKey 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2022,8 +1944,6 @@ func TestModelListRequiresAPIKey(t *testing.T) {
 	}
 	assertErrorRequestID(t, response)
 }
-
-
 
 /**
  * TestModelListDeduplicatesFailoverRoutes 验证对应功能在指定场景下的行为。
@@ -2054,8 +1974,6 @@ func TestModelListDeduplicatesFailoverRoutes(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestSingularModelListAliasUsesSelectedRoutes 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2072,8 +1990,6 @@ func TestSingularModelListAliasUsesSelectedRoutes(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
-
-
 
 /**
  * TestGatewayErrorsIncludeRequestID 验证对应功能在指定场景下的行为。
@@ -2118,8 +2034,6 @@ func TestGatewayErrorsIncludeRequestID(t *testing.T) {
 	}
 }
 
-
-
 /**
  * assertErrorRequestID 封装该名称对应的业务处理逻辑。
  * @param t 本次操作需要使用的输入参数。
@@ -2142,8 +2056,6 @@ func assertErrorRequestID(t *testing.T, response *httptest.ResponseRecorder) uui
 	}
 	return parsed
 }
-
-
 
 /**
  * TestBuildUpstreamURLAndPrivateAddressGuard 验证对应功能在指定场景下的行为。
@@ -2171,8 +2083,6 @@ func TestBuildUpstreamURLAndPrivateAddressGuard(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestDefaultOutboundClientDoesNotFollowRedirects 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2189,8 +2099,6 @@ func TestDefaultOutboundClientDoesNotFollowRedirects(t *testing.T) {
 		t.Fatalf("redirect error=%v, want http.ErrUseLastResponse", err)
 	}
 }
-
-
 
 /**
  * TestUpstreamFailureRefundsReservation 验证对应功能在指定场景下的行为。
@@ -2211,8 +2119,6 @@ func TestUpstreamFailureRefundsReservation(t *testing.T) {
 		t.Fatalf("status=%d refund_calls=%d reserved=%d refunded=%d", response.Code, biller.refundCalls, biller.reserved, biller.refunded)
 	}
 }
-
-
 
 /**
  * TestParseUsageSupportsProviderCacheShapes 验证对应功能在指定场景下的行为。
@@ -2244,8 +2150,6 @@ func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestUsageFallbackNeverChargesUnreportedDimensions 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2270,8 +2174,6 @@ func TestUsageFallbackNeverChargesUnreportedDimensions(t *testing.T) {
 		t.Fatalf("missing output was charged: %+v", usage)
 	}
 }
-
-
 
 /**
  * TestUsageRejectsConflictingAliasTotals 验证对应功能在指定场景下的行为。
@@ -2326,8 +2228,6 @@ func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestParseUsageSupportsNewAPIBillingUsage 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2372,8 +2272,6 @@ func TestParseUsageSupportsNewAPIBillingUsage(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestParseUsageIgnoresUnrecognizedBillingUsage 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2388,8 +2286,6 @@ func TestParseUsageIgnoresUnrecognizedBillingUsage(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestParseUsagePreservesNewAPIEstimatedFlag 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2403,8 +2299,6 @@ func TestParseUsagePreservesNewAPIEstimatedFlag(t *testing.T) {
 		t.Fatalf("estimated billing usage was treated as exact: %+v", usage)
 	}
 }
-
-
 
 /**
  * TestOpenAIUsageRejectsCacheBreakdownAboveTotal 验证对应功能在指定场景下的行为。
@@ -2427,8 +2321,6 @@ func TestOpenAIUsageRejectsCacheBreakdownAboveTotal(t *testing.T) {
 	}
 }
 
-
-
 /**
  * TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2442,8 +2334,6 @@ func TestAnthropicUsageRejectsInconsistentCacheCreationBreakdown(t *testing.T) {
 		t.Fatalf("inconsistent Anthropic cache breakdown was charged: %+v", usage)
 	}
 }
-
-
 
 /**
  * TestUsageMergeReplacesInputSnapshotAtomically 验证对应功能在指定场景下的行为。
@@ -2462,8 +2352,6 @@ func TestUsageMergeReplacesInputSnapshotAtomically(t *testing.T) {
 		t.Fatalf("input total=%d breakdown=%+v", usage.Input, usage.breakdown())
 	}
 }
-
-
 
 /**
  * TestEstimateInputTokensDoesNotTreatEveryByteAsToken 验证对应功能在指定场景下的行为。

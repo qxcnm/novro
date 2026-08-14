@@ -25,10 +25,12 @@ import (
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/billing"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
+	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/requestid"
 	"github.com/novro-gateway/novro/internal/upstreamhttp"
+	"github.com/novro-gateway/novro/internal/upstreammodel"
 )
 
 const (
@@ -150,11 +152,22 @@ type SettingsService interface {
 	Config(context.Context) (gatewaysettings.Config, error)
 }
 
+/**
+ * PriceResolver 定义网关在请求开始时读取模型价格的能力。
+ * @param none 无参数。
+ * @author Gao Hongshun
+ * @date 2026-08-14
+ */
+type PriceResolver interface {
+	Resolve(context.Context, uuid.UUID, time.Time) (modelpricing.Resolution, error)
+}
+
 type Dependencies struct {
 	APIKeys  KeyAuthenticator
 	Routes   RouteService
 	Billing  BillingService
 	Settings SettingsService
+	Pricing  PriceResolver
 	Client   *http.Client
 	Logger   *slog.Logger
 }
@@ -164,6 +177,7 @@ type Handler struct {
 	routes                RouteService
 	billing               BillingService
 	settings              SettingsService
+	pricing               PriceResolver
 	client                *http.Client
 	logger                *slog.Logger
 	now                   func() time.Time
@@ -187,7 +201,7 @@ func New(deps Dependencies) *Handler {
 		logger = slog.Default()
 	}
 	return &Handler{
-		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, client: client, logger: logger,
+		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, pricing: deps.Pricing, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
 		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
 	}
@@ -388,7 +402,25 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	if reservationOutputCap <= 0 {
 		reservationOutputCap = gatewaysettings.DefaultReservationOutputTokenCap
 	}
+	// 先按请求开始时间解析并固定每条候选路由的费率；后续预扣、重试和结算
+	// 都只读取 route.ResolvedPrices，避免请求执行期间跨窗口造成价格不一致。
 	for _, route := range compatible {
+		if h.pricing != nil {
+			resolution, err := h.pricing.Resolve(r.Context(), *route.UpstreamModelID, startedAt)
+			if err != nil {
+				h.logger.Error("resolve gateway model pricing", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
+				continue
+			}
+			prices := upstreammodel.Prices{
+				InputMicros: resolution.Rates.InputMicros, OutputMicros: resolution.Rates.OutputMicros,
+				CacheReadMicros: resolution.Rates.CacheReadMicros, CacheWriteMicros: resolution.Rates.CacheWriteMicros,
+				CacheWrite1hMicros: resolution.Rates.CacheWrite1hMicros, RequestMicros: resolution.Rates.RequestMicros,
+			}
+			route.ResolvedPrices = &prices
+			route.PricingPlanID = resolution.PlanID
+			route.PricingWindowID = resolution.WindowID
+			route.PricingWindowLabel = resolution.WindowLabel
+		}
 		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, stream)
 		if err != nil {
 			h.logger.Error("build gateway upstream payload", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
@@ -1893,13 +1925,17 @@ func writeOperationReplay(w http.ResponseWriter, operation billing.Operation) {
 }
 
 /**
- * rateCardFor 执行该名称对应的业务处理逻辑。
- * @param route 本次操作需要使用的输入参数。
+ * rateCardFor 优先读取本次请求已固定的价格快照，并兼容旧路由价格字段回退。
+ * @param route 已解析提供商和模型价格的路由。
+ * @return 网关计费计算使用的六维费率卡。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-14
  */
 func rateCardFor(route modelroute.Resolved) billing.RateCard {
 	prices := route.UpstreamModel.Prices
+	if route.ResolvedPrices != nil {
+		prices = *route.ResolvedPrices
+	}
 	return billing.RateCard{InputMicros: prices.InputMicros, OutputMicros: prices.OutputMicros, CacheReadMicros: prices.CacheReadMicros, CacheWriteMicros: prices.CacheWriteMicros, CacheWrite1hMicros: prices.CacheWrite1hMicros, RequestMicros: prices.RequestMicros}
 }
 
@@ -2036,6 +2072,7 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 	}
 	return body, nil
 }
+
 /**
  * copyResponseHeaders 执行该名称对应的业务处理逻辑。
  * @param target 本次操作需要使用的输入参数。
@@ -2051,6 +2088,7 @@ func copyResponseHeaders(target, source http.Header) {
 	}
 	target.Set("Cache-Control", "no-store")
 }
+
 /**
  * mapValue 执行该名称对应的业务处理逻辑。
  * @param value 本次操作需要使用的输入参数。
@@ -2058,13 +2096,15 @@ func copyResponseHeaders(target, source http.Header) {
  * @date 2026-08-13
  */
 func mapValue(value any) map[string]any { result, _ := value.(map[string]any); return result }
+
 /**
  * stringValue 执行该名称对应的业务处理逻辑。
  * @param value 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func stringValue(value any) string      { result, _ := value.(string); return result }
+func stringValue(value any) string { result, _ := value.(string); return result }
+
 /**
  * intValue 执行该名称对应的业务处理逻辑。
  * @param value 本次操作需要使用的输入参数。
@@ -2193,6 +2233,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+
 /**
  * writeError 执行该名称对应的业务处理逻辑。
  * @param w 本次操作需要使用的输入参数。

@@ -762,6 +762,29 @@ func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.UpstreamModel {
 	})
 }
 
+// HasPricePlans applies the HasEdge predicate on the "price_plans" edge.
+func HasPricePlans() predicate.UpstreamModel {
+	return predicate.UpstreamModel(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, PricePlansTable, PricePlansColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasPricePlansWith applies the HasEdge predicate on the "price_plans" edge with a given conditions (other predicates).
+func HasPricePlansWith(preds ...predicate.ModelPricePlan) predicate.UpstreamModel {
+	return predicate.UpstreamModel(func(s *sql.Selector) {
+		step := newPricePlansStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.UpstreamModel) predicate.UpstreamModel {
 	return predicate.UpstreamModel(sql.AndPredicates(predicates...))

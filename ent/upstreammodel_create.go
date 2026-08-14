@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
 )
@@ -237,6 +238,21 @@ func (_c *UpstreamModelCreate) AddAPIUsages(v ...*APIUsage) *UpstreamModelCreate
 		ids[i] = v[i].ID
 	}
 	return _c.AddAPIUsageIDs(ids...)
+}
+
+// AddPricePlanIDs adds the "price_plans" edge to the ModelPricePlan entity by IDs.
+func (_c *UpstreamModelCreate) AddPricePlanIDs(ids ...uuid.UUID) *UpstreamModelCreate {
+	_c.mutation.AddPricePlanIDs(ids...)
+	return _c
+}
+
+// AddPricePlans adds the "price_plans" edges to the ModelPricePlan entity.
+func (_c *UpstreamModelCreate) AddPricePlans(v ...*ModelPricePlan) *UpstreamModelCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPricePlanIDs(ids...)
 }
 
 // Mutation returns the UpstreamModelMutation object of the builder.
@@ -527,6 +543,22 @@ func (_c *UpstreamModelCreate) createSpec() (*UpstreamModel, *sqlgraph.CreateSpe
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PricePlansIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

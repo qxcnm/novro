@@ -6,16 +6,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/schema"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
+	"github.com/novro-gateway/novro/ent/modelpricewindow"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
-	"github.com/novro-gateway/novro/ent/schema"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -522,6 +524,176 @@ func init() {
 	gatewayoperationDescID := gatewayoperationFields[0].Descriptor()
 	// gatewayoperation.DefaultID holds the default value on creation for the id field.
 	gatewayoperation.DefaultID = gatewayoperationDescID.Default.(func() uuid.UUID)
+	modelpriceplanFields := schema.ModelPricePlan{}.Fields()
+	_ = modelpriceplanFields
+	// modelpriceplanDescVersion is the schema descriptor for version field.
+	modelpriceplanDescVersion := modelpriceplanFields[2].Descriptor()
+	// modelpriceplan.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	modelpriceplan.VersionValidator = modelpriceplanDescVersion.Validators[0].(func(int) error)
+	// modelpriceplanDescTimezone is the schema descriptor for timezone field.
+	modelpriceplanDescTimezone := modelpriceplanFields[4].Descriptor()
+	// modelpriceplan.DefaultTimezone holds the default value on creation for the timezone field.
+	modelpriceplan.DefaultTimezone = modelpriceplanDescTimezone.Default.(string)
+	// modelpriceplan.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	modelpriceplan.TimezoneValidator = func() func(string) error {
+		validators := modelpriceplanDescTimezone.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(timezone string) error {
+			for _, fn := range fns {
+				if err := fn(timezone); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelpriceplanDescDefaultInputPriceMicros is the schema descriptor for default_input_price_micros field.
+	modelpriceplanDescDefaultInputPriceMicros := modelpriceplanFields[8].Descriptor()
+	// modelpriceplan.DefaultInputPriceMicrosValidator is a validator for the "default_input_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultInputPriceMicrosValidator = modelpriceplanDescDefaultInputPriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescDefaultOutputPriceMicros is the schema descriptor for default_output_price_micros field.
+	modelpriceplanDescDefaultOutputPriceMicros := modelpriceplanFields[9].Descriptor()
+	// modelpriceplan.DefaultOutputPriceMicrosValidator is a validator for the "default_output_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultOutputPriceMicrosValidator = modelpriceplanDescDefaultOutputPriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescDefaultCacheReadPriceMicros is the schema descriptor for default_cache_read_price_micros field.
+	modelpriceplanDescDefaultCacheReadPriceMicros := modelpriceplanFields[10].Descriptor()
+	// modelpriceplan.DefaultCacheReadPriceMicrosValidator is a validator for the "default_cache_read_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultCacheReadPriceMicrosValidator = modelpriceplanDescDefaultCacheReadPriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescDefaultCacheWritePriceMicros is the schema descriptor for default_cache_write_price_micros field.
+	modelpriceplanDescDefaultCacheWritePriceMicros := modelpriceplanFields[11].Descriptor()
+	// modelpriceplan.DefaultCacheWritePriceMicrosValidator is a validator for the "default_cache_write_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultCacheWritePriceMicrosValidator = modelpriceplanDescDefaultCacheWritePriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescDefaultCacheWrite1hPriceMicros is the schema descriptor for default_cache_write_1h_price_micros field.
+	modelpriceplanDescDefaultCacheWrite1hPriceMicros := modelpriceplanFields[12].Descriptor()
+	// modelpriceplan.DefaultCacheWrite1hPriceMicrosValidator is a validator for the "default_cache_write_1h_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultCacheWrite1hPriceMicrosValidator = modelpriceplanDescDefaultCacheWrite1hPriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescDefaultRequestPriceMicros is the schema descriptor for default_request_price_micros field.
+	modelpriceplanDescDefaultRequestPriceMicros := modelpriceplanFields[13].Descriptor()
+	// modelpriceplan.DefaultRequestPriceMicrosValidator is a validator for the "default_request_price_micros" field. It is called by the builders before save.
+	modelpriceplan.DefaultRequestPriceMicrosValidator = modelpriceplanDescDefaultRequestPriceMicros.Validators[0].(func(int64) error)
+	// modelpriceplanDescCreatedAt is the schema descriptor for created_at field.
+	modelpriceplanDescCreatedAt := modelpriceplanFields[14].Descriptor()
+	// modelpriceplan.DefaultCreatedAt holds the default value on creation for the created_at field.
+	modelpriceplan.DefaultCreatedAt = modelpriceplanDescCreatedAt.Default.(func() time.Time)
+	// modelpriceplanDescUpdatedAt is the schema descriptor for updated_at field.
+	modelpriceplanDescUpdatedAt := modelpriceplanFields[15].Descriptor()
+	// modelpriceplan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	modelpriceplan.DefaultUpdatedAt = modelpriceplanDescUpdatedAt.Default.(func() time.Time)
+	// modelpriceplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	modelpriceplan.UpdateDefaultUpdatedAt = modelpriceplanDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// modelpriceplanDescID is the schema descriptor for id field.
+	modelpriceplanDescID := modelpriceplanFields[0].Descriptor()
+	// modelpriceplan.DefaultID holds the default value on creation for the id field.
+	modelpriceplan.DefaultID = modelpriceplanDescID.Default.(func() uuid.UUID)
+	modelpricewindowFields := schema.ModelPriceWindow{}.Fields()
+	_ = modelpricewindowFields
+	// modelpricewindowDescLabel is the schema descriptor for label field.
+	modelpricewindowDescLabel := modelpricewindowFields[2].Descriptor()
+	// modelpricewindow.LabelValidator is a validator for the "label" field. It is called by the builders before save.
+	modelpricewindow.LabelValidator = func() func(string) error {
+		validators := modelpricewindowDescLabel.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(label string) error {
+			for _, fn := range fns {
+				if err := fn(label); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelpricewindowDescWeekdayMask is the schema descriptor for weekday_mask field.
+	modelpricewindowDescWeekdayMask := modelpricewindowFields[3].Descriptor()
+	// modelpricewindow.WeekdayMaskValidator is a validator for the "weekday_mask" field. It is called by the builders before save.
+	modelpricewindow.WeekdayMaskValidator = func() func(int) error {
+		validators := modelpricewindowDescWeekdayMask.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(weekday_mask int) error {
+			for _, fn := range fns {
+				if err := fn(weekday_mask); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelpricewindowDescStartMinute is the schema descriptor for start_minute field.
+	modelpricewindowDescStartMinute := modelpricewindowFields[4].Descriptor()
+	// modelpricewindow.StartMinuteValidator is a validator for the "start_minute" field. It is called by the builders before save.
+	modelpricewindow.StartMinuteValidator = func() func(int) error {
+		validators := modelpricewindowDescStartMinute.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(start_minute int) error {
+			for _, fn := range fns {
+				if err := fn(start_minute); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelpricewindowDescEndMinute is the schema descriptor for end_minute field.
+	modelpricewindowDescEndMinute := modelpricewindowFields[5].Descriptor()
+	// modelpricewindow.EndMinuteValidator is a validator for the "end_minute" field. It is called by the builders before save.
+	modelpricewindow.EndMinuteValidator = func() func(int) error {
+		validators := modelpricewindowDescEndMinute.Validators
+		fns := [...]func(int) error{
+			validators[0].(func(int) error),
+			validators[1].(func(int) error),
+		}
+		return func(end_minute int) error {
+			for _, fn := range fns {
+				if err := fn(end_minute); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// modelpricewindowDescInputPriceMicros is the schema descriptor for input_price_micros field.
+	modelpricewindowDescInputPriceMicros := modelpricewindowFields[6].Descriptor()
+	// modelpricewindow.InputPriceMicrosValidator is a validator for the "input_price_micros" field. It is called by the builders before save.
+	modelpricewindow.InputPriceMicrosValidator = modelpricewindowDescInputPriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescOutputPriceMicros is the schema descriptor for output_price_micros field.
+	modelpricewindowDescOutputPriceMicros := modelpricewindowFields[7].Descriptor()
+	// modelpricewindow.OutputPriceMicrosValidator is a validator for the "output_price_micros" field. It is called by the builders before save.
+	modelpricewindow.OutputPriceMicrosValidator = modelpricewindowDescOutputPriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescCacheReadPriceMicros is the schema descriptor for cache_read_price_micros field.
+	modelpricewindowDescCacheReadPriceMicros := modelpricewindowFields[8].Descriptor()
+	// modelpricewindow.CacheReadPriceMicrosValidator is a validator for the "cache_read_price_micros" field. It is called by the builders before save.
+	modelpricewindow.CacheReadPriceMicrosValidator = modelpricewindowDescCacheReadPriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescCacheWritePriceMicros is the schema descriptor for cache_write_price_micros field.
+	modelpricewindowDescCacheWritePriceMicros := modelpricewindowFields[9].Descriptor()
+	// modelpricewindow.CacheWritePriceMicrosValidator is a validator for the "cache_write_price_micros" field. It is called by the builders before save.
+	modelpricewindow.CacheWritePriceMicrosValidator = modelpricewindowDescCacheWritePriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescCacheWrite1hPriceMicros is the schema descriptor for cache_write_1h_price_micros field.
+	modelpricewindowDescCacheWrite1hPriceMicros := modelpricewindowFields[10].Descriptor()
+	// modelpricewindow.CacheWrite1hPriceMicrosValidator is a validator for the "cache_write_1h_price_micros" field. It is called by the builders before save.
+	modelpricewindow.CacheWrite1hPriceMicrosValidator = modelpricewindowDescCacheWrite1hPriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescRequestPriceMicros is the schema descriptor for request_price_micros field.
+	modelpricewindowDescRequestPriceMicros := modelpricewindowFields[11].Descriptor()
+	// modelpricewindow.RequestPriceMicrosValidator is a validator for the "request_price_micros" field. It is called by the builders before save.
+	modelpricewindow.RequestPriceMicrosValidator = modelpricewindowDescRequestPriceMicros.Validators[0].(func(int64) error)
+	// modelpricewindowDescCreatedAt is the schema descriptor for created_at field.
+	modelpricewindowDescCreatedAt := modelpricewindowFields[12].Descriptor()
+	// modelpricewindow.DefaultCreatedAt holds the default value on creation for the created_at field.
+	modelpricewindow.DefaultCreatedAt = modelpricewindowDescCreatedAt.Default.(func() time.Time)
+	// modelpricewindowDescID is the schema descriptor for id field.
+	modelpricewindowDescID := modelpricewindowFields[0].Descriptor()
+	// modelpricewindow.DefaultID holds the default value on creation for the id field.
+	modelpricewindow.DefaultID = modelpricewindowDescID.Default.(func() uuid.UUID)
 	modelrouteFields := schema.ModelRoute{}.Fields()
 	_ = modelrouteFields
 	// modelrouteDescPublicName is the schema descriptor for public_name field.

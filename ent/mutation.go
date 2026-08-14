@@ -18,6 +18,8 @@ import (
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
+	"github.com/novro-gateway/novro/ent/modelpricewindow"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/predicate"
@@ -47,6 +49,8 @@ const (
 	TypeEmailSMTPConfig       = "EmailSMTPConfig"
 	TypeEmailVerificationCode = "EmailVerificationCode"
 	TypeGatewayOperation      = "GatewayOperation"
+	TypeModelPricePlan        = "ModelPricePlan"
+	TypeModelPriceWindow      = "ModelPriceWindow"
 	TypeModelRoute            = "ModelRoute"
 	TypePaymentConfig         = "PaymentConfig"
 	TypeProvider              = "Provider"
@@ -7827,6 +7831,2769 @@ func (m *GatewayOperationMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown GatewayOperation edge %s", name)
 }
 
+// ModelPricePlanMutation represents an operation that mutates the ModelPricePlan nodes in the graph.
+type ModelPricePlanMutation struct {
+	config
+	op                                     Op
+	typ                                    string
+	id                                     *uuid.UUID
+	version                                *int
+	addversion                             *int
+	mode                                   *modelpriceplan.Mode
+	timezone                               *string
+	effective_from                         *time.Time
+	effective_to                           *time.Time
+	status                                 *modelpriceplan.Status
+	default_input_price_micros             *int64
+	adddefault_input_price_micros          *int64
+	default_output_price_micros            *int64
+	adddefault_output_price_micros         *int64
+	default_cache_read_price_micros        *int64
+	adddefault_cache_read_price_micros     *int64
+	default_cache_write_price_micros       *int64
+	adddefault_cache_write_price_micros    *int64
+	default_cache_write_1h_price_micros    *int64
+	adddefault_cache_write_1h_price_micros *int64
+	default_request_price_micros           *int64
+	adddefault_request_price_micros        *int64
+	created_at                             *time.Time
+	updated_at                             *time.Time
+	clearedFields                          map[string]struct{}
+	upstream_model                         *uuid.UUID
+	clearedupstream_model                  bool
+	windows                                map[uuid.UUID]struct{}
+	removedwindows                         map[uuid.UUID]struct{}
+	clearedwindows                         bool
+	done                                   bool
+	oldValue                               func(context.Context) (*ModelPricePlan, error)
+	predicates                             []predicate.ModelPricePlan
+}
+
+var _ ent.Mutation = (*ModelPricePlanMutation)(nil)
+
+// modelpriceplanOption allows management of the mutation configuration using functional options.
+type modelpriceplanOption func(*ModelPricePlanMutation)
+
+// newModelPricePlanMutation creates new mutation for the ModelPricePlan entity.
+func newModelPricePlanMutation(c config, op Op, opts ...modelpriceplanOption) *ModelPricePlanMutation {
+	m := &ModelPricePlanMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeModelPricePlan,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withModelPricePlanID sets the ID field of the mutation.
+func withModelPricePlanID(id uuid.UUID) modelpriceplanOption {
+	return func(m *ModelPricePlanMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ModelPricePlan
+		)
+		m.oldValue = func(ctx context.Context) (*ModelPricePlan, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ModelPricePlan.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withModelPricePlan sets the old ModelPricePlan of the mutation.
+func withModelPricePlan(node *ModelPricePlan) modelpriceplanOption {
+	return func(m *ModelPricePlanMutation) {
+		m.oldValue = func(context.Context) (*ModelPricePlan, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ModelPricePlanMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ModelPricePlanMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ModelPricePlan entities.
+func (m *ModelPricePlanMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ModelPricePlanMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ModelPricePlanMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ModelPricePlan.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUpstreamModelID sets the "upstream_model_id" field.
+func (m *ModelPricePlanMutation) SetUpstreamModelID(u uuid.UUID) {
+	m.upstream_model = &u
+}
+
+// UpstreamModelID returns the value of the "upstream_model_id" field in the mutation.
+func (m *ModelPricePlanMutation) UpstreamModelID() (r uuid.UUID, exists bool) {
+	v := m.upstream_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpstreamModelID returns the old "upstream_model_id" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldUpstreamModelID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpstreamModelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpstreamModelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpstreamModelID: %w", err)
+	}
+	return oldValue.UpstreamModelID, nil
+}
+
+// ResetUpstreamModelID resets all changes to the "upstream_model_id" field.
+func (m *ModelPricePlanMutation) ResetUpstreamModelID() {
+	m.upstream_model = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *ModelPricePlanMutation) SetVersion(i int) {
+	m.version = &i
+	m.addversion = nil
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *ModelPricePlanMutation) Version() (r int, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// AddVersion adds i to the "version" field.
+func (m *ModelPricePlanMutation) AddVersion(i int) {
+	if m.addversion != nil {
+		*m.addversion += i
+	} else {
+		m.addversion = &i
+	}
+}
+
+// AddedVersion returns the value that was added to the "version" field in this mutation.
+func (m *ModelPricePlanMutation) AddedVersion() (r int, exists bool) {
+	v := m.addversion
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *ModelPricePlanMutation) ResetVersion() {
+	m.version = nil
+	m.addversion = nil
+}
+
+// SetMode sets the "mode" field.
+func (m *ModelPricePlanMutation) SetMode(value modelpriceplan.Mode) {
+	m.mode = &value
+}
+
+// Mode returns the value of the "mode" field in the mutation.
+func (m *ModelPricePlanMutation) Mode() (r modelpriceplan.Mode, exists bool) {
+	v := m.mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMode returns the old "mode" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldMode(ctx context.Context) (v modelpriceplan.Mode, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMode: %w", err)
+	}
+	return oldValue.Mode, nil
+}
+
+// ResetMode resets all changes to the "mode" field.
+func (m *ModelPricePlanMutation) ResetMode() {
+	m.mode = nil
+}
+
+// SetTimezone sets the "timezone" field.
+func (m *ModelPricePlanMutation) SetTimezone(s string) {
+	m.timezone = &s
+}
+
+// Timezone returns the value of the "timezone" field in the mutation.
+func (m *ModelPricePlanMutation) Timezone() (r string, exists bool) {
+	v := m.timezone
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimezone returns the old "timezone" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldTimezone(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimezone is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimezone requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimezone: %w", err)
+	}
+	return oldValue.Timezone, nil
+}
+
+// ResetTimezone resets all changes to the "timezone" field.
+func (m *ModelPricePlanMutation) ResetTimezone() {
+	m.timezone = nil
+}
+
+// SetEffectiveFrom sets the "effective_from" field.
+func (m *ModelPricePlanMutation) SetEffectiveFrom(t time.Time) {
+	m.effective_from = &t
+}
+
+// EffectiveFrom returns the value of the "effective_from" field in the mutation.
+func (m *ModelPricePlanMutation) EffectiveFrom() (r time.Time, exists bool) {
+	v := m.effective_from
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEffectiveFrom returns the old "effective_from" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldEffectiveFrom(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEffectiveFrom is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEffectiveFrom requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEffectiveFrom: %w", err)
+	}
+	return oldValue.EffectiveFrom, nil
+}
+
+// ResetEffectiveFrom resets all changes to the "effective_from" field.
+func (m *ModelPricePlanMutation) ResetEffectiveFrom() {
+	m.effective_from = nil
+}
+
+// SetEffectiveTo sets the "effective_to" field.
+func (m *ModelPricePlanMutation) SetEffectiveTo(t time.Time) {
+	m.effective_to = &t
+}
+
+// EffectiveTo returns the value of the "effective_to" field in the mutation.
+func (m *ModelPricePlanMutation) EffectiveTo() (r time.Time, exists bool) {
+	v := m.effective_to
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEffectiveTo returns the old "effective_to" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldEffectiveTo(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEffectiveTo is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEffectiveTo requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEffectiveTo: %w", err)
+	}
+	return oldValue.EffectiveTo, nil
+}
+
+// ClearEffectiveTo clears the value of the "effective_to" field.
+func (m *ModelPricePlanMutation) ClearEffectiveTo() {
+	m.effective_to = nil
+	m.clearedFields[modelpriceplan.FieldEffectiveTo] = struct{}{}
+}
+
+// EffectiveToCleared returns if the "effective_to" field was cleared in this mutation.
+func (m *ModelPricePlanMutation) EffectiveToCleared() bool {
+	_, ok := m.clearedFields[modelpriceplan.FieldEffectiveTo]
+	return ok
+}
+
+// ResetEffectiveTo resets all changes to the "effective_to" field.
+func (m *ModelPricePlanMutation) ResetEffectiveTo() {
+	m.effective_to = nil
+	delete(m.clearedFields, modelpriceplan.FieldEffectiveTo)
+}
+
+// SetStatus sets the "status" field.
+func (m *ModelPricePlanMutation) SetStatus(value modelpriceplan.Status) {
+	m.status = &value
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ModelPricePlanMutation) Status() (r modelpriceplan.Status, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldStatus(ctx context.Context) (v modelpriceplan.Status, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ModelPricePlanMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetDefaultInputPriceMicros sets the "default_input_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultInputPriceMicros(i int64) {
+	m.default_input_price_micros = &i
+	m.adddefault_input_price_micros = nil
+}
+
+// DefaultInputPriceMicros returns the value of the "default_input_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultInputPriceMicros() (r int64, exists bool) {
+	v := m.default_input_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultInputPriceMicros returns the old "default_input_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultInputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultInputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultInputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultInputPriceMicros: %w", err)
+	}
+	return oldValue.DefaultInputPriceMicros, nil
+}
+
+// AddDefaultInputPriceMicros adds i to the "default_input_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultInputPriceMicros(i int64) {
+	if m.adddefault_input_price_micros != nil {
+		*m.adddefault_input_price_micros += i
+	} else {
+		m.adddefault_input_price_micros = &i
+	}
+}
+
+// AddedDefaultInputPriceMicros returns the value that was added to the "default_input_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultInputPriceMicros() (r int64, exists bool) {
+	v := m.adddefault_input_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultInputPriceMicros resets all changes to the "default_input_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultInputPriceMicros() {
+	m.default_input_price_micros = nil
+	m.adddefault_input_price_micros = nil
+}
+
+// SetDefaultOutputPriceMicros sets the "default_output_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultOutputPriceMicros(i int64) {
+	m.default_output_price_micros = &i
+	m.adddefault_output_price_micros = nil
+}
+
+// DefaultOutputPriceMicros returns the value of the "default_output_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultOutputPriceMicros() (r int64, exists bool) {
+	v := m.default_output_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultOutputPriceMicros returns the old "default_output_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultOutputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultOutputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultOutputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultOutputPriceMicros: %w", err)
+	}
+	return oldValue.DefaultOutputPriceMicros, nil
+}
+
+// AddDefaultOutputPriceMicros adds i to the "default_output_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultOutputPriceMicros(i int64) {
+	if m.adddefault_output_price_micros != nil {
+		*m.adddefault_output_price_micros += i
+	} else {
+		m.adddefault_output_price_micros = &i
+	}
+}
+
+// AddedDefaultOutputPriceMicros returns the value that was added to the "default_output_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultOutputPriceMicros() (r int64, exists bool) {
+	v := m.adddefault_output_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultOutputPriceMicros resets all changes to the "default_output_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultOutputPriceMicros() {
+	m.default_output_price_micros = nil
+	m.adddefault_output_price_micros = nil
+}
+
+// SetDefaultCacheReadPriceMicros sets the "default_cache_read_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultCacheReadPriceMicros(i int64) {
+	m.default_cache_read_price_micros = &i
+	m.adddefault_cache_read_price_micros = nil
+}
+
+// DefaultCacheReadPriceMicros returns the value of the "default_cache_read_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultCacheReadPriceMicros() (r int64, exists bool) {
+	v := m.default_cache_read_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultCacheReadPriceMicros returns the old "default_cache_read_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultCacheReadPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultCacheReadPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultCacheReadPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultCacheReadPriceMicros: %w", err)
+	}
+	return oldValue.DefaultCacheReadPriceMicros, nil
+}
+
+// AddDefaultCacheReadPriceMicros adds i to the "default_cache_read_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultCacheReadPriceMicros(i int64) {
+	if m.adddefault_cache_read_price_micros != nil {
+		*m.adddefault_cache_read_price_micros += i
+	} else {
+		m.adddefault_cache_read_price_micros = &i
+	}
+}
+
+// AddedDefaultCacheReadPriceMicros returns the value that was added to the "default_cache_read_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultCacheReadPriceMicros() (r int64, exists bool) {
+	v := m.adddefault_cache_read_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultCacheReadPriceMicros resets all changes to the "default_cache_read_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultCacheReadPriceMicros() {
+	m.default_cache_read_price_micros = nil
+	m.adddefault_cache_read_price_micros = nil
+}
+
+// SetDefaultCacheWritePriceMicros sets the "default_cache_write_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultCacheWritePriceMicros(i int64) {
+	m.default_cache_write_price_micros = &i
+	m.adddefault_cache_write_price_micros = nil
+}
+
+// DefaultCacheWritePriceMicros returns the value of the "default_cache_write_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultCacheWritePriceMicros() (r int64, exists bool) {
+	v := m.default_cache_write_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultCacheWritePriceMicros returns the old "default_cache_write_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultCacheWritePriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultCacheWritePriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultCacheWritePriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultCacheWritePriceMicros: %w", err)
+	}
+	return oldValue.DefaultCacheWritePriceMicros, nil
+}
+
+// AddDefaultCacheWritePriceMicros adds i to the "default_cache_write_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultCacheWritePriceMicros(i int64) {
+	if m.adddefault_cache_write_price_micros != nil {
+		*m.adddefault_cache_write_price_micros += i
+	} else {
+		m.adddefault_cache_write_price_micros = &i
+	}
+}
+
+// AddedDefaultCacheWritePriceMicros returns the value that was added to the "default_cache_write_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultCacheWritePriceMicros() (r int64, exists bool) {
+	v := m.adddefault_cache_write_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultCacheWritePriceMicros resets all changes to the "default_cache_write_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultCacheWritePriceMicros() {
+	m.default_cache_write_price_micros = nil
+	m.adddefault_cache_write_price_micros = nil
+}
+
+// SetDefaultCacheWrite1hPriceMicros sets the "default_cache_write_1h_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultCacheWrite1hPriceMicros(i int64) {
+	m.default_cache_write_1h_price_micros = &i
+	m.adddefault_cache_write_1h_price_micros = nil
+}
+
+// DefaultCacheWrite1hPriceMicros returns the value of the "default_cache_write_1h_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultCacheWrite1hPriceMicros() (r int64, exists bool) {
+	v := m.default_cache_write_1h_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultCacheWrite1hPriceMicros returns the old "default_cache_write_1h_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultCacheWrite1hPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultCacheWrite1hPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultCacheWrite1hPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultCacheWrite1hPriceMicros: %w", err)
+	}
+	return oldValue.DefaultCacheWrite1hPriceMicros, nil
+}
+
+// AddDefaultCacheWrite1hPriceMicros adds i to the "default_cache_write_1h_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultCacheWrite1hPriceMicros(i int64) {
+	if m.adddefault_cache_write_1h_price_micros != nil {
+		*m.adddefault_cache_write_1h_price_micros += i
+	} else {
+		m.adddefault_cache_write_1h_price_micros = &i
+	}
+}
+
+// AddedDefaultCacheWrite1hPriceMicros returns the value that was added to the "default_cache_write_1h_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultCacheWrite1hPriceMicros() (r int64, exists bool) {
+	v := m.adddefault_cache_write_1h_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultCacheWrite1hPriceMicros resets all changes to the "default_cache_write_1h_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultCacheWrite1hPriceMicros() {
+	m.default_cache_write_1h_price_micros = nil
+	m.adddefault_cache_write_1h_price_micros = nil
+}
+
+// SetDefaultRequestPriceMicros sets the "default_request_price_micros" field.
+func (m *ModelPricePlanMutation) SetDefaultRequestPriceMicros(i int64) {
+	m.default_request_price_micros = &i
+	m.adddefault_request_price_micros = nil
+}
+
+// DefaultRequestPriceMicros returns the value of the "default_request_price_micros" field in the mutation.
+func (m *ModelPricePlanMutation) DefaultRequestPriceMicros() (r int64, exists bool) {
+	v := m.default_request_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultRequestPriceMicros returns the old "default_request_price_micros" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldDefaultRequestPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultRequestPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultRequestPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultRequestPriceMicros: %w", err)
+	}
+	return oldValue.DefaultRequestPriceMicros, nil
+}
+
+// AddDefaultRequestPriceMicros adds i to the "default_request_price_micros" field.
+func (m *ModelPricePlanMutation) AddDefaultRequestPriceMicros(i int64) {
+	if m.adddefault_request_price_micros != nil {
+		*m.adddefault_request_price_micros += i
+	} else {
+		m.adddefault_request_price_micros = &i
+	}
+}
+
+// AddedDefaultRequestPriceMicros returns the value that was added to the "default_request_price_micros" field in this mutation.
+func (m *ModelPricePlanMutation) AddedDefaultRequestPriceMicros() (r int64, exists bool) {
+	v := m.adddefault_request_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDefaultRequestPriceMicros resets all changes to the "default_request_price_micros" field.
+func (m *ModelPricePlanMutation) ResetDefaultRequestPriceMicros() {
+	m.default_request_price_micros = nil
+	m.adddefault_request_price_micros = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ModelPricePlanMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ModelPricePlanMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ModelPricePlanMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ModelPricePlanMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ModelPricePlanMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ModelPricePlan entity.
+// If the ModelPricePlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPricePlanMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ModelPricePlanMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
+func (m *ModelPricePlanMutation) ClearUpstreamModel() {
+	m.clearedupstream_model = true
+	m.clearedFields[modelpriceplan.FieldUpstreamModelID] = struct{}{}
+}
+
+// UpstreamModelCleared reports if the "upstream_model" edge to the UpstreamModel entity was cleared.
+func (m *ModelPricePlanMutation) UpstreamModelCleared() bool {
+	return m.clearedupstream_model
+}
+
+// UpstreamModelIDs returns the "upstream_model" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UpstreamModelID instead. It exists only for internal usage by the builders.
+func (m *ModelPricePlanMutation) UpstreamModelIDs() (ids []uuid.UUID) {
+	if id := m.upstream_model; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUpstreamModel resets all changes to the "upstream_model" edge.
+func (m *ModelPricePlanMutation) ResetUpstreamModel() {
+	m.upstream_model = nil
+	m.clearedupstream_model = false
+}
+
+// AddWindowIDs adds the "windows" edge to the ModelPriceWindow entity by ids.
+func (m *ModelPricePlanMutation) AddWindowIDs(ids ...uuid.UUID) {
+	if m.windows == nil {
+		m.windows = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.windows[ids[i]] = struct{}{}
+	}
+}
+
+// ClearWindows clears the "windows" edge to the ModelPriceWindow entity.
+func (m *ModelPricePlanMutation) ClearWindows() {
+	m.clearedwindows = true
+}
+
+// WindowsCleared reports if the "windows" edge to the ModelPriceWindow entity was cleared.
+func (m *ModelPricePlanMutation) WindowsCleared() bool {
+	return m.clearedwindows
+}
+
+// RemoveWindowIDs removes the "windows" edge to the ModelPriceWindow entity by IDs.
+func (m *ModelPricePlanMutation) RemoveWindowIDs(ids ...uuid.UUID) {
+	if m.removedwindows == nil {
+		m.removedwindows = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.windows, ids[i])
+		m.removedwindows[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedWindows returns the removed IDs of the "windows" edge to the ModelPriceWindow entity.
+func (m *ModelPricePlanMutation) RemovedWindowsIDs() (ids []uuid.UUID) {
+	for id := range m.removedwindows {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// WindowsIDs returns the "windows" edge IDs in the mutation.
+func (m *ModelPricePlanMutation) WindowsIDs() (ids []uuid.UUID) {
+	for id := range m.windows {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetWindows resets all changes to the "windows" edge.
+func (m *ModelPricePlanMutation) ResetWindows() {
+	m.windows = nil
+	m.clearedwindows = false
+	m.removedwindows = nil
+}
+
+// Where appends a list predicates to the ModelPricePlanMutation builder.
+func (m *ModelPricePlanMutation) Where(ps ...predicate.ModelPricePlan) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ModelPricePlanMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ModelPricePlanMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ModelPricePlan, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ModelPricePlanMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ModelPricePlanMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ModelPricePlan).
+func (m *ModelPricePlanMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ModelPricePlanMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.upstream_model != nil {
+		fields = append(fields, modelpriceplan.FieldUpstreamModelID)
+	}
+	if m.version != nil {
+		fields = append(fields, modelpriceplan.FieldVersion)
+	}
+	if m.mode != nil {
+		fields = append(fields, modelpriceplan.FieldMode)
+	}
+	if m.timezone != nil {
+		fields = append(fields, modelpriceplan.FieldTimezone)
+	}
+	if m.effective_from != nil {
+		fields = append(fields, modelpriceplan.FieldEffectiveFrom)
+	}
+	if m.effective_to != nil {
+		fields = append(fields, modelpriceplan.FieldEffectiveTo)
+	}
+	if m.status != nil {
+		fields = append(fields, modelpriceplan.FieldStatus)
+	}
+	if m.default_input_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultInputPriceMicros)
+	}
+	if m.default_output_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultOutputPriceMicros)
+	}
+	if m.default_cache_read_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheReadPriceMicros)
+	}
+	if m.default_cache_write_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheWritePriceMicros)
+	}
+	if m.default_cache_write_1h_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheWrite1hPriceMicros)
+	}
+	if m.default_request_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultRequestPriceMicros)
+	}
+	if m.created_at != nil {
+		fields = append(fields, modelpriceplan.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, modelpriceplan.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ModelPricePlanMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case modelpriceplan.FieldUpstreamModelID:
+		return m.UpstreamModelID()
+	case modelpriceplan.FieldVersion:
+		return m.Version()
+	case modelpriceplan.FieldMode:
+		return m.Mode()
+	case modelpriceplan.FieldTimezone:
+		return m.Timezone()
+	case modelpriceplan.FieldEffectiveFrom:
+		return m.EffectiveFrom()
+	case modelpriceplan.FieldEffectiveTo:
+		return m.EffectiveTo()
+	case modelpriceplan.FieldStatus:
+		return m.Status()
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		return m.DefaultInputPriceMicros()
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		return m.DefaultOutputPriceMicros()
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		return m.DefaultCacheReadPriceMicros()
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		return m.DefaultCacheWritePriceMicros()
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		return m.DefaultCacheWrite1hPriceMicros()
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		return m.DefaultRequestPriceMicros()
+	case modelpriceplan.FieldCreatedAt:
+		return m.CreatedAt()
+	case modelpriceplan.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ModelPricePlanMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case modelpriceplan.FieldUpstreamModelID:
+		return m.OldUpstreamModelID(ctx)
+	case modelpriceplan.FieldVersion:
+		return m.OldVersion(ctx)
+	case modelpriceplan.FieldMode:
+		return m.OldMode(ctx)
+	case modelpriceplan.FieldTimezone:
+		return m.OldTimezone(ctx)
+	case modelpriceplan.FieldEffectiveFrom:
+		return m.OldEffectiveFrom(ctx)
+	case modelpriceplan.FieldEffectiveTo:
+		return m.OldEffectiveTo(ctx)
+	case modelpriceplan.FieldStatus:
+		return m.OldStatus(ctx)
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		return m.OldDefaultInputPriceMicros(ctx)
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		return m.OldDefaultOutputPriceMicros(ctx)
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		return m.OldDefaultCacheReadPriceMicros(ctx)
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		return m.OldDefaultCacheWritePriceMicros(ctx)
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		return m.OldDefaultCacheWrite1hPriceMicros(ctx)
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		return m.OldDefaultRequestPriceMicros(ctx)
+	case modelpriceplan.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case modelpriceplan.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ModelPricePlan field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelPricePlanMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case modelpriceplan.FieldUpstreamModelID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpstreamModelID(v)
+		return nil
+	case modelpriceplan.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case modelpriceplan.FieldMode:
+		v, ok := value.(modelpriceplan.Mode)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMode(v)
+		return nil
+	case modelpriceplan.FieldTimezone:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimezone(v)
+		return nil
+	case modelpriceplan.FieldEffectiveFrom:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEffectiveFrom(v)
+		return nil
+	case modelpriceplan.FieldEffectiveTo:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEffectiveTo(v)
+		return nil
+	case modelpriceplan.FieldStatus:
+		v, ok := value.(modelpriceplan.Status)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultInputPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultOutputPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultCacheReadPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultCacheWritePriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultCacheWrite1hPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultRequestPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case modelpriceplan.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ModelPricePlanMutation) AddedFields() []string {
+	var fields []string
+	if m.addversion != nil {
+		fields = append(fields, modelpriceplan.FieldVersion)
+	}
+	if m.adddefault_input_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultInputPriceMicros)
+	}
+	if m.adddefault_output_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultOutputPriceMicros)
+	}
+	if m.adddefault_cache_read_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheReadPriceMicros)
+	}
+	if m.adddefault_cache_write_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheWritePriceMicros)
+	}
+	if m.adddefault_cache_write_1h_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultCacheWrite1hPriceMicros)
+	}
+	if m.adddefault_request_price_micros != nil {
+		fields = append(fields, modelpriceplan.FieldDefaultRequestPriceMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ModelPricePlanMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case modelpriceplan.FieldVersion:
+		return m.AddedVersion()
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		return m.AddedDefaultInputPriceMicros()
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		return m.AddedDefaultOutputPriceMicros()
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		return m.AddedDefaultCacheReadPriceMicros()
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		return m.AddedDefaultCacheWritePriceMicros()
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		return m.AddedDefaultCacheWrite1hPriceMicros()
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		return m.AddedDefaultRequestPriceMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelPricePlanMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case modelpriceplan.FieldVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVersion(v)
+		return nil
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultInputPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultOutputPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultCacheReadPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultCacheWritePriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultCacheWrite1hPriceMicros(v)
+		return nil
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDefaultRequestPriceMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ModelPricePlanMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(modelpriceplan.FieldEffectiveTo) {
+		fields = append(fields, modelpriceplan.FieldEffectiveTo)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ModelPricePlanMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ModelPricePlanMutation) ClearField(name string) error {
+	switch name {
+	case modelpriceplan.FieldEffectiveTo:
+		m.ClearEffectiveTo()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ModelPricePlanMutation) ResetField(name string) error {
+	switch name {
+	case modelpriceplan.FieldUpstreamModelID:
+		m.ResetUpstreamModelID()
+		return nil
+	case modelpriceplan.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case modelpriceplan.FieldMode:
+		m.ResetMode()
+		return nil
+	case modelpriceplan.FieldTimezone:
+		m.ResetTimezone()
+		return nil
+	case modelpriceplan.FieldEffectiveFrom:
+		m.ResetEffectiveFrom()
+		return nil
+	case modelpriceplan.FieldEffectiveTo:
+		m.ResetEffectiveTo()
+		return nil
+	case modelpriceplan.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case modelpriceplan.FieldDefaultInputPriceMicros:
+		m.ResetDefaultInputPriceMicros()
+		return nil
+	case modelpriceplan.FieldDefaultOutputPriceMicros:
+		m.ResetDefaultOutputPriceMicros()
+		return nil
+	case modelpriceplan.FieldDefaultCacheReadPriceMicros:
+		m.ResetDefaultCacheReadPriceMicros()
+		return nil
+	case modelpriceplan.FieldDefaultCacheWritePriceMicros:
+		m.ResetDefaultCacheWritePriceMicros()
+		return nil
+	case modelpriceplan.FieldDefaultCacheWrite1hPriceMicros:
+		m.ResetDefaultCacheWrite1hPriceMicros()
+		return nil
+	case modelpriceplan.FieldDefaultRequestPriceMicros:
+		m.ResetDefaultRequestPriceMicros()
+		return nil
+	case modelpriceplan.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case modelpriceplan.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ModelPricePlanMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.upstream_model != nil {
+		edges = append(edges, modelpriceplan.EdgeUpstreamModel)
+	}
+	if m.windows != nil {
+		edges = append(edges, modelpriceplan.EdgeWindows)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ModelPricePlanMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case modelpriceplan.EdgeUpstreamModel:
+		if id := m.upstream_model; id != nil {
+			return []ent.Value{*id}
+		}
+	case modelpriceplan.EdgeWindows:
+		ids := make([]ent.Value, 0, len(m.windows))
+		for id := range m.windows {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ModelPricePlanMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedwindows != nil {
+		edges = append(edges, modelpriceplan.EdgeWindows)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ModelPricePlanMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case modelpriceplan.EdgeWindows:
+		ids := make([]ent.Value, 0, len(m.removedwindows))
+		for id := range m.removedwindows {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ModelPricePlanMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedupstream_model {
+		edges = append(edges, modelpriceplan.EdgeUpstreamModel)
+	}
+	if m.clearedwindows {
+		edges = append(edges, modelpriceplan.EdgeWindows)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ModelPricePlanMutation) EdgeCleared(name string) bool {
+	switch name {
+	case modelpriceplan.EdgeUpstreamModel:
+		return m.clearedupstream_model
+	case modelpriceplan.EdgeWindows:
+		return m.clearedwindows
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ModelPricePlanMutation) ClearEdge(name string) error {
+	switch name {
+	case modelpriceplan.EdgeUpstreamModel:
+		m.ClearUpstreamModel()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ModelPricePlanMutation) ResetEdge(name string) error {
+	switch name {
+	case modelpriceplan.EdgeUpstreamModel:
+		m.ResetUpstreamModel()
+		return nil
+	case modelpriceplan.EdgeWindows:
+		m.ResetWindows()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPricePlan edge %s", name)
+}
+
+// ModelPriceWindowMutation represents an operation that mutates the ModelPriceWindow nodes in the graph.
+type ModelPriceWindowMutation struct {
+	config
+	op                             Op
+	typ                            string
+	id                             *uuid.UUID
+	label                          *string
+	weekday_mask                   *int
+	addweekday_mask                *int
+	start_minute                   *int
+	addstart_minute                *int
+	end_minute                     *int
+	addend_minute                  *int
+	input_price_micros             *int64
+	addinput_price_micros          *int64
+	output_price_micros            *int64
+	addoutput_price_micros         *int64
+	cache_read_price_micros        *int64
+	addcache_read_price_micros     *int64
+	cache_write_price_micros       *int64
+	addcache_write_price_micros    *int64
+	cache_write_1h_price_micros    *int64
+	addcache_write_1h_price_micros *int64
+	request_price_micros           *int64
+	addrequest_price_micros        *int64
+	created_at                     *time.Time
+	clearedFields                  map[string]struct{}
+	price_plan                     *uuid.UUID
+	clearedprice_plan              bool
+	done                           bool
+	oldValue                       func(context.Context) (*ModelPriceWindow, error)
+	predicates                     []predicate.ModelPriceWindow
+}
+
+var _ ent.Mutation = (*ModelPriceWindowMutation)(nil)
+
+// modelpricewindowOption allows management of the mutation configuration using functional options.
+type modelpricewindowOption func(*ModelPriceWindowMutation)
+
+// newModelPriceWindowMutation creates new mutation for the ModelPriceWindow entity.
+func newModelPriceWindowMutation(c config, op Op, opts ...modelpricewindowOption) *ModelPriceWindowMutation {
+	m := &ModelPriceWindowMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeModelPriceWindow,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withModelPriceWindowID sets the ID field of the mutation.
+func withModelPriceWindowID(id uuid.UUID) modelpricewindowOption {
+	return func(m *ModelPriceWindowMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ModelPriceWindow
+		)
+		m.oldValue = func(ctx context.Context) (*ModelPriceWindow, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ModelPriceWindow.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withModelPriceWindow sets the old ModelPriceWindow of the mutation.
+func withModelPriceWindow(node *ModelPriceWindow) modelpricewindowOption {
+	return func(m *ModelPriceWindowMutation) {
+		m.oldValue = func(context.Context) (*ModelPriceWindow, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ModelPriceWindowMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ModelPriceWindowMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ModelPriceWindow entities.
+func (m *ModelPriceWindowMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ModelPriceWindowMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ModelPriceWindowMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ModelPriceWindow.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetPricePlanID sets the "price_plan_id" field.
+func (m *ModelPriceWindowMutation) SetPricePlanID(u uuid.UUID) {
+	m.price_plan = &u
+}
+
+// PricePlanID returns the value of the "price_plan_id" field in the mutation.
+func (m *ModelPriceWindowMutation) PricePlanID() (r uuid.UUID, exists bool) {
+	v := m.price_plan
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPricePlanID returns the old "price_plan_id" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldPricePlanID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPricePlanID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPricePlanID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPricePlanID: %w", err)
+	}
+	return oldValue.PricePlanID, nil
+}
+
+// ResetPricePlanID resets all changes to the "price_plan_id" field.
+func (m *ModelPriceWindowMutation) ResetPricePlanID() {
+	m.price_plan = nil
+}
+
+// SetLabel sets the "label" field.
+func (m *ModelPriceWindowMutation) SetLabel(s string) {
+	m.label = &s
+}
+
+// Label returns the value of the "label" field in the mutation.
+func (m *ModelPriceWindowMutation) Label() (r string, exists bool) {
+	v := m.label
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLabel returns the old "label" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldLabel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLabel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLabel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLabel: %w", err)
+	}
+	return oldValue.Label, nil
+}
+
+// ResetLabel resets all changes to the "label" field.
+func (m *ModelPriceWindowMutation) ResetLabel() {
+	m.label = nil
+}
+
+// SetWeekdayMask sets the "weekday_mask" field.
+func (m *ModelPriceWindowMutation) SetWeekdayMask(i int) {
+	m.weekday_mask = &i
+	m.addweekday_mask = nil
+}
+
+// WeekdayMask returns the value of the "weekday_mask" field in the mutation.
+func (m *ModelPriceWindowMutation) WeekdayMask() (r int, exists bool) {
+	v := m.weekday_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeekdayMask returns the old "weekday_mask" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldWeekdayMask(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeekdayMask is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeekdayMask requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeekdayMask: %w", err)
+	}
+	return oldValue.WeekdayMask, nil
+}
+
+// AddWeekdayMask adds i to the "weekday_mask" field.
+func (m *ModelPriceWindowMutation) AddWeekdayMask(i int) {
+	if m.addweekday_mask != nil {
+		*m.addweekday_mask += i
+	} else {
+		m.addweekday_mask = &i
+	}
+}
+
+// AddedWeekdayMask returns the value that was added to the "weekday_mask" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedWeekdayMask() (r int, exists bool) {
+	v := m.addweekday_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeekdayMask resets all changes to the "weekday_mask" field.
+func (m *ModelPriceWindowMutation) ResetWeekdayMask() {
+	m.weekday_mask = nil
+	m.addweekday_mask = nil
+}
+
+// SetStartMinute sets the "start_minute" field.
+func (m *ModelPriceWindowMutation) SetStartMinute(i int) {
+	m.start_minute = &i
+	m.addstart_minute = nil
+}
+
+// StartMinute returns the value of the "start_minute" field in the mutation.
+func (m *ModelPriceWindowMutation) StartMinute() (r int, exists bool) {
+	v := m.start_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartMinute returns the old "start_minute" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldStartMinute(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartMinute is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartMinute requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartMinute: %w", err)
+	}
+	return oldValue.StartMinute, nil
+}
+
+// AddStartMinute adds i to the "start_minute" field.
+func (m *ModelPriceWindowMutation) AddStartMinute(i int) {
+	if m.addstart_minute != nil {
+		*m.addstart_minute += i
+	} else {
+		m.addstart_minute = &i
+	}
+}
+
+// AddedStartMinute returns the value that was added to the "start_minute" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedStartMinute() (r int, exists bool) {
+	v := m.addstart_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStartMinute resets all changes to the "start_minute" field.
+func (m *ModelPriceWindowMutation) ResetStartMinute() {
+	m.start_minute = nil
+	m.addstart_minute = nil
+}
+
+// SetEndMinute sets the "end_minute" field.
+func (m *ModelPriceWindowMutation) SetEndMinute(i int) {
+	m.end_minute = &i
+	m.addend_minute = nil
+}
+
+// EndMinute returns the value of the "end_minute" field in the mutation.
+func (m *ModelPriceWindowMutation) EndMinute() (r int, exists bool) {
+	v := m.end_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndMinute returns the old "end_minute" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldEndMinute(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndMinute is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndMinute requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndMinute: %w", err)
+	}
+	return oldValue.EndMinute, nil
+}
+
+// AddEndMinute adds i to the "end_minute" field.
+func (m *ModelPriceWindowMutation) AddEndMinute(i int) {
+	if m.addend_minute != nil {
+		*m.addend_minute += i
+	} else {
+		m.addend_minute = &i
+	}
+}
+
+// AddedEndMinute returns the value that was added to the "end_minute" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedEndMinute() (r int, exists bool) {
+	v := m.addend_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEndMinute resets all changes to the "end_minute" field.
+func (m *ModelPriceWindowMutation) ResetEndMinute() {
+	m.end_minute = nil
+	m.addend_minute = nil
+}
+
+// SetInputPriceMicros sets the "input_price_micros" field.
+func (m *ModelPriceWindowMutation) SetInputPriceMicros(i int64) {
+	m.input_price_micros = &i
+	m.addinput_price_micros = nil
+}
+
+// InputPriceMicros returns the value of the "input_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) InputPriceMicros() (r int64, exists bool) {
+	v := m.input_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInputPriceMicros returns the old "input_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldInputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInputPriceMicros: %w", err)
+	}
+	return oldValue.InputPriceMicros, nil
+}
+
+// AddInputPriceMicros adds i to the "input_price_micros" field.
+func (m *ModelPriceWindowMutation) AddInputPriceMicros(i int64) {
+	if m.addinput_price_micros != nil {
+		*m.addinput_price_micros += i
+	} else {
+		m.addinput_price_micros = &i
+	}
+}
+
+// AddedInputPriceMicros returns the value that was added to the "input_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedInputPriceMicros() (r int64, exists bool) {
+	v := m.addinput_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInputPriceMicros resets all changes to the "input_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetInputPriceMicros() {
+	m.input_price_micros = nil
+	m.addinput_price_micros = nil
+}
+
+// SetOutputPriceMicros sets the "output_price_micros" field.
+func (m *ModelPriceWindowMutation) SetOutputPriceMicros(i int64) {
+	m.output_price_micros = &i
+	m.addoutput_price_micros = nil
+}
+
+// OutputPriceMicros returns the value of the "output_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) OutputPriceMicros() (r int64, exists bool) {
+	v := m.output_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutputPriceMicros returns the old "output_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldOutputPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutputPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutputPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutputPriceMicros: %w", err)
+	}
+	return oldValue.OutputPriceMicros, nil
+}
+
+// AddOutputPriceMicros adds i to the "output_price_micros" field.
+func (m *ModelPriceWindowMutation) AddOutputPriceMicros(i int64) {
+	if m.addoutput_price_micros != nil {
+		*m.addoutput_price_micros += i
+	} else {
+		m.addoutput_price_micros = &i
+	}
+}
+
+// AddedOutputPriceMicros returns the value that was added to the "output_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedOutputPriceMicros() (r int64, exists bool) {
+	v := m.addoutput_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutputPriceMicros resets all changes to the "output_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetOutputPriceMicros() {
+	m.output_price_micros = nil
+	m.addoutput_price_micros = nil
+}
+
+// SetCacheReadPriceMicros sets the "cache_read_price_micros" field.
+func (m *ModelPriceWindowMutation) SetCacheReadPriceMicros(i int64) {
+	m.cache_read_price_micros = &i
+	m.addcache_read_price_micros = nil
+}
+
+// CacheReadPriceMicros returns the value of the "cache_read_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) CacheReadPriceMicros() (r int64, exists bool) {
+	v := m.cache_read_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheReadPriceMicros returns the old "cache_read_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldCacheReadPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheReadPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheReadPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheReadPriceMicros: %w", err)
+	}
+	return oldValue.CacheReadPriceMicros, nil
+}
+
+// AddCacheReadPriceMicros adds i to the "cache_read_price_micros" field.
+func (m *ModelPriceWindowMutation) AddCacheReadPriceMicros(i int64) {
+	if m.addcache_read_price_micros != nil {
+		*m.addcache_read_price_micros += i
+	} else {
+		m.addcache_read_price_micros = &i
+	}
+}
+
+// AddedCacheReadPriceMicros returns the value that was added to the "cache_read_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedCacheReadPriceMicros() (r int64, exists bool) {
+	v := m.addcache_read_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCacheReadPriceMicros resets all changes to the "cache_read_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetCacheReadPriceMicros() {
+	m.cache_read_price_micros = nil
+	m.addcache_read_price_micros = nil
+}
+
+// SetCacheWritePriceMicros sets the "cache_write_price_micros" field.
+func (m *ModelPriceWindowMutation) SetCacheWritePriceMicros(i int64) {
+	m.cache_write_price_micros = &i
+	m.addcache_write_price_micros = nil
+}
+
+// CacheWritePriceMicros returns the value of the "cache_write_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) CacheWritePriceMicros() (r int64, exists bool) {
+	v := m.cache_write_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheWritePriceMicros returns the old "cache_write_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldCacheWritePriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheWritePriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheWritePriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheWritePriceMicros: %w", err)
+	}
+	return oldValue.CacheWritePriceMicros, nil
+}
+
+// AddCacheWritePriceMicros adds i to the "cache_write_price_micros" field.
+func (m *ModelPriceWindowMutation) AddCacheWritePriceMicros(i int64) {
+	if m.addcache_write_price_micros != nil {
+		*m.addcache_write_price_micros += i
+	} else {
+		m.addcache_write_price_micros = &i
+	}
+}
+
+// AddedCacheWritePriceMicros returns the value that was added to the "cache_write_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedCacheWritePriceMicros() (r int64, exists bool) {
+	v := m.addcache_write_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCacheWritePriceMicros resets all changes to the "cache_write_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetCacheWritePriceMicros() {
+	m.cache_write_price_micros = nil
+	m.addcache_write_price_micros = nil
+}
+
+// SetCacheWrite1hPriceMicros sets the "cache_write_1h_price_micros" field.
+func (m *ModelPriceWindowMutation) SetCacheWrite1hPriceMicros(i int64) {
+	m.cache_write_1h_price_micros = &i
+	m.addcache_write_1h_price_micros = nil
+}
+
+// CacheWrite1hPriceMicros returns the value of the "cache_write_1h_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) CacheWrite1hPriceMicros() (r int64, exists bool) {
+	v := m.cache_write_1h_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheWrite1hPriceMicros returns the old "cache_write_1h_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldCacheWrite1hPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheWrite1hPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheWrite1hPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheWrite1hPriceMicros: %w", err)
+	}
+	return oldValue.CacheWrite1hPriceMicros, nil
+}
+
+// AddCacheWrite1hPriceMicros adds i to the "cache_write_1h_price_micros" field.
+func (m *ModelPriceWindowMutation) AddCacheWrite1hPriceMicros(i int64) {
+	if m.addcache_write_1h_price_micros != nil {
+		*m.addcache_write_1h_price_micros += i
+	} else {
+		m.addcache_write_1h_price_micros = &i
+	}
+}
+
+// AddedCacheWrite1hPriceMicros returns the value that was added to the "cache_write_1h_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedCacheWrite1hPriceMicros() (r int64, exists bool) {
+	v := m.addcache_write_1h_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCacheWrite1hPriceMicros resets all changes to the "cache_write_1h_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetCacheWrite1hPriceMicros() {
+	m.cache_write_1h_price_micros = nil
+	m.addcache_write_1h_price_micros = nil
+}
+
+// SetRequestPriceMicros sets the "request_price_micros" field.
+func (m *ModelPriceWindowMutation) SetRequestPriceMicros(i int64) {
+	m.request_price_micros = &i
+	m.addrequest_price_micros = nil
+}
+
+// RequestPriceMicros returns the value of the "request_price_micros" field in the mutation.
+func (m *ModelPriceWindowMutation) RequestPriceMicros() (r int64, exists bool) {
+	v := m.request_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequestPriceMicros returns the old "request_price_micros" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldRequestPriceMicros(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequestPriceMicros is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequestPriceMicros requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequestPriceMicros: %w", err)
+	}
+	return oldValue.RequestPriceMicros, nil
+}
+
+// AddRequestPriceMicros adds i to the "request_price_micros" field.
+func (m *ModelPriceWindowMutation) AddRequestPriceMicros(i int64) {
+	if m.addrequest_price_micros != nil {
+		*m.addrequest_price_micros += i
+	} else {
+		m.addrequest_price_micros = &i
+	}
+}
+
+// AddedRequestPriceMicros returns the value that was added to the "request_price_micros" field in this mutation.
+func (m *ModelPriceWindowMutation) AddedRequestPriceMicros() (r int64, exists bool) {
+	v := m.addrequest_price_micros
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRequestPriceMicros resets all changes to the "request_price_micros" field.
+func (m *ModelPriceWindowMutation) ResetRequestPriceMicros() {
+	m.request_price_micros = nil
+	m.addrequest_price_micros = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ModelPriceWindowMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ModelPriceWindowMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ModelPriceWindow entity.
+// If the ModelPriceWindow object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelPriceWindowMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ModelPriceWindowMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearPricePlan clears the "price_plan" edge to the ModelPricePlan entity.
+func (m *ModelPriceWindowMutation) ClearPricePlan() {
+	m.clearedprice_plan = true
+	m.clearedFields[modelpricewindow.FieldPricePlanID] = struct{}{}
+}
+
+// PricePlanCleared reports if the "price_plan" edge to the ModelPricePlan entity was cleared.
+func (m *ModelPriceWindowMutation) PricePlanCleared() bool {
+	return m.clearedprice_plan
+}
+
+// PricePlanIDs returns the "price_plan" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// PricePlanID instead. It exists only for internal usage by the builders.
+func (m *ModelPriceWindowMutation) PricePlanIDs() (ids []uuid.UUID) {
+	if id := m.price_plan; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetPricePlan resets all changes to the "price_plan" edge.
+func (m *ModelPriceWindowMutation) ResetPricePlan() {
+	m.price_plan = nil
+	m.clearedprice_plan = false
+}
+
+// Where appends a list predicates to the ModelPriceWindowMutation builder.
+func (m *ModelPriceWindowMutation) Where(ps ...predicate.ModelPriceWindow) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ModelPriceWindowMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ModelPriceWindowMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ModelPriceWindow, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ModelPriceWindowMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ModelPriceWindowMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ModelPriceWindow).
+func (m *ModelPriceWindowMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ModelPriceWindowMutation) Fields() []string {
+	fields := make([]string, 0, 12)
+	if m.price_plan != nil {
+		fields = append(fields, modelpricewindow.FieldPricePlanID)
+	}
+	if m.label != nil {
+		fields = append(fields, modelpricewindow.FieldLabel)
+	}
+	if m.weekday_mask != nil {
+		fields = append(fields, modelpricewindow.FieldWeekdayMask)
+	}
+	if m.start_minute != nil {
+		fields = append(fields, modelpricewindow.FieldStartMinute)
+	}
+	if m.end_minute != nil {
+		fields = append(fields, modelpricewindow.FieldEndMinute)
+	}
+	if m.input_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldInputPriceMicros)
+	}
+	if m.output_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldOutputPriceMicros)
+	}
+	if m.cache_read_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheReadPriceMicros)
+	}
+	if m.cache_write_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheWritePriceMicros)
+	}
+	if m.cache_write_1h_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheWrite1hPriceMicros)
+	}
+	if m.request_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldRequestPriceMicros)
+	}
+	if m.created_at != nil {
+		fields = append(fields, modelpricewindow.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ModelPriceWindowMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case modelpricewindow.FieldPricePlanID:
+		return m.PricePlanID()
+	case modelpricewindow.FieldLabel:
+		return m.Label()
+	case modelpricewindow.FieldWeekdayMask:
+		return m.WeekdayMask()
+	case modelpricewindow.FieldStartMinute:
+		return m.StartMinute()
+	case modelpricewindow.FieldEndMinute:
+		return m.EndMinute()
+	case modelpricewindow.FieldInputPriceMicros:
+		return m.InputPriceMicros()
+	case modelpricewindow.FieldOutputPriceMicros:
+		return m.OutputPriceMicros()
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		return m.CacheReadPriceMicros()
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		return m.CacheWritePriceMicros()
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		return m.CacheWrite1hPriceMicros()
+	case modelpricewindow.FieldRequestPriceMicros:
+		return m.RequestPriceMicros()
+	case modelpricewindow.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ModelPriceWindowMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case modelpricewindow.FieldPricePlanID:
+		return m.OldPricePlanID(ctx)
+	case modelpricewindow.FieldLabel:
+		return m.OldLabel(ctx)
+	case modelpricewindow.FieldWeekdayMask:
+		return m.OldWeekdayMask(ctx)
+	case modelpricewindow.FieldStartMinute:
+		return m.OldStartMinute(ctx)
+	case modelpricewindow.FieldEndMinute:
+		return m.OldEndMinute(ctx)
+	case modelpricewindow.FieldInputPriceMicros:
+		return m.OldInputPriceMicros(ctx)
+	case modelpricewindow.FieldOutputPriceMicros:
+		return m.OldOutputPriceMicros(ctx)
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		return m.OldCacheReadPriceMicros(ctx)
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		return m.OldCacheWritePriceMicros(ctx)
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		return m.OldCacheWrite1hPriceMicros(ctx)
+	case modelpricewindow.FieldRequestPriceMicros:
+		return m.OldRequestPriceMicros(ctx)
+	case modelpricewindow.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ModelPriceWindow field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelPriceWindowMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case modelpricewindow.FieldPricePlanID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPricePlanID(v)
+		return nil
+	case modelpricewindow.FieldLabel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLabel(v)
+		return nil
+	case modelpricewindow.FieldWeekdayMask:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeekdayMask(v)
+		return nil
+	case modelpricewindow.FieldStartMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartMinute(v)
+		return nil
+	case modelpricewindow.FieldEndMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndMinute(v)
+		return nil
+	case modelpricewindow.FieldInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInputPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutputPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheReadPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheWritePriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheWrite1hPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldRequestPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequestPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPriceWindow field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ModelPriceWindowMutation) AddedFields() []string {
+	var fields []string
+	if m.addweekday_mask != nil {
+		fields = append(fields, modelpricewindow.FieldWeekdayMask)
+	}
+	if m.addstart_minute != nil {
+		fields = append(fields, modelpricewindow.FieldStartMinute)
+	}
+	if m.addend_minute != nil {
+		fields = append(fields, modelpricewindow.FieldEndMinute)
+	}
+	if m.addinput_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldInputPriceMicros)
+	}
+	if m.addoutput_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldOutputPriceMicros)
+	}
+	if m.addcache_read_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheReadPriceMicros)
+	}
+	if m.addcache_write_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheWritePriceMicros)
+	}
+	if m.addcache_write_1h_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldCacheWrite1hPriceMicros)
+	}
+	if m.addrequest_price_micros != nil {
+		fields = append(fields, modelpricewindow.FieldRequestPriceMicros)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ModelPriceWindowMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case modelpricewindow.FieldWeekdayMask:
+		return m.AddedWeekdayMask()
+	case modelpricewindow.FieldStartMinute:
+		return m.AddedStartMinute()
+	case modelpricewindow.FieldEndMinute:
+		return m.AddedEndMinute()
+	case modelpricewindow.FieldInputPriceMicros:
+		return m.AddedInputPriceMicros()
+	case modelpricewindow.FieldOutputPriceMicros:
+		return m.AddedOutputPriceMicros()
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		return m.AddedCacheReadPriceMicros()
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		return m.AddedCacheWritePriceMicros()
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		return m.AddedCacheWrite1hPriceMicros()
+	case modelpricewindow.FieldRequestPriceMicros:
+		return m.AddedRequestPriceMicros()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ModelPriceWindowMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case modelpricewindow.FieldWeekdayMask:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeekdayMask(v)
+		return nil
+	case modelpricewindow.FieldStartMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStartMinute(v)
+		return nil
+	case modelpricewindow.FieldEndMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEndMinute(v)
+		return nil
+	case modelpricewindow.FieldInputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInputPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldOutputPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutputPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheReadPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheWritePriceMicros(v)
+		return nil
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheWrite1hPriceMicros(v)
+		return nil
+	case modelpricewindow.FieldRequestPriceMicros:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRequestPriceMicros(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPriceWindow numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ModelPriceWindowMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ModelPriceWindowMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ModelPriceWindowMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ModelPriceWindow nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ModelPriceWindowMutation) ResetField(name string) error {
+	switch name {
+	case modelpricewindow.FieldPricePlanID:
+		m.ResetPricePlanID()
+		return nil
+	case modelpricewindow.FieldLabel:
+		m.ResetLabel()
+		return nil
+	case modelpricewindow.FieldWeekdayMask:
+		m.ResetWeekdayMask()
+		return nil
+	case modelpricewindow.FieldStartMinute:
+		m.ResetStartMinute()
+		return nil
+	case modelpricewindow.FieldEndMinute:
+		m.ResetEndMinute()
+		return nil
+	case modelpricewindow.FieldInputPriceMicros:
+		m.ResetInputPriceMicros()
+		return nil
+	case modelpricewindow.FieldOutputPriceMicros:
+		m.ResetOutputPriceMicros()
+		return nil
+	case modelpricewindow.FieldCacheReadPriceMicros:
+		m.ResetCacheReadPriceMicros()
+		return nil
+	case modelpricewindow.FieldCacheWritePriceMicros:
+		m.ResetCacheWritePriceMicros()
+		return nil
+	case modelpricewindow.FieldCacheWrite1hPriceMicros:
+		m.ResetCacheWrite1hPriceMicros()
+		return nil
+	case modelpricewindow.FieldRequestPriceMicros:
+		m.ResetRequestPriceMicros()
+		return nil
+	case modelpricewindow.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPriceWindow field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ModelPriceWindowMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.price_plan != nil {
+		edges = append(edges, modelpricewindow.EdgePricePlan)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ModelPriceWindowMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case modelpricewindow.EdgePricePlan:
+		if id := m.price_plan; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ModelPriceWindowMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ModelPriceWindowMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ModelPriceWindowMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedprice_plan {
+		edges = append(edges, modelpricewindow.EdgePricePlan)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ModelPriceWindowMutation) EdgeCleared(name string) bool {
+	switch name {
+	case modelpricewindow.EdgePricePlan:
+		return m.clearedprice_plan
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ModelPriceWindowMutation) ClearEdge(name string) error {
+	switch name {
+	case modelpricewindow.EdgePricePlan:
+		m.ClearPricePlan()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPriceWindow unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ModelPriceWindowMutation) ResetEdge(name string) error {
+	switch name {
+	case modelpricewindow.EdgePricePlan:
+		m.ResetPricePlan()
+		return nil
+	}
+	return fmt.Errorf("unknown ModelPriceWindow edge %s", name)
+}
+
 // ModelRouteMutation represents an operation that mutates the ModelRoute nodes in the graph.
 type ModelRouteMutation struct {
 	config
@@ -12729,6 +15496,9 @@ type UpstreamModelMutation struct {
 	api_usages                     map[uuid.UUID]struct{}
 	removedapi_usages              map[uuid.UUID]struct{}
 	clearedapi_usages              bool
+	price_plans                    map[uuid.UUID]struct{}
+	removedprice_plans             map[uuid.UUID]struct{}
+	clearedprice_plans             bool
 	done                           bool
 	oldValue                       func(context.Context) (*UpstreamModel, error)
 	predicates                     []predicate.UpstreamModel
@@ -13583,6 +16353,60 @@ func (m *UpstreamModelMutation) ResetAPIUsages() {
 	m.removedapi_usages = nil
 }
 
+// AddPricePlanIDs adds the "price_plans" edge to the ModelPricePlan entity by ids.
+func (m *UpstreamModelMutation) AddPricePlanIDs(ids ...uuid.UUID) {
+	if m.price_plans == nil {
+		m.price_plans = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.price_plans[ids[i]] = struct{}{}
+	}
+}
+
+// ClearPricePlans clears the "price_plans" edge to the ModelPricePlan entity.
+func (m *UpstreamModelMutation) ClearPricePlans() {
+	m.clearedprice_plans = true
+}
+
+// PricePlansCleared reports if the "price_plans" edge to the ModelPricePlan entity was cleared.
+func (m *UpstreamModelMutation) PricePlansCleared() bool {
+	return m.clearedprice_plans
+}
+
+// RemovePricePlanIDs removes the "price_plans" edge to the ModelPricePlan entity by IDs.
+func (m *UpstreamModelMutation) RemovePricePlanIDs(ids ...uuid.UUID) {
+	if m.removedprice_plans == nil {
+		m.removedprice_plans = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.price_plans, ids[i])
+		m.removedprice_plans[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedPricePlans returns the removed IDs of the "price_plans" edge to the ModelPricePlan entity.
+func (m *UpstreamModelMutation) RemovedPricePlansIDs() (ids []uuid.UUID) {
+	for id := range m.removedprice_plans {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// PricePlansIDs returns the "price_plans" edge IDs in the mutation.
+func (m *UpstreamModelMutation) PricePlansIDs() (ids []uuid.UUID) {
+	for id := range m.price_plans {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetPricePlans resets all changes to the "price_plans" edge.
+func (m *UpstreamModelMutation) ResetPricePlans() {
+	m.price_plans = nil
+	m.clearedprice_plans = false
+	m.removedprice_plans = nil
+}
+
 // Where appends a list predicates to the UpstreamModelMutation builder.
 func (m *UpstreamModelMutation) Where(ps ...predicate.UpstreamModel) {
 	m.predicates = append(m.predicates, ps...)
@@ -14021,12 +16845,15 @@ func (m *UpstreamModelMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UpstreamModelMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.model_routes != nil {
 		edges = append(edges, upstreammodel.EdgeModelRoutes)
 	}
 	if m.api_usages != nil {
 		edges = append(edges, upstreammodel.EdgeAPIUsages)
+	}
+	if m.price_plans != nil {
+		edges = append(edges, upstreammodel.EdgePricePlans)
 	}
 	return edges
 }
@@ -14047,18 +16874,27 @@ func (m *UpstreamModelMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case upstreammodel.EdgePricePlans:
+		ids := make([]ent.Value, 0, len(m.price_plans))
+		for id := range m.price_plans {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UpstreamModelMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.removedmodel_routes != nil {
 		edges = append(edges, upstreammodel.EdgeModelRoutes)
 	}
 	if m.removedapi_usages != nil {
 		edges = append(edges, upstreammodel.EdgeAPIUsages)
+	}
+	if m.removedprice_plans != nil {
+		edges = append(edges, upstreammodel.EdgePricePlans)
 	}
 	return edges
 }
@@ -14079,18 +16915,27 @@ func (m *UpstreamModelMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case upstreammodel.EdgePricePlans:
+		ids := make([]ent.Value, 0, len(m.removedprice_plans))
+		for id := range m.removedprice_plans {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UpstreamModelMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.clearedmodel_routes {
 		edges = append(edges, upstreammodel.EdgeModelRoutes)
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, upstreammodel.EdgeAPIUsages)
+	}
+	if m.clearedprice_plans {
+		edges = append(edges, upstreammodel.EdgePricePlans)
 	}
 	return edges
 }
@@ -14103,6 +16948,8 @@ func (m *UpstreamModelMutation) EdgeCleared(name string) bool {
 		return m.clearedmodel_routes
 	case upstreammodel.EdgeAPIUsages:
 		return m.clearedapi_usages
+	case upstreammodel.EdgePricePlans:
+		return m.clearedprice_plans
 	}
 	return false
 }
@@ -14124,6 +16971,9 @@ func (m *UpstreamModelMutation) ResetEdge(name string) error {
 		return nil
 	case upstreammodel.EdgeAPIUsages:
 		m.ResetAPIUsages()
+		return nil
+	case upstreammodel.EdgePricePlans:
+		m.ResetPricePlans()
 		return nil
 	}
 	return fmt.Errorf("unknown UpstreamModel edge %s", name)

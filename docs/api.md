@@ -62,10 +62,16 @@
 | `POST` | `/api/admin/providers/{id}/models/sync` | 管理员 | 从提供商发现模型 ID；全局目录已有 ID 复用原价格，新 ID 建立待定价记录 |
 | `POST` | `/api/admin/providers/{id}/models` | 管理员 | 从模型目录批量创建关联路由 |
 | `GET` | `/api/admin/upstream-models` | 管理员 | 搜索和筛选模型目录 |
-| `POST` | `/api/admin/upstream-models` | 管理员 | 创建全局唯一模型目录记录和完整价格维度 |
-| `PATCH` | `/api/admin/upstream-models/{id}` | 管理员 | 修改全局模型目录和价格维度 |
+| `POST` | `/api/admin/upstream-models` | 管理员 | 创建全局唯一模型目录及首个已发布固定价版本 |
+| `PATCH` | `/api/admin/upstream-models/{id}` | 管理员 | 修改模型目录元数据；价格使用独立版本接口 |
 | `PATCH` | `/api/admin/upstream-models/{id}/status` | 管理员 | 启用或停用目录模型 |
 | `DELETE` | `/api/admin/upstream-models/{id}` | 管理员 | 软删除目录模型及其模型路由 |
+| `GET` | `/api/admin/upstream-models/{id}/price-plans` | 管理员 | 按版本倒序读取价格方案和时段 |
+| `POST` | `/api/admin/upstream-models/{id}/price-plans` | 管理员 | 创建价格方案草稿 |
+| `PATCH` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}` | 管理员 | 修改草稿及其全部时段 |
+| `DELETE` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}` | 管理员 | 删除草稿；已发布版本不可删除 |
+| `POST` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}/publish` | 管理员 | 发布草稿并调整相邻版本生效区间 |
+| `POST` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}/republish` | 管理员 | 直接切换历史版本的生效区间并立即生效，不创建新版本；重复切换幂等返回 |
 | `GET` | `/api/admin/model-routes` | 管理员 | 搜索和筛选模型路由 |
 | `POST` | `/api/admin/model-routes` | 管理员 | 创建对外模型到上游模型的映射 |
 | `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改上游模型映射和显示名称 |
@@ -208,6 +214,10 @@ POST /v1/messages
 - 请求进入网关后先验证用户、Key、模型、提供商和账户状态。
 - 按 Novro 全局模型目录配置的普通输入、缓存命中、缓存创建（5 分钟/1 小时）、输出和按次价格，
   以人民币微元（1 元 = 1,000,000 微元）结算；API Key 所属计费分组倍率作用于汇总费用。
+- 价格由管理员自行配置，不从厂商目录自动导入。每次请求开始时按已发布版本、生效区间、IANA 时区、
+  星期和分钟窗口解析一次费率；解析结果同时用于余额预占和最终结算，请求中途跨过峰谷边界不会改价。
+  已发布方案按模型缓存在网关进程的共享内存快照中，同一模型不会为每个请求重复查询价格表；发布新版本
+  会替换该模型快照，下一次请求立即按新版本解析。没有已发布方案的旧模型继续走兼容价格查询路径。
 - 网关用 `ceil(JSON 请求字节数 / 4) + 64` 估算输入，输入预占默认上限为 16384 Token；
   输出按请求声明的最大值估算，默认预占上限为 1024 Token。两个上限由 `/admin/gateway`
   配置，只限制余额冻结，不截断发送给模型的上下文或输出。网关按候选渠道中的最高可能费用

@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/modelpriceplan"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -283,6 +284,21 @@ func (_u *UpstreamModelUpdate) AddAPIUsages(v ...*APIUsage) *UpstreamModelUpdate
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddPricePlanIDs adds the "price_plans" edge to the ModelPricePlan entity by IDs.
+func (_u *UpstreamModelUpdate) AddPricePlanIDs(ids ...uuid.UUID) *UpstreamModelUpdate {
+	_u.mutation.AddPricePlanIDs(ids...)
+	return _u
+}
+
+// AddPricePlans adds the "price_plans" edges to the ModelPricePlan entity.
+func (_u *UpstreamModelUpdate) AddPricePlans(v ...*ModelPricePlan) *UpstreamModelUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPricePlanIDs(ids...)
+}
+
 // Mutation returns the UpstreamModelMutation object of the builder.
 func (_u *UpstreamModelUpdate) Mutation() *UpstreamModelMutation {
 	return _u.mutation
@@ -328,6 +344,27 @@ func (_u *UpstreamModelUpdate) RemoveAPIUsages(v ...*APIUsage) *UpstreamModelUpd
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearPricePlans clears all "price_plans" edges to the ModelPricePlan entity.
+func (_u *UpstreamModelUpdate) ClearPricePlans() *UpstreamModelUpdate {
+	_u.mutation.ClearPricePlans()
+	return _u
+}
+
+// RemovePricePlanIDs removes the "price_plans" edge to ModelPricePlan entities by IDs.
+func (_u *UpstreamModelUpdate) RemovePricePlanIDs(ids ...uuid.UUID) *UpstreamModelUpdate {
+	_u.mutation.RemovePricePlanIDs(ids...)
+	return _u
+}
+
+// RemovePricePlans removes "price_plans" edges to ModelPricePlan entities.
+func (_u *UpstreamModelUpdate) RemovePricePlans(v ...*ModelPricePlan) *UpstreamModelUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePricePlanIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -576,6 +613,51 @@ func (_u *UpstreamModelUpdate) sqlSave(ctx context.Context) (_node int, err erro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PricePlansCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPricePlansIDs(); len(nodes) > 0 && !_u.mutation.PricePlansCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PricePlansIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -855,6 +937,21 @@ func (_u *UpstreamModelUpdateOne) AddAPIUsages(v ...*APIUsage) *UpstreamModelUpd
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddPricePlanIDs adds the "price_plans" edge to the ModelPricePlan entity by IDs.
+func (_u *UpstreamModelUpdateOne) AddPricePlanIDs(ids ...uuid.UUID) *UpstreamModelUpdateOne {
+	_u.mutation.AddPricePlanIDs(ids...)
+	return _u
+}
+
+// AddPricePlans adds the "price_plans" edges to the ModelPricePlan entity.
+func (_u *UpstreamModelUpdateOne) AddPricePlans(v ...*ModelPricePlan) *UpstreamModelUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPricePlanIDs(ids...)
+}
+
 // Mutation returns the UpstreamModelMutation object of the builder.
 func (_u *UpstreamModelUpdateOne) Mutation() *UpstreamModelMutation {
 	return _u.mutation
@@ -900,6 +997,27 @@ func (_u *UpstreamModelUpdateOne) RemoveAPIUsages(v ...*APIUsage) *UpstreamModel
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAPIUsageIDs(ids...)
+}
+
+// ClearPricePlans clears all "price_plans" edges to the ModelPricePlan entity.
+func (_u *UpstreamModelUpdateOne) ClearPricePlans() *UpstreamModelUpdateOne {
+	_u.mutation.ClearPricePlans()
+	return _u
+}
+
+// RemovePricePlanIDs removes the "price_plans" edge to ModelPricePlan entities by IDs.
+func (_u *UpstreamModelUpdateOne) RemovePricePlanIDs(ids ...uuid.UUID) *UpstreamModelUpdateOne {
+	_u.mutation.RemovePricePlanIDs(ids...)
+	return _u
+}
+
+// RemovePricePlans removes "price_plans" edges to ModelPricePlan entities.
+func (_u *UpstreamModelUpdateOne) RemovePricePlans(v ...*ModelPricePlan) *UpstreamModelUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePricePlanIDs(ids...)
 }
 
 // Where appends a list predicates to the UpstreamModelUpdate builder.
@@ -1178,6 +1296,51 @@ func (_u *UpstreamModelUpdateOne) sqlSave(ctx context.Context) (_node *UpstreamM
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PricePlansCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPricePlansIDs(); len(nodes) > 0 && !_u.mutation.PricePlansCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PricePlansIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   upstreammodel.PricePlansTable,
+			Columns: []string{upstreammodel.PricePlansColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(modelpriceplan.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

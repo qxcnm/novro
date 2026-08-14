@@ -24,6 +24,10 @@ type Tx struct {
 	EmailVerificationCode *EmailVerificationCodeClient
 	// GatewayOperation is the client for interacting with the GatewayOperation builders.
 	GatewayOperation *GatewayOperationClient
+	// ModelPricePlan is the client for interacting with the ModelPricePlan builders.
+	ModelPricePlan *ModelPricePlanClient
+	// ModelPriceWindow is the client for interacting with the ModelPriceWindow builders.
+	ModelPriceWindow *ModelPriceWindowClient
 	// ModelRoute is the client for interacting with the ModelRoute builders.
 	ModelRoute *ModelRouteClient
 	// PaymentConfig is the client for interacting with the PaymentConfig builders.
@@ -183,6 +187,8 @@ func (tx *Tx) init() {
 	tx.EmailSMTPConfig = NewEmailSMTPConfigClient(tx.config)
 	tx.EmailVerificationCode = NewEmailVerificationCodeClient(tx.config)
 	tx.GatewayOperation = NewGatewayOperationClient(tx.config)
+	tx.ModelPricePlan = NewModelPricePlanClient(tx.config)
+	tx.ModelPriceWindow = NewModelPriceWindowClient(tx.config)
 	tx.ModelRoute = NewModelRouteClient(tx.config)
 	tx.PaymentConfig = NewPaymentConfigClient(tx.config)
 	tx.Provider = NewProviderClient(tx.config)

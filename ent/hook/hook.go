@@ -81,6 +81,30 @@ func (f GatewayOperationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GatewayOperationMutation", m)
 }
 
+// The ModelPricePlanFunc type is an adapter to allow the use of ordinary
+// function as ModelPricePlan mutator.
+type ModelPricePlanFunc func(context.Context, *ent.ModelPricePlanMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ModelPricePlanFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ModelPricePlanMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ModelPricePlanMutation", m)
+}
+
+// The ModelPriceWindowFunc type is an adapter to allow the use of ordinary
+// function as ModelPriceWindow mutator.
+type ModelPriceWindowFunc func(context.Context, *ent.ModelPriceWindowMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ModelPriceWindowFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ModelPriceWindowMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ModelPriceWindowMutation", m)
+}
+
 // The ModelRouteFunc type is an adapter to allow the use of ordinary
 // function as ModelRoute mutator.
 type ModelRouteFunc func(context.Context, *ent.ModelRouteMutation) (ent.Value, error)

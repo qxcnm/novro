@@ -48,6 +48,8 @@ const (
 	EdgeModelRoutes = "model_routes"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgePricePlans holds the string denoting the price_plans edge name in mutations.
+	EdgePricePlans = "price_plans"
 	// Table holds the table name of the upstreammodel in the database.
 	Table = "upstream_models"
 	// ModelRoutesTable is the table that holds the model_routes relation/edge.
@@ -64,6 +66,13 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "upstream_model_id"
+	// PricePlansTable is the table that holds the price_plans relation/edge.
+	PricePlansTable = "model_price_plans"
+	// PricePlansInverseTable is the table name for the ModelPricePlan entity.
+	// It exists in this package in order to avoid circular dependency with the "modelpriceplan" package.
+	PricePlansInverseTable = "model_price_plans"
+	// PricePlansColumn is the table column denoting the price_plans relation/edge.
+	PricePlansColumn = "upstream_model_id"
 )
 
 // Columns holds all SQL columns for upstreammodel fields.
@@ -269,6 +278,20 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newAPIUsagesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByPricePlansCount orders the results by price_plans count.
+func ByPricePlansCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPricePlansStep(), opts...)
+	}
+}
+
+// ByPricePlans orders the results by price_plans terms.
+func ByPricePlans(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPricePlansStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newModelRoutesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -281,5 +304,12 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newPricePlansStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PricePlansInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PricePlansTable, PricePlansColumn),
 	)
 }
