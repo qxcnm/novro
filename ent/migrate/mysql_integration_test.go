@@ -104,6 +104,95 @@ func TestMySQLMigrationChecksumsUpgradeAndRejectDrift(t *testing.T) {
 }
 
 /**
+ * TestMySQLModelRouteBillingGroupMigrationMovesExistingAssignments 验证对应功能在指定场景下的行为。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-15
+ */
+func TestMySQLModelRouteBillingGroupMigrationMovesExistingAssignments(t *testing.T) {
+	database := openMigrationIntegrationDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	migrations, err := readMigrations(VersionedSQL)
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	var routeGroupMigration migrationFile
+	for _, migration := range migrations {
+		if migration.Version == "0013_model_route_billing_groups" {
+			routeGroupMigration = migration
+			break
+		}
+		if _, err := database.ExecContext(ctx, migration.SQL); err != nil {
+			t.Fatalf("apply pre-route-group migration %s: %v", migration.Version, err)
+		}
+	}
+	if routeGroupMigration.Version == "" {
+		t.Fatal("model route billing group migration not found")
+	}
+
+	const (
+		defaultGroupID = "00000000-0000-0000-0000-000000000001"
+		secondGroupID  = "d1000000-0000-0000-0000-000000000001"
+		providerID     = "d2000000-0000-0000-0000-000000000001"
+		modelID        = "d3000000-0000-0000-0000-000000000001"
+		routeID        = "d4000000-0000-0000-0000-000000000001"
+	)
+	seedStatements := []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO billing_groups (id, code, display_name, multiplier_bps, is_default, status, created_at, updated_at) VALUES (?, 'migration-second', 'Migration Second', 15000, FALSE, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{secondGroupID}},
+		{`INSERT INTO providers (id, code, display_name, protocol, base_url, model_list_path, encrypted_api_key, api_key_hint, status, created_at, updated_at, billing_group_id) VALUES (?, 'route-group-provider', 'Route Group Provider', 'openai', 'https://example.com/v1', '', 'encrypted', 'rypt', 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?)`, []any{providerID, defaultGroupID}},
+		{`INSERT INTO upstream_models (id, provider_name, upstream_name, display_name, input_price_micros, output_price_micros, cache_read_price_micros, cache_write_price_micros, cache_write_1h_price_micros, request_price_micros, pricing_configured, status, created_at, updated_at) VALUES (?, 'Migration', 'route-group-model', 'Route Group Model', 1, 2, 0, 0, 0, 0, TRUE, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{modelID}},
+		{`INSERT INTO model_routes (id, provider_id, upstream_model_id, public_name, display_name, upstream_name, input_price_micros, output_price_micros, status, created_at, updated_at) VALUES (?, ?, ?, 'route-group-model', 'Route Group Model', 'route-group-model', 1, 2, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{routeID, providerID, modelID}},
+	}
+	for _, statement := range seedStatements {
+		if _, err := database.ExecContext(ctx, statement.sql, statement.args...); err != nil {
+			t.Fatalf("seed pre-route-group state: %v", err)
+		}
+	}
+
+	if _, err := database.ExecContext(ctx, routeGroupMigration.SQL); err != nil {
+		t.Fatalf("apply model route billing group migration: %v", err)
+	}
+
+	var migratedGroupID string
+	if err := database.QueryRowContext(ctx, `SELECT billing_group_id FROM model_routes WHERE id = ?`, routeID).Scan(&migratedGroupID); err != nil {
+		t.Fatalf("read migrated route group: %v", err)
+	}
+	if migratedGroupID != defaultGroupID {
+		t.Fatalf("migrated route group=%s want=%s", migratedGroupID, defaultGroupID)
+	}
+
+	var providerGroupColumns, routeGroupNullable, routeGroupForeignKeys, routeGroupUniqueIndexes int
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'providers' AND column_name = 'billing_group_id'`).Scan(&providerGroupColumns); err != nil {
+		t.Fatalf("inspect provider group column: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'model_routes' AND column_name = 'billing_group_id' AND is_nullable = 'NO'`).Scan(&routeGroupNullable); err != nil {
+		t.Fatalf("inspect route group column: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'model_routes' AND constraint_name = 'model_routes_billing_groups_model_routes'`).Scan(&routeGroupForeignKeys); err != nil {
+		t.Fatalf("inspect route group foreign key: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'model_routes' AND index_name = 'modelroute_group_public_provider_model' AND non_unique = 0`).Scan(&routeGroupUniqueIndexes); err != nil {
+		t.Fatalf("inspect route group unique index: %v", err)
+	}
+	if providerGroupColumns != 0 || routeGroupNullable != 1 || routeGroupForeignKeys != 1 || routeGroupUniqueIndexes != 1 {
+		t.Fatalf("migrated schema provider_columns=%d route_not_null=%d route_fks=%d route_unique_indexes=%d", providerGroupColumns, routeGroupNullable, routeGroupForeignKeys, routeGroupUniqueIndexes)
+	}
+
+	if _, err := database.ExecContext(ctx, `INSERT INTO model_routes (id, provider_id, upstream_model_id, billing_group_id, public_name, display_name, upstream_name, input_price_micros, output_price_micros, status, created_at, updated_at) VALUES (UUID(), ?, ?, ?, 'route-group-model', 'Route Group Model', 'route-group-model', 1, 2, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, providerID, modelID, secondGroupID); err != nil {
+		t.Fatalf("insert same provider/model route in second group: %v", err)
+	}
+	var routeCount int
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM model_routes WHERE provider_id = ? AND upstream_model_id = ? AND public_name = 'route-group-model'`, providerID, modelID).Scan(&routeCount); err != nil || routeCount != 2 {
+		t.Fatalf("multi-group route count=%d err=%v", routeCount, err)
+	}
+}
+
+/**
  * TestUnifiedModelCatalogMigrationConsolidatesExistingReferences 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
  * @author Gao Hongshun

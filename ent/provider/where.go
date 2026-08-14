@@ -56,11 +56,6 @@ func IDLTE(id uuid.UUID) predicate.Provider {
 	return predicate.Provider(sql.FieldLTE(FieldID, id))
 }
 
-// BillingGroupID applies equality check predicate on the "billing_group_id" field. It's identical to BillingGroupIDEQ.
-func BillingGroupID(v uuid.UUID) predicate.Provider {
-	return predicate.Provider(sql.FieldEQ(FieldBillingGroupID, v))
-}
-
 // Code applies equality check predicate on the "code" field. It's identical to CodeEQ.
 func Code(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldCode, v))
@@ -109,26 +104,6 @@ func UpdatedAt(v time.Time) predicate.Provider {
 // DeletedAt applies equality check predicate on the "deleted_at" field. It's identical to DeletedAtEQ.
 func DeletedAt(v time.Time) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldDeletedAt, v))
-}
-
-// BillingGroupIDEQ applies the EQ predicate on the "billing_group_id" field.
-func BillingGroupIDEQ(v uuid.UUID) predicate.Provider {
-	return predicate.Provider(sql.FieldEQ(FieldBillingGroupID, v))
-}
-
-// BillingGroupIDNEQ applies the NEQ predicate on the "billing_group_id" field.
-func BillingGroupIDNEQ(v uuid.UUID) predicate.Provider {
-	return predicate.Provider(sql.FieldNEQ(FieldBillingGroupID, v))
-}
-
-// BillingGroupIDIn applies the In predicate on the "billing_group_id" field.
-func BillingGroupIDIn(vs ...uuid.UUID) predicate.Provider {
-	return predicate.Provider(sql.FieldIn(FieldBillingGroupID, vs...))
-}
-
-// BillingGroupIDNotIn applies the NotIn predicate on the "billing_group_id" field.
-func BillingGroupIDNotIn(vs ...uuid.UUID) predicate.Provider {
-	return predicate.Provider(sql.FieldNotIn(FieldBillingGroupID, vs...))
 }
 
 // CodeEQ applies the EQ predicate on the "code" field.
@@ -729,29 +704,6 @@ func DeletedAtIsNil() predicate.Provider {
 // DeletedAtNotNil applies the NotNil predicate on the "deleted_at" field.
 func DeletedAtNotNil() predicate.Provider {
 	return predicate.Provider(sql.FieldNotNull(FieldDeletedAt))
-}
-
-// HasBillingGroup applies the HasEdge predicate on the "billing_group" edge.
-func HasBillingGroup() predicate.Provider {
-	return predicate.Provider(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasBillingGroupWith applies the HasEdge predicate on the "billing_group" edge with a given conditions (other predicates).
-func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.Provider {
-	return predicate.Provider(func(s *sql.Selector) {
-		step := newBillingGroupStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
 }
 
 // HasModelRoutes applies the HasEdge predicate on the "model_routes" edge.

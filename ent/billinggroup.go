@@ -46,8 +46,8 @@ type BillingGroup struct {
 type BillingGroupEdges struct {
 	// APIKeys holds the value of the api_keys edge.
 	APIKeys []*APIKey `json:"api_keys,omitempty"`
-	// Providers holds the value of the providers edge.
-	Providers []*Provider `json:"providers,omitempty"`
+	// ModelRoutes holds the value of the model_routes edge.
+	ModelRoutes []*ModelRoute `json:"model_routes,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// AuthorizedUsers holds the value of the authorized_users edge.
@@ -66,13 +66,13 @@ func (e BillingGroupEdges) APIKeysOrErr() ([]*APIKey, error) {
 	return nil, &NotLoadedError{edge: "api_keys"}
 }
 
-// ProvidersOrErr returns the Providers value or an error if the edge
+// ModelRoutesOrErr returns the ModelRoutes value or an error if the edge
 // was not loaded in eager-loading.
-func (e BillingGroupEdges) ProvidersOrErr() ([]*Provider, error) {
+func (e BillingGroupEdges) ModelRoutesOrErr() ([]*ModelRoute, error) {
 	if e.loadedTypes[1] {
-		return e.Providers, nil
+		return e.ModelRoutes, nil
 	}
-	return nil, &NotLoadedError{edge: "providers"}
+	return nil, &NotLoadedError{edge: "model_routes"}
 }
 
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
@@ -202,9 +202,9 @@ func (_m *BillingGroup) QueryAPIKeys() *APIKeyQuery {
 	return NewBillingGroupClient(_m.config).QueryAPIKeys(_m)
 }
 
-// QueryProviders queries the "providers" edge of the BillingGroup entity.
-func (_m *BillingGroup) QueryProviders() *ProviderQuery {
-	return NewBillingGroupClient(_m.config).QueryProviders(_m)
+// QueryModelRoutes queries the "model_routes" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryModelRoutes() *ModelRouteQuery {
+	return NewBillingGroupClient(_m.config).QueryModelRoutes(_m)
 }
 
 // QueryAPIUsages queries the "api_usages" edge of the BillingGroup entity.

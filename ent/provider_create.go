@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
-	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/provider"
 )
@@ -21,12 +20,6 @@ type ProviderCreate struct {
 	config
 	mutation *ProviderMutation
 	hooks    []Hook
-}
-
-// SetBillingGroupID sets the "billing_group_id" field.
-func (_c *ProviderCreate) SetBillingGroupID(v uuid.UUID) *ProviderCreate {
-	_c.mutation.SetBillingGroupID(v)
-	return _c
 }
 
 // SetCode sets the "code" field.
@@ -163,11 +156,6 @@ func (_c *ProviderCreate) SetNillableID(v *uuid.UUID) *ProviderCreate {
 	return _c
 }
 
-// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
-func (_c *ProviderCreate) SetBillingGroup(v *BillingGroup) *ProviderCreate {
-	return _c.SetBillingGroupID(v.ID)
-}
-
 // AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
 func (_c *ProviderCreate) AddModelRouteIDs(ids ...uuid.UUID) *ProviderCreate {
 	_c.mutation.AddModelRouteIDs(ids...)
@@ -246,9 +234,6 @@ func (_c *ProviderCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *ProviderCreate) check() error {
-	if _, ok := _c.mutation.BillingGroupID(); !ok {
-		return &ValidationError{Name: "billing_group_id", err: errors.New(`ent: missing required field "Provider.billing_group_id"`)}
-	}
 	if _, ok := _c.mutation.Code(); !ok {
 		return &ValidationError{Name: "code", err: errors.New(`ent: missing required field "Provider.code"`)}
 	}
@@ -326,9 +311,6 @@ func (_c *ProviderCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Provider.updated_at"`)}
-	}
-	if len(_c.mutation.BillingGroupIDs()) == 0 {
-		return &ValidationError{Name: "billing_group", err: errors.New(`ent: missing required edge "Provider.billing_group"`)}
 	}
 	return nil
 }
@@ -412,23 +394,6 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DeletedAt(); ok {
 		_spec.SetField(provider.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
-	}
-	if nodes := _c.mutation.BillingGroupIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   provider.BillingGroupTable,
-			Columns: []string{provider.BillingGroupColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.BillingGroupID = nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ModelRoutesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

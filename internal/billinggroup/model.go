@@ -33,7 +33,7 @@ type Record struct {
 	IsHidden        bool             `json:"is_hidden"`
 	Status          Status           `json:"status"`
 	APIKeyCount     int              `json:"api_key_count"`
-	ProviderCount   int              `json:"provider_count"`
+	ModelRouteCount int              `json:"model_route_count"`
 	AuthorizedUsers []AuthorizedUser `json:"authorized_users"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`

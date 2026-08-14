@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Pencil, Plus, Power, PowerOff, RefreshCw, Search, ServerCog, Trash2, UsersRound } from "lucide-react";
+import { KeyRound, Pencil, Plus, Power, PowerOff, RefreshCw, Route, Search, Trash2, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
@@ -27,7 +27,7 @@ type Group = {
   is_hidden: boolean;
   status: "active" | "disabled";
   api_key_count: number;
-  provider_count: number;
+  model_route_count: number;
   authorized_users: AuthorizedUser[] | null;
 };
 
@@ -287,7 +287,7 @@ export default function BillingGroupsClient() {
       <section className="grid border-y bg-background sm:grid-cols-4">
         <div className="px-4 py-4 sm:border-r"><p className="text-xs text-muted-foreground">计费分组</p><p className="mt-1 text-xl font-semibold">{groups.length}</p></div>
         <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">API Key</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.api_key_count, 0)}</p></div>
-        <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">供应商</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.provider_count, 0)}</p></div>
+        <div className="border-t px-4 py-4 sm:border-r sm:border-t-0"><p className="text-xs text-muted-foreground">模型路由</p><p className="mt-1 text-xl font-semibold">{groups.reduce((sum, group) => sum + group.model_route_count, 0)}</p></div>
         <div className="border-t px-4 py-4 sm:border-t-0"><p className="text-xs text-muted-foreground">默认倍率</p><p className="mt-1 text-xl font-semibold">{((groups.find((group) => group.is_default)?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}x</p></div>
       </section>
 
@@ -307,7 +307,7 @@ export default function BillingGroupsClient() {
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有可操作计费分组" checked={selection.checkboxState} disabled={loading || filtered.filter((group) => !group.is_default).length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>分组</TableHead><TableHead>倍率</TableHead><TableHead>授权用户</TableHead><TableHead>API Key</TableHead><TableHead>供应商</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有可操作计费分组" checked={selection.checkboxState} disabled={loading || filtered.filter((group) => !group.is_default).length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>分组</TableHead><TableHead>倍率</TableHead><TableHead>授权用户</TableHead><TableHead>API Key</TableHead><TableHead>模型路由</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>
               {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
               {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>还没有计费分组</TableCell></TableRow> : null}
@@ -317,7 +317,7 @@ export default function BillingGroupsClient() {
                 <TableCell className="font-mono">{(group.multiplier_bps / 10_000).toFixed(4)}x</TableCell>
                 <TableCell>{group.is_hidden ? <span className="inline-flex items-center gap-1"><UsersRound className="size-4 text-muted-foreground" />{(group.authorized_users ?? []).length}</span> : <span className="text-muted-foreground">全部用户</span>}</TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><KeyRound className="size-4 text-muted-foreground" />{group.api_key_count}</span></TableCell>
-                <TableCell><span className="inline-flex items-center gap-1"><ServerCog className="size-4 text-muted-foreground" />{group.provider_count}</span></TableCell>
+                <TableCell><span className="inline-flex items-center gap-1"><Route className="size-4 text-muted-foreground" />{group.model_route_count}</span></TableCell>
                 <TableCell><Badge variant={group.status === "active" ? "outline" : "destructive"}>{group.status === "active" ? "启用" : "停用"}</Badge></TableCell>
                 <TableCell><div className="flex justify-end gap-1"><Button aria-label={`编辑 ${group.display_name}`} onClick={() => beginEdit(group)} size="icon-sm" title="编辑" variant="ghost"><Pencil /></Button><Button aria-label={`${group.status === "active" ? "停用" : "启用"} ${group.display_name}`} disabled={group.is_default} onClick={() => setStatusGroup(group)} size="icon-sm" title={group.is_default ? "默认分组不能停用" : group.status === "active" ? "停用" : "启用"} variant="ghost">{group.status === "active" ? <PowerOff /> : <Power />}</Button><Button aria-label={`删除 ${group.display_name}`} disabled={group.is_default} onClick={() => setDeletingGroup(group)} size="icon-sm" title={group.is_default ? "默认分组不能删除" : "删除计费分组"} variant="ghost"><Trash2 /></Button></div></TableCell>
               </TableRow>)}
@@ -327,7 +327,7 @@ export default function BillingGroupsClient() {
       </Card>
 
       <Dialog onOpenChange={(open) => { setCreateOpen(open); if (!open) { setForm(emptyForm); setUserQuery(""); } }} open={createOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg"><DialogHeader><DialogTitle>新增计费分组</DialogTitle><DialogDescription>API Key 和供应商选择同一分组后，调用会按该倍率结算并只使用同组供应商。</DialogDescription></DialogHeader><form className="space-y-4" id="create-group-form" onSubmit={submit}>{fields}</form><DialogFooter><Button onClick={() => setCreateOpen(false)} variant="outline">取消</Button><Button disabled={busy} form="create-group-form" type="submit"><Plus />创建分组</Button></DialogFooter></DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg"><DialogHeader><DialogTitle>新增计费分组</DialogTitle><DialogDescription>API Key 与模型路由绑定同一分组后，调用会按该倍率结算并只使用该分组的模型渠道。</DialogDescription></DialogHeader><form className="space-y-4" id="create-group-form" onSubmit={submit}>{fields}</form><DialogFooter><Button onClick={() => setCreateOpen(false)} variant="outline">取消</Button><Button disabled={busy} form="create-group-form" type="submit"><Plus />创建分组</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <Sheet onOpenChange={(open) => { if (!open) { setEditing(null); setForm(emptyForm); setUserQuery(""); } }} open={editing !== null}>

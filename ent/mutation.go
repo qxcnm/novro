@@ -4309,9 +4309,9 @@ type BillingGroupMutation struct {
 	api_keys                map[uuid.UUID]struct{}
 	removedapi_keys         map[uuid.UUID]struct{}
 	clearedapi_keys         bool
-	providers               map[uuid.UUID]struct{}
-	removedproviders        map[uuid.UUID]struct{}
-	clearedproviders        bool
+	model_routes            map[uuid.UUID]struct{}
+	removedmodel_routes     map[uuid.UUID]struct{}
+	clearedmodel_routes     bool
 	api_usages              map[uuid.UUID]struct{}
 	removedapi_usages       map[uuid.UUID]struct{}
 	clearedapi_usages       bool
@@ -4838,58 +4838,58 @@ func (m *BillingGroupMutation) ResetAPIKeys() {
 	m.removedapi_keys = nil
 }
 
-// AddProviderIDs adds the "providers" edge to the Provider entity by ids.
-func (m *BillingGroupMutation) AddProviderIDs(ids ...uuid.UUID) {
-	if m.providers == nil {
-		m.providers = make(map[uuid.UUID]struct{})
+// AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by ids.
+func (m *BillingGroupMutation) AddModelRouteIDs(ids ...uuid.UUID) {
+	if m.model_routes == nil {
+		m.model_routes = make(map[uuid.UUID]struct{})
 	}
 	for i := range ids {
-		m.providers[ids[i]] = struct{}{}
+		m.model_routes[ids[i]] = struct{}{}
 	}
 }
 
-// ClearProviders clears the "providers" edge to the Provider entity.
-func (m *BillingGroupMutation) ClearProviders() {
-	m.clearedproviders = true
+// ClearModelRoutes clears the "model_routes" edge to the ModelRoute entity.
+func (m *BillingGroupMutation) ClearModelRoutes() {
+	m.clearedmodel_routes = true
 }
 
-// ProvidersCleared reports if the "providers" edge to the Provider entity was cleared.
-func (m *BillingGroupMutation) ProvidersCleared() bool {
-	return m.clearedproviders
+// ModelRoutesCleared reports if the "model_routes" edge to the ModelRoute entity was cleared.
+func (m *BillingGroupMutation) ModelRoutesCleared() bool {
+	return m.clearedmodel_routes
 }
 
-// RemoveProviderIDs removes the "providers" edge to the Provider entity by IDs.
-func (m *BillingGroupMutation) RemoveProviderIDs(ids ...uuid.UUID) {
-	if m.removedproviders == nil {
-		m.removedproviders = make(map[uuid.UUID]struct{})
+// RemoveModelRouteIDs removes the "model_routes" edge to the ModelRoute entity by IDs.
+func (m *BillingGroupMutation) RemoveModelRouteIDs(ids ...uuid.UUID) {
+	if m.removedmodel_routes == nil {
+		m.removedmodel_routes = make(map[uuid.UUID]struct{})
 	}
 	for i := range ids {
-		delete(m.providers, ids[i])
-		m.removedproviders[ids[i]] = struct{}{}
+		delete(m.model_routes, ids[i])
+		m.removedmodel_routes[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedProviders returns the removed IDs of the "providers" edge to the Provider entity.
-func (m *BillingGroupMutation) RemovedProvidersIDs() (ids []uuid.UUID) {
-	for id := range m.removedproviders {
+// RemovedModelRoutes returns the removed IDs of the "model_routes" edge to the ModelRoute entity.
+func (m *BillingGroupMutation) RemovedModelRoutesIDs() (ids []uuid.UUID) {
+	for id := range m.removedmodel_routes {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ProvidersIDs returns the "providers" edge IDs in the mutation.
-func (m *BillingGroupMutation) ProvidersIDs() (ids []uuid.UUID) {
-	for id := range m.providers {
+// ModelRoutesIDs returns the "model_routes" edge IDs in the mutation.
+func (m *BillingGroupMutation) ModelRoutesIDs() (ids []uuid.UUID) {
+	for id := range m.model_routes {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetProviders resets all changes to the "providers" edge.
-func (m *BillingGroupMutation) ResetProviders() {
-	m.providers = nil
-	m.clearedproviders = false
-	m.removedproviders = nil
+// ResetModelRoutes resets all changes to the "model_routes" edge.
+func (m *BillingGroupMutation) ResetModelRoutes() {
+	m.model_routes = nil
+	m.clearedmodel_routes = false
+	m.removedmodel_routes = nil
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by ids.
@@ -5297,8 +5297,8 @@ func (m *BillingGroupMutation) AddedEdges() []string {
 	if m.api_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
-	if m.providers != nil {
-		edges = append(edges, billinggroup.EdgeProviders)
+	if m.model_routes != nil {
+		edges = append(edges, billinggroup.EdgeModelRoutes)
 	}
 	if m.api_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
@@ -5319,9 +5319,9 @@ func (m *BillingGroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case billinggroup.EdgeProviders:
-		ids := make([]ent.Value, 0, len(m.providers))
-		for id := range m.providers {
+	case billinggroup.EdgeModelRoutes:
+		ids := make([]ent.Value, 0, len(m.model_routes))
+		for id := range m.model_routes {
 			ids = append(ids, id)
 		}
 		return ids
@@ -5347,8 +5347,8 @@ func (m *BillingGroupMutation) RemovedEdges() []string {
 	if m.removedapi_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
-	if m.removedproviders != nil {
-		edges = append(edges, billinggroup.EdgeProviders)
+	if m.removedmodel_routes != nil {
+		edges = append(edges, billinggroup.EdgeModelRoutes)
 	}
 	if m.removedapi_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
@@ -5369,9 +5369,9 @@ func (m *BillingGroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case billinggroup.EdgeProviders:
-		ids := make([]ent.Value, 0, len(m.removedproviders))
-		for id := range m.removedproviders {
+	case billinggroup.EdgeModelRoutes:
+		ids := make([]ent.Value, 0, len(m.removedmodel_routes))
+		for id := range m.removedmodel_routes {
 			ids = append(ids, id)
 		}
 		return ids
@@ -5397,8 +5397,8 @@ func (m *BillingGroupMutation) ClearedEdges() []string {
 	if m.clearedapi_keys {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
-	if m.clearedproviders {
-		edges = append(edges, billinggroup.EdgeProviders)
+	if m.clearedmodel_routes {
+		edges = append(edges, billinggroup.EdgeModelRoutes)
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
@@ -5415,8 +5415,8 @@ func (m *BillingGroupMutation) EdgeCleared(name string) bool {
 	switch name {
 	case billinggroup.EdgeAPIKeys:
 		return m.clearedapi_keys
-	case billinggroup.EdgeProviders:
-		return m.clearedproviders
+	case billinggroup.EdgeModelRoutes:
+		return m.clearedmodel_routes
 	case billinggroup.EdgeAPIUsages:
 		return m.clearedapi_usages
 	case billinggroup.EdgeAuthorizedUsers:
@@ -5440,8 +5440,8 @@ func (m *BillingGroupMutation) ResetEdge(name string) error {
 	case billinggroup.EdgeAPIKeys:
 		m.ResetAPIKeys()
 		return nil
-	case billinggroup.EdgeProviders:
-		m.ResetProviders()
+	case billinggroup.EdgeModelRoutes:
+		m.ResetModelRoutes()
 		return nil
 	case billinggroup.EdgeAPIUsages:
 		m.ResetAPIUsages()
@@ -10616,6 +10616,8 @@ type ModelRouteMutation struct {
 	clearedprovider        bool
 	upstream_model         *uuid.UUID
 	clearedupstream_model  bool
+	billing_group          *uuid.UUID
+	clearedbilling_group   bool
 	api_usages             map[uuid.UUID]struct{}
 	removedapi_usages      map[uuid.UUID]struct{}
 	clearedapi_usages      bool
@@ -10811,6 +10813,42 @@ func (m *ModelRouteMutation) UpstreamModelIDCleared() bool {
 func (m *ModelRouteMutation) ResetUpstreamModelID() {
 	m.upstream_model = nil
 	delete(m.clearedFields, modelroute.FieldUpstreamModelID)
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (m *ModelRouteMutation) SetBillingGroupID(u uuid.UUID) {
+	m.billing_group = &u
+}
+
+// BillingGroupID returns the value of the "billing_group_id" field in the mutation.
+func (m *ModelRouteMutation) BillingGroupID() (r uuid.UUID, exists bool) {
+	v := m.billing_group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingGroupID returns the old "billing_group_id" field's value of the ModelRoute entity.
+// If the ModelRoute object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ModelRouteMutation) OldBillingGroupID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingGroupID: %w", err)
+	}
+	return oldValue.BillingGroupID, nil
+}
+
+// ResetBillingGroupID resets all changes to the "billing_group_id" field.
+func (m *ModelRouteMutation) ResetBillingGroupID() {
+	m.billing_group = nil
 }
 
 // SetPublicName sets the "public_name" field.
@@ -11244,6 +11282,33 @@ func (m *ModelRouteMutation) ResetUpstreamModel() {
 	m.clearedupstream_model = false
 }
 
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (m *ModelRouteMutation) ClearBillingGroup() {
+	m.clearedbilling_group = true
+	m.clearedFields[modelroute.FieldBillingGroupID] = struct{}{}
+}
+
+// BillingGroupCleared reports if the "billing_group" edge to the BillingGroup entity was cleared.
+func (m *ModelRouteMutation) BillingGroupCleared() bool {
+	return m.clearedbilling_group
+}
+
+// BillingGroupIDs returns the "billing_group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// BillingGroupID instead. It exists only for internal usage by the builders.
+func (m *ModelRouteMutation) BillingGroupIDs() (ids []uuid.UUID) {
+	if id := m.billing_group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetBillingGroup resets all changes to the "billing_group" edge.
+func (m *ModelRouteMutation) ResetBillingGroup() {
+	m.billing_group = nil
+	m.clearedbilling_group = false
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by ids.
 func (m *ModelRouteMutation) AddAPIUsageIDs(ids ...uuid.UUID) {
 	if m.api_usages == nil {
@@ -11332,12 +11397,15 @@ func (m *ModelRouteMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ModelRouteMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.provider != nil {
 		fields = append(fields, modelroute.FieldProviderID)
 	}
 	if m.upstream_model != nil {
 		fields = append(fields, modelroute.FieldUpstreamModelID)
+	}
+	if m.billing_group != nil {
+		fields = append(fields, modelroute.FieldBillingGroupID)
 	}
 	if m.public_name != nil {
 		fields = append(fields, modelroute.FieldPublicName)
@@ -11378,6 +11446,8 @@ func (m *ModelRouteMutation) Field(name string) (ent.Value, bool) {
 		return m.ProviderID()
 	case modelroute.FieldUpstreamModelID:
 		return m.UpstreamModelID()
+	case modelroute.FieldBillingGroupID:
+		return m.BillingGroupID()
 	case modelroute.FieldPublicName:
 		return m.PublicName()
 	case modelroute.FieldDisplayName:
@@ -11409,6 +11479,8 @@ func (m *ModelRouteMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldProviderID(ctx)
 	case modelroute.FieldUpstreamModelID:
 		return m.OldUpstreamModelID(ctx)
+	case modelroute.FieldBillingGroupID:
+		return m.OldBillingGroupID(ctx)
 	case modelroute.FieldPublicName:
 		return m.OldPublicName(ctx)
 	case modelroute.FieldDisplayName:
@@ -11449,6 +11521,13 @@ func (m *ModelRouteMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpstreamModelID(v)
+		return nil
+	case modelroute.FieldBillingGroupID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingGroupID(v)
 		return nil
 	case modelroute.FieldPublicName:
 		v, ok := value.(string)
@@ -11610,6 +11689,9 @@ func (m *ModelRouteMutation) ResetField(name string) error {
 	case modelroute.FieldUpstreamModelID:
 		m.ResetUpstreamModelID()
 		return nil
+	case modelroute.FieldBillingGroupID:
+		m.ResetBillingGroupID()
+		return nil
 	case modelroute.FieldPublicName:
 		m.ResetPublicName()
 		return nil
@@ -11643,12 +11725,15 @@ func (m *ModelRouteMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ModelRouteMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.provider != nil {
 		edges = append(edges, modelroute.EdgeProvider)
 	}
 	if m.upstream_model != nil {
 		edges = append(edges, modelroute.EdgeUpstreamModel)
+	}
+	if m.billing_group != nil {
+		edges = append(edges, modelroute.EdgeBillingGroup)
 	}
 	if m.api_usages != nil {
 		edges = append(edges, modelroute.EdgeAPIUsages)
@@ -11668,6 +11753,10 @@ func (m *ModelRouteMutation) AddedIDs(name string) []ent.Value {
 		if id := m.upstream_model; id != nil {
 			return []ent.Value{*id}
 		}
+	case modelroute.EdgeBillingGroup:
+		if id := m.billing_group; id != nil {
+			return []ent.Value{*id}
+		}
 	case modelroute.EdgeAPIUsages:
 		ids := make([]ent.Value, 0, len(m.api_usages))
 		for id := range m.api_usages {
@@ -11680,7 +11769,7 @@ func (m *ModelRouteMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ModelRouteMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedapi_usages != nil {
 		edges = append(edges, modelroute.EdgeAPIUsages)
 	}
@@ -11703,12 +11792,15 @@ func (m *ModelRouteMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ModelRouteMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedprovider {
 		edges = append(edges, modelroute.EdgeProvider)
 	}
 	if m.clearedupstream_model {
 		edges = append(edges, modelroute.EdgeUpstreamModel)
+	}
+	if m.clearedbilling_group {
+		edges = append(edges, modelroute.EdgeBillingGroup)
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, modelroute.EdgeAPIUsages)
@@ -11724,6 +11816,8 @@ func (m *ModelRouteMutation) EdgeCleared(name string) bool {
 		return m.clearedprovider
 	case modelroute.EdgeUpstreamModel:
 		return m.clearedupstream_model
+	case modelroute.EdgeBillingGroup:
+		return m.clearedbilling_group
 	case modelroute.EdgeAPIUsages:
 		return m.clearedapi_usages
 	}
@@ -11740,6 +11834,9 @@ func (m *ModelRouteMutation) ClearEdge(name string) error {
 	case modelroute.EdgeUpstreamModel:
 		m.ClearUpstreamModel()
 		return nil
+	case modelroute.EdgeBillingGroup:
+		m.ClearBillingGroup()
+		return nil
 	}
 	return fmt.Errorf("unknown ModelRoute unique edge %s", name)
 }
@@ -11753,6 +11850,9 @@ func (m *ModelRouteMutation) ResetEdge(name string) error {
 		return nil
 	case modelroute.EdgeUpstreamModel:
 		m.ResetUpstreamModel()
+		return nil
+	case modelroute.EdgeBillingGroup:
+		m.ResetBillingGroup()
 		return nil
 	case modelroute.EdgeAPIUsages:
 		m.ResetAPIUsages()
@@ -12813,31 +12913,29 @@ func (m *PaymentConfigMutation) ResetEdge(name string) error {
 // ProviderMutation represents an operation that mutates the Provider nodes in the graph.
 type ProviderMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *uuid.UUID
-	code                 *string
-	display_name         *string
-	protocol             *provider.Protocol
-	base_url             *string
-	model_list_path      *string
-	weight               *int
-	addweight            *int
-	encrypted_api_key    *string
-	api_key_hint         *string
-	status               *provider.Status
-	created_at           *time.Time
-	updated_at           *time.Time
-	deleted_at           *time.Time
-	clearedFields        map[string]struct{}
-	billing_group        *uuid.UUID
-	clearedbilling_group bool
-	model_routes         map[uuid.UUID]struct{}
-	removedmodel_routes  map[uuid.UUID]struct{}
-	clearedmodel_routes  bool
-	done                 bool
-	oldValue             func(context.Context) (*Provider, error)
-	predicates           []predicate.Provider
+	op                  Op
+	typ                 string
+	id                  *uuid.UUID
+	code                *string
+	display_name        *string
+	protocol            *provider.Protocol
+	base_url            *string
+	model_list_path     *string
+	weight              *int
+	addweight           *int
+	encrypted_api_key   *string
+	api_key_hint        *string
+	status              *provider.Status
+	created_at          *time.Time
+	updated_at          *time.Time
+	deleted_at          *time.Time
+	clearedFields       map[string]struct{}
+	model_routes        map[uuid.UUID]struct{}
+	removedmodel_routes map[uuid.UUID]struct{}
+	clearedmodel_routes bool
+	done                bool
+	oldValue            func(context.Context) (*Provider, error)
+	predicates          []predicate.Provider
 }
 
 var _ ent.Mutation = (*ProviderMutation)(nil)
@@ -12942,42 +13040,6 @@ func (m *ProviderMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
-}
-
-// SetBillingGroupID sets the "billing_group_id" field.
-func (m *ProviderMutation) SetBillingGroupID(u uuid.UUID) {
-	m.billing_group = &u
-}
-
-// BillingGroupID returns the value of the "billing_group_id" field in the mutation.
-func (m *ProviderMutation) BillingGroupID() (r uuid.UUID, exists bool) {
-	v := m.billing_group
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBillingGroupID returns the old "billing_group_id" field's value of the Provider entity.
-// If the Provider object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProviderMutation) OldBillingGroupID(ctx context.Context) (v uuid.UUID, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBillingGroupID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBillingGroupID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBillingGroupID: %w", err)
-	}
-	return oldValue.BillingGroupID, nil
-}
-
-// ResetBillingGroupID resets all changes to the "billing_group_id" field.
-func (m *ProviderMutation) ResetBillingGroupID() {
-	m.billing_group = nil
 }
 
 // SetCode sets the "code" field.
@@ -13445,33 +13507,6 @@ func (m *ProviderMutation) ResetDeletedAt() {
 	delete(m.clearedFields, provider.FieldDeletedAt)
 }
 
-// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
-func (m *ProviderMutation) ClearBillingGroup() {
-	m.clearedbilling_group = true
-	m.clearedFields[provider.FieldBillingGroupID] = struct{}{}
-}
-
-// BillingGroupCleared reports if the "billing_group" edge to the BillingGroup entity was cleared.
-func (m *ProviderMutation) BillingGroupCleared() bool {
-	return m.clearedbilling_group
-}
-
-// BillingGroupIDs returns the "billing_group" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// BillingGroupID instead. It exists only for internal usage by the builders.
-func (m *ProviderMutation) BillingGroupIDs() (ids []uuid.UUID) {
-	if id := m.billing_group; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetBillingGroup resets all changes to the "billing_group" edge.
-func (m *ProviderMutation) ResetBillingGroup() {
-	m.billing_group = nil
-	m.clearedbilling_group = false
-}
-
 // AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by ids.
 func (m *ProviderMutation) AddModelRouteIDs(ids ...uuid.UUID) {
 	if m.model_routes == nil {
@@ -13560,10 +13595,7 @@ func (m *ProviderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProviderMutation) Fields() []string {
-	fields := make([]string, 0, 13)
-	if m.billing_group != nil {
-		fields = append(fields, provider.FieldBillingGroupID)
-	}
+	fields := make([]string, 0, 12)
 	if m.code != nil {
 		fields = append(fields, provider.FieldCode)
 	}
@@ -13608,8 +13640,6 @@ func (m *ProviderMutation) Fields() []string {
 // schema.
 func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case provider.FieldBillingGroupID:
-		return m.BillingGroupID()
 	case provider.FieldCode:
 		return m.Code()
 	case provider.FieldDisplayName:
@@ -13643,8 +13673,6 @@ func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case provider.FieldBillingGroupID:
-		return m.OldBillingGroupID(ctx)
 	case provider.FieldCode:
 		return m.OldCode(ctx)
 	case provider.FieldDisplayName:
@@ -13678,13 +13706,6 @@ func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value
 // type.
 func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case provider.FieldBillingGroupID:
-		v, ok := value.(uuid.UUID)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBillingGroupID(v)
-		return nil
 	case provider.FieldCode:
 		v, ok := value.(string)
 		if !ok {
@@ -13842,9 +13863,6 @@ func (m *ProviderMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *ProviderMutation) ResetField(name string) error {
 	switch name {
-	case provider.FieldBillingGroupID:
-		m.ResetBillingGroupID()
-		return nil
 	case provider.FieldCode:
 		m.ResetCode()
 		return nil
@@ -13887,10 +13905,7 @@ func (m *ProviderMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ProviderMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.billing_group != nil {
-		edges = append(edges, provider.EdgeBillingGroup)
-	}
+	edges := make([]string, 0, 1)
 	if m.model_routes != nil {
 		edges = append(edges, provider.EdgeModelRoutes)
 	}
@@ -13901,10 +13916,6 @@ func (m *ProviderMutation) AddedEdges() []string {
 // name in this mutation.
 func (m *ProviderMutation) AddedIDs(name string) []ent.Value {
 	switch name {
-	case provider.EdgeBillingGroup:
-		if id := m.billing_group; id != nil {
-			return []ent.Value{*id}
-		}
 	case provider.EdgeModelRoutes:
 		ids := make([]ent.Value, 0, len(m.model_routes))
 		for id := range m.model_routes {
@@ -13917,7 +13928,7 @@ func (m *ProviderMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ProviderMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.removedmodel_routes != nil {
 		edges = append(edges, provider.EdgeModelRoutes)
 	}
@@ -13940,10 +13951,7 @@ func (m *ProviderMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ProviderMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.clearedbilling_group {
-		edges = append(edges, provider.EdgeBillingGroup)
-	}
+	edges := make([]string, 0, 1)
 	if m.clearedmodel_routes {
 		edges = append(edges, provider.EdgeModelRoutes)
 	}
@@ -13954,8 +13962,6 @@ func (m *ProviderMutation) ClearedEdges() []string {
 // was cleared in this mutation.
 func (m *ProviderMutation) EdgeCleared(name string) bool {
 	switch name {
-	case provider.EdgeBillingGroup:
-		return m.clearedbilling_group
 	case provider.EdgeModelRoutes:
 		return m.clearedmodel_routes
 	}
@@ -13966,9 +13972,6 @@ func (m *ProviderMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *ProviderMutation) ClearEdge(name string) error {
 	switch name {
-	case provider.EdgeBillingGroup:
-		m.ClearBillingGroup()
-		return nil
 	}
 	return fmt.Errorf("unknown Provider unique edge %s", name)
 }
@@ -13977,9 +13980,6 @@ func (m *ProviderMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *ProviderMutation) ResetEdge(name string) error {
 	switch name {
-	case provider.EdgeBillingGroup:
-		m.ResetBillingGroup()
-		return nil
 	case provider.EdgeModelRoutes:
 		m.ResetModelRoutes()
 		return nil

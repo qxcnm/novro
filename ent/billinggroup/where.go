@@ -459,21 +459,21 @@ func HasAPIKeysWith(preds ...predicate.APIKey) predicate.BillingGroup {
 	})
 }
 
-// HasProviders applies the HasEdge predicate on the "providers" edge.
-func HasProviders() predicate.BillingGroup {
+// HasModelRoutes applies the HasEdge predicate on the "model_routes" edge.
+func HasModelRoutes() predicate.BillingGroup {
 	return predicate.BillingGroup(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, ProvidersTable, ProvidersColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, ModelRoutesTable, ModelRoutesColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasProvidersWith applies the HasEdge predicate on the "providers" edge with a given conditions (other predicates).
-func HasProvidersWith(preds ...predicate.Provider) predicate.BillingGroup {
+// HasModelRoutesWith applies the HasEdge predicate on the "model_routes" edge with a given conditions (other predicates).
+func HasModelRoutesWith(preds ...predicate.ModelRoute) predicate.BillingGroup {
 	return predicate.BillingGroup(func(s *sql.Selector) {
-		step := newProvidersStep()
+		step := newModelRoutesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

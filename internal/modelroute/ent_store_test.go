@@ -19,6 +19,7 @@ import (
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 )
 
 /**
@@ -32,7 +33,6 @@ func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 	ctx := context.Background()
 	groupID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	activeProvider, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("active-provider").SetDisplayName("Active Provider").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://active.example.com").
 		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
@@ -40,7 +40,6 @@ func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 		t.Fatalf("create active provider: %v", err)
 	}
 	disabledProvider, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("disabled-provider").SetDisplayName("Disabled Provider").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://disabled.example.com").
 		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").
@@ -49,16 +48,19 @@ func TestEntStoreListAppliesSearchAndStatusFilters(t *testing.T) {
 		t.Fatalf("create disabled provider: %v", err)
 	}
 	if _, err := client.ModelRoute.Create().SetProviderID(activeProvider.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("alpha-chat").SetDisplayName("Alpha Chat").SetUpstreamName("alpha-upstream").
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); err != nil {
 		t.Fatalf("create active matching route: %v", err)
 	}
 	if _, err := client.ModelRoute.Create().SetProviderID(activeProvider.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("beta-chat").SetDisplayName("Beta Chat").SetUpstreamName("beta-upstream").
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetStatus(entmodelroute.StatusDisabled).Save(ctx); err != nil {
 		t.Fatalf("create disabled matching route: %v", err)
 	}
 	if _, err := client.ModelRoute.Create().SetProviderID(disabledProvider.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("gamma-chat").SetDisplayName("Gamma Chat").SetUpstreamName("gamma-upstream").
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); err != nil {
 		t.Fatalf("create route with disabled provider: %v", err)
@@ -92,7 +94,6 @@ func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
 	ctx := context.Background()
 	groupID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	configured, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("soft-delete-provider").SetDisplayName("Soft Delete Provider").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://soft-delete.example.com").
 		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
@@ -100,6 +101,7 @@ func TestEntStoreDeleteKeepsHistoricalRouteAndHidesItFromLists(t *testing.T) {
 		t.Fatalf("create provider: %v", err)
 	}
 	route, err := client.ModelRoute.Create().SetProviderID(configured.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("soft-delete-chat").SetDisplayName("Soft Delete Chat").SetUpstreamName("soft-delete-upstream").
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx)
 	if err != nil {
@@ -136,7 +138,6 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	ctx := context.Background()
 	groupID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	firstProvider, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("candidate-first").SetDisplayName("Candidate First").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://first.example.com").
 		SetEncryptedAPIKey("first-encrypted").SetAPIKeyHint("rypt").Save(ctx)
@@ -144,7 +145,6 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 		t.Fatalf("create first provider: %v", err)
 	}
 	secondProvider, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("candidate-second").SetDisplayName("Candidate Second").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://second.example.com").
 		SetEncryptedAPIKey("second-encrypted").SetAPIKeyHint("rypt").Save(ctx)
@@ -157,11 +157,13 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 	}
 	createdAt := time.Date(2026, 8, 7, 1, 0, 0, 0, time.UTC)
 	if _, err := client.ModelRoute.Create().SetProviderID(secondProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt.Add(time.Minute)).Save(ctx); err != nil {
 		t.Fatalf("create second candidate: %v", err)
 	}
 	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("shared-chat").SetDisplayName("Shared Chat").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).SetCreatedAt(createdAt).Save(ctx); err != nil {
 		t.Fatalf("create first candidate: %v", err)
@@ -175,6 +177,7 @@ func TestEntStoreResolvesOrderedCandidatesForOnePublicModel(t *testing.T) {
 		t.Fatalf("unexpected candidates: %+v", resolved)
 	}
 	if _, err := client.ModelRoute.Create().SetProviderID(firstProvider.ID).SetUpstreamModelID(sharedModel.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("shared-chat").SetDisplayName("Duplicate").SetUpstreamName(sharedModel.UpstreamName).
 		SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); !ent.IsConstraintError(err) {
 		t.Fatalf("duplicate route constraint error=%v", err)
@@ -192,26 +195,17 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	ctx := context.Background()
 	groupAID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	groupB, err := client.BillingGroup.Create().
-		SetCode("group-b").SetDisplayName("Group B").SetMultiplierBps(15_000).
+		SetCode("group-b").SetDisplayName("Group B").SetMultiplierBps(10_000).
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create second billing group: %v", err)
 	}
-	providerA, err := client.Provider.Create().
-		SetBillingGroupID(groupAID).
-		SetCode("group-a-provider").SetDisplayName("Group A Provider").
-		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://group-a.example.com").
-		SetEncryptedAPIKey("group-a-encrypted").SetAPIKeyHint("rypt").Save(ctx)
+	sharedProvider, err := client.Provider.Create().
+		SetCode("shared-group-provider").SetDisplayName("Shared Group Provider").
+		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://shared-groups.example.com").
+		SetEncryptedAPIKey("shared-group-encrypted").SetAPIKeyHint("rypt").Save(ctx)
 	if err != nil {
-		t.Fatalf("create group A provider: %v", err)
-	}
-	providerB, err := client.Provider.Create().
-		SetBillingGroupID(groupB.ID).
-		SetCode("group-b-provider").SetDisplayName("Group B Provider").
-		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://group-b.example.com").
-		SetEncryptedAPIKey("group-b-encrypted").SetAPIKeyHint("rypt").Save(ctx)
-	if err != nil {
-		t.Fatalf("create group B provider: %v", err)
+		t.Fatalf("create shared provider: %v", err)
 	}
 	sharedModel, err := client.UpstreamModel.Create().
 		SetProviderName("Shared Catalog").SetUpstreamName("grouped-shared-chat").SetDisplayName("Grouped Shared Chat").
@@ -219,11 +213,12 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create shared upstream model: %v", err)
 	}
-	for _, provider := range []*ent.Provider{providerA, providerB} {
-		if _, err := client.ModelRoute.Create().SetProviderID(provider.ID).SetUpstreamModelID(sharedModel.ID).
+	for _, groupID := range []uuid.UUID{groupAID, groupB.ID} {
+		if _, err := client.ModelRoute.Create().SetProviderID(sharedProvider.ID).SetUpstreamModelID(sharedModel.ID).
+			SetBillingGroupID(groupID).
 			SetPublicName("grouped-shared-chat").SetDisplayName("Grouped Shared Chat").SetUpstreamName(sharedModel.UpstreamName).
 			SetInputPriceMicros(1).SetOutputPriceMicros(1).Save(ctx); err != nil {
-			t.Fatalf("create grouped route for %s: %v", provider.Code, err)
+			t.Fatalf("create grouped route for %s: %v", groupID, err)
 		}
 	}
 
@@ -232,14 +227,14 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve group A candidates: %v", err)
 	}
-	if len(groupAResolved) != 1 || groupAResolved[0].Record.Provider.Code != "group-a-provider" {
+	if len(groupAResolved) != 1 || groupAResolved[0].Record.Provider.Code != "shared-group-provider" || groupAResolved[0].Record.BillingGroupID != groupAID {
 		t.Fatalf("unexpected group A candidates: %+v", groupAResolved)
 	}
 	groupBResolved, err := store.ResolveCandidates(ctx, "grouped-shared-chat", groupB.ID)
 	if err != nil {
 		t.Fatalf("resolve group B candidates: %v", err)
 	}
-	if len(groupBResolved) != 1 || groupBResolved[0].Record.Provider.Code != "group-b-provider" {
+	if len(groupBResolved) != 1 || groupBResolved[0].Record.Provider.Code != "shared-group-provider" || groupBResolved[0].Record.BillingGroupID != groupB.ID {
 		t.Fatalf("unexpected group B candidates: %+v", groupBResolved)
 	}
 	groupAActive, err := store.ListActive(ctx, groupAID)
@@ -247,7 +242,7 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 		t.Fatalf("list group A active routes: %v", err)
 	}
 	for _, route := range groupAActive {
-		if route.PublicName == "grouped-shared-chat" && route.Provider.Code != "group-a-provider" {
+		if route.PublicName == "grouped-shared-chat" && (route.Provider.Code != "shared-group-provider" || route.BillingGroupID != groupAID) {
 			t.Fatalf("group A list exposed cross-group route: %+v", route)
 		}
 	}
@@ -256,9 +251,12 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 		t.Fatalf("list group B active routes: %v", err)
 	}
 	for _, route := range groupBActive {
-		if route.PublicName == "grouped-shared-chat" && route.Provider.Code != "group-b-provider" {
+		if route.PublicName == "grouped-shared-chat" && (route.Provider.Code != "shared-group-provider" || route.BillingGroupID != groupB.ID) {
 			t.Fatalf("group B list exposed cross-group route: %+v", route)
 		}
+	}
+	if err := billinggroup.NewEntStore(client).Delete(ctx, groupB.ID); !errors.Is(err, billinggroup.ErrInUse) {
+		t.Fatalf("delete billing group referenced by model route error=%v", err)
 	}
 }
 
@@ -273,7 +271,6 @@ func TestEntStoreRequiresCatalogPricingForActiveRoute(t *testing.T) {
 	ctx := context.Background()
 	groupID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	configured, err := client.Provider.Create().
-		SetBillingGroupID(groupID).
 		SetCode("unpriced-provider").SetDisplayName("Unpriced Provider").
 		SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://unpriced.example.com").
 		SetEncryptedAPIKey("encrypted").SetAPIKeyHint("rypt").Save(ctx)
@@ -287,6 +284,7 @@ func TestEntStoreRequiresCatalogPricingForActiveRoute(t *testing.T) {
 		t.Fatalf("create unpriced model: %v", err)
 	}
 	route, err := client.ModelRoute.Create().SetProviderID(configured.ID).SetUpstreamModelID(model.ID).
+		SetBillingGroupID(groupID).
 		SetPublicName("unpriced-chat").SetDisplayName("Unpriced Chat").SetUpstreamName(model.UpstreamName).
 		SetInputPriceMicros(0).SetOutputPriceMicros(0).SetStatus(entmodelroute.StatusDisabled).Save(ctx)
 	if err != nil {

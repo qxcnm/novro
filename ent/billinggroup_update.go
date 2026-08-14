@@ -15,8 +15,8 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
-	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -151,19 +151,19 @@ func (_u *BillingGroupUpdate) AddAPIKeys(v ...*APIKey) *BillingGroupUpdate {
 	return _u.AddAPIKeyIDs(ids...)
 }
 
-// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
-func (_u *BillingGroupUpdate) AddProviderIDs(ids ...uuid.UUID) *BillingGroupUpdate {
-	_u.mutation.AddProviderIDs(ids...)
+// AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
+func (_u *BillingGroupUpdate) AddModelRouteIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.AddModelRouteIDs(ids...)
 	return _u
 }
 
-// AddProviders adds the "providers" edges to the Provider entity.
-func (_u *BillingGroupUpdate) AddProviders(v ...*Provider) *BillingGroupUpdate {
+// AddModelRoutes adds the "model_routes" edges to the ModelRoute entity.
+func (_u *BillingGroupUpdate) AddModelRoutes(v ...*ModelRoute) *BillingGroupUpdate {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddProviderIDs(ids...)
+	return _u.AddModelRouteIDs(ids...)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -222,25 +222,25 @@ func (_u *BillingGroupUpdate) RemoveAPIKeys(v ...*APIKey) *BillingGroupUpdate {
 	return _u.RemoveAPIKeyIDs(ids...)
 }
 
-// ClearProviders clears all "providers" edges to the Provider entity.
-func (_u *BillingGroupUpdate) ClearProviders() *BillingGroupUpdate {
-	_u.mutation.ClearProviders()
+// ClearModelRoutes clears all "model_routes" edges to the ModelRoute entity.
+func (_u *BillingGroupUpdate) ClearModelRoutes() *BillingGroupUpdate {
+	_u.mutation.ClearModelRoutes()
 	return _u
 }
 
-// RemoveProviderIDs removes the "providers" edge to Provider entities by IDs.
-func (_u *BillingGroupUpdate) RemoveProviderIDs(ids ...uuid.UUID) *BillingGroupUpdate {
-	_u.mutation.RemoveProviderIDs(ids...)
+// RemoveModelRouteIDs removes the "model_routes" edge to ModelRoute entities by IDs.
+func (_u *BillingGroupUpdate) RemoveModelRouteIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.RemoveModelRouteIDs(ids...)
 	return _u
 }
 
-// RemoveProviders removes "providers" edges to Provider entities.
-func (_u *BillingGroupUpdate) RemoveProviders(v ...*Provider) *BillingGroupUpdate {
+// RemoveModelRoutes removes "model_routes" edges to ModelRoute entities.
+func (_u *BillingGroupUpdate) RemoveModelRoutes(v ...*ModelRoute) *BillingGroupUpdate {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveProviderIDs(ids...)
+	return _u.RemoveModelRouteIDs(ids...)
 }
 
 // ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
@@ -425,28 +425,28 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.ProvidersCleared() {
+	if _u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedProvidersIDs(); len(nodes) > 0 && !_u.mutation.ProvidersCleared() {
+	if nodes := _u.mutation.RemovedModelRoutesIDs(); len(nodes) > 0 && !_u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -454,15 +454,15 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.ProvidersIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.ModelRoutesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -698,19 +698,19 @@ func (_u *BillingGroupUpdateOne) AddAPIKeys(v ...*APIKey) *BillingGroupUpdateOne
 	return _u.AddAPIKeyIDs(ids...)
 }
 
-// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
-func (_u *BillingGroupUpdateOne) AddProviderIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
-	_u.mutation.AddProviderIDs(ids...)
+// AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
+func (_u *BillingGroupUpdateOne) AddModelRouteIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.AddModelRouteIDs(ids...)
 	return _u
 }
 
-// AddProviders adds the "providers" edges to the Provider entity.
-func (_u *BillingGroupUpdateOne) AddProviders(v ...*Provider) *BillingGroupUpdateOne {
+// AddModelRoutes adds the "model_routes" edges to the ModelRoute entity.
+func (_u *BillingGroupUpdateOne) AddModelRoutes(v ...*ModelRoute) *BillingGroupUpdateOne {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddProviderIDs(ids...)
+	return _u.AddModelRouteIDs(ids...)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -769,25 +769,25 @@ func (_u *BillingGroupUpdateOne) RemoveAPIKeys(v ...*APIKey) *BillingGroupUpdate
 	return _u.RemoveAPIKeyIDs(ids...)
 }
 
-// ClearProviders clears all "providers" edges to the Provider entity.
-func (_u *BillingGroupUpdateOne) ClearProviders() *BillingGroupUpdateOne {
-	_u.mutation.ClearProviders()
+// ClearModelRoutes clears all "model_routes" edges to the ModelRoute entity.
+func (_u *BillingGroupUpdateOne) ClearModelRoutes() *BillingGroupUpdateOne {
+	_u.mutation.ClearModelRoutes()
 	return _u
 }
 
-// RemoveProviderIDs removes the "providers" edge to Provider entities by IDs.
-func (_u *BillingGroupUpdateOne) RemoveProviderIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
-	_u.mutation.RemoveProviderIDs(ids...)
+// RemoveModelRouteIDs removes the "model_routes" edge to ModelRoute entities by IDs.
+func (_u *BillingGroupUpdateOne) RemoveModelRouteIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.RemoveModelRouteIDs(ids...)
 	return _u
 }
 
-// RemoveProviders removes "providers" edges to Provider entities.
-func (_u *BillingGroupUpdateOne) RemoveProviders(v ...*Provider) *BillingGroupUpdateOne {
+// RemoveModelRoutes removes "model_routes" edges to ModelRoute entities.
+func (_u *BillingGroupUpdateOne) RemoveModelRoutes(v ...*ModelRoute) *BillingGroupUpdateOne {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveProviderIDs(ids...)
+	return _u.RemoveModelRouteIDs(ids...)
 }
 
 // ClearAPIUsages clears all "api_usages" edges to the APIUsage entity.
@@ -1002,28 +1002,28 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.ProvidersCleared() {
+	if _u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedProvidersIDs(); len(nodes) > 0 && !_u.mutation.ProvidersCleared() {
+	if nodes := _u.mutation.RemovedModelRoutesIDs(); len(nodes) > 0 && !_u.mutation.ModelRoutesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -1031,15 +1031,15 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.ProvidersIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.ModelRoutesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

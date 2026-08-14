@@ -563,11 +563,11 @@ type ProviderModelService interface {
 	 * Link 声明该接口方法需要提供的业务能力。
 	 * @param arg1 类型为 context.Context 的接口输入参数。
 	 * @param arg2 类型为 uuid.UUID 的接口输入参数。
-	 * @param arg3 类型为 []uuid.UUID 的接口输入参数。
+	 * @param arg3 类型为 []providersync.ModelBinding 的接口输入参数。
 	 * @author Gao Hongshun
 	 * @date 2026-08-13
 	 */
-	Link(context.Context, uuid.UUID, []uuid.UUID) (providersync.LinkResult, error)
+	Link(context.Context, uuid.UUID, []providersync.ModelBinding) (providersync.LinkResult, error)
 }
 
 type BillingGroupService interface {
@@ -1910,13 +1910,13 @@ func (h *apiHandler) linkProviderModels(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var request struct {
-		ModelIDs []uuid.UUID `json:"model_ids"`
+		Bindings []providersync.ModelBinding `json:"bindings"`
 	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "关联模型信息格式无效")
 		return
 	}
-	result, err := h.providerModels.Link(r.Context(), id, request.ModelIDs)
+	result, err := h.providerModels.Link(r.Context(), id, request.Bindings)
 	if err != nil {
 		h.writeProviderModelError(w, "link provider models", err)
 		return
@@ -3579,8 +3579,6 @@ func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string,
 		writeError(w, http.StatusNotFound, "not_found", "提供商不存在")
 	case errors.Is(err, provider.ErrCodeTaken):
 		writeError(w, http.StatusConflict, "provider_code_taken", "提供商标识已存在")
-	case errors.Is(err, provider.ErrGroupUnavailable):
-		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
 	default:
 		h.internalError(w, operation, err)
 	}
@@ -3698,6 +3696,8 @@ func (h *apiHandler) writeModelRouteError(w http.ResponseWriter, operation strin
 		writeError(w, http.StatusConflict, "model_route_taken", "该对外模型已关联相同的提供商和目录模型")
 	case errors.Is(err, modelroute.ErrPricingRequired):
 		writeError(w, http.StatusConflict, "model_pricing_required", "请先在模型目录完成定价并启用模型")
+	case errors.Is(err, modelroute.ErrGroupUnavailable):
+		writeError(w, http.StatusBadRequest, "billing_group_unavailable", "计费分组不存在或已停用")
 	default:
 		h.internalError(w, operation, err)
 	}

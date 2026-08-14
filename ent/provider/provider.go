@@ -16,8 +16,6 @@ const (
 	Label = "provider"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
-	FieldBillingGroupID = "billing_group_id"
 	// FieldCode holds the string denoting the code field in the database.
 	FieldCode = "code"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
@@ -42,19 +40,10 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
 	FieldDeletedAt = "deleted_at"
-	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
-	EdgeBillingGroup = "billing_group"
 	// EdgeModelRoutes holds the string denoting the model_routes edge name in mutations.
 	EdgeModelRoutes = "model_routes"
 	// Table holds the table name of the provider in the database.
 	Table = "providers"
-	// BillingGroupTable is the table that holds the billing_group relation/edge.
-	BillingGroupTable = "providers"
-	// BillingGroupInverseTable is the table name for the BillingGroup entity.
-	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
-	BillingGroupInverseTable = "billing_groups"
-	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
-	BillingGroupColumn = "billing_group_id"
 	// ModelRoutesTable is the table that holds the model_routes relation/edge.
 	ModelRoutesTable = "model_routes"
 	// ModelRoutesInverseTable is the table name for the ModelRoute entity.
@@ -67,7 +56,6 @@ const (
 // Columns holds all SQL columns for provider fields.
 var Columns = []string{
 	FieldID,
-	FieldBillingGroupID,
 	FieldCode,
 	FieldDisplayName,
 	FieldProtocol,
@@ -178,11 +166,6 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByBillingGroupID orders the results by the billing_group_id field.
-func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
-}
-
 // ByCode orders the results by the code field.
 func ByCode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCode, opts...).ToFunc()
@@ -243,13 +226,6 @@ func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
 }
 
-// ByBillingGroupField orders the results by billing_group field.
-func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
-	}
-}
-
 // ByModelRoutesCount orders the results by model_routes count.
 func ByModelRoutesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -262,13 +238,6 @@ func ByModelRoutes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newModelRoutesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
-}
-func newBillingGroupStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(BillingGroupInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
-	)
 }
 func newModelRoutesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(

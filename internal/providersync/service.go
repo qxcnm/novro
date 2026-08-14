@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
@@ -80,6 +81,16 @@ type LinkResult struct {
 	Existing  int `json:"existing"`
 	Reenabled int `json:"reenabled"`
 	Disabled  int `json:"disabled"`
+}
+
+type ModelBinding struct {
+	UpstreamModelID uuid.UUID `json:"upstream_model_id"`
+	BillingGroupID  uuid.UUID `json:"billing_group_id"`
+}
+
+type bindingKey struct {
+	modelID uuid.UUID
+	groupID uuid.UUID
 }
 
 type Service struct {
@@ -254,15 +265,23 @@ func findCatalogModel(ctx context.Context, tx *ent.Tx, model discoveredModel) (*
  * Link 封装该名称对应的业务处理逻辑。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param providerID 目标资源的一个或多个唯一标识。
- * @param modelIDs 目标资源的一个或多个唯一标识。
+ * @param bindings 模型和计费分组绑定关系。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (LinkResult, error) {
-	modelIDs = uniqueIDs(modelIDs)
-	if providerID == uuid.Nil || len(modelIDs) == 0 || len(modelIDs) > maxLinkModels {
+func (s *Service) Link(ctx context.Context, providerID uuid.UUID, bindings []ModelBinding) (LinkResult, error) {
+	bindings = uniqueBindings(bindings)
+	if providerID == uuid.Nil || len(bindings) == 0 || len(bindings) > maxLinkModels {
 		return LinkResult{}, ErrInvalidInput
 	}
+	modelIDs := make([]uuid.UUID, 0, len(bindings))
+	groupIDs := make([]uuid.UUID, 0, len(bindings))
+	for _, binding := range bindings {
+		modelIDs = append(modelIDs, binding.UpstreamModelID)
+		groupIDs = append(groupIDs, binding.BillingGroupID)
+	}
+	modelIDs = uniqueIDs(modelIDs)
+	groupIDs = uniqueIDs(groupIDs)
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("begin provider model linking: %w", err)
@@ -275,6 +294,13 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read provider for model linking: %w", err)
 	}
+	groups, err := tx.BillingGroup.Query().Where(entbillinggroup.IDIn(groupIDs...), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).All(ctx)
+	if err != nil {
+		return LinkResult{}, fmt.Errorf("read billing groups for provider model linking: %w", err)
+	}
+	if len(groups) != len(groupIDs) {
+		return LinkResult{}, ErrInvalidInput
+	}
 	models, err := tx.UpstreamModel.Query().Where(entupstreammodel.IDIn(modelIDs...), entupstreammodel.DeletedAtIsNil()).All(ctx)
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read catalog models for provider linking: %w", err)
@@ -282,20 +308,26 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 	if len(models) != len(modelIDs) {
 		return LinkResult{}, ErrInvalidInput
 	}
-	existingRoutes, err := tx.ModelRoute.Query().Where(entmodelroute.ProviderIDEQ(providerID), entmodelroute.UpstreamModelIDIn(modelIDs...)).All(ctx)
+	modelsByID := make(map[uuid.UUID]*ent.UpstreamModel, len(models))
+	for _, model := range models {
+		modelsByID[model.ID] = model
+	}
+	existingRoutes, err := tx.ModelRoute.Query().Where(entmodelroute.ProviderIDEQ(providerID), entmodelroute.UpstreamModelIDIn(modelIDs...), entmodelroute.BillingGroupIDIn(groupIDs...)).All(ctx)
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read existing provider model routes: %w", err)
 	}
-	existing := make(map[uuid.UUID]*ent.ModelRoute, len(existingRoutes))
+	existing := make(map[bindingKey]*ent.ModelRoute, len(existingRoutes))
 	for _, route := range existingRoutes {
 		if route.UpstreamModelID != nil {
-			existing[*route.UpstreamModelID] = route
+			existing[bindingKey{modelID: *route.UpstreamModelID, groupID: route.BillingGroupID}] = route
 		}
 	}
 
 	result := LinkResult{}
-	for _, model := range models {
-		if route, ok := existing[model.ID]; ok {
+	for _, binding := range bindings {
+		model := modelsByID[binding.UpstreamModelID]
+		key := bindingKey{modelID: binding.UpstreamModelID, groupID: binding.BillingGroupID}
+		if route, ok := existing[key]; ok {
 			result.Existing++
 			status := entmodelroute.StatusDisabled
 			if model.Status == entupstreammodel.StatusActive && model.PricingConfigured {
@@ -338,6 +370,7 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 		route, err := tx.ModelRoute.Create().
 			SetProviderID(configured.ID).
 			SetUpstreamModelID(model.ID).
+			SetBillingGroupID(binding.BillingGroupID).
 			SetPublicName(publicName).
 			SetDisplayName(model.DisplayName).
 			SetUpstreamName(model.UpstreamName).
@@ -348,13 +381,30 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, modelIDs []uui
 		if err != nil {
 			return LinkResult{}, fmt.Errorf("create provider model route %s: %w", publicName, err)
 		}
-		existing[model.ID] = route
+		existing[key] = route
 		result.Created++
 	}
 	if err := tx.Commit(); err != nil {
 		return LinkResult{}, fmt.Errorf("commit provider model linking: %w", err)
 	}
 	return result, nil
+}
+
+func uniqueBindings(values []ModelBinding) []ModelBinding {
+	seen := make(map[bindingKey]struct{}, len(values))
+	bindings := make([]ModelBinding, 0, len(values))
+	for _, value := range values {
+		if value.UpstreamModelID == uuid.Nil || value.BillingGroupID == uuid.Nil {
+			continue
+		}
+		key := bindingKey{modelID: value.UpstreamModelID, groupID: value.BillingGroupID}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		bindings = append(bindings, value)
+	}
+	return bindings
 }
 
 type discoveredModel struct {

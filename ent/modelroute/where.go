@@ -66,6 +66,11 @@ func UpstreamModelID(v uuid.UUID) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldUpstreamModelID, v))
 }
 
+// BillingGroupID applies equality check predicate on the "billing_group_id" field. It's identical to BillingGroupIDEQ.
+func BillingGroupID(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
 // PublicName applies equality check predicate on the "public_name" field. It's identical to PublicNameEQ.
 func PublicName(v string) predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldEQ(FieldPublicName, v))
@@ -154,6 +159,26 @@ func UpstreamModelIDIsNil() predicate.ModelRoute {
 // UpstreamModelIDNotNil applies the NotNil predicate on the "upstream_model_id" field.
 func UpstreamModelIDNotNil() predicate.ModelRoute {
 	return predicate.ModelRoute(sql.FieldNotNull(FieldUpstreamModelID))
+}
+
+// BillingGroupIDEQ applies the EQ predicate on the "billing_group_id" field.
+func BillingGroupIDEQ(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDNEQ applies the NEQ predicate on the "billing_group_id" field.
+func BillingGroupIDNEQ(v uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNEQ(FieldBillingGroupID, v))
+}
+
+// BillingGroupIDIn applies the In predicate on the "billing_group_id" field.
+func BillingGroupIDIn(vs ...uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldIn(FieldBillingGroupID, vs...))
+}
+
+// BillingGroupIDNotIn applies the NotIn predicate on the "billing_group_id" field.
+func BillingGroupIDNotIn(vs ...uuid.UUID) predicate.ModelRoute {
+	return predicate.ModelRoute(sql.FieldNotIn(FieldBillingGroupID, vs...))
 }
 
 // PublicNameEQ applies the EQ predicate on the "public_name" field.
@@ -619,6 +644,29 @@ func HasUpstreamModel() predicate.ModelRoute {
 func HasUpstreamModelWith(preds ...predicate.UpstreamModel) predicate.ModelRoute {
 	return predicate.ModelRoute(func(s *sql.Selector) {
 		step := newUpstreamModelStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasBillingGroup applies the HasEdge predicate on the "billing_group" edge.
+func HasBillingGroup() predicate.ModelRoute {
+	return predicate.ModelRoute(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasBillingGroupWith applies the HasEdge predicate on the "billing_group" edge with a given conditions (other predicates).
+func HasBillingGroupWith(preds ...predicate.BillingGroup) predicate.ModelRoute {
+	return predicate.ModelRoute(func(s *sql.Selector) {
+		step := newBillingGroupStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

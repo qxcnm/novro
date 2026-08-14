@@ -16,11 +16,10 @@ APIKey
 └── GatewayOperation[]
 
 Provider
-├── BillingGroup
 └── ModelRoute[]
 
 BillingGroup
-└── APIKey[] / Provider[] / APIUsage[]
+└── APIKey[] / ModelRoute[] / APIUsage[]
 
 UpstreamModel
 ├── ModelRoute[]
@@ -105,8 +104,8 @@ EmailVerificationCode
 当前迁移从 `0001_initial_schema.sql` 开始，并通过后续有序迁移演进。`0009_gateway_billing_safety.sql`
 新增持久化网关 operation 和计费补偿流水类型；`0010_billing_group_user_authorizations.sql` 新增隐藏
 计费分组与普通成员的多对多授权表；`0011_system_announcement.sql` 将全局设置值扩为 `TEXT`；
-`0012_model_price_plans.sql` 新增版本化固定价和分时价方案，并把已有目录价格回填为版本 1。
-部署包含本功能的代码前必须先成功执行到 `0012`。
+`0012_model_price_plans.sql` 新增版本化固定价和分时价方案，并把已有目录价格回填为版本 1；
+`0013_model_route_billing_groups.sql` 将旧提供商分组关联迁移到模型路由。部署包含本功能的代码前必须先成功执行到 `0013`。
 迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
 邮件、邀请返现、系统公告、用量审计和结算恢复相关表，并写入默认计费分组与默认邀请返现比例。
 服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
@@ -114,7 +113,7 @@ EmailVerificationCode
 
 提供商、模型目录、模型路由和计费分组使用软删除。普通查询和网关路由解析排除
 `deleted_at` 非空记录，但历史用量、钱包流水及外键关联继续保留。删除提供商或目录模型时，
-关联模型路由在同一事务中一并软删除；默认计费分组以及仍被启用 API Key 或未删除供应商
+关联模型路由在同一事务中一并软删除；默认计费分组以及仍被启用 API Key 或未删除模型路由
 使用的分组拒绝删除。
 
 ## 7. wallets
@@ -209,7 +208,7 @@ EmailVerificationCode
 
 ## 11. providers
 
-- `id`、`billing_group_id`、`code`、`display_name`
+- `id`、`code`、`display_name`
 - `protocol`，`openai` 或 `anthropic`
 - `base_url`
 - `model_list_path`，可选的模型获取路径覆盖值
@@ -222,21 +221,22 @@ EmailVerificationCode
 站点绝对路径，并在模型目录同步时覆盖默认拼接规则。基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
 明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
 上游重定向。
-新增和修改供应商时只能选择启用中的计费分组。网关解析候选路由时只会使用与当前 API Key
-同一计费分组的供应商，并按 `weight` 降序请求；同权重保留稳定路由顺序。
+供应商不再直接关联计费分组；一个供应商可以通过多条模型路由为多个分组提供同一模型。
+网关解析候选路由时按模型路由的 `billing_group_id` 过滤，再按提供商 `weight` 降序请求；同权重保留稳定路由顺序。
 
 ## 12. model_routes
 
 - `provider_id`
 - `upstream_model_id`，指向独立模型目录记录
+- `billing_group_id`，该路由所属的计费分组
 - `public_name`，对外模型名，创建后不可修改；自动关联时使用全局目录模型 ID，多个提供商因此进入同一个故障切换池
 - `display_name`
 - 旧版 `upstream_name`、输入/输出价格字段保留用于迁移兼容，新的计费读取全局模型目录
 - `status`、`created_at`、`updated_at`
 
-`public_name + provider_id + upstream_model_id` 组合唯一，防止完全相同的渠道重复配置。同一
-`public_name` 下只有模型路由、提供商配置、提供商计费分组和目录模型都启用，且提供商分组
-与当前 API Key 分组一致的记录才进入候选池；
+`billing_group_id + public_name + provider_id + upstream_model_id` 组合唯一，防止同一分组中完全相同的渠道重复配置。同一
+`public_name` 下只有模型路由、提供商配置、所属分组和目录模型都启用，且路由分组
+与当前 API Key 的 `billing_group_id` 一致的记录才进入候选池；
 `/v1/models` 对同名候选去重后返回。
 
 ## 13. billing_groups
@@ -245,12 +245,11 @@ EmailVerificationCode
 - `multiplier_bps`，10000 表示 1.0000 倍
 - `is_default`、`status`、`created_at`、`updated_at`
 
-计费分组用于 API Key 和供应商两个维度。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
+计费分组用于 API Key 和模型路由两个维度。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
 `billing_group_authorized_users` 用 `(billing_group_id, user_id)` 唯一记录普通成员的逐组授权；管理员
 自动拥有全部隐藏组权限，不写入该表。`0010` 会将旧 `can_access_hidden_groups = TRUE` 的普通成员
 回填到迁移时所有未删除隐藏组，以保持升级前的有效权限；应用不再读取或写入旧布尔列。创建 API Key
-时用户选择分组；新增或修改供应商时管理员选择分组。调用时以 API Key 所属分组作为结算倍率，并只访问
-同分组供应商。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
+时用户选择分组；管理员在模型关联和模型路由配置时为每条路由选择分组。调用时以 API Key 的 `billing_group_id` 选择路由，以该分组的 `multiplier_bps` 计算费用，倍率数值不参与路由匹配。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
 用于空库初始化和默认选择，不能停用。
 
 ## 14. upstream_models

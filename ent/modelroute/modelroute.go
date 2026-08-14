@@ -20,6 +20,8 @@ const (
 	FieldProviderID = "provider_id"
 	// FieldUpstreamModelID holds the string denoting the upstream_model_id field in the database.
 	FieldUpstreamModelID = "upstream_model_id"
+	// FieldBillingGroupID holds the string denoting the billing_group_id field in the database.
+	FieldBillingGroupID = "billing_group_id"
 	// FieldPublicName holds the string denoting the public_name field in the database.
 	FieldPublicName = "public_name"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
@@ -42,6 +44,8 @@ const (
 	EdgeProvider = "provider"
 	// EdgeUpstreamModel holds the string denoting the upstream_model edge name in mutations.
 	EdgeUpstreamModel = "upstream_model"
+	// EdgeBillingGroup holds the string denoting the billing_group edge name in mutations.
+	EdgeBillingGroup = "billing_group"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
 	// Table holds the table name of the modelroute in the database.
@@ -60,6 +64,13 @@ const (
 	UpstreamModelInverseTable = "upstream_models"
 	// UpstreamModelColumn is the table column denoting the upstream_model relation/edge.
 	UpstreamModelColumn = "upstream_model_id"
+	// BillingGroupTable is the table that holds the billing_group relation/edge.
+	BillingGroupTable = "model_routes"
+	// BillingGroupInverseTable is the table name for the BillingGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroup" package.
+	BillingGroupInverseTable = "billing_groups"
+	// BillingGroupColumn is the table column denoting the billing_group relation/edge.
+	BillingGroupColumn = "billing_group_id"
 	// APIUsagesTable is the table that holds the api_usages relation/edge.
 	APIUsagesTable = "api_usages"
 	// APIUsagesInverseTable is the table name for the APIUsage entity.
@@ -74,6 +85,7 @@ var Columns = []string{
 	FieldID,
 	FieldProviderID,
 	FieldUpstreamModelID,
+	FieldBillingGroupID,
 	FieldPublicName,
 	FieldDisplayName,
 	FieldUpstreamName,
@@ -160,6 +172,11 @@ func ByUpstreamModelID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpstreamModelID, opts...).ToFunc()
 }
 
+// ByBillingGroupID orders the results by the billing_group_id field.
+func ByBillingGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingGroupID, opts...).ToFunc()
+}
+
 // ByPublicName orders the results by the public_name field.
 func ByPublicName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPublicName, opts...).ToFunc()
@@ -219,6 +236,13 @@ func ByUpstreamModelField(field string, opts ...sql.OrderTermOption) OrderOption
 	}
 }
 
+// ByBillingGroupField orders the results by billing_group field.
+func ByBillingGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBillingGroupStep(), sql.OrderByField(field, opts...))
+	}
+}
+
 // ByAPIUsagesCount orders the results by api_usages count.
 func ByAPIUsagesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -244,6 +268,13 @@ func newUpstreamModelStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UpstreamModelInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, UpstreamModelTable, UpstreamModelColumn),
+	)
+}
+func newBillingGroupStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BillingGroupInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, BillingGroupTable, BillingGroupColumn),
 	)
 }
 func newAPIUsagesStep() *sqlgraph.Step {

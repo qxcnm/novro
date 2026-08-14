@@ -44,7 +44,7 @@ func (BillingGroup) Fields() []ent.Field {
 func (BillingGroup) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("api_keys", APIKey.Type),
-		edge.To("providers", Provider.Type),
+		edge.To("model_routes", ModelRoute.Type),
 		edge.To("api_usages", APIUsage.Type),
 		edge.To("authorized_users", User.Type).
 			StorageKey(edge.Table("billing_group_authorized_users"), edge.Columns("billing_group_id", "user_id")),

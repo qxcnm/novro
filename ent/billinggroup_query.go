@@ -17,8 +17,8 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
-	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -30,7 +30,7 @@ type BillingGroupQuery struct {
 	inters              []Interceptor
 	predicates          []predicate.BillingGroup
 	withAPIKeys         *APIKeyQuery
-	withProviders       *ProviderQuery
+	withModelRoutes     *ModelRouteQuery
 	withAPIUsages       *APIUsageQuery
 	withAuthorizedUsers *UserQuery
 	modifiers           []func(*sql.Selector)
@@ -92,9 +92,9 @@ func (_q *BillingGroupQuery) QueryAPIKeys() *APIKeyQuery {
 	return query
 }
 
-// QueryProviders chains the current query on the "providers" edge.
-func (_q *BillingGroupQuery) QueryProviders() *ProviderQuery {
-	query := (&ProviderClient{config: _q.config}).Query()
+// QueryModelRoutes chains the current query on the "model_routes" edge.
+func (_q *BillingGroupQuery) QueryModelRoutes() *ModelRouteQuery {
+	query := (&ModelRouteClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -105,8 +105,8 @@ func (_q *BillingGroupQuery) QueryProviders() *ProviderQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
-			sqlgraph.To(provider.Table, provider.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.ProvidersTable, billinggroup.ProvidersColumn),
+			sqlgraph.To(modelroute.Table, modelroute.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.ModelRoutesTable, billinggroup.ModelRoutesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -351,7 +351,7 @@ func (_q *BillingGroupQuery) Clone() *BillingGroupQuery {
 		inters:              append([]Interceptor{}, _q.inters...),
 		predicates:          append([]predicate.BillingGroup{}, _q.predicates...),
 		withAPIKeys:         _q.withAPIKeys.Clone(),
-		withProviders:       _q.withProviders.Clone(),
+		withModelRoutes:     _q.withModelRoutes.Clone(),
 		withAPIUsages:       _q.withAPIUsages.Clone(),
 		withAuthorizedUsers: _q.withAuthorizedUsers.Clone(),
 		// clone intermediate query.
@@ -371,14 +371,14 @@ func (_q *BillingGroupQuery) WithAPIKeys(opts ...func(*APIKeyQuery)) *BillingGro
 	return _q
 }
 
-// WithProviders tells the query-builder to eager-load the nodes that are connected to
-// the "providers" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *BillingGroupQuery) WithProviders(opts ...func(*ProviderQuery)) *BillingGroupQuery {
-	query := (&ProviderClient{config: _q.config}).Query()
+// WithModelRoutes tells the query-builder to eager-load the nodes that are connected to
+// the "model_routes" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BillingGroupQuery) WithModelRoutes(opts ...func(*ModelRouteQuery)) *BillingGroupQuery {
+	query := (&ModelRouteClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withProviders = query
+	_q.withModelRoutes = query
 	return _q
 }
 
@@ -484,7 +484,7 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		_spec       = _q.querySpec()
 		loadedTypes = [4]bool{
 			_q.withAPIKeys != nil,
-			_q.withProviders != nil,
+			_q.withModelRoutes != nil,
 			_q.withAPIUsages != nil,
 			_q.withAuthorizedUsers != nil,
 		}
@@ -517,10 +517,10 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			return nil, err
 		}
 	}
-	if query := _q.withProviders; query != nil {
-		if err := _q.loadProviders(ctx, query, nodes,
-			func(n *BillingGroup) { n.Edges.Providers = []*Provider{} },
-			func(n *BillingGroup, e *Provider) { n.Edges.Providers = append(n.Edges.Providers, e) }); err != nil {
+	if query := _q.withModelRoutes; query != nil {
+		if err := _q.loadModelRoutes(ctx, query, nodes,
+			func(n *BillingGroup) { n.Edges.ModelRoutes = []*ModelRoute{} },
+			func(n *BillingGroup, e *ModelRoute) { n.Edges.ModelRoutes = append(n.Edges.ModelRoutes, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -571,7 +571,7 @@ func (_q *BillingGroupQuery) loadAPIKeys(ctx context.Context, query *APIKeyQuery
 	}
 	return nil
 }
-func (_q *BillingGroupQuery) loadProviders(ctx context.Context, query *ProviderQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *Provider)) error {
+func (_q *BillingGroupQuery) loadModelRoutes(ctx context.Context, query *ModelRouteQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *ModelRoute)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[uuid.UUID]*BillingGroup)
 	for i := range nodes {
@@ -582,10 +582,10 @@ func (_q *BillingGroupQuery) loadProviders(ctx context.Context, query *ProviderQ
 		}
 	}
 	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(provider.FieldBillingGroupID)
+		query.ctx.AppendFieldOnce(modelroute.FieldBillingGroupID)
 	}
-	query.Where(predicate.Provider(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(billinggroup.ProvidersColumn), fks...))
+	query.Where(predicate.ModelRoute(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(billinggroup.ModelRoutesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

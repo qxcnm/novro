@@ -402,6 +402,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "billing_group_id", Type: field.TypeUUID},
 		{Name: "provider_id", Type: field.TypeUUID},
 		{Name: "upstream_model_id", Type: field.TypeUUID, Nullable: true},
 	}
@@ -412,33 +413,44 @@ var (
 		PrimaryKey: []*schema.Column{ModelRoutesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "model_routes_providers_model_routes",
+				Symbol:     "model_routes_billing_groups_model_routes",
 				Columns:    []*schema.Column{ModelRoutesColumns[10]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "model_routes_providers_model_routes",
+				Columns:    []*schema.Column{ModelRoutesColumns[11]},
 				RefColumns: []*schema.Column{ProvidersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "model_routes_upstream_models_model_routes",
-				Columns:    []*schema.Column{ModelRoutesColumns[11]},
+				Columns:    []*schema.Column{ModelRoutesColumns[12]},
 				RefColumns: []*schema.Column{UpstreamModelsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "modelroute_public_name_provider_id_upstream_model_id",
+				Name:    "modelroute_group_public_provider_model",
 				Unique:  true,
-				Columns: []*schema.Column{ModelRoutesColumns[1], ModelRoutesColumns[10], ModelRoutesColumns[11]},
+				Columns: []*schema.Column{ModelRoutesColumns[10], ModelRoutesColumns[1], ModelRoutesColumns[11], ModelRoutesColumns[12]},
 			},
 			{
-				Name:    "modelroute_provider_id_status",
+				Name:    "modelroute_billing_group_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{ModelRoutesColumns[10], ModelRoutesColumns[6]},
 			},
 			{
-				Name:    "modelroute_upstream_model_id_status",
+				Name:    "modelroute_provider_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{ModelRoutesColumns[11], ModelRoutesColumns[6]},
+			},
+			{
+				Name:    "modelroute_upstream_model_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{ModelRoutesColumns[12], ModelRoutesColumns[6]},
 			},
 			{
 				Name:    "modelroute_status_created_at",
@@ -490,27 +502,13 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
-		{Name: "billing_group_id", Type: field.TypeUUID},
 	}
 	// ProvidersTable holds the schema information for the "providers" table.
 	ProvidersTable = &schema.Table{
 		Name:       "providers",
 		Columns:    ProvidersColumns,
 		PrimaryKey: []*schema.Column{ProvidersColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "providers_billing_groups_providers",
-				Columns:    []*schema.Column{ProvidersColumns[13]},
-				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
 		Indexes: []*schema.Index{
-			{
-				Name:    "provider_billing_group_id_status",
-				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[13], ProvidersColumns[9]},
-			},
 			{
 				Name:    "provider_status_created_at",
 				Unique:  false,
@@ -863,9 +861,9 @@ func init() {
 	GatewayOperationsTable.ForeignKeys[1].RefTable = UsersTable
 	ModelPricePlansTable.ForeignKeys[0].RefTable = UpstreamModelsTable
 	ModelPriceWindowsTable.ForeignKeys[0].RefTable = ModelPricePlansTable
-	ModelRoutesTable.ForeignKeys[0].RefTable = ProvidersTable
-	ModelRoutesTable.ForeignKeys[1].RefTable = UpstreamModelsTable
-	ProvidersTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	ModelRoutesTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	ModelRoutesTable.ForeignKeys[1].RefTable = ProvidersTable
+	ModelRoutesTable.ForeignKeys[2].RefTable = UpstreamModelsTable
 	TopUpOrdersTable.ForeignKeys[0].RefTable = UsersTable
 	UsersTable.ForeignKeys[0].RefTable = UsersTable
 	UserIdentitiesTable.ForeignKeys[0].RefTable = UsersTable

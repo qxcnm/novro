@@ -153,7 +153,7 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create integration API key: %v", err)
 	}
-	providerEntity, err := client.Provider.Create().SetBillingGroupID(group.ID).SetCode("integration-provider").SetDisplayName("Integration Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
+	providerEntity, err := client.Provider.Create().SetCode("integration-provider").SetDisplayName("Integration Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
 	if err != nil {
 		t.Fatalf("create integration provider: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestMySQLUsageAccountingRetriesAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create integration upstream model: %v", err)
 	}
-	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetPublicName("integration-model").SetDisplayName("Integration Model").SetUpstreamName("upstream-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
+	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetBillingGroupID(group.ID).SetPublicName("integration-model").SetDisplayName("Integration Model").SetUpstreamName("upstream-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
 	if err != nil {
 		t.Fatalf("create integration model route: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create gateway race API key: %v", err)
 	}
-	providerEntity, err := client.Provider.Create().SetBillingGroupID(group.ID).SetCode("gateway-race-provider").SetDisplayName("Gateway Race Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
+	providerEntity, err := client.Provider.Create().SetCode("gateway-race-provider").SetDisplayName("Gateway Race Provider").SetProtocol("openai").SetBaseURL("https://api.example.com").SetEncryptedAPIKey("encrypted").SetAPIKeyHint("hint").Save(ctx)
 	if err != nil {
 		t.Fatalf("create gateway race provider: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestMySQLConcurrentGatewayBillingTransitionsAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create gateway race upstream model: %v", err)
 	}
-	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetPublicName("gateway-race-model").SetDisplayName("Gateway Race Model").SetUpstreamName("gateway-race-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
+	route, err := client.ModelRoute.Create().SetProviderID(providerEntity.ID).SetUpstreamModelID(upstream.ID).SetBillingGroupID(group.ID).SetPublicName("gateway-race-model").SetDisplayName("Gateway Race Model").SetUpstreamName("gateway-race-model").SetInputPriceMicros(0).SetOutputPriceMicros(0).Save(ctx)
 	if err != nil {
 		t.Fatalf("create gateway race route: %v", err)
 	}

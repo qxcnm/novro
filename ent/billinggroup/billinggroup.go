@@ -36,8 +36,8 @@ const (
 	FieldDeletedAt = "deleted_at"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
-	// EdgeProviders holds the string denoting the providers edge name in mutations.
-	EdgeProviders = "providers"
+	// EdgeModelRoutes holds the string denoting the model_routes edge name in mutations.
+	EdgeModelRoutes = "model_routes"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
 	// EdgeAuthorizedUsers holds the string denoting the authorized_users edge name in mutations.
@@ -51,13 +51,13 @@ const (
 	APIKeysInverseTable = "api_keys"
 	// APIKeysColumn is the table column denoting the api_keys relation/edge.
 	APIKeysColumn = "billing_group_id"
-	// ProvidersTable is the table that holds the providers relation/edge.
-	ProvidersTable = "providers"
-	// ProvidersInverseTable is the table name for the Provider entity.
-	// It exists in this package in order to avoid circular dependency with the "provider" package.
-	ProvidersInverseTable = "providers"
-	// ProvidersColumn is the table column denoting the providers relation/edge.
-	ProvidersColumn = "billing_group_id"
+	// ModelRoutesTable is the table that holds the model_routes relation/edge.
+	ModelRoutesTable = "model_routes"
+	// ModelRoutesInverseTable is the table name for the ModelRoute entity.
+	// It exists in this package in order to avoid circular dependency with the "modelroute" package.
+	ModelRoutesInverseTable = "model_routes"
+	// ModelRoutesColumn is the table column denoting the model_routes relation/edge.
+	ModelRoutesColumn = "billing_group_id"
 	// APIUsagesTable is the table that holds the api_usages relation/edge.
 	APIUsagesTable = "api_usages"
 	// APIUsagesInverseTable is the table name for the APIUsage entity.
@@ -218,17 +218,17 @@ func ByAPIKeys(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByProvidersCount orders the results by providers count.
-func ByProvidersCount(opts ...sql.OrderTermOption) OrderOption {
+// ByModelRoutesCount orders the results by model_routes count.
+func ByModelRoutesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newProvidersStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newModelRoutesStep(), opts...)
 	}
 }
 
-// ByProviders orders the results by providers terms.
-func ByProviders(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByModelRoutes orders the results by model_routes terms.
+func ByModelRoutes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newProvidersStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newModelRoutesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -266,11 +266,11 @@ func newAPIKeysStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, APIKeysTable, APIKeysColumn),
 	)
 }
-func newProvidersStep() *sqlgraph.Step {
+func newModelRoutesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ProvidersInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ProvidersTable, ProvidersColumn),
+		sqlgraph.To(ModelRoutesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ModelRoutesTable, ModelRoutesColumn),
 	)
 }
 func newAPIUsagesStep() *sqlgraph.Step {

@@ -44,10 +44,19 @@ type CatalogModel = {
   prices: Prices;
 };
 
+type BillingGroup = {
+  id: string;
+  display_name: string;
+  multiplier_bps: number;
+  status: "active" | "disabled";
+};
+
 type ModelRoute = {
   id: string;
   provider_id: string;
   upstream_model_id: string | null;
+  billing_group_id: string;
+  billing_group: Pick<BillingGroup, "id" | "display_name" | "multiplier_bps">;
   public_name: string;
   display_name: string;
   status: "active" | "disabled";
@@ -58,11 +67,12 @@ type ModelRoute = {
 type RouteForm = {
   provider_id: string;
   upstream_model_id: string;
+  billing_group_id: string;
   public_name: string;
   display_name: string;
 };
 
-const EMPTY_FORM: RouteForm = { provider_id: "", upstream_model_id: "", public_name: "", display_name: "" };
+const EMPTY_FORM: RouteForm = { provider_id: "", upstream_model_id: "", billing_group_id: "", public_name: "", display_name: "" };
 const ALL_PROVIDERS = "__all__";
 
 /**
@@ -97,6 +107,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
   const [routes, setRoutes] = useState<ModelRoute[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [catalog, setCatalog] = useState<CatalogModel[]>([]);
+  const [billingGroups, setBillingGroups] = useState<BillingGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -112,14 +123,15 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [routesResponse, providersResponse, catalogResponse] = await Promise.all([
+    const [routesResponse, providersResponse, catalogResponse, groupsResponse] = await Promise.all([
       fetch("/api/admin/model-routes", { cache: "no-store" }),
       fetch("/api/admin/providers", { cache: "no-store" }),
       fetch("/api/admin/upstream-models", { cache: "no-store" }),
+      fetch("/api/admin/billing-groups", { cache: "no-store" }),
     ]);
     if (routesResponse.status === 401) { router.replace("/login"); return; }
     if (routesResponse.status === 403) { router.replace("/console"); return; }
-    if (!routesResponse.ok || !providersResponse.ok || !catalogResponse.ok) {
+    if (!routesResponse.ok || !providersResponse.ok || !catalogResponse.ok || !groupsResponse.ok) {
       setMessage("加载模型路由失败");
       setLoading(false);
       return;
@@ -127,6 +139,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     setRoutes(((await routesResponse.json()) as { model_routes: ModelRoute[] }).model_routes);
     setProviders(((await providersResponse.json()) as { providers: Provider[] }).providers);
     setCatalog(((await catalogResponse.json()) as { upstream_models: CatalogModel[] }).upstream_models);
+    setBillingGroups(((await groupsResponse.json()) as { billing_groups: BillingGroup[] }).billing_groups);
     setLoading(false);
   }, [router]);
 
@@ -149,11 +162,12 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     const needle = query.trim().toLowerCase();
     return routes.filter((route) => {
       const providerMatches = activeProvider === ALL_PROVIDERS || route.provider_id === activeProvider;
-      const queryMatches = !needle || `${route.public_name} ${route.display_name} ${route.provider.display_name} ${route.upstream_model?.upstream_name ?? ""}`.toLowerCase().includes(needle);
+      const queryMatches = !needle || `${route.public_name} ${route.display_name} ${route.provider.display_name} ${route.upstream_model?.upstream_name ?? ""} ${route.billing_group.display_name}`.toLowerCase().includes(needle);
       return providerMatches && queryMatches;
     });
   }, [activeProvider, query, routes]);
   const selection = useListSelection(filtered.map((route) => route.id));
+  const activeBillingGroups = billingGroups.filter((group) => group.status === "active");
 
   /**
    * beginCreate 封装该名称对应的业务处理逻辑。
@@ -163,7 +177,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
    */
   function beginCreate() {
     setEditing(null);
-    setForm({ ...EMPTY_FORM, provider_id: activeProvider === ALL_PROVIDERS ? "" : activeProvider });
+    setForm({ ...EMPTY_FORM, provider_id: activeProvider === ALL_PROVIDERS ? "" : activeProvider, billing_group_id: activeBillingGroups[0]?.id ?? "" });
     setEditorOpen(true);
   }
 
@@ -178,6 +192,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     setForm({
       provider_id: route.provider_id,
       upstream_model_id: route.upstream_model_id ?? "",
+      billing_group_id: route.billing_group_id,
       public_name: route.public_name,
       display_name: route.display_name,
     });
@@ -333,14 +348,15 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有模型路由" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>对外模型</TableHead><TableHead>提供商配置</TableHead><TableHead>目录模型</TableHead><TableHead>输入 / 缓存命中</TableHead><TableHead>缓存创建 / 输出</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有模型路由" checked={selection.checkboxState} disabled={loading || filtered.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead>对外模型</TableHead><TableHead>计费分组</TableHead><TableHead>提供商配置</TableHead><TableHead>目录模型</TableHead><TableHead>输入 / 缓存命中</TableHead><TableHead>缓存创建 / 输出</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
-                {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>{query.trim() ? "没有匹配的关联模型" : activeProvider === ALL_PROVIDERS ? "还没有关联模型路由" : "该提供商暂无关联模型"}</TableCell></TableRow> : null}
+                {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={9}>加载中...</TableCell></TableRow> : null}
+                {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>{query.trim() ? "没有匹配的关联模型" : activeProvider === ALL_PROVIDERS ? "还没有关联模型路由" : "该提供商暂无关联模型"}</TableCell></TableRow> : null}
                 {filtered.map((route) => (
                   <TableRow key={route.id}>
                     <TableCell><Checkbox aria-label={`选择 ${route.display_name}`} checked={selection.isSelected(route.id)} onCheckedChange={(checked) => selection.toggleOne(route.id, checked === true)} /></TableCell>
                     <TableCell><p className="font-medium">{route.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.public_name}</p></TableCell>
+                    <TableCell><p>{route.billing_group.display_name}</p><p className="font-mono text-xs text-muted-foreground">{(route.billing_group.multiplier_bps / 10_000).toFixed(4)}×</p></TableCell>
                     <TableCell><p>{route.provider.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.provider.code}</p></TableCell>
                     <TableCell><p>{route.upstream_model?.display_name ?? "未关联"}</p><p className="text-xs text-muted-foreground">{route.upstream_model ? `${route.upstream_model.provider_name} · ${route.upstream_model.upstream_name}` : "-"}</p></TableCell>
                     <TableCell><p>{money(route.upstream_model?.prices.input_price_micros ?? 0)}</p><p className="text-xs text-muted-foreground">命中 {money(route.upstream_model?.prices.cache_read_price_micros ?? 0)}</p></TableCell>
@@ -357,8 +373,9 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
 
       <Dialog onOpenChange={(open) => { setEditorOpen(open); if (!open) { setEditing(null); setForm(EMPTY_FORM); } }} open={editorOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "编辑关联模型路由" : "新增关联模型路由"}</DialogTitle><DialogDescription>路由将一个对外模型名称绑定到提供商配置和模型目录记录。</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "编辑关联模型路由" : "新增关联模型路由"}</DialogTitle><DialogDescription>路由将一个对外模型名称绑定到计费分组、提供商配置和模型目录记录。</DialogDescription></DialogHeader>
           <form className="space-y-4" id="model-route-form" onSubmit={submit}>
+            <div className="space-y-2"><Label htmlFor="route-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger className="w-full" id="route-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×{group.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-provider">提供商配置</Label><Select onValueChange={(provider_id) => setForm({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id="route-provider"><SelectValue placeholder="选择提供商配置" /></SelectTrigger><SelectContent>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name}{provider.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-catalog-model">目录模型</Label><Select onValueChange={(upstream_model_id) => setForm({ ...form, upstream_model_id })} value={form.upstream_model_id}><SelectTrigger className="w-full" id="route-catalog-model"><SelectValue placeholder="选择目录模型" /></SelectTrigger><SelectContent>{catalog.map((model) => <SelectItem key={model.id} value={model.id}>{model.provider_name} · {model.display_name}{!model.pricing_configured ? "（待定价）" : model.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-public-name">对外模型名称</Label><Input disabled={editing !== null} id="route-public-name" maxLength={256} minLength={2} onChange={(event) => setForm({ ...form, public_name: event.target.value })} pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{1,255}" placeholder="例如 deepseek-chat" required title="对外模型名称需为 2 到 256 位，以字母或数字开头，只能使用字母、数字、点号、下划线、冒号、斜杠和连字符，不能包含空格或中文" value={form.public_name} /><p className="text-xs text-muted-foreground">2 到 256 位；以字母或数字开头，允许点号、下划线、冒号、斜杠和连字符，不允许空格或中文。</p></div>

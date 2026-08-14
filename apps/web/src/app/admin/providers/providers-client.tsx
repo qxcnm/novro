@@ -24,8 +24,6 @@ import { useListSelection } from "@/lib/use-list-selection";
 type Protocol = "openai" | "anthropic";
 type ProviderRecord = {
   id: string;
-  billing_group_id: string;
-  billing_group: { id: string; code: string; display_name: string; multiplier_bps: number };
   code: string;
   display_name: string;
   protocol: Protocol;
@@ -53,12 +51,13 @@ type PickerModel = {
 type RouteRecord = {
   provider_id: string;
   upstream_model_id: string | null;
+  billing_group_id: string;
 };
 
 type ErrorResponse = { error?: { message?: string } };
 type BillingGroup = { id: string; display_name: string; multiplier_bps: number; is_default: boolean; status: "active" | "disabled" };
-type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string; billing_group_id: string };
-type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string; billing_group_id: string };
+type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string };
+type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string };
 
 const INITIAL_CREATE: CreateForm = {
   code: "",
@@ -68,7 +67,6 @@ const INITIAL_CREATE: CreateForm = {
   model_list_path: "",
   weight: 100,
   api_key: "",
-  billing_group_id: "",
 };
 
 const MODEL_SYNC_TIMEOUT_MS = 35_000;
@@ -138,6 +136,10 @@ function defaultBaseURL(protocol: Protocol) {
   return protocol === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com";
 }
 
+function bindingKey(modelID: string, billingGroupID: string) {
+  return `${modelID}:${billingGroupID}`;
+}
+
 /**
  * ProvidersClient 渲染对应的 React 界面组件。
  * @param none 无参数。
@@ -165,15 +167,16 @@ export default function ProvidersClient() {
   const [bulkSyncOpen, setBulkSyncOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(INITIAL_CREATE);
-  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", weight: 100, api_key: "", billing_group_id: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", weight: 100, api_key: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerProvider, setPickerProvider] = useState<ProviderRecord | null>(null);
   const [pickerModels, setPickerModels] = useState<PickerModel[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [pickerNotice, setPickerNotice] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
-  const [selectedModelIDs, setSelectedModelIDs] = useState<Set<string>>(new Set());
-  const [linkedModelIDs, setLinkedModelIDs] = useState<Set<string>>(new Set());
+  const [pickerGroupByModelID, setPickerGroupByModelID] = useState<Record<string, string>>({});
+  const [selectedBindingKeys, setSelectedBindingKeys] = useState<Set<string>>(new Set());
+  const [linkedBindingKeys, setLinkedBindingKeys] = useState<Set<string>>(new Set());
   const selection = useListSelection(providers.map((provider) => provider.id));
 
   const loadProviders = useCallback(async () => {
@@ -229,7 +232,7 @@ export default function ProvidersClient() {
    */
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
-    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "", billing_group_id: record.billing_group_id });
+    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "" });
     setFormError("");
   }
 
@@ -247,8 +250,11 @@ export default function ProvidersClient() {
     setPickerNotice(sync ? "正在同步模型..." : "");
     setPickerQuery("");
     setPickerModels([]);
-    setSelectedModelIDs(new Set());
-    setLinkedModelIDs(new Set());
+    const activeGroups = billingGroups.filter((group) => group.status === "active");
+    const defaultGroupID = activeGroups.find((group) => group.is_default)?.id ?? activeGroups[0]?.id ?? "";
+    setPickerGroupByModelID({});
+    setSelectedBindingKeys(new Set());
+    setLinkedBindingKeys(new Set());
 
 	try {
 	  let syncedIDs = new Set<string>();
@@ -294,19 +300,29 @@ export default function ProvidersClient() {
 			 * @date 2026-08-13
 			 */
 			const routes = ((await routesResponse.json()) as { model_routes: RouteRecord[] }).model_routes;
-			const linked = new Set(routes.filter((route) => route.provider_id === record.id && route.upstream_model_id).map((route) => route.upstream_model_id as string));
+			const linked = new Set(routes.filter((route) => route.provider_id === record.id && route.upstream_model_id).map((route) => bindingKey(route.upstream_model_id as string, route.billing_group_id)));
+			let models: PickerModel[];
 			if (syncedModels !== null) {
-				setPickerModels(syncedModels);
+				models = syncedModels;
 			} else {
 				const catalogResponse = await fetchWithTimeout("/api/admin/upstream-models", { cache: "no-store" }, 15_000);
 				if (!catalogResponse.ok) {
 					setPickerNotice("加载模型目录失败，请稍后重试");
 					return;
 				}
-				setPickerModels(((await catalogResponse.json()) as { upstream_models: PickerModel[] }).upstream_models);
+				models = ((await catalogResponse.json()) as { upstream_models: PickerModel[] }).upstream_models;
 			}
-			setLinkedModelIDs(linked);
-      setSelectedModelIDs(new Set([...syncedIDs].filter((id) => !linked.has(id))));
+			const groupByModelID = Object.fromEntries(models.map((model) => {
+				const linkedGroupID = activeGroups.find((group) => linked.has(bindingKey(model.id, group.id)))?.id;
+				return [model.id, linkedGroupID ?? defaultGroupID];
+			}));
+			setPickerModels(models);
+			setPickerGroupByModelID(groupByModelID);
+			setLinkedBindingKeys(linked);
+      setSelectedBindingKeys(new Set([...syncedIDs].map((id) => {
+        const groupID = groupByModelID[id] ?? "";
+        return groupID ? bindingKey(id, groupID) : "";
+      }).filter((key) => key !== "" && !linked.has(key))));
     } catch {
       setPickerNotice("加载模型目录失败，请稍后重试");
     } finally {
@@ -322,10 +338,6 @@ export default function ProvidersClient() {
    */
   async function createProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!createForm.billing_group_id) {
-      setFormError("请选择计费分组");
-      return;
-    }
     setBusy(true);
     setMessage("");
     setFormError("");
@@ -362,7 +374,7 @@ export default function ProvidersClient() {
     setBusy(true);
     setMessage("");
     setFormError("");
-    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key?: string; billing_group_id?: string } = {
+    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key?: string } = {
       display_name: editForm.display_name,
       protocol: editForm.protocol,
       base_url: editForm.base_url,
@@ -370,7 +382,6 @@ export default function ProvidersClient() {
       weight: editForm.weight,
     };
     if (editForm.api_key.trim()) payload.api_key = editForm.api_key;
-    if (editForm.billing_group_id && editForm.billing_group_id !== editingProvider.billing_group_id) payload.billing_group_id = editForm.billing_group_id;
     const response = await fetch(`/api/admin/providers/${editingProvider.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -495,9 +506,34 @@ export default function ProvidersClient() {
    * @date 2026-08-13
    */
   function toggleModel(modelID: string, checked: boolean) {
-    setSelectedModelIDs((current) => {
+    const groupID = pickerGroupByModelID[modelID] ?? "";
+    if (!groupID) return;
+    const key = bindingKey(modelID, groupID);
+    setSelectedBindingKeys((current) => {
       const next = new Set(current);
-      if (checked) next.add(modelID); else next.delete(modelID);
+      if (checked) next.add(key); else next.delete(key);
+      return next;
+    });
+  }
+
+  /**
+   * changeModelBillingGroup 更新单个模型行对应的计费分组。
+   * @param modelID 目标模型标识。
+   * @param previousGroupID 切换前的计费分组标识。
+   * @param billingGroupID 切换后的计费分组标识。
+   * @author Gao Hongshun
+   * @date 2026-08-15
+   */
+  function changeModelBillingGroup(modelID: string, previousGroupID: string, billingGroupID: string) {
+    setPickerGroupByModelID((current) => ({ ...current, [modelID]: billingGroupID }));
+    if (!previousGroupID) return;
+    setSelectedBindingKeys((current) => {
+      const previousKey = bindingKey(modelID, previousGroupID);
+      if (!current.has(previousKey)) return current;
+      const next = new Set(current);
+      next.delete(previousKey);
+      const nextKey = bindingKey(modelID, billingGroupID);
+      if (!linkedBindingKeys.has(nextKey)) next.add(nextKey);
       return next;
     });
   }
@@ -509,7 +545,16 @@ export default function ProvidersClient() {
    * @date 2026-08-13
    */
   function selectAllAvailable() {
-    setSelectedModelIDs(new Set(visiblePickerModels.filter((model) => !linkedModelIDs.has(model.id)).map((model) => model.id)));
+    setSelectedBindingKeys((current) => {
+      const next = new Set(current);
+      for (const model of visiblePickerModels) {
+        const groupID = pickerGroupByModelID[model.id] ?? "";
+        if (!groupID) continue;
+        const key = bindingKey(model.id, groupID);
+        if (!linkedBindingKeys.has(key)) next.add(key);
+      }
+      return next;
+    });
   }
 
   /**
@@ -519,15 +564,18 @@ export default function ProvidersClient() {
    * @date 2026-08-13
    */
   async function linkSelectedModels() {
-    if (!pickerProvider || selectedModelIDs.size === 0) {
-      setPickerNotice("请选择至少一个模型");
+    if (!pickerProvider || selectedBindingKeys.size === 0) {
+      setPickerNotice("请选择至少一个模型和计费分组");
       return;
     }
     setBusy(true);
     const response = await fetch(`/api/admin/providers/${pickerProvider.id}/models`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_ids: [...selectedModelIDs] }),
+      body: JSON.stringify({ bindings: [...selectedBindingKeys].map((key) => {
+        const [upstream_model_id, billing_group_id] = key.split(":");
+        return { upstream_model_id, billing_group_id };
+      }) }),
     });
     setBusy(false);
     if (!response.ok) { setPickerNotice(await readError(response)); return; }
@@ -547,7 +595,6 @@ export default function ProvidersClient() {
   const activeCount = providers.filter((item) => item.status === "active").length;
   const disabledCount = providers.filter((item) => item.status === "disabled").length;
   const activeBillingGroups = billingGroups.filter((group) => group.status === "active");
-  const defaultBillingGroupID = activeBillingGroups.find((group) => group.is_default)?.id ?? activeBillingGroups[0]?.id ?? "";
 
   return (
     <Tabs onValueChange={setActiveTab} value={activeTab}>
@@ -574,7 +621,7 @@ export default function ProvidersClient() {
               <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
             </Select>
             <Button aria-label="刷新提供商列表" disabled={loading} onClick={() => void loadProviders()} size="icon" title="刷新提供商列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
-            <Button onClick={() => { setCreateForm({ ...INITIAL_CREATE, billing_group_id: defaultBillingGroupID }); setCreateOpen(true); }}><Plus />添加提供商</Button>
+            <Button onClick={() => { setCreateForm(INITIAL_CREATE); setCreateOpen(true); }}><Plus />添加提供商</Button>
           </div>
         </div>
 
@@ -591,16 +638,15 @@ export default function ProvidersClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>权重</TableHead><TableHead>计费分组</TableHead><TableHead>协议</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>权重</TableHead><TableHead>协议</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={10}>加载中...</TableCell></TableRow> : null}
-                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={10}>没有匹配的提供商</TableCell></TableRow> : null}
+                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={9}>加载中...</TableCell></TableRow> : null}
+                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>没有匹配的提供商</TableCell></TableRow> : null}
                   {!loading ? providers.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell><Checkbox aria-label={`选择提供商 ${item.display_name}`} checked={selection.isSelected(item.id)} onCheckedChange={(checked) => selection.toggleOne(item.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{item.display_name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.code}</p></TableCell>
                       <TableCell className="font-mono tabular-nums">{item.weight}</TableCell>
-                      <TableCell><p>{item.billing_group?.display_name ?? "未分组"}</p><p className="font-mono text-xs text-muted-foreground">{((item.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
                       <TableCell><Badge variant="secondary">{protocolLabel(item.protocol)}</Badge></TableCell>
                       <TableCell><p className="max-w-72 truncate font-mono text-xs" title={item.base_url}>{item.base_url}</p></TableCell>
                       <TableCell className="font-mono text-xs">{item.has_api_key ? `••••${item.api_key_hint}` : "未配置"}</TableCell>
@@ -625,7 +671,6 @@ export default function ProvidersClient() {
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
               <Field><FieldLabel htmlFor="provider-code">提供商代码</FieldLabel><Input autoComplete="off" id="provider-code" maxLength={64} minLength={3} onChange={(event) => setCreateForm({ ...createForm, code: event.target.value.toLowerCase() })} pattern="[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]" placeholder="例如 kimi-0.2" required title="提供商代码需为 3 到 64 位，只能使用小写字母、数字、点号和连字符，不能包含下划线或空格，且必须以字母或数字开头和结尾" value={createForm.code} /><FieldDescription className="text-xs">3 到 64 位；允许小写字母、数字、点号和连字符，不允许下划线或空格。</FieldDescription></Field>
               <Field><FieldLabel htmlFor="provider-name">显示名称</FieldLabel><Input id="provider-name" maxLength={128} onChange={(event) => setCreateForm({ ...createForm, display_name: event.target.value })} placeholder="例如 DeepSeek 主账号" required value={createForm.display_name} /></Field>
-              <Field><FieldLabel htmlFor="provider-billing-group">计费分组</FieldLabel><Select onValueChange={(billing_group_id) => setCreateForm({ ...createForm, billing_group_id })} value={createForm.billing_group_id}><SelectTrigger className="w-full" id="provider-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{activeBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></Field>
               <Field><FieldLabel htmlFor="provider-protocol">协议</FieldLabel><Select onValueChange={(protocol: Protocol) => setCreateForm({ ...createForm, protocol, base_url: defaultBaseURL(protocol) })} value={createForm.protocol}><SelectTrigger className="w-full" id="provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></Field>
               <Field><FieldLabel htmlFor="provider-base-url">基础地址</FieldLabel><Input id="provider-base-url" onChange={(event) => setCreateForm({ ...createForm, base_url: event.target.value })} placeholder="https://api.example.com/v1" required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={createForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription></Field>
               <Field><FieldLabel htmlFor="provider-model-list-path">模型获取路径</FieldLabel><Input id="provider-model-list-path" onChange={(event) => setCreateForm({ ...createForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models，例如 /api/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={createForm.model_list_path} /><FieldDescription className="text-xs">填写站点路径，必须以 / 开头；不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription></Field>
@@ -645,7 +690,6 @@ export default function ProvidersClient() {
             <div className="grid grid-cols-2 gap-4 border-y py-4 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={editingProvider.status === "active" ? "outline" : "secondary"}>{editingProvider.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">当前凭据</p><p className="mt-2 font-mono text-xs">{editingProvider.has_api_key ? `••••${editingProvider.api_key_hint}` : "未配置"}</p></div></div>
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
               <Field><FieldLabel htmlFor="edit-provider-name">显示名称</FieldLabel><Input id="edit-provider-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} required value={editForm.display_name} /></Field>
-              <Field><FieldLabel htmlFor="edit-provider-billing-group">计费分组</FieldLabel><Select onValueChange={(billing_group_id) => setEditForm({ ...editForm, billing_group_id })} value={editForm.billing_group_id}><SelectTrigger className="w-full" id="edit-provider-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.filter((group) => group.status === "active" || group.id === editingProvider.billing_group_id).map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×{group.status === "disabled" ? " · 已停用" : ""}</SelectItem>)}</SelectContent></Select></Field>
               <Field><FieldLabel htmlFor="edit-provider-protocol">协议</FieldLabel><Select onValueChange={(protocol: Protocol) => setEditForm({ ...editForm, protocol })} value={editForm.protocol}><SelectTrigger className="w-full" id="edit-provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></Field>
               <Field><FieldLabel htmlFor="edit-provider-base-url">基础地址</FieldLabel><Input id="edit-provider-base-url" onChange={(event) => setEditForm({ ...editForm, base_url: event.target.value })} required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={editForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription></Field>
               <Field><FieldLabel htmlFor="edit-provider-model-list-path">模型获取路径</FieldLabel><Input id="edit-provider-model-list-path" onChange={(event) => setEditForm({ ...editForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={editForm.model_list_path} /><FieldDescription className="text-xs">例如 /api/models；必须以 / 开头，不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription></Field>
@@ -658,22 +702,24 @@ export default function ProvidersClient() {
         </SheetContent>
       </Sheet>
 
-      <Dialog onOpenChange={(open) => { setPickerOpen(open); if (!open) { setPickerProvider(null); setPickerModels([]); setSelectedModelIDs(new Set()); } }} open={pickerOpen}>
-        <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-2xl">
+      <Dialog onOpenChange={(open) => { setPickerOpen(open); if (!open) { setPickerProvider(null); setPickerModels([]); setPickerGroupByModelID({}); setSelectedBindingKeys(new Set()); } }} open={pickerOpen}>
+        <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-3xl">
           <DialogHeader><DialogTitle>关联目录模型</DialogTitle><DialogDescription>{pickerProvider ? `${pickerProvider.display_name} · ${pickerProvider.code}` : ""}</DialogDescription></DialogHeader>
           <div className="flex min-h-0 flex-col gap-3">
-            <div className="flex items-center gap-2"><div className="relative flex-1"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="搜索可关联模型" className="pl-8" onChange={(event) => setPickerQuery(event.target.value)} placeholder="搜索模型目录" value={pickerQuery} /></div><Button disabled={pickerLoading} onClick={selectAllAvailable} type="button" variant="outline">全选</Button></div>
+            <div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="搜索可关联模型" className="pl-8" onChange={(event) => setPickerQuery(event.target.value)} placeholder="搜索模型目录" value={pickerQuery} /></div><Button disabled={pickerLoading || activeBillingGroups.length === 0 || visiblePickerModels.length === 0} onClick={selectAllAvailable} type="button" variant="outline">全选</Button></div>
             {pickerNotice ? <p className="border-y px-3 py-2 text-sm" role="status">{pickerNotice}</p> : null}
             <div className="max-h-[46vh] overflow-y-auto border-y">
               {pickerLoading ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">正在加载...</p> : null}
               {!pickerLoading && visiblePickerModels.length === 0 ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">模型目录为空</p> : null}
               {!pickerLoading ? visiblePickerModels.map((model) => {
-                const linked = linkedModelIDs.has(model.id);
-                return <label className="flex cursor-pointer items-start gap-3 border-b px-4 py-3 last:border-b-0 has-disabled:cursor-default has-disabled:opacity-60" htmlFor={`provider-model-${model.id}`} key={model.id}><Checkbox checked={linked || selectedModelIDs.has(model.id)} disabled={linked} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">统一模型 ID · {model.upstream_name} · 厂商标签 {model.provider_name}</span></span></label>;
+                const groupID = pickerGroupByModelID[model.id] ?? "";
+                const key = groupID ? bindingKey(model.id, groupID) : "";
+                const linked = key !== "" && linkedBindingKeys.has(key);
+                return <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_12rem] sm:items-center" key={model.id}><Checkbox checked={linked || (key !== "" && selectedBindingKeys.has(key))} disabled={linked || !groupID} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><label className="min-w-0 cursor-pointer" htmlFor={`provider-model-${model.id}`}><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">该分组已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">统一模型 ID · {model.upstream_name} · 厂商标签 {model.provider_name}</span></label><div className="col-span-2 sm:col-span-1"><Select disabled={activeBillingGroups.length === 0} onValueChange={(billingGroupID) => changeModelBillingGroup(model.id, groupID, billingGroupID)} value={groupID}><SelectTrigger aria-label={`选择 ${model.display_name} 的计费分组`} className="w-full"><SelectValue placeholder="选择倍率分组" /></SelectTrigger><SelectContent>{activeBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div></div>;
               }) : null}
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setPickerOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy || pickerLoading || selectedModelIDs.size === 0} onClick={() => void linkSelectedModels()} type="button"><Link2 />{busy ? "正在关联..." : `关联所选模型（${selectedModelIDs.size}）`}</Button></DialogFooter>
+          <DialogFooter><Button onClick={() => setPickerOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy || pickerLoading || selectedBindingKeys.size === 0} onClick={() => void linkSelectedModels()} type="button"><Link2 />{busy ? "正在关联..." : `关联所选模型（${selectedBindingKeys.size}）`}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

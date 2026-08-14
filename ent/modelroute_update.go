@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/provider"
@@ -63,6 +64,20 @@ func (_u *ModelRouteUpdate) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRoute
 // ClearUpstreamModelID clears the value of the "upstream_model_id" field.
 func (_u *ModelRouteUpdate) ClearUpstreamModelID() *ModelRouteUpdate {
 	_u.mutation.ClearUpstreamModelID()
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *ModelRouteUpdate) SetBillingGroupID(v uuid.UUID) *ModelRouteUpdate {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *ModelRouteUpdate) SetNillableBillingGroupID(v *uuid.UUID) *ModelRouteUpdate {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
 	return _u
 }
 
@@ -186,6 +201,11 @@ func (_u *ModelRouteUpdate) SetUpstreamModel(v *UpstreamModel) *ModelRouteUpdate
 	return _u.SetUpstreamModelID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *ModelRouteUpdate) SetBillingGroup(v *BillingGroup) *ModelRouteUpdate {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *ModelRouteUpdate) AddAPIUsageIDs(ids ...uuid.UUID) *ModelRouteUpdate {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -215,6 +235,12 @@ func (_u *ModelRouteUpdate) ClearProvider() *ModelRouteUpdate {
 // ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
 func (_u *ModelRouteUpdate) ClearUpstreamModel() *ModelRouteUpdate {
 	_u.mutation.ClearUpstreamModel()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *ModelRouteUpdate) ClearBillingGroup() *ModelRouteUpdate {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -304,6 +330,9 @@ func (_u *ModelRouteUpdate) check() error {
 	}
 	if _u.mutation.ProviderCleared() && len(_u.mutation.ProviderIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "ModelRoute.provider"`)
+	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "ModelRoute.billing_group"`)
 	}
 	return nil
 }
@@ -408,6 +437,35 @@ func (_u *ModelRouteUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.BillingGroupTable,
+			Columns: []string{modelroute.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.BillingGroupTable,
+			Columns: []string{modelroute.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.APIUsagesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -504,6 +562,20 @@ func (_u *ModelRouteUpdateOne) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRo
 // ClearUpstreamModelID clears the value of the "upstream_model_id" field.
 func (_u *ModelRouteUpdateOne) ClearUpstreamModelID() *ModelRouteUpdateOne {
 	_u.mutation.ClearUpstreamModelID()
+	return _u
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_u *ModelRouteUpdateOne) SetBillingGroupID(v uuid.UUID) *ModelRouteUpdateOne {
+	_u.mutation.SetBillingGroupID(v)
+	return _u
+}
+
+// SetNillableBillingGroupID sets the "billing_group_id" field if the given value is not nil.
+func (_u *ModelRouteUpdateOne) SetNillableBillingGroupID(v *uuid.UUID) *ModelRouteUpdateOne {
+	if v != nil {
+		_u.SetBillingGroupID(*v)
+	}
 	return _u
 }
 
@@ -627,6 +699,11 @@ func (_u *ModelRouteUpdateOne) SetUpstreamModel(v *UpstreamModel) *ModelRouteUpd
 	return _u.SetUpstreamModelID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_u *ModelRouteUpdateOne) SetBillingGroup(v *BillingGroup) *ModelRouteUpdateOne {
+	return _u.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_u *ModelRouteUpdateOne) AddAPIUsageIDs(ids ...uuid.UUID) *ModelRouteUpdateOne {
 	_u.mutation.AddAPIUsageIDs(ids...)
@@ -656,6 +733,12 @@ func (_u *ModelRouteUpdateOne) ClearProvider() *ModelRouteUpdateOne {
 // ClearUpstreamModel clears the "upstream_model" edge to the UpstreamModel entity.
 func (_u *ModelRouteUpdateOne) ClearUpstreamModel() *ModelRouteUpdateOne {
 	_u.mutation.ClearUpstreamModel()
+	return _u
+}
+
+// ClearBillingGroup clears the "billing_group" edge to the BillingGroup entity.
+func (_u *ModelRouteUpdateOne) ClearBillingGroup() *ModelRouteUpdateOne {
+	_u.mutation.ClearBillingGroup()
 	return _u
 }
 
@@ -758,6 +841,9 @@ func (_u *ModelRouteUpdateOne) check() error {
 	}
 	if _u.mutation.ProviderCleared() && len(_u.mutation.ProviderIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "ModelRoute.provider"`)
+	}
+	if _u.mutation.BillingGroupCleared() && len(_u.mutation.BillingGroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "ModelRoute.billing_group"`)
 	}
 	return nil
 }
@@ -872,6 +958,35 @@ func (_u *ModelRouteUpdateOne) sqlSave(ctx context.Context) (_node *ModelRoute, 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(upstreammodel.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.BillingGroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.BillingGroupTable,
+			Columns: []string{modelroute.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.BillingGroupTable,
+			Columns: []string{modelroute.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

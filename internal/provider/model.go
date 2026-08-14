@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/novro-gateway/novro/internal/billinggroup"
 )
 
 type Protocol string
@@ -21,48 +20,43 @@ const (
 )
 
 var (
-	ErrInvalidInput     = errors.New("invalid provider input")
-	ErrNotFound         = errors.New("provider not found")
-	ErrCodeTaken        = errors.New("provider code already exists")
-	ErrGroupUnavailable = errors.New("billing group is unavailable")
+	ErrInvalidInput = errors.New("invalid provider input")
+	ErrNotFound     = errors.New("provider not found")
+	ErrCodeTaken    = errors.New("provider code already exists")
 )
 
 type Record struct {
-	ID             uuid.UUID            `json:"id"`
-	BillingGroupID uuid.UUID            `json:"billing_group_id"`
-	BillingGroup   billinggroup.Summary `json:"billing_group"`
-	Code           string               `json:"code"`
-	DisplayName    string               `json:"display_name"`
-	Protocol       Protocol             `json:"protocol"`
-	BaseURL        string               `json:"base_url"`
-	ModelListPath  string               `json:"model_list_path"`
-	Weight         int                  `json:"weight"`
-	APIKeyHint     string               `json:"api_key_hint"`
-	HasAPIKey      bool                 `json:"has_api_key"`
-	Status         Status               `json:"status"`
-	CreatedAt      time.Time            `json:"created_at"`
-	UpdatedAt      time.Time            `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	Code          string    `json:"code"`
+	DisplayName   string    `json:"display_name"`
+	Protocol      Protocol  `json:"protocol"`
+	BaseURL       string    `json:"base_url"`
+	ModelListPath string    `json:"model_list_path"`
+	Weight        int       `json:"weight"`
+	APIKeyHint    string    `json:"api_key_hint"`
+	HasAPIKey     bool      `json:"has_api_key"`
+	Status        Status    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Code           string    `json:"code"`
-	DisplayName    string    `json:"display_name"`
-	Protocol       Protocol  `json:"protocol"`
-	BaseURL        string    `json:"base_url"`
-	ModelListPath  string    `json:"model_list_path"`
-	Weight         int       `json:"weight"`
-	APIKey         string    `json:"api_key"`
-	BillingGroupID uuid.UUID `json:"billing_group_id"`
+	Code          string   `json:"code"`
+	DisplayName   string   `json:"display_name"`
+	Protocol      Protocol `json:"protocol"`
+	BaseURL       string   `json:"base_url"`
+	ModelListPath string   `json:"model_list_path"`
+	Weight        int      `json:"weight"`
+	APIKey        string   `json:"api_key"`
 }
 
 type UpdateInput struct {
-	DisplayName    *string    `json:"display_name"`
-	Protocol       *Protocol  `json:"protocol"`
-	BaseURL        *string    `json:"base_url"`
-	ModelListPath  *string    `json:"model_list_path"`
-	Weight         *int       `json:"weight"`
-	APIKey         *string    `json:"api_key"`
-	BillingGroupID *uuid.UUID `json:"billing_group_id"`
+	DisplayName   *string   `json:"display_name"`
+	Protocol      *Protocol `json:"protocol"`
+	BaseURL       *string   `json:"base_url"`
+	ModelListPath *string   `json:"model_list_path"`
+	Weight        *int      `json:"weight"`
+	APIKey        *string   `json:"api_key"`
 }
 
 type UpdateParams struct {
@@ -73,7 +67,6 @@ type UpdateParams struct {
 	Weight          *int
 	EncryptedAPIKey *string
 	APIKeyHint      *string
-	BillingGroupID  *uuid.UUID
 }
 
 type ListFilter struct {

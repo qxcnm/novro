@@ -98,7 +98,7 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
 		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocol: ProtocolOpenAI,
-		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234", BillingGroupID: uuid.New(),
+		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -143,7 +143,7 @@ func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
 		Code: "kimi-0.2", DisplayName: "Kimi", Protocol: ProtocolOpenAI,
-		BaseURL: "https://api.example.com/v1", APIKey: "secret", BillingGroupID: uuid.New(),
+		BaseURL: "https://api.example.com/v1", APIKey: "secret",
 	})
 	if err != nil {
 		t.Fatalf("expected dotted provider code to be accepted: %v", err)
@@ -164,7 +164,7 @@ func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
 		Code: "self-hosted", DisplayName: "自建网关", Protocol: ProtocolOpenAI,
-		BaseURL: "http://203.0.113.10:3000/v1/", APIKey: "secret", BillingGroupID: uuid.New(),
+		BaseURL: "http://203.0.113.10:3000/v1/", APIKey: "secret",
 	})
 	if err != nil {
 		t.Fatalf("expected HTTP self-hosted provider to be accepted: %v", err)
@@ -208,7 +208,7 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 func TestProviderValidationRejectsNonPositiveWeight(t *testing.T) {
 	service := testService(t, &fakeStore{})
 	for _, weight := range []int{-1, MaxWeight + 1} {
-		_, err := service.Create(context.Background(), CreateInput{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret", Weight: weight, BillingGroupID: uuid.New()})
+		_, err := service.Create(context.Background(), CreateInput{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret", Weight: weight})
 		if !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("weight=%d err=%v", weight, err)
 		}

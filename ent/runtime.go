@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/novro-gateway/novro/ent/schema"
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
@@ -18,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/paymentconfig"
 	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/schema"
 	"github.com/novro-gateway/novro/ent/systemsetting"
 	"github.com/novro-gateway/novro/ent/topuporder"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -697,7 +697,7 @@ func init() {
 	modelrouteFields := schema.ModelRoute{}.Fields()
 	_ = modelrouteFields
 	// modelrouteDescPublicName is the schema descriptor for public_name field.
-	modelrouteDescPublicName := modelrouteFields[3].Descriptor()
+	modelrouteDescPublicName := modelrouteFields[4].Descriptor()
 	// modelroute.PublicNameValidator is a validator for the "public_name" field. It is called by the builders before save.
 	modelroute.PublicNameValidator = func() func(string) error {
 		validators := modelrouteDescPublicName.Validators
@@ -715,7 +715,7 @@ func init() {
 		}
 	}()
 	// modelrouteDescDisplayName is the schema descriptor for display_name field.
-	modelrouteDescDisplayName := modelrouteFields[4].Descriptor()
+	modelrouteDescDisplayName := modelrouteFields[5].Descriptor()
 	// modelroute.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	modelroute.DisplayNameValidator = func() func(string) error {
 		validators := modelrouteDescDisplayName.Validators
@@ -733,7 +733,7 @@ func init() {
 		}
 	}()
 	// modelrouteDescUpstreamName is the schema descriptor for upstream_name field.
-	modelrouteDescUpstreamName := modelrouteFields[5].Descriptor()
+	modelrouteDescUpstreamName := modelrouteFields[6].Descriptor()
 	// modelroute.UpstreamNameValidator is a validator for the "upstream_name" field. It is called by the builders before save.
 	modelroute.UpstreamNameValidator = func() func(string) error {
 		validators := modelrouteDescUpstreamName.Validators
@@ -751,19 +751,19 @@ func init() {
 		}
 	}()
 	// modelrouteDescInputPriceMicros is the schema descriptor for input_price_micros field.
-	modelrouteDescInputPriceMicros := modelrouteFields[6].Descriptor()
+	modelrouteDescInputPriceMicros := modelrouteFields[7].Descriptor()
 	// modelroute.InputPriceMicrosValidator is a validator for the "input_price_micros" field. It is called by the builders before save.
 	modelroute.InputPriceMicrosValidator = modelrouteDescInputPriceMicros.Validators[0].(func(int64) error)
 	// modelrouteDescOutputPriceMicros is the schema descriptor for output_price_micros field.
-	modelrouteDescOutputPriceMicros := modelrouteFields[7].Descriptor()
+	modelrouteDescOutputPriceMicros := modelrouteFields[8].Descriptor()
 	// modelroute.OutputPriceMicrosValidator is a validator for the "output_price_micros" field. It is called by the builders before save.
 	modelroute.OutputPriceMicrosValidator = modelrouteDescOutputPriceMicros.Validators[0].(func(int64) error)
 	// modelrouteDescCreatedAt is the schema descriptor for created_at field.
-	modelrouteDescCreatedAt := modelrouteFields[9].Descriptor()
+	modelrouteDescCreatedAt := modelrouteFields[10].Descriptor()
 	// modelroute.DefaultCreatedAt holds the default value on creation for the created_at field.
 	modelroute.DefaultCreatedAt = modelrouteDescCreatedAt.Default.(func() time.Time)
 	// modelrouteDescUpdatedAt is the schema descriptor for updated_at field.
-	modelrouteDescUpdatedAt := modelrouteFields[10].Descriptor()
+	modelrouteDescUpdatedAt := modelrouteFields[11].Descriptor()
 	// modelroute.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	modelroute.DefaultUpdatedAt = modelrouteDescUpdatedAt.Default.(func() time.Time)
 	// modelroute.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -859,7 +859,7 @@ func init() {
 	providerFields := schema.Provider{}.Fields()
 	_ = providerFields
 	// providerDescCode is the schema descriptor for code field.
-	providerDescCode := providerFields[2].Descriptor()
+	providerDescCode := providerFields[1].Descriptor()
 	// provider.CodeValidator is a validator for the "code" field. It is called by the builders before save.
 	provider.CodeValidator = func() func(string) error {
 		validators := providerDescCode.Validators
@@ -877,7 +877,7 @@ func init() {
 		}
 	}()
 	// providerDescDisplayName is the schema descriptor for display_name field.
-	providerDescDisplayName := providerFields[3].Descriptor()
+	providerDescDisplayName := providerFields[2].Descriptor()
 	// provider.DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	provider.DisplayNameValidator = func() func(string) error {
 		validators := providerDescDisplayName.Validators
@@ -895,7 +895,7 @@ func init() {
 		}
 	}()
 	// providerDescBaseURL is the schema descriptor for base_url field.
-	providerDescBaseURL := providerFields[5].Descriptor()
+	providerDescBaseURL := providerFields[4].Descriptor()
 	// provider.BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	provider.BaseURLValidator = func() func(string) error {
 		validators := providerDescBaseURL.Validators
@@ -913,13 +913,13 @@ func init() {
 		}
 	}()
 	// providerDescModelListPath is the schema descriptor for model_list_path field.
-	providerDescModelListPath := providerFields[6].Descriptor()
+	providerDescModelListPath := providerFields[5].Descriptor()
 	// provider.DefaultModelListPath holds the default value on creation for the model_list_path field.
 	provider.DefaultModelListPath = providerDescModelListPath.Default.(string)
 	// provider.ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
 	provider.ModelListPathValidator = providerDescModelListPath.Validators[0].(func(string) error)
 	// providerDescWeight is the schema descriptor for weight field.
-	providerDescWeight := providerFields[7].Descriptor()
+	providerDescWeight := providerFields[6].Descriptor()
 	// provider.DefaultWeight holds the default value on creation for the weight field.
 	provider.DefaultWeight = providerDescWeight.Default.(int)
 	// provider.WeightValidator is a validator for the "weight" field. It is called by the builders before save.
@@ -939,7 +939,7 @@ func init() {
 		}
 	}()
 	// providerDescEncryptedAPIKey is the schema descriptor for encrypted_api_key field.
-	providerDescEncryptedAPIKey := providerFields[8].Descriptor()
+	providerDescEncryptedAPIKey := providerFields[7].Descriptor()
 	// provider.EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	provider.EncryptedAPIKeyValidator = func() func(string) error {
 		validators := providerDescEncryptedAPIKey.Validators
@@ -957,7 +957,7 @@ func init() {
 		}
 	}()
 	// providerDescAPIKeyHint is the schema descriptor for api_key_hint field.
-	providerDescAPIKeyHint := providerFields[9].Descriptor()
+	providerDescAPIKeyHint := providerFields[8].Descriptor()
 	// provider.APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
 	provider.APIKeyHintValidator = func() func(string) error {
 		validators := providerDescAPIKeyHint.Validators
@@ -975,11 +975,11 @@ func init() {
 		}
 	}()
 	// providerDescCreatedAt is the schema descriptor for created_at field.
-	providerDescCreatedAt := providerFields[11].Descriptor()
+	providerDescCreatedAt := providerFields[10].Descriptor()
 	// provider.DefaultCreatedAt holds the default value on creation for the created_at field.
 	provider.DefaultCreatedAt = providerDescCreatedAt.Default.(func() time.Time)
 	// providerDescUpdatedAt is the schema descriptor for updated_at field.
-	providerDescUpdatedAt := providerFields[12].Descriptor()
+	providerDescUpdatedAt := providerFields[11].Descriptor()
 	// provider.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	provider.DefaultUpdatedAt = providerDescUpdatedAt.Default.(func() time.Time)
 	// provider.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -104,7 +104,8 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	service := NewService(store, cipher)
 	upstreamModelID := uuid.New()
 	providerID := uuid.New()
-	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, PublicName: "  deepseek-chat  ", DisplayName: " DeepSeek Chat "}); err != nil {
+	billingGroupID := uuid.New()
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: "  deepseek-chat  ", DisplayName: " DeepSeek Chat "}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if store.created.PublicName != "deepseek-chat" || store.created.DisplayName != "DeepSeek Chat" || store.created.ProviderID != providerID || store.created.UpstreamModelID != upstreamModelID {
@@ -120,7 +121,7 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	if len(longName) <= 128 || len(longName) > 256 {
 		t.Fatalf("invalid long-name test fixture length %d", len(longName))
 	}
-	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, PublicName: longName, DisplayName: "Long Model"}); err != nil {
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: longName, DisplayName: "Long Model"}); err != nil {
 		t.Fatalf("256-character model IDs should be accepted: %v", err)
 	}
 }

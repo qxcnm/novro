@@ -14,7 +14,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
-	"github.com/novro-gateway/novro/ent/provider"
+	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/user"
 )
 
@@ -164,19 +164,19 @@ func (_c *BillingGroupCreate) AddAPIKeys(v ...*APIKey) *BillingGroupCreate {
 	return _c.AddAPIKeyIDs(ids...)
 }
 
-// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
-func (_c *BillingGroupCreate) AddProviderIDs(ids ...uuid.UUID) *BillingGroupCreate {
-	_c.mutation.AddProviderIDs(ids...)
+// AddModelRouteIDs adds the "model_routes" edge to the ModelRoute entity by IDs.
+func (_c *BillingGroupCreate) AddModelRouteIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddModelRouteIDs(ids...)
 	return _c
 }
 
-// AddProviders adds the "providers" edges to the Provider entity.
-func (_c *BillingGroupCreate) AddProviders(v ...*Provider) *BillingGroupCreate {
+// AddModelRoutes adds the "model_routes" edges to the ModelRoute entity.
+func (_c *BillingGroupCreate) AddModelRoutes(v ...*ModelRoute) *BillingGroupCreate {
 	ids := make([]uuid.UUID, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddProviderIDs(ids...)
+	return _c.AddModelRouteIDs(ids...)
 }
 
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
@@ -407,15 +407,15 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.ProvidersIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.ModelRoutesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   billinggroup.ProvidersTable,
-			Columns: []string{billinggroup.ProvidersColumn},
+			Table:   billinggroup.ModelRoutesTable,
+			Columns: []string{billinggroup.ModelRoutesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeUUID),
+				IDSpec: sqlgraph.NewFieldSpec(modelroute.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/apiusage"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -41,6 +42,12 @@ func (_c *ModelRouteCreate) SetNillableUpstreamModelID(v *uuid.UUID) *ModelRoute
 	if v != nil {
 		_c.SetUpstreamModelID(*v)
 	}
+	return _c
+}
+
+// SetBillingGroupID sets the "billing_group_id" field.
+func (_c *ModelRouteCreate) SetBillingGroupID(v uuid.UUID) *ModelRouteCreate {
+	_c.mutation.SetBillingGroupID(v)
 	return _c
 }
 
@@ -154,6 +161,11 @@ func (_c *ModelRouteCreate) SetUpstreamModel(v *UpstreamModel) *ModelRouteCreate
 	return _c.SetUpstreamModelID(v.ID)
 }
 
+// SetBillingGroup sets the "billing_group" edge to the BillingGroup entity.
+func (_c *ModelRouteCreate) SetBillingGroup(v *BillingGroup) *ModelRouteCreate {
+	return _c.SetBillingGroupID(v.ID)
+}
+
 // AddAPIUsageIDs adds the "api_usages" edge to the APIUsage entity by IDs.
 func (_c *ModelRouteCreate) AddAPIUsageIDs(ids ...uuid.UUID) *ModelRouteCreate {
 	_c.mutation.AddAPIUsageIDs(ids...)
@@ -227,6 +239,9 @@ func (_c *ModelRouteCreate) check() error {
 	if _, ok := _c.mutation.ProviderID(); !ok {
 		return &ValidationError{Name: "provider_id", err: errors.New(`ent: missing required field "ModelRoute.provider_id"`)}
 	}
+	if _, ok := _c.mutation.BillingGroupID(); !ok {
+		return &ValidationError{Name: "billing_group_id", err: errors.New(`ent: missing required field "ModelRoute.billing_group_id"`)}
+	}
 	if _, ok := _c.mutation.PublicName(); !ok {
 		return &ValidationError{Name: "public_name", err: errors.New(`ent: missing required field "ModelRoute.public_name"`)}
 	}
@@ -283,6 +298,9 @@ func (_c *ModelRouteCreate) check() error {
 	}
 	if len(_c.mutation.ProviderIDs()) == 0 {
 		return &ValidationError{Name: "provider", err: errors.New(`ent: missing required edge "ModelRoute.provider"`)}
+	}
+	if len(_c.mutation.BillingGroupIDs()) == 0 {
+		return &ValidationError{Name: "billing_group", err: errors.New(`ent: missing required edge "ModelRoute.billing_group"`)}
 	}
 	return nil
 }
@@ -387,6 +405,23 @@ func (_c *ModelRouteCreate) createSpec() (*ModelRoute, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.UpstreamModelID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.BillingGroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   modelroute.BillingGroupTable,
+			Columns: []string{modelroute.BillingGroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroup.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.BillingGroupID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.APIUsagesIDs(); len(nodes) > 0 {

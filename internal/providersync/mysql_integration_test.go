@@ -54,7 +54,6 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	createProvider := func(code string) *ent.Provider {
 		t.Helper()
 		created, err := client.Provider.Create().
-			SetBillingGroupID(group.ID).
 			SetCode(code).
 			SetDisplayName(strings.ToUpper(code)).
 			SetProtocol(entprovider.ProtocolOpenai).
@@ -94,8 +93,9 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 		t.Fatalf("global models=%+v err=%v", models, err)
 	}
 
+	defaultBinding := ModelBinding{UpstreamModelID: modelID, BillingGroupID: group.ID}
 	for _, configured := range []*ent.Provider{firstProvider, secondProvider} {
-		result, err := service.Link(ctx, configured.ID, []uuid.UUID{modelID})
+		result, err := service.Link(ctx, configured.ID, []ModelBinding{defaultBinding})
 		if err != nil || result.Created != 1 || result.Existing != 0 || result.Disabled != 0 {
 			t.Fatalf("link provider %s result=%+v err=%v", configured.Code, result, err)
 		}
@@ -122,9 +122,35 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	if _, err := client.ModelRoute.UpdateOneID(firstProviderRoute.ID).SetStatus(entmodelroute.StatusDisabled).Save(ctx); err != nil {
 		t.Fatalf("disable route for reenable check: %v", err)
 	}
-	reenabled, err := service.Link(ctx, firstProvider.ID, []uuid.UUID{modelID})
+	reenabled, err := service.Link(ctx, firstProvider.ID, []ModelBinding{defaultBinding})
 	if err != nil || reenabled.Reenabled != 1 || reenabled.Existing != 1 {
 		t.Fatalf("reenable result=%+v err=%v", reenabled, err)
+	}
+	premiumGroup, err := client.BillingGroup.Create().
+		SetCode("sync-premium").SetDisplayName("Sync Premium").SetMultiplierBps(15_000).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create premium billing group: %v", err)
+	}
+	premiumBinding := ModelBinding{UpstreamModelID: modelID, BillingGroupID: premiumGroup.ID}
+	premiumLink, err := service.Link(ctx, firstProvider.ID, []ModelBinding{premiumBinding})
+	if err != nil || premiumLink.Created != 1 || premiumLink.Existing != 0 {
+		t.Fatalf("link same provider and model to premium group result=%+v err=%v", premiumLink, err)
+	}
+	firstProviderRoutes, err := client.ModelRoute.Query().Where(
+		entmodelroute.ProviderIDEQ(firstProvider.ID),
+		entmodelroute.UpstreamModelIDEQ(modelID),
+		entmodelroute.DeletedAtIsNil(),
+	).All(ctx)
+	if err != nil || len(firstProviderRoutes) != 2 {
+		t.Fatalf("same-provider multi-group routes=%+v err=%v", firstProviderRoutes, err)
+	}
+	seenGroups := map[uuid.UUID]bool{}
+	for _, route := range firstProviderRoutes {
+		seenGroups[route.BillingGroupID] = true
+	}
+	if !seenGroups[group.ID] || !seenGroups[premiumGroup.ID] {
+		t.Fatalf("same-provider routes did not preserve group bindings: %+v", firstProviderRoutes)
 	}
 
 	// A model removed from the catalog can be advertised again by an
@@ -149,7 +175,7 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	if err != nil || len(restoredSync) != 1 || restoredSync[0].Added || !restoredSync[0].Restored || restoredSync[0].ID != modelID || restoredSync[0].Status != string(entupstreammodel.StatusActive) {
 		t.Fatalf("restored sync=%+v err=%v", restoredSync, err)
 	}
-	restoredLink, err := service.Link(ctx, firstProvider.ID, []uuid.UUID{modelID})
+	restoredLink, err := service.Link(ctx, firstProvider.ID, []ModelBinding{defaultBinding})
 	if err != nil || restoredLink.Existing != 1 || restoredLink.Reenabled != 1 || restoredLink.Created != 0 {
 		t.Fatalf("restored link=%+v err=%v", restoredLink, err)
 	}

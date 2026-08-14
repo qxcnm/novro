@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/ent/billinggroup"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/provider"
 	"github.com/novro-gateway/novro/ent/upstreammodel"
@@ -24,6 +25,8 @@ type ModelRoute struct {
 	ProviderID uuid.UUID `json:"provider_id,omitempty"`
 	// UpstreamModelID holds the value of the "upstream_model_id" field.
 	UpstreamModelID *uuid.UUID `json:"upstream_model_id,omitempty"`
+	// BillingGroupID holds the value of the "billing_group_id" field.
+	BillingGroupID uuid.UUID `json:"billing_group_id,omitempty"`
 	// PublicName holds the value of the "public_name" field.
 	PublicName string `json:"public_name,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
@@ -54,11 +57,13 @@ type ModelRouteEdges struct {
 	Provider *Provider `json:"provider,omitempty"`
 	// UpstreamModel holds the value of the upstream_model edge.
 	UpstreamModel *UpstreamModel `json:"upstream_model,omitempty"`
+	// BillingGroup holds the value of the billing_group edge.
+	BillingGroup *BillingGroup `json:"billing_group,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // ProviderOrErr returns the Provider value or an error if the edge
@@ -83,10 +88,21 @@ func (e ModelRouteEdges) UpstreamModelOrErr() (*UpstreamModel, error) {
 	return nil, &NotLoadedError{edge: "upstream_model"}
 }
 
+// BillingGroupOrErr returns the BillingGroup value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e ModelRouteEdges) BillingGroupOrErr() (*BillingGroup, error) {
+	if e.BillingGroup != nil {
+		return e.BillingGroup, nil
+	} else if e.loadedTypes[2] {
+		return nil, &NotFoundError{label: billinggroup.Label}
+	}
+	return nil, &NotLoadedError{edge: "billing_group"}
+}
+
 // APIUsagesOrErr returns the APIUsages value or an error if the edge
 // was not loaded in eager-loading.
 func (e ModelRouteEdges) APIUsagesOrErr() ([]*APIUsage, error) {
-	if e.loadedTypes[2] {
+	if e.loadedTypes[3] {
 		return e.APIUsages, nil
 	}
 	return nil, &NotLoadedError{edge: "api_usages"}
@@ -105,7 +121,7 @@ func (*ModelRoute) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case modelroute.FieldCreatedAt, modelroute.FieldUpdatedAt, modelroute.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
-		case modelroute.FieldID, modelroute.FieldProviderID:
+		case modelroute.FieldID, modelroute.FieldProviderID, modelroute.FieldBillingGroupID:
 			values[i] = new(uuid.UUID)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -140,6 +156,12 @@ func (_m *ModelRoute) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpstreamModelID = new(uuid.UUID)
 				*_m.UpstreamModelID = *value.S.(*uuid.UUID)
+			}
+		case modelroute.FieldBillingGroupID:
+			if value, ok := values[i].(*uuid.UUID); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_group_id", values[i])
+			} else if value != nil {
+				_m.BillingGroupID = *value
 			}
 		case modelroute.FieldPublicName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -219,6 +241,11 @@ func (_m *ModelRoute) QueryUpstreamModel() *UpstreamModelQuery {
 	return NewModelRouteClient(_m.config).QueryUpstreamModel(_m)
 }
 
+// QueryBillingGroup queries the "billing_group" edge of the ModelRoute entity.
+func (_m *ModelRoute) QueryBillingGroup() *BillingGroupQuery {
+	return NewModelRouteClient(_m.config).QueryBillingGroup(_m)
+}
+
 // QueryAPIUsages queries the "api_usages" edge of the ModelRoute entity.
 func (_m *ModelRoute) QueryAPIUsages() *APIUsageQuery {
 	return NewModelRouteClient(_m.config).QueryAPIUsages(_m)
@@ -254,6 +281,9 @@ func (_m *ModelRoute) String() string {
 		builder.WriteString("upstream_model_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("billing_group_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BillingGroupID))
 	builder.WriteString(", ")
 	builder.WriteString("public_name=")
 	builder.WriteString(_m.PublicName)

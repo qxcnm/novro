@@ -188,7 +188,7 @@ type fakeProviders struct {
 type fakeProviderModels struct {
 	syncProviderID uuid.UUID
 	linkProviderID uuid.UUID
-	modelIDs       []uuid.UUID
+	bindings       []providersync.ModelBinding
 	syncModels     []providersync.CatalogModel
 	linkResult     providersync.LinkResult
 	err            error
@@ -750,13 +750,13 @@ func (f *fakeProviderModels) Sync(_ context.Context, providerID uuid.UUID) ([]pr
 /**
  * Link 封装该名称对应的业务处理逻辑。
  * @param providerID 目标资源的一个或多个唯一标识。
- * @param modelIDs 目标资源的一个或多个唯一标识。
+ * @param bindings 模型和计费分组绑定关系。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, modelIDs []uuid.UUID) (providersync.LinkResult, error) {
+func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, bindings []providersync.ModelBinding) (providersync.LinkResult, error) {
 	f.linkProviderID = providerID
-	f.modelIDs = modelIDs
+	f.bindings = bindings
 	return f.linkResult, f.err
 }
 
@@ -768,7 +768,7 @@ func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, model
  */
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
 	f.createInput = input
-	return provider.Record{ID: uuid.New(), BillingGroupID: input.BillingGroupID, BillingGroup: billinggroup.Summary{ID: input.BillingGroupID, DisplayName: "默认", MultiplierBPS: billinggroup.DefaultMultiplierBPS}, Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
+	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
 }
 
 /**
@@ -2386,7 +2386,7 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	disabledID := uuid.New()
 	active := activeBillingGroup(activeID, "personal", "个人版", 12_500, false)
 	active.APIKeyCount = 7
-	active.ProviderCount = 3
+	active.ModelRouteCount = 3
 	active.CreatedAt = time.Unix(1_700_000_000, 0).UTC()
 	hiddenID := uuid.New()
 	hidden := activeBillingGroup(hiddenID, "partner", "代理折扣", 3_000, false)
@@ -2404,7 +2404,7 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
 	body := response.Body.String()
-	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || groups.listFilter.IncludeHidden || !strings.Contains(body, activeID.String()) || strings.Contains(body, hiddenID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "provider_count") || strings.Contains(body, "created_at") {
+	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || groups.listFilter.IncludeHidden || !strings.Contains(body, activeID.String()) || strings.Contains(body, hiddenID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "model_route_count") || strings.Contains(body, "created_at") {
 		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
 	}
 }
@@ -2553,18 +2553,17 @@ func TestAPIKeyErrorsAreStable(t *testing.T) {
  */
 func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
-	groupID := uuid.New()
 	providers := &fakeProviders{}
 	handler := New(Dependencies{
 		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, Providers: providers,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret","billing_group_id":"`+groupID.String()+`"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || providers.createInput.BillingGroupID != groupID || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || strings.Contains(response.Body.String(), "upstream-secret") {
+	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || strings.Contains(response.Body.String(), "upstream-secret") {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.createInput)
 	}
 
@@ -2675,6 +2674,7 @@ func TestAdminSyncsAndLinksProviderModels(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
 	providerID := uuid.New()
 	modelID := uuid.New()
+	groupID := uuid.New()
 	providerModels := &fakeProviderModels{
 		syncModels: []providersync.CatalogModel{{ID: modelID, ProviderName: "DeepSeek", UpstreamName: "deepseek-chat", Added: true}},
 		linkResult: providersync.LinkResult{Created: 1},
@@ -2692,12 +2692,12 @@ func TestAdminSyncsAndLinksProviderModels(t *testing.T) {
 		t.Fatalf("sync status=%d body=%s provider=%s", response.Code, response.Body.String(), providerModels.syncProviderID)
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+providerID.String()+"/models", strings.NewReader(`{"model_ids":["`+modelID.String()+`"]}`))
+	request = httptest.NewRequest(http.MethodPost, "/api/admin/providers/"+providerID.String()+"/models", strings.NewReader(`{"bindings":[{"upstream_model_id":"`+modelID.String()+`","billing_group_id":"`+groupID.String()+`"}]}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || providerModels.linkProviderID != providerID || len(providerModels.modelIDs) != 1 || providerModels.modelIDs[0] != modelID || !strings.Contains(response.Body.String(), `"created":1`) {
-		t.Fatalf("link status=%d body=%s provider=%s models=%v", response.Code, response.Body.String(), providerModels.linkProviderID, providerModels.modelIDs)
+	if response.Code != http.StatusOK || providerModels.linkProviderID != providerID || len(providerModels.bindings) != 1 || providerModels.bindings[0].UpstreamModelID != modelID || providerModels.bindings[0].BillingGroupID != groupID || !strings.Contains(response.Body.String(), `"created":1`) {
+		t.Fatalf("link status=%d body=%s provider=%s bindings=%+v", response.Code, response.Body.String(), providerModels.linkProviderID, providerModels.bindings)
 	}
 }
 

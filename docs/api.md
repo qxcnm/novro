@@ -55,12 +55,12 @@
 | `GET` | `/api/admin/users/{id}/balance` | 管理员 | 查看用户余额和流水 |
 | `POST` | `/api/admin/users/{id}/balance-adjustments` | 管理员 | 原子调整余额并写入流水 |
 | `GET` | `/api/admin/providers` | 管理员 | 搜索和筛选提供商 |
-| `POST` | `/api/admin/providers` | 管理员 | 指定计费分组创建加密凭据配置 |
-| `PATCH` | `/api/admin/providers/{id}` | 管理员 | 修改提供商配置、计费分组或替换凭据 |
+| `POST` | `/api/admin/providers` | 管理员 | 创建加密凭据配置，提供商本身不绑定计费分组 |
+| `PATCH` | `/api/admin/providers/{id}` | 管理员 | 修改提供商配置或替换凭据 |
 | `PATCH` | `/api/admin/providers/{id}/status` | 管理员 | 启用或停用提供商 |
 | `DELETE` | `/api/admin/providers/{id}` | 管理员 | 软删除提供商及其模型路由 |
 | `POST` | `/api/admin/providers/{id}/models/sync` | 管理员 | 从提供商发现模型 ID；全局目录已有 ID 复用原价格，新 ID 建立待定价记录 |
-| `POST` | `/api/admin/providers/{id}/models` | 管理员 | 从模型目录批量创建关联路由 |
+| `POST` | `/api/admin/providers/{id}/models` | 管理员 | 按“上游模型 + 计费分组”批量创建关联路由 |
 | `GET` | `/api/admin/upstream-models` | 管理员 | 搜索和筛选模型目录 |
 | `POST` | `/api/admin/upstream-models` | 管理员 | 创建全局唯一模型目录及首个已发布固定价版本 |
 | `PATCH` | `/api/admin/upstream-models/{id}` | 管理员 | 修改模型目录元数据；价格使用独立版本接口 |
@@ -73,11 +73,11 @@
 | `POST` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}/publish` | 管理员 | 发布草稿并调整相邻版本生效区间 |
 | `POST` | `/api/admin/upstream-models/{id}/price-plans/{plan_id}/republish` | 管理员 | 直接切换历史版本的生效区间并立即生效，不创建新版本；重复切换幂等返回 |
 | `GET` | `/api/admin/model-routes` | 管理员 | 搜索和筛选模型路由 |
-| `POST` | `/api/admin/model-routes` | 管理员 | 创建对外模型到上游模型的映射 |
-| `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改上游模型映射和显示名称 |
+| `POST` | `/api/admin/model-routes` | 管理员 | 指定计费分组，创建对外模型到上游模型的映射 |
+| `PATCH` | `/api/admin/model-routes/{id}` | 管理员 | 修改计费分组、上游模型映射和显示名称 |
 | `PATCH` | `/api/admin/model-routes/{id}/status` | 管理员 | 启用或停用模型路由 |
 | `DELETE` | `/api/admin/model-routes/{id}` | 管理员 | 软删除模型路由 |
-| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、隐藏属性、授权用户、API Key 数和供应商数 |
+| `GET` | `/api/admin/billing-groups` | 管理员 | 查看计费分组、隐藏属性、授权用户、API Key 数和模型路由数 |
 | `POST` | `/api/admin/billing-groups` | 管理员 | 创建计费分组、倍率和隐藏组授权用户 |
 | `PATCH` | `/api/admin/billing-groups/{id}` | 管理员 | 修改分组名称、倍率、隐藏属性或授权用户 |
 | `PATCH` | `/api/admin/billing-groups/{id}/status` | 管理员 | 启用或停用非默认分组 |
@@ -93,6 +93,21 @@
 隐藏计费分组的创建请求可提交 `authorized_user_ids` UUID 数组；修改请求可用同名字段整体替换
 授权名单。名单只能包含普通成员，不能包含管理员或未知用户；公开分组不能携带授权名单。
 管理员自动拥有全部隐藏组权限。管理列表中的每个分组返回 `authorized_users` 摘要，供控制台回显。
+
+`POST /api/admin/providers/{id}/models` 使用结构化绑定请求，不再接收旧的 `model_ids`：
+
+```json
+{
+  "bindings": [
+    {
+      "upstream_model_id": "00000000-0000-0000-0000-000000000001",
+      "billing_group_id": "00000000-0000-0000-0000-000000000002"
+    }
+  ]
+}
+```
+
+同一上游模型可以与多个计费分组各建立一条绑定。请求和管理端始终传递 `billing_group_id`；`multiplier_bps` 仅用于计费，不作为路由标识。
 
 每个 HTTP 请求都会返回 `X-Novro-Request-ID`。错误 JSON 还会返回顶层
 `request_id`，控制台 API、网关鉴权失败和网关上游错误都使用同一 ID，便于结合结构化
@@ -221,8 +236,8 @@ POST /v1/messages
 - 网关用 `ceil(JSON 请求字节数 / 4) + 64` 估算输入，输入预占默认上限为 16384 Token；
   输出按请求声明的最大值估算，默认预占上限为 1024 Token。两个上限由 `/admin/gateway`
   配置，只限制余额冻结，不截断发送给模型的上下文或输出。网关按候选渠道中的最高可能费用
-  做一次预占；成功后按实际命中渠道的上游 usage 和单价结算并释放差额。候选渠道只来自与当前 API Key
-  同一计费分组的供应商。用户可用模型页按所选分组、同协议渠道池的各维度最高单价展示，
+  做一次预占；成功后按实际命中渠道的上游 usage 和单价结算并释放差额。候选渠道只来自 `billing_group_id` 与当前 API Key
+  一致的模型路由。用户可用模型页按所选分组、同协议渠道池的各维度最高单价展示，
   避免实际结算高于页面价格。
 - 供应商调用成功后，只根据上游明确返回的 usage 扣减用户余额。usage 缺少输入或输出维度时，
   缺失维度按 0 结算并释放对应预占，不使用请求字节数或最大输出 token 猜测最终费用。

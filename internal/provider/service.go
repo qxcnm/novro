@@ -59,7 +59,6 @@ type Store interface {
 
 type CreateParams struct {
 	Code            string
-	BillingGroupID  uuid.UUID
 	DisplayName     string
 	Protocol        Protocol
 	BaseURL         string
@@ -102,7 +101,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	if weight == 0 {
 		weight = DefaultWeight
 	}
-	if !providerCodePattern.MatchString(code) || input.BillingGroupID == uuid.Nil || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 || weight <= 0 || weight > MaxWeight {
+	if !providerCodePattern.MatchString(code) || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 || weight <= 0 || weight > MaxWeight {
 		return Record{}, ErrInvalidInput
 	}
 	encrypted, err := s.cipher.Encrypt(apiKey)
@@ -110,7 +109,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 		return Record{}, err
 	}
 	return s.store.Create(ctx, CreateParams{
-		Code: code, BillingGroupID: input.BillingGroupID, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
+		Code: code, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
 		EncryptedAPIKey: encrypted, APIKeyHint: secretHint(apiKey),
 	})
 }
@@ -139,16 +138,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil && input.BillingGroupID == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	params := UpdateParams{Protocol: input.Protocol}
-	if input.BillingGroupID != nil {
-		if *input.BillingGroupID == uuid.Nil {
-			return Record{}, ErrInvalidInput
-		}
-		params.BillingGroupID = input.BillingGroupID
-	}
 	if input.DisplayName != nil {
 		value := strings.TrimSpace(*input.DisplayName)
 		if value == "" || utf8.RuneCountInString(value) > 128 {

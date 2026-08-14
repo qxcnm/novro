@@ -41,7 +41,7 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql", "0013_model_route_billing_groups.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}
@@ -96,6 +96,27 @@ func TestModelPricingMigrationPreservesUnpricedCatalogState(t *testing.T) {
 	} {
 		if !strings.Contains(sql, expected) {
 			t.Fatalf("model pricing migration is missing %q", expected)
+		}
+	}
+}
+
+func TestModelRouteBillingGroupMigrationMovesProviderAssignments(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0013_model_route_billing_groups.sql")
+	if err != nil {
+		t.Fatalf("read model route billing group migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{
+		"ADD COLUMN billing_group_id",
+		"JOIN providers AS providers ON providers.id = routes.provider_id",
+		"SET routes.billing_group_id = providers.billing_group_id",
+		"modelroute_group_public_provider_model",
+		"model_routes_billing_groups_model_routes",
+		"DROP FOREIGN KEY providers_billing_groups_providers",
+		"DROP COLUMN billing_group_id",
+	} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("model route billing group migration is missing %q", expected)
 		}
 	}
 }

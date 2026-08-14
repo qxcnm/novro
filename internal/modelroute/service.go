@@ -108,7 +108,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	input.PublicName = strings.TrimSpace(input.PublicName)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.UpstreamName = strings.TrimSpace(input.UpstreamName)
-	if input.UpstreamModelID == uuid.Nil || input.ProviderID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) {
+	if input.UpstreamModelID == uuid.Nil || input.ProviderID == uuid.Nil || input.BillingGroupID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Create(ctx, input)
@@ -138,13 +138,16 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.UpstreamModelID == nil && input.ProviderID == nil && input.DisplayName == nil && input.UpstreamName == nil && input.InputPriceMicros == nil && input.OutputPriceMicros == nil) {
+	if id == uuid.Nil || (input.UpstreamModelID == nil && input.ProviderID == nil && input.BillingGroupID == nil && input.DisplayName == nil && input.UpstreamName == nil && input.InputPriceMicros == nil && input.OutputPriceMicros == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	if input.ProviderID != nil && *input.ProviderID == uuid.Nil {
 		return Record{}, ErrInvalidInput
 	}
 	if input.UpstreamModelID != nil && *input.UpstreamModelID == uuid.Nil {
+		return Record{}, ErrInvalidInput
+	}
+	if input.BillingGroupID != nil && *input.BillingGroupID == uuid.Nil {
 		return Record{}, ErrInvalidInput
 	}
 	if input.DisplayName != nil {
@@ -256,13 +259,15 @@ func (s *Service) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]R
 func validText(value string, max int) bool {
 	return value != "" && utf8.RuneCountInString(value) <= max
 }
+
 /**
  * validPrice 执行该名称对应的业务处理逻辑。
  * @param value 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func validPrice(value int64) bool          { return value >= 0 && value <= 1_000_000_000_000 }
+func validPrice(value int64) bool { return value >= 0 && value <= 1_000_000_000_000 }
+
 /**
  * validPrices 执行该名称对应的业务处理逻辑。
  * @param input 本次操作需要使用的输入参数。

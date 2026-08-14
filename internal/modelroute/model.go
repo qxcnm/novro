@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
 )
@@ -17,10 +18,11 @@ const (
 )
 
 var (
-	ErrInvalidInput    = errors.New("invalid model route input")
-	ErrNotFound        = errors.New("model route not found")
-	ErrNameTaken       = errors.New("model route already exists for provider and model")
-	ErrPricingRequired = errors.New("upstream model pricing is required")
+	ErrInvalidInput     = errors.New("invalid model route input")
+	ErrNotFound         = errors.New("model route not found")
+	ErrNameTaken        = errors.New("model route already exists for provider and model")
+	ErrPricingRequired  = errors.New("upstream model pricing is required")
+	ErrGroupUnavailable = errors.New("billing group is unavailable")
 )
 
 type ProviderSummary struct {
@@ -36,6 +38,8 @@ type Record struct {
 	ID                uuid.UUID             `json:"id"`
 	ProviderID        uuid.UUID             `json:"provider_id"`
 	UpstreamModelID   *uuid.UUID            `json:"upstream_model_id"`
+	BillingGroupID    uuid.UUID             `json:"billing_group_id"`
+	BillingGroup      billinggroup.Summary  `json:"billing_group"`
 	PublicName        string                `json:"public_name"`
 	DisplayName       string                `json:"display_name"`
 	UpstreamName      string                `json:"upstream_name"`
@@ -51,6 +55,7 @@ type Record struct {
 type CreateInput struct {
 	UpstreamModelID   uuid.UUID `json:"upstream_model_id"`
 	ProviderID        uuid.UUID `json:"provider_id"`
+	BillingGroupID    uuid.UUID `json:"billing_group_id"`
 	PublicName        string    `json:"public_name"`
 	DisplayName       string    `json:"display_name"`
 	UpstreamName      string    `json:"upstream_name"`
@@ -61,6 +66,7 @@ type CreateInput struct {
 type UpdateInput struct {
 	UpstreamModelID   *uuid.UUID `json:"upstream_model_id"`
 	ProviderID        *uuid.UUID `json:"provider_id"`
+	BillingGroupID    *uuid.UUID `json:"billing_group_id"`
 	DisplayName       *string    `json:"display_name"`
 	UpstreamName      *string    `json:"upstream_name"`
 	InputPriceMicros  *int64     `json:"input_price_micros"`

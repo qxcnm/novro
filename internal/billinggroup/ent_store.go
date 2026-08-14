@@ -9,7 +9,7 @@ import (
 	"github.com/novro-gateway/novro/ent"
 	entapikey "github.com/novro-gateway/novro/ent/apikey"
 	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
-	entprovider "github.com/novro-gateway/novro/ent/provider"
+	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entuser "github.com/novro-gateway/novro/ent/user"
 )
 
@@ -81,7 +81,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 	}
 	entities, err := query.
 		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
-		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).
+		WithModelRoutes(func(query *ent.ModelRouteQuery) { query.Where(entmodelroute.DeletedAtIsNil()) }).
 		WithAuthorizedUsers(func(query *ent.UserQuery) { query.Order(ent.Asc(entuser.FieldUsername)) }).
 		Order(ent.Desc(entbillinggroup.FieldIsDefault), ent.Asc(entbillinggroup.FieldDisplayName)).All(ctx)
 	if err != nil {
@@ -202,11 +202,11 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("check billing group API keys: %w", err)
 	}
-	hasProviders, err := tx.Provider.Query().Where(entprovider.BillingGroupIDEQ(id), entprovider.DeletedAtIsNil()).Exist(ctx)
+	hasModelRoutes, err := tx.ModelRoute.Query().Where(entmodelroute.BillingGroupIDEQ(id), entmodelroute.DeletedAtIsNil()).Exist(ctx)
 	if err != nil {
-		return fmt.Errorf("check billing group providers: %w", err)
+		return fmt.Errorf("check billing group model routes: %w", err)
 	}
-	if hasAPIKeys || hasProviders {
+	if hasAPIKeys || hasModelRoutes {
 		return ErrInUse
 	}
 	if _, err := entity.Update().SetStatus(entbillinggroup.StatusDisabled).SetDeletedAt(time.Now().UTC()).Save(ctx); err != nil {
@@ -228,7 +228,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 	entity, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).
 		WithAPIKeys(func(query *ent.APIKeyQuery) { query.Where(entapikey.StatusEQ(entapikey.StatusActive)) }).
-		WithProviders(func(query *ent.ProviderQuery) { query.Where(entprovider.DeletedAtIsNil()) }).
+		WithModelRoutes(func(query *ent.ModelRouteQuery) { query.Where(entmodelroute.DeletedAtIsNil()) }).
 		WithAuthorizedUsers(func(query *ent.UserQuery) { query.Order(ent.Asc(entuser.FieldUsername)) }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
@@ -261,7 +261,7 @@ func fromEntList(entities []*ent.BillingGroup) []Record {
  */
 func fromEnt(entity *ent.BillingGroup) Record {
 	record := Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
-		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ProviderCount: len(entity.Edges.Providers), AuthorizedUsers: make([]AuthorizedUser, 0, len(entity.Edges.AuthorizedUsers)), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ModelRouteCount: len(entity.Edges.ModelRoutes), AuthorizedUsers: make([]AuthorizedUser, 0, len(entity.Edges.AuthorizedUsers)), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 	for _, authorized := range entity.Edges.AuthorizedUsers {
 		record.AuthorizedUsers = append(record.AuthorizedUsers, AuthorizedUser{ID: authorized.ID, Username: authorized.Username, DisplayName: authorized.DisplayName, Status: string(authorized.Status)})
 	}

@@ -7,9 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/provider"
 	"github.com/novro-gateway/novro/internal/upstreammodel"
 )
@@ -32,6 +34,11 @@ func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client
  * @date 2026-08-13
  */
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
+	if _, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(input.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+		return Record{}, ErrGroupUnavailable
+	} else if err != nil {
+		return Record{}, fmt.Errorf("read model route billing group: %w", err)
+	}
 	upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(input.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrInvalidInput
@@ -48,7 +55,7 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 		status = entmodelroute.StatusDisabled
 	}
 	created, err := s.client.ModelRoute.Create().
-		SetProviderID(input.ProviderID).SetUpstreamModelID(upstream.ID).SetPublicName(input.PublicName).SetDisplayName(input.DisplayName).
+		SetProviderID(input.ProviderID).SetUpstreamModelID(upstream.ID).SetBillingGroupID(input.BillingGroupID).SetPublicName(input.PublicName).SetDisplayName(input.DisplayName).
 		SetUpstreamName(upstream.UpstreamName).SetInputPriceMicros(upstream.InputPriceMicros).
 		SetOutputPriceMicros(upstream.OutputPriceMicros).SetStatus(status).Save(ctx)
 	if ent.IsConstraintError(err) {
@@ -72,7 +79,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
 		entmodelroute.DeletedAtIsNil(),
 		entmodelroute.HasProviderWith(entprovider.DeletedAtIsNil()),
 		entmodelroute.Or(entmodelroute.UpstreamModelIDIsNil(), entmodelroute.HasUpstreamModelWith(entupstreammodel.DeletedAtIsNil())),
-	).WithProvider().WithUpstreamModel()
+	).WithProvider().WithUpstreamModel().WithBillingGroup()
 	if filter.Search != "" {
 		query = query.Where(entmodelroute.Or(entmodelroute.PublicNameContainsFold(filter.Search), entmodelroute.DisplayNameContainsFold(filter.Search), entmodelroute.UpstreamNameContainsFold(filter.Search), entmodelroute.HasProviderWith(entprovider.Or(entprovider.CodeContainsFold(filter.Search), entprovider.DisplayNameContainsFold(filter.Search)))))
 	}
@@ -118,12 +125,22 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 			return Record{}, fmt.Errorf("read model provider: %w", err)
 		}
 	}
+	if params.BillingGroupID != nil {
+		if _, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(*params.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+			return Record{}, ErrGroupUnavailable
+		} else if err != nil {
+			return Record{}, fmt.Errorf("read model route billing group: %w", err)
+		}
+	}
 	update := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil())
 	if params.UpstreamModelID != nil {
 		update.SetUpstreamModelID(*params.UpstreamModelID)
 	}
 	if params.ProviderID != nil {
 		update.SetProviderID(*params.ProviderID)
+	}
+	if params.BillingGroupID != nil {
+		update.SetBillingGroupID(*params.BillingGroupID)
 	}
 	if params.DisplayName != nil {
 		update.SetDisplayName(*params.DisplayName)
@@ -158,7 +175,7 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
  */
 func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (Record, error) {
 	if status == StatusActive {
-		route, err := s.client.ModelRoute.Query().Where(entmodelroute.IDEQ(id), entmodelroute.DeletedAtIsNil()).WithUpstreamModel().Only(ctx)
+		route, err := s.client.ModelRoute.Query().Where(entmodelroute.IDEQ(id), entmodelroute.DeletedAtIsNil()).WithUpstreamModel().WithBillingGroup().Only(ctx)
 		if ent.IsNotFound(err) {
 			return Record{}, ErrNotFound
 		}
@@ -173,6 +190,10 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 			if upstream.Status != entupstreammodel.StatusActive || !upstream.PricingConfigured || upstream.DeletedAt != nil {
 				return Record{}, ErrPricingRequired
 			}
+		}
+		group, groupErr := route.Edges.BillingGroupOrErr()
+		if groupErr != nil || group.Status != entbillinggroup.StatusActive || group.DeletedAt != nil {
+			return Record{}, ErrGroupUnavailable
 		}
 	}
 	if _, err := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil()).SetStatus(entmodelroute.Status(status)).Save(ctx); ent.IsNotFound(err) {
@@ -211,7 +232,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
  * @date 2026-08-13
  */
 func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, billingGroupID uuid.UUID) ([]Resolution, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.BillingGroupIDEQ(billingGroupID), entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.BillingGroupIDEQ(billingGroupID), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve model routes: %w", err)
 	}
@@ -237,7 +258,7 @@ func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, bil
  * @date 2026-08-13
  */
 func (s *EntStore) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]Record, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasProviderWith(entprovider.BillingGroupIDEQ(billingGroupID), entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.BillingGroupIDEQ(billingGroupID), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active model routes: %w", err)
 	}
@@ -257,7 +278,7 @@ func (s *EntStore) get(ctx context.Context, id uuid.UUID) (Record, error) {
 		entmodelroute.DeletedAtIsNil(),
 		entmodelroute.HasProviderWith(entprovider.DeletedAtIsNil()),
 		entmodelroute.Or(entmodelroute.UpstreamModelIDIsNil(), entmodelroute.HasUpstreamModelWith(entupstreammodel.DeletedAtIsNil())),
-	).WithProvider().WithUpstreamModel().Only(ctx)
+	).WithProvider().WithUpstreamModel().WithBillingGroup().Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
 	}
@@ -293,6 +314,10 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	if p != nil {
 		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Weight: p.Weight, Protocol: provider.Protocol(p.Protocol), Status: provider.Status(p.Status)}
 	}
+	groupSummary := billinggroup.Summary{}
+	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
+		groupSummary = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+	}
 	var upstreamRecord *upstreammodel.Record
 	upstreamName, inputPrice, outputPrice := entity.UpstreamName, entity.InputPriceMicros, entity.OutputPriceMicros
 	if upstream, err := entity.Edges.UpstreamModelOrErr(); err == nil {
@@ -302,5 +327,5 @@ func fromEnt(entity *ent.ModelRoute) Record {
 		upstreamRecord = &record
 		upstreamName, inputPrice, outputPrice = upstream.UpstreamName, upstream.InputPriceMicros, upstream.OutputPriceMicros
 	}
-	return Record{ID: entity.ID, ProviderID: entity.ProviderID, UpstreamModelID: entity.UpstreamModelID, PublicName: entity.PublicName, DisplayName: entity.DisplayName, UpstreamName: upstreamName, InputPriceMicros: inputPrice, OutputPriceMicros: outputPrice, Status: Status(entity.Status), Provider: summary, UpstreamModel: upstreamRecord, CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
+	return Record{ID: entity.ID, ProviderID: entity.ProviderID, UpstreamModelID: entity.UpstreamModelID, BillingGroupID: entity.BillingGroupID, BillingGroup: groupSummary, PublicName: entity.PublicName, DisplayName: entity.DisplayName, UpstreamName: upstreamName, InputPriceMicros: inputPrice, OutputPriceMicros: outputPrice, Status: Status(entity.Status), Provider: summary, UpstreamModel: upstreamRecord, CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 }
