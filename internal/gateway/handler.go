@@ -302,13 +302,14 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request, actor apike
 }
 
 /**
- * proxy 执行该名称对应的业务处理逻辑。
+ * proxy 执行统一模型网关的完整调用流程：解析候选路由、固定每条路由的价格、按最坏候选预占余额，
+ * 再依权重顺序调用上游，并仅用实际命中渠道的确认 usage 结算。预占和结算由同一个 requestID 关联。
  * @param w 本次操作需要使用的输入参数。
  * @param r 本次操作需要使用的输入参数。
  * @param actor 本次操作需要使用的输入参数。
  * @param endpoint 本次操作需要使用的输入参数。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Actor, endpoint string) {
 	startedAt := h.now()
@@ -403,7 +404,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		reservationOutputCap = gatewaysettings.DefaultReservationOutputTokenCap
 	}
 	// 先按请求开始时间解析并固定每条候选路由的费率；后续预扣、重试和结算
-	// 都只读取 route.ResolvedPrices，避免请求执行期间跨窗口造成价格不一致。
+	// 都只读取 route.ResolvedPrices，避免请求执行期间跨窗口或发布新版本造成价格不一致。
 	for _, route := range compatible {
 		if h.pricing != nil {
 			resolution, err := h.pricing.Resolve(r.Context(), *route.UpstreamModelID, startedAt)
@@ -427,12 +428,15 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			continue
 		}
 		inputEstimate := estimateInputTokens(upstreamBody)
+		// 输入和输出分别被上限截断，防止超大请求或 max_tokens 使一次预占无限增长。
 		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
 		if err != nil {
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
 		}
 		attempts = append(attempts, upstreamAttempt{route: route, inputEstimate: inputEstimate})
+		// 可能因故障切换到任意候选路由，故冻结所有候选估算中的最大值；
+		// 成功后仍按实际命中路由的已确认 usage 退差额或补扣，不会按这个最大值收费。
 		reserved = max(reserved, reservation.CostMicros)
 	}
 	if len(attempts) == 0 {
@@ -449,6 +453,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	if idempotencyKey == "" {
+		// 未提供显式幂等键时，requestID 仍会让当前请求的内部重试共享同一笔 operation。
 		idempotencyKey = requestID.String()
 	}
 	operation, err := h.billing.StartOperation(r.Context(), billing.OperationStartInput{
@@ -471,6 +476,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	requestID = operation.Operation.RequestID
 	w.Header().Set(requestid.Header, requestID.String())
 	if !operation.Created {
+		// 已存在的 operation 绝不再次调用上游，避免网络重试产生两次模型调用或两次扣费。
 		writeOperationReplay(w, operation.Operation)
 		return
 	}
@@ -548,6 +554,8 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		if err != nil {
 			cancelAttempt()
 			if requestWritten {
+				// 请求字节已经写出时无法判断上游是否执行成功；保留预占并等待人工核对，
+				// 不能切换渠道重放，否则用户可能在未知情况下被执行两次。
 				h.markOperationPendingUnknown(requestID, "upstream_result_unknown")
 				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游请求结果无法确认；预占已保留，系统不会自动重放请求")
 				return
@@ -1303,7 +1311,8 @@ streamLoop:
 }
 
 /**
- * settle 执行该名称对应的业务处理逻辑。
+ * settle 按“持久化意图 -> 写入资金和 usage -> 完成 operation”的顺序完成结算。
+ * 第一阶段完成后即使进程崩溃，后台也能根据 settlement JSON 恢复；成功响应只应在该流程完成后返回。
  * @param ctx 本次操作需要使用的输入参数。
  * @param actor 本次操作需要使用的输入参数。
  * @param route 本次操作需要使用的输入参数。
@@ -1314,15 +1323,17 @@ streamLoop:
  * @param usage 本次操作需要使用的输入参数。
  * @param startedAt 本次操作需要使用的输入参数。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) error {
 	input := h.usageInput(actor, route, requestID, endpoint, reserved, quote, usage, startedAt)
 	persistCtx, persistCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer persistCancel()
+	// 先确保可恢复的结算意图已经入库，防止上游成功但进程崩溃后丢失应收费用。
 	if err, _ := h.retrySettlement(persistCtx, func() error { return h.billing.MarkOperationPendingSettlement(persistCtx, requestID, input) }); err != nil {
 		return fmt.Errorf("%w: %v", errSettlementIntentNotPersisted, err)
 	}
+	// Finalize 在同一事务中处理差额退款/超额补扣并写 usage；它本身支持按 requestID 幂等重试。
 	if err := h.finalizeInput(ctx, input); err != nil {
 		return err
 	}
@@ -1526,6 +1537,8 @@ func retryableSettlementError(err error) bool {
 		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
+// tokenUsage 是把不同上游协议的 usage 归一化后的中间表示。
+// Input 始终等于四种输入维度之和；Reported 与 Invalid 分开记录，避免“字段缺失”和“字段矛盾”被混为零 Token。
 type tokenUsage struct {
 	Input, UncachedInput, CacheRead, CacheWrite, CacheWrite1h, Output int
 	InputReported, OutputReported                                     bool
@@ -1535,10 +1548,12 @@ type tokenUsage struct {
 }
 
 /**
- * merge 执行该名称对应的业务处理逻辑。
- * @param other 本次操作需要使用的输入参数。
+ * merge 将一份 usage 快照并入当前累计结果。
+ * 流式上游通常在每个事件中发送“截至当前”的累计值而不是增量，因此已报告的维度必须整体替换，不能累加。
+ * 无效字段优先级高于已报告字段，避免前一个事件的旧数据掩盖后一个事件发现的协议矛盾。
+ * @param other 新收到的 usage 快照。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func (u *tokenUsage) merge(other tokenUsage) {
 	if other.InputInvalid {
@@ -1577,7 +1592,9 @@ func (u *tokenUsage) merge(other tokenUsage) {
 type usageSemantics uint8
 
 const (
+	// OpenAI 的 prompt/input total 已包含缓存相关 Token，缓存维度必须从总数中扣除。
 	usageSemanticsOpenAITotal usageSemantics = iota
+	// Anthropic 的 input_tokens 是未缓存输入，缓存维度是额外的互斥部分，需要相加。
 	usageSemanticsAnthropicAdditional
 )
 
@@ -1596,11 +1613,13 @@ func usageSemanticsFor(endpoint string, protocol provider.Protocol) usageSemanti
 }
 
 /**
- * parseUsage 执行该名称对应的业务处理逻辑。
- * @param body 本次操作需要使用的输入参数。
- * @param semantics 本次操作需要使用的输入参数。
+ * parseUsage 从普通响应、Responses 包装响应或 Anthropic message 中读取 usage。
+ * 同一响应可能同时包含通用 usage 与 NewAPI billing_usage；两者被归一化后按累计快照语义合并。
+ * @param body 上游响应或 SSE 事件的 JSON 正文。
+ * @param semantics 当前 endpoint 和上游协议的输入 Token 语义。
+ * @return 可用于最终结算的确认 Token、完整性和上游请求 ID。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 	var root map[string]any
@@ -1628,11 +1647,14 @@ func parseUsage(body []byte, semantics usageSemantics) tokenUsage {
 }
 
 /**
- * parseUsageCandidate 执行该名称对应的业务处理逻辑。
- * @param candidate 本次操作需要使用的输入参数。
- * @param semantics 本次操作需要使用的输入参数。
+ * parseUsageCandidate 兼容 OpenAI、Anthropic 和代理层使用的字段别名，并生成严格一致的 Token 明细。
+ * 别名同时出现但为不同的非零值、缓存子项超过总输入，或缓存创建总数与分项不一致时，整组输入维度作废；
+ * 最终结算宁可把该维度标记为缺失并按零处理，也不能依据矛盾数据重复收费。
+ * @param candidate 包含 usage 字段的单个 JSON 对象。
+ * @param semantics 当前协议的输入总数与缓存维度关系。
+ * @return 已归一化的 Token 使用量。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tokenUsage {
 	promptTokens, hasPromptTokens := intField(candidate, "prompt_tokens")
@@ -1645,6 +1667,7 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 		conflictingNonzeroAliases(promptTokens, hasPromptTokens, inputTokens, hasInputTokens)
 	invalidOutput := hasInvalidIntField(candidate, "completion_tokens") || hasInvalidIntField(candidate, "output_tokens") ||
 		conflictingNonzeroAliases(completionTokens, hasCompletionTokens, outputTokens, hasOutputTokens)
+	// 允许“一个别名为 0、另一个提供真实值”的兼容响应；两个非零别名不一致已在上面判为无效。
 	promptTokens = max(promptTokens, inputTokens)
 	outputTokens = max(completionTokens, outputTokens)
 	details := mapValue(candidate["prompt_tokens_details"])
@@ -1673,15 +1696,15 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 	cacheWrite := cacheWriteTotal
 	hasCacheWriteBreakdown := mapHasAny(candidate, "cache_creation_1h_input_tokens", "cache_creation_5m_input_tokens") || mapHasAny(cacheCreation, "ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens")
 	if hasCacheWriteBreakdown {
+		// 缓存创建总数包含 5 分钟和 1 小时两种创建；计费记录把 5 分钟存入 CacheWrite，1 小时单列。
 		if hasCacheWriteTotal && cacheWriteTotal != cacheWrite5m+cacheWrite1h {
 			invalidCacheField = true
 		}
 		cacheWrite = cacheWrite5m
 	}
 
-	// OpenAI Chat and Responses report cache dimensions as subsets of the total
-	// prompt/input count. Anthropic reports uncached input and cache dimensions as
-	// additional, mutually exclusive counts.
+	// OpenAI Chat/Responses 的缓存维度是总 prompt/input 的子集，必须用 total - categorized 得到未缓存输入。
+	// Anthropic 的 input_tokens 本身是未缓存输入，缓存维度为额外且互斥的 Token，必须相加。
 	uncached := 0
 	inputTotal := 0
 	inputReported := false
@@ -1710,6 +1733,7 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 		}
 	}
 	if inputInvalid {
+		// 归零整个输入组而不是保留局部缓存数，确保 Input == 各输入维度之和始终成立。
 		inputTotal, uncached, cacheRead, cacheWrite, cacheWrite1h, inputReported = 0, 0, 0, 0, 0, false
 	}
 	return tokenUsage{
@@ -1720,10 +1744,12 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 }
 
 /**
- * parseNewAPIBillingUsage 执行该名称对应的业务处理逻辑。
- * @param candidate 本次操作需要使用的输入参数。
+ * parseNewAPIBillingUsage 解析 NewAPI 在 billing_usage 下封装的原始提供商 usage。
+ * source 与 semantic 必须成对匹配；只信任对应原始协议的字段，避免代理层错误映射导致按错误语义结算。
+ * @param candidate 含有可选 billing_usage 的 usage 对象。
+ * @return 解析结果及该对象是否确实使用了 NewAPI 格式。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func parseNewAPIBillingUsage(candidate map[string]any) (tokenUsage, bool) {
 	billingUsage := mapValue(candidate["billing_usage"])
@@ -1770,10 +1796,13 @@ func parseNewAPIBillingUsage(candidate map[string]any) (tokenUsage, bool) {
 }
 
 /**
- * parseNewAPIGeminiBillingUsage 执行该名称对应的业务处理逻辑。
- * @param metadata 本次操作需要使用的输入参数。
+ * parseNewAPIGeminiBillingUsage 将 Gemini usageMetadata 映射到统一 Token 明细。
+ * prompt 与 toolUsePrompt 都属于输入，candidates 与 thoughts 都属于输出；cachedContent 是输入的子集，
+ * 因此未缓存输入为 input - cacheRead，缓存数超过输入总数时整组输入无效。
+ * @param metadata Gemini usageMetadata 对象。
+ * @return 解析后的 usage 和是否读取成功。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func parseNewAPIGeminiBillingUsage(metadata map[string]any) (tokenUsage, bool) {
 	fields := []string{"promptTokenCount", "toolUsePromptTokenCount", "candidatesTokenCount", "thoughtsTokenCount", "cachedContentTokenCount", "totalTokenCount"}
@@ -1816,11 +1845,12 @@ func conflictingNonzeroAliases(first int, hasFirst bool, second int, hasSecond b
 }
 
 /**
- * addTokenCounts 执行该名称对应的业务处理逻辑。
- * @param first 本次操作需要使用的输入参数。
- * @param second 本次操作需要使用的输入参数。
+ * addTokenCounts 相加两个非负 Token 字段，并在转换为 Go int 前拒绝溢出。
+ * @param first 第一个 Token 计数。
+ * @param second 第二个 Token 计数。
+ * @return 相加结果和是否安全表示。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func addTokenCounts(first, second int) (int, bool) {
 	if first > maxInt()-second {
@@ -1840,10 +1870,11 @@ func (u tokenUsage) breakdown() billing.TokenBreakdown {
 }
 
 /**
- * applyUsageFallback 执行该名称对应的业务处理逻辑。
- * @param usage 本次操作需要使用的输入参数。
+ * applyUsageFallback 将缺失的上游 usage 维度显式设为零并标记估算。
+ * 预占阶段的请求字节数和最大输出只用于余额校验，绝不能在最终费用缺失时作为实际 Token 代替品。
+ * @param usage 已解析的上游 usage。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsage {
 	if !usage.InputReported {
@@ -1862,16 +1893,15 @@ func applyUsageFallback(usage tokenUsage, _, _ int, _ billing.RateCard) tokenUsa
 }
 
 /**
- * estimateInputTokens 执行该名称对应的业务处理逻辑。
- * @param body 本次操作需要使用的输入参数。
+ * estimateInputTokens 为余额预占估算请求输入规模，而非最终计费。
+ * 公式为 ceil(JSON字节数 / 4) + 64：四字节近似提供商无关的文本 Token 密度，64 覆盖协议字段和少量结构开销。
+ * @param body 发给上游前的 JSON 请求正文。
+ * @return 至少为 1 的预估输入 Token 数。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func estimateInputTokens(body []byte) int {
-	// JSON request bytes are a materially closer provisional estimate than the
-	// previous one-byte-per-token hold. Four bytes per token is intentionally a
-	// simple model-neutral estimate; final settlement always uses provider usage
-	// and can debit an idempotent overage when the estimate is low.
+	// (len(body)+3)/4 是对非负整数除以 4 的向上取整；最终金额始终使用上游确认 usage。
 	const protocolOverheadTokens = 64
 	return max(1, (len(body)+3)/4+protocolOverheadTokens)
 }
@@ -1940,11 +1970,13 @@ func rateCardFor(route modelroute.Resolved) billing.RateCard {
 }
 
 /**
- * readMaxOutput 执行该名称对应的业务处理逻辑。
- * @param payload 本次操作需要使用的输入参数。
- * @param endpoint 本次操作需要使用的输入参数。
+ * readMaxOutput 读取不同 OpenAI 兼容 endpoint 的最大输出字段，并在缺失时写入默认值。
+ * chat_completions 优先新字段 max_completion_tokens 再兼容 max_tokens；Responses 仅使用 max_output_tokens。
+ * @param payload 将发往上游且可能被补入默认字段的 JSON 请求对象。
+ * @param endpoint 当前网关 endpoint。
+ * @return 最大输出 Token 及字段是否为正整数。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func readMaxOutput(payload map[string]any, endpoint string) (int, bool) {
 	keys := []string{"max_tokens"}

@@ -290,6 +290,8 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
 
 /**
  * publishDraftTx 在当前事务中发布草稿并收口相邻版本。
+ * 发布后，同一模型的版本时间线始终由互不重叠的半开区间组成；草稿插入历史时间点时，
+ * 前一版本在草稿开始时刻结束，草稿则最多持续到下一版本开始时刻。
  * @param tx 当前数据库事务。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param plan 已锁定的待发布草稿。
@@ -319,6 +321,7 @@ func (s *EntStore) publishDraftTx(tx *ent.Tx, ctx context.Context, plan *ent.Mod
 		}
 	}
 	effectiveTo := plan.EffectiveTo
+	// 下一版本优先于草稿自己的结束时间，防止新草稿覆盖已发布未来版本的时间段。
 	if next != nil && (effectiveTo == nil || effectiveTo.After(next.EffectiveFrom)) {
 		value := next.EffectiveFrom
 		effectiveTo = &value
@@ -327,6 +330,7 @@ func (s *EntStore) publishDraftTx(tx *ent.Tx, ctx context.Context, plan *ent.Mod
 		return ErrConflict
 	}
 	if previous != nil && (previous.EffectiveTo == nil || previous.EffectiveTo.After(plan.EffectiveFrom)) {
+		// 用相同边界闭合前一版本；半开区间确保这一刻只属于新版本。
 		if _, err := tx.ModelPricePlan.UpdateOne(previous).SetEffectiveTo(plan.EffectiveFrom).Save(ctx); err != nil {
 			return fmt.Errorf("close previous model price plan: %w", err)
 		}
@@ -392,6 +396,7 @@ func (s *EntStore) DeleteDraft(ctx context.Context, planID uuid.UUID) error {
 
 /**
  * Resolve 从数据库解析请求时间对应的已发布方案和峰谷窗口。
+ * 查询条件使用 EffectiveFrom <= at 且 EffectiveTo > at（或无结束时间），与内存快照解析保持完全相同的半开区间语义。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param modelID 上游模型的唯一标识。
  * @param at 已统一为 UTC 的请求开始时间。
@@ -429,6 +434,7 @@ func (s *EntStore) Resolve(ctx context.Context, modelID uuid.UUID, at time.Time)
 		return Resolution{}, fmt.Errorf("load model price timezone: %w", err)
 	}
 	local := at.In(location)
+	// 按价格方案的 IANA 时区转为本地时间后，才可正确处理星期与日内峰谷窗口。
 	minute := local.Hour()*60 + local.Minute()
 	weekdayMask := 1 << int(local.Weekday())
 	resolution := Resolution{
@@ -440,6 +446,7 @@ func (s *EntStore) Resolve(ctx context.Context, modelID uuid.UUID, at time.Time)
 	}
 	windows, _ := plan.Edges.WindowsOrErr()
 	for _, window := range windows {
+		// EndMinute 为排他边界；相邻窗口在边界分钟不会同时命中。
 		if window.WeekdayMask&weekdayMask == 0 || minute < window.StartMinute || minute >= window.EndMinute {
 			continue
 		}
@@ -500,6 +507,7 @@ func (s *EntStore) get(ctx context.Context, planID uuid.UUID) (Plan, error) {
 
 /**
  * effectivePlanAt 选择指定时刻正在生效的已发布方案。
+ * 该辅助方法用于切换历史版本，必须与 Resolve 使用相同的 [from, to) 判断，避免“当前版本”判定和请求计费不一致。
  * @param plans 同一模型的已发布方案，按生效时间升序排列。
  * @param at 待解析的 UTC 时刻。
  * @return 命中的方案，未命中时返回 nil。

@@ -227,16 +227,19 @@ func (s *Service) Usage(ctx context.Context, userID uuid.UUID, filter UsageFilte
 }
 
 /**
- * UsageRate 封装该名称对应的业务处理逻辑。
+ * UsageRate 计算当前用户最近一分钟的已记录调用速率。
+ * RPM 是窗口内请求数；TPM 只汇总上游明确报告的输入和输出 Token，因此不完整 usage 不会用预估值放大限流指标。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param userID 目标用户的唯一标识。
+ * @return 一分钟窗口内的请求数、Token 数和计算时间。
  * @author Gao Hongshun
- * @date 2026-08-13
+ * @date 2026-08-15
  */
 func (s *Service) UsageRate(ctx context.Context, userID uuid.UUID) (UsageRate, error) {
 	if userID == uuid.Nil {
 		return UsageRate{}, ErrInvalidInput
 	}
+	// 统一以 UTC 写入计算时间和查询边界，避免服务端本地时区变化造成窗口长度偏移。
 	calculatedAt := s.now().UTC()
 	rate, err := s.store.GetUsageRate(ctx, userID, calculatedAt.Add(-usageRateWindow))
 	if err != nil {
@@ -321,13 +324,16 @@ func (s *Service) ReleaseReservation(ctx context.Context, userID, referenceID uu
 }
 
 /**
- * Finalize 封装该名称对应的业务处理逻辑。
+ * Finalize 校验成功调用的不可变计费快照，并提交最终结算。
+ * 该方法不重新查询当前价格或当前分组倍率，历史调用必须按照请求开始时固定的费率和倍率完成结算。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param input 需要处理的输入数据。
+ * @return 结算完成、幂等重试成功或校验/持久化错误。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
 func (s *Service) Finalize(ctx context.Context, input UsageInput) error {
+	// 所有入口都先归一化，保证同步结算和后台恢复对 status 0 的处理一致。
 	input = normalizeUsageInput(input)
 	if err := s.FinalizeInput(input); err != nil {
 		return err
@@ -350,10 +356,12 @@ func (s *Service) StartOperation(ctx context.Context, input OperationStartInput)
 }
 
 /**
- * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
+ * MarkOperationPendingSettlement 在扣减或退款前持久化完整的最终结算意图。
+ * 如果数据库在后续钱包操作时短暂失败，后台可从这份快照重放同一笔结算，而不会猜测价格或 Token。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param requestID 目标资源的一个或多个唯一标识。
  * @param input 需要处理的输入数据。
+ * @return 意图已持久化、幂等成功或校验错误。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
@@ -369,8 +377,10 @@ func (s *Service) MarkOperationPendingSettlement(ctx context.Context, requestID 
 }
 
 /**
- * FinalizeInput 封装该名称对应的业务处理逻辑。
+ * FinalizeInput 校验使用记录的内部一致性，并从 Token 和费率重新推导金额。
+ * 它是持久化边界前的防篡改检查：调用方不能只改 CostMicros、BaseCostMicros 或输入总数后继续结算。
  * @param input 需要处理的输入数据。
+ * @return 所有审计字段、金额和算法版本是否可以安全结算。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
@@ -379,6 +389,7 @@ func (s *Service) FinalizeInput(input UsageInput) error {
 	if input.UserID == uuid.Nil || input.APIKeyID == uuid.Nil || input.ModelRouteID == uuid.Nil || input.UpstreamModelID == nil || *input.UpstreamModelID == uuid.Nil || input.BillingGroupID == nil || *input.BillingGroupID == uuid.Nil || input.RequestID == uuid.Nil || input.StatusCode < 200 || input.StatusCode >= 400 || input.InputTokens < 0 || input.OutputTokens < 0 || input.InputTokens != input.Tokens.InputTotal() || input.OutputTokens != input.Tokens.Output || input.CostMicros < 0 || input.BaseCostMicros < 0 || input.CostMicros > 1_000_000_000_000_000 || input.ReservedMicros < 0 || input.ReservedMicros > 1_000_000_000_000_000 || (input.ReservedMicros == 0 && input.CostMicros > 0) || input.CalculationVersion != CalculationVersion || (input.Endpoint != "chat_completions" && input.Endpoint != "responses" && input.Endpoint != "messages") {
 		return ErrInvalidInput
 	}
+	// 重算必须使用已固定的 Rates 与 MultiplierBPS，而不是当前生效配置；否则重试会改写历史费用。
 	quote, err := CalculateCost(input.Tokens, input.Rates, input.MultiplierBPS)
 	if err != nil || quote.BaseCostMicros != input.BaseCostMicros || quote.CostMicros != input.CostMicros {
 		return ErrInvalidInput
@@ -447,9 +458,11 @@ func (s *Service) ListPendingSettlements(ctx context.Context, limit int) ([]Pend
 }
 
 /**
- * RecoverPendingSettlements 封装该名称对应的业务处理逻辑。
+ * RecoverPendingSettlements 重放已持久化但尚未完成的钱包结算。
+ * 每条记录独立处理：一个损坏或冲突的快照不会阻塞同批其他待结算操作，返回值同时给出成功数量和聚合错误。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param limit 本次操作使用的数值参数。
+ * @return 成功恢复数量及所有失败原因的聚合错误。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
@@ -461,6 +474,8 @@ func (s *Service) RecoverPendingSettlements(ctx context.Context, limit int) (int
 	recovered := 0
 	var recoveryErrors []error
 	for _, item := range pending {
+		// 先复核快照，再写钱包和 usage，最后切 operation 状态为 completed。
+		// 每一步都是幂等的，因此进程在任意一步中断后都可安全再次恢复。
 		usage := normalizeUsageInput(item.Usage)
 		if err := s.FinalizeInput(usage); err != nil {
 			recoveryErrors = append(recoveryErrors, fmt.Errorf("validate pending settlement %s: %w", item.Operation.RequestID, err))
@@ -480,7 +495,8 @@ func (s *Service) RecoverPendingSettlements(ctx context.Context, limit int) (int
 }
 
 /**
- * normalizeUsageInput 封装该名称对应的业务处理逻辑。
+ * normalizeUsageInput 将旧调用方遗漏的成功状态统一为 HTTP 200。
+ * 已持久化的结算快照也走这里，避免恢复任务与实时请求对同一数据产生不同校验结果。
  * @param input 需要处理的输入数据。
  * @author Gao Hongshun
  * @date 2026-08-13

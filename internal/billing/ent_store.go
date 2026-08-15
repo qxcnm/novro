@@ -278,7 +278,8 @@ func (s *EntStore) Adjust(ctx context.Context, userID, actorID, referenceID uuid
 }
 
 /**
- * StartOperation 封装该名称对应的业务处理逻辑。
+ * StartOperation 在一个事务内创建网关操作并冻结预占金额。
+ * 钱包行锁、幂等键检查、余额扣减、预占流水和 operation 创建必须一起提交，才能保证并发重试既不重复扣款也不重复调用上游。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param input 需要处理的输入数据。
  * @author Gao Hongshun
@@ -290,6 +291,7 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
 		return OperationStartResult{}, fmt.Errorf("begin gateway operation: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// 先锁住同一用户的钱包。相同幂等键的并发首请求会串行化，后一个请求只能看到已创建的 operation。
 	walletEntity, err := tx.Wallet.Query().Where(entwallet.UserIDEQ(input.UserID)).ForUpdate().Only(ctx)
 	if ent.IsNotFound(err) {
 		return OperationStartResult{}, ErrWalletNotFound
@@ -303,6 +305,7 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
 	).Only(ctx)
 	if err == nil {
 		operation := operationFromEnt(existing)
+		// 同一个 API Key 和幂等键只能重放完全相同的用户、请求体和 endpoint，防止键被复用于另一笔扣款。
 		if operation.UserID != input.UserID || operation.RequestHash != input.RequestHash || operation.Endpoint != input.Endpoint {
 			return OperationStartResult{}, ErrRequestConflict
 		}
@@ -311,9 +314,11 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
 	if !ent.IsNotFound(err) {
 		return OperationStartResult{}, fmt.Errorf("read existing gateway operation: %w", err)
 	}
+	// 只有确认此前没有同键 operation 后才检查并扣除余额；这样重试不会因余额已减少而误报余额不足。
 	if walletEntity.BalanceMicros < input.ReservedMicros {
 		return OperationStartResult{}, ErrInsufficientBalance
 	}
+	// 预占流水以负数记录，且 balance_after 与钱包行在同一事务更新，形成可审计的余额状态转换。
 	next := walletEntity.BalanceMicros - input.ReservedMicros
 	if input.ReservedMicros > 0 {
 		if _, err := tx.Wallet.UpdateOneID(walletEntity.ID).SetBalanceMicros(next).Save(ctx); err != nil {
@@ -336,7 +341,8 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
 }
 
 /**
- * MarkOperationPendingSettlement 封装该名称对应的业务处理逻辑。
+ * MarkOperationPendingSettlement 固化上游成功后的结算快照，供 Finalize 和后台恢复使用。
+ * 状态先变为 pending_settlement，再触碰钱包；这使“调用已成功但数据库暂时不可写”不会丢失实际费用。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param requestID 目标资源的一个或多个唯一标识。
  * @param input 需要处理的输入数据。
@@ -344,6 +350,7 @@ func (s *EntStore) StartOperation(ctx context.Context, input OperationStartInput
  * @date 2026-08-13
  */
 func (s *EntStore) MarkOperationPendingSettlement(ctx context.Context, requestID uuid.UUID, input UsageInput) error {
+	// 精确保存用于最终结算的字段快照，而不是之后按当前模型价格重新计算。
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("encode pending settlement: %w", err)
@@ -376,6 +383,7 @@ func (s *EntStore) MarkOperationPendingSettlement(ctx context.Context, requestID
 	if operation.Status == entgatewayoperation.StatusFailed || operation.Status == entgatewayoperation.StatusPendingUnknown {
 		return ErrRequestConflict
 	}
+	// 同一 requestID 重试只能携带字节级相同的结算意图，否则说明调用方试图改写审计记录。
 	if operation.Status == entgatewayoperation.StatusPendingSettlement && operation.SettlementJSON != string(encoded) {
 		return ErrRequestConflict
 	}
@@ -467,7 +475,8 @@ func (s *EntStore) CompleteOperation(ctx context.Context, requestID uuid.UUID) e
 }
 
 /**
- * FailOperation 封装该名称对应的业务处理逻辑。
+ * FailOperation 标记未产生可结算 usage 的操作失败，并且只释放原始预占一次。
+ * 已进入 pending_unknown 的请求不能走此路径，因为它可能已经到达上游，自动退款会造成免费调用。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param requestID 目标资源的一个或多个唯一标识。
  * @param code 用于标识或筛选目标的文本值。
@@ -514,6 +523,7 @@ func (s *EntStore) FailOperation(ctx context.Context, requestID uuid.UUID, code 
 	if usageExists {
 		return ErrRequestConflict
 	}
+	// 退款前确认原始预占流水存在且金额匹配，防止把没有实际冻结的金额凭空加回钱包。
 	if operation.ReservedMicros > 0 {
 		reservation, err := tx.WalletEntry.Query().Where(entwalletentry.WalletIDEQ(walletEntity.ID), entwalletentry.ReferenceIDEQ(requestID), entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageReservation)).Only(ctx)
 		if err != nil || reservation.AmountMicros != -operation.ReservedMicros {
@@ -528,6 +538,7 @@ func (s *EntStore) FailOperation(ctx context.Context, requestID uuid.UUID, code 
 		return fmt.Errorf("check failed operation refund: %w", err)
 	}
 	if !refundExists && operation.ReservedMicros > 0 {
+		// WalletEntry 的 (reference_id, entry_type) 唯一约束与事务锁共同保证失败重试最多退回一次。
 		if walletEntity.BalanceMicros > math.MaxInt64-operation.ReservedMicros {
 			return ErrInvalidInput
 		}
@@ -653,7 +664,8 @@ func (s *EntStore) ReleaseReservation(ctx context.Context, userID, referenceID u
 }
 
 /**
- * releaseReservation 封装该名称对应的业务处理逻辑。
+ * releaseReservation 退回一笔已经冻结但无需结算的预占金额。
+ * requireUnfinalized 用于网关失败分支：一旦成功 usage 已存在，保留余额和流水，不允许后来补发退款。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param userID 目标用户的唯一标识。
  * @param referenceID 目标资源的一个或多个唯一标识。
@@ -691,6 +703,7 @@ func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID u
 		return ErrRequestConflict
 	}
 	if requireUnfinalized {
+		// 避免“结算已成功、失败清理任务随后到达”的竞态把实际费用退回。
 		usageExists, err := tx.APIUsage.Query().Where(entapiusage.RequestIDEQ(referenceID), entapiusage.StatusCodeLT(400)).Exist(ctx)
 		if err != nil {
 			return fmt.Errorf("check usage before releasing reservation: %w", err)
@@ -713,6 +726,7 @@ func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID u
 	if !ent.IsNotFound(err) {
 		return fmt.Errorf("read existing usage refund: %w", err)
 	}
+	// 加回余额前先做上溢检查，防止历史异常余额绕过负数/正数范围。
 	if walletEntity.BalanceMicros > math.MaxInt64-amount {
 		return ErrInvalidInput
 	}
@@ -730,7 +744,8 @@ func (s *EntStore) releaseReservation(ctx context.Context, userID, referenceID u
 }
 
 /**
- * Finalize 封装该名称对应的业务处理逻辑。
+ * Finalize 将已持久化的结算快照转换为钱包流水和不可变 usage 审计记录。
+ * 在同一个事务中执行“退回差额或补扣超额”和 usage 写入；失败重试会按 requestID 识别为已完成或冲突。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param input 需要处理的输入数据。
  * @author Gao Hongshun
@@ -793,6 +808,7 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 			return ErrRequestConflict
 		}
 	}
+	// refund 的符号直接表达预占和实际费用的差额：正数退回，负数补扣，零则余额无需变化。
 	refund := input.ReservedMicros - input.CostMicros
 	_, refundErr := tx.WalletEntry.Query().Where(
 		entwalletentry.WalletIDEQ(walletEntity.ID),
@@ -805,6 +821,7 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 		return ErrRequestConflict
 	} else if ent.IsNotFound(refundErr) {
 		if refund > 0 {
+			// 实际成本低于预占时，只释放未使用部分；原预占流水本身仍保留以完整表达资金轨迹。
 			if walletEntity.BalanceMicros > math.MaxInt64-refund {
 				return ErrInvalidInput
 			}
@@ -820,6 +837,7 @@ func (s *EntStore) Finalize(ctx context.Context, input UsageInput) error {
 		return fmt.Errorf("read existing usage finalization refund: %w", refundErr)
 	}
 	if refund < 0 {
+		// 最终 usage 高于保守预占时不能截断费用。允许余额短暂为负，之后由管理员或充值恢复。
 		extra := -refund
 		existingSettlement, settlementErr := tx.WalletEntry.Query().Where(entwalletentry.WalletIDEQ(walletEntity.ID), entwalletentry.ReferenceIDEQ(input.RequestID), entwalletentry.EntryTypeEQ(entwalletentry.EntryTypeUsageSettlement)).Only(ctx)
 		if settlementErr == nil {
