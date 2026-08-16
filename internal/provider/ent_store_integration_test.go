@@ -27,6 +27,7 @@ func TestEntStoreCreateReusesSoftDeletedProviderCode(t *testing.T) {
 		SetCode("reusable-provider").
 		SetDisplayName("Original Provider").
 		SetProtocol(entprovider.ProtocolOpenai).
+		SetProtocols([]string{"openai"}).
 		SetBaseURL("https://old.example.com/v1").
 		SetEncryptedAPIKey("old-encrypted-key").
 		SetAPIKeyHint("old1").
@@ -39,14 +40,14 @@ func TestEntStoreCreateReusesSoftDeletedProviderCode(t *testing.T) {
 	}
 
 	restored, err := store.Create(ctx, CreateParams{
-		Code: "reusable-provider", DisplayName: "Replacement Provider", Protocol: ProtocolAnthropic,
+		Code: "reusable-provider", DisplayName: "Replacement Provider", Protocols: []Protocol{ProtocolOpenAI, ProtocolAnthropic}, PrimaryProtocol: ProtocolOpenAI,
 		BaseURL: "https://new.example.com", ModelListPath: "/models", Weight: 250,
 		EncryptedAPIKey: "new-encrypted-key", APIKeyHint: "new1",
 	})
 	if err != nil {
 		t.Fatalf("reuse deleted provider code: %v", err)
 	}
-	if restored.ID != original.ID || restored.DisplayName != "Replacement Provider" || restored.Protocol != ProtocolAnthropic || restored.Status != StatusActive {
+	if restored.ID != original.ID || restored.DisplayName != "Replacement Provider" || len(restored.Protocols) != 2 || !SupportsProtocol(restored.Protocols, ProtocolOpenAI) || !SupportsProtocol(restored.Protocols, ProtocolAnthropic) || restored.Status != StatusActive {
 		t.Fatalf("unexpected restored provider: %+v", restored)
 	}
 	count, err := client.Provider.Query().Where(entprovider.CodeEQ("reusable-provider")).Count(ctx)
@@ -54,7 +55,7 @@ func TestEntStoreCreateReusesSoftDeletedProviderCode(t *testing.T) {
 		t.Fatalf("provider code count=%d err=%v", count, err)
 	}
 	if _, err := store.Create(ctx, CreateParams{
-		Code: "reusable-provider", DisplayName: "Duplicate", Protocol: ProtocolOpenAI,
+		Code: "reusable-provider", DisplayName: "Duplicate", Protocols: []Protocol{ProtocolOpenAI}, PrimaryProtocol: ProtocolOpenAI,
 		BaseURL: "https://duplicate.example.com", Weight: 100, EncryptedAPIKey: "duplicate-key", APIKeyHint: "dupe",
 	}); !errors.Is(err, ErrCodeTaken) {
 		t.Fatalf("active duplicate error=%v", err)

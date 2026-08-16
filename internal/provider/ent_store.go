@@ -45,7 +45,8 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		}
 		restored, restoreErr := tx.Provider.UpdateOne(existing).
 			SetDisplayName(params.DisplayName).
-			SetProtocol(entprovider.Protocol(params.Protocol)).
+			SetProtocol(entprovider.Protocol(params.PrimaryProtocol)).
+			SetProtocols(protocolStrings(params.Protocols)).
 			SetBaseURL(params.BaseURL).
 			SetModelListPath(params.ModelListPath).
 			SetWeight(params.Weight).
@@ -68,7 +69,8 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 	created, err := tx.Provider.Create().
 		SetCode(params.Code).
 		SetDisplayName(params.DisplayName).
-		SetProtocol(entprovider.Protocol(params.Protocol)).
+		SetProtocol(entprovider.Protocol(params.PrimaryProtocol)).
+		SetProtocols(protocolStrings(params.Protocols)).
 		SetBaseURL(params.BaseURL).
 		SetModelListPath(params.ModelListPath).
 		SetWeight(params.Weight).
@@ -136,8 +138,8 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	if params.DisplayName != nil {
 		update.SetDisplayName(*params.DisplayName)
 	}
-	if params.Protocol != nil {
-		update.SetProtocol(entprovider.Protocol(*params.Protocol))
+	if params.Protocols != nil && params.PrimaryProtocol != nil {
+		update.SetProtocol(entprovider.Protocol(*params.PrimaryProtocol)).SetProtocols(protocolStrings(*params.Protocols))
 	}
 	if params.BaseURL != nil {
 		update.SetBaseURL(*params.BaseURL)
@@ -229,7 +231,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 func fromEnt(entity *ent.Provider) Record {
 	record := Record{
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
-		Protocol: Protocol(entity.Protocol), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
+		Protocols: ProtocolsFromStrings(entity.Protocols, Protocol(entity.Protocol)), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
 		Weight:     entity.Weight,
 		APIKeyHint: entity.APIKeyHint, HasAPIKey: entity.EncryptedAPIKey != "",
 		Status: Status(entity.Status), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt,

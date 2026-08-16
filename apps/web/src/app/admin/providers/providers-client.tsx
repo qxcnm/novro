@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
 import { useListSelection } from "@/lib/use-list-selection";
 
@@ -26,7 +27,7 @@ type ProviderRecord = {
   id: string;
   code: string;
   display_name: string;
-  protocol: Protocol;
+  protocols: Protocol[];
   base_url: string;
   model_list_path: string;
   weight: number;
@@ -54,15 +55,17 @@ type RouteRecord = {
   billing_group_id: string;
 };
 
-type ErrorResponse = { error?: { message?: string } };
+type ProviderField = "code" | "display_name" | "protocols" | "base_url" | "model_list_path" | "weight" | "api_key";
+type ProviderFormError = { field?: ProviderField; message: string };
+type ErrorResponse = { error?: { field?: string; message?: string } };
 type BillingGroup = { id: string; display_name: string; multiplier_bps: number; effective_multiplier_bps?: number; is_default: boolean; status: "active" | "disabled" };
-type CreateForm = { code: string; display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string };
-type EditForm = { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key: string };
+type CreateForm = { code: string; display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
+type EditForm = { display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
 
 const INITIAL_CREATE: CreateForm = {
   code: "",
   display_name: "",
-  protocol: "openai",
+  protocols: ["openai"],
   base_url: "https://api.openai.com/v1",
   model_list_path: "",
   weight: 100,
@@ -70,6 +73,8 @@ const INITIAL_CREATE: CreateForm = {
 };
 
 const MODEL_SYNC_TIMEOUT_MS = 35_000;
+const PROVIDER_CODE_PATTERN = /^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$/;
+const PROVIDER_FIELDS = new Set<ProviderField>(["code", "display_name", "protocols", "base_url", "model_list_path", "weight", "api_key"]);
 
 /**
  * fetchWithTimeout 封装该名称对应的业务处理逻辑。
@@ -106,6 +111,67 @@ async function readError(response: Response) {
   return body.error?.message ?? "操作失败，请稍后重试";
 }
 
+async function readProviderError(response: Response): Promise<ProviderFormError> {
+  const body = (await response.json().catch(() => ({}))) as ErrorResponse;
+  const field = body.error?.field;
+  return {
+    field: typeof field === "string" && PROVIDER_FIELDS.has(field as ProviderField) ? field as ProviderField : undefined,
+    message: body.error?.message ?? "操作失败，请稍后重试",
+  };
+}
+
+function validateProviderForm(form: CreateForm | EditForm, requireAPIKey: boolean): ProviderFormError | null {
+  if ("code" in form && !PROVIDER_CODE_PATTERN.test(form.code.trim())) {
+    return { field: "code", message: "提供商代码必须为 3 到 64 位，只能使用小写字母、数字、点号和连字符" };
+  }
+  const displayName = form.display_name.trim();
+  if (!displayName || [...displayName].length > 128) {
+    return { field: "display_name", message: "显示名称不能为空且不能超过 128 个字符" };
+  }
+  if (form.protocols.length === 0) {
+    return { field: "protocols", message: "至少选择一个支持协议" };
+  }
+  try {
+    const baseURL = new URL(form.base_url.trim());
+    if ((baseURL.protocol !== "http:" && baseURL.protocol !== "https:") || !baseURL.host || baseURL.username || baseURL.password || baseURL.search || baseURL.hash) {
+      return { field: "base_url", message: "基础地址必须是完整的 HTTP 或 HTTPS 地址，且不能包含凭据、查询参数或片段" };
+    }
+  } catch {
+    return { field: "base_url", message: "基础地址必须是完整的 HTTP 或 HTTPS 地址，且不能包含凭据、查询参数或片段" };
+  }
+  const modelListPath = form.model_list_path.trim();
+  if (modelListPath && (!modelListPath.startsWith("/") || modelListPath.includes("?") || modelListPath.includes("#") || modelListPath.length > 512)) {
+    return { field: "model_list_path", message: "模型获取路径必须留空或以 / 开头，且不能包含 ? 或 #" };
+  }
+  if (!Number.isInteger(form.weight) || form.weight < 1 || form.weight > 1_000_000) {
+    return { field: "weight", message: "请求权重必须是 1 到 1000000 之间的整数" };
+  }
+  const apiKey = form.api_key.trim();
+  if ((requireAPIKey && !apiKey) || apiKey.length > 1024) {
+    return { field: "api_key", message: "API Key 不能为空且不能超过 1024 个字符" };
+  }
+  return null;
+}
+
+function providerFieldElementID(field: ProviderField, editing: boolean) {
+  const prefix = editing ? "edit-provider" : "provider";
+  const suffix: Record<ProviderField, string> = {
+    code: "code",
+    display_name: "name",
+    protocols: "protocol-openai",
+    base_url: "base-url",
+    model_list_path: "model-list-path",
+    weight: "weight",
+    api_key: "api-key",
+  };
+  return `${prefix}-${suffix[field]}`;
+}
+
+function focusProviderField(field: ProviderField | undefined, editing: boolean) {
+  if (!field) return;
+  window.setTimeout(() => document.getElementById(providerFieldElementID(field, editing))?.focus(), 0);
+}
+
 /**
  * formatDate 封装该名称对应的业务处理逻辑。
  * @param value 需要处理的输入值。
@@ -132,8 +198,8 @@ function protocolLabel(protocol: Protocol) {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-function defaultBaseURL(protocol: Protocol) {
-  return protocol === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com";
+function defaultBaseURL(protocols: Protocol[]) {
+  return protocols.includes("openai") ? "https://api.openai.com/v1" : "https://api.anthropic.com";
 }
 
 function bindingKey(modelID: string, billingGroupID: string) {
@@ -155,7 +221,7 @@ export default function ProvidersClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [formError, setFormError] = useState("");
+  const [formError, setFormError] = useState<ProviderFormError | null>(null);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "disabled">("all");
@@ -167,7 +233,7 @@ export default function ProvidersClient() {
   const [bulkSyncOpen, setBulkSyncOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(INITIAL_CREATE);
-  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocol: "openai", base_url: "", model_list_path: "", weight: 100, api_key: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocols: ["openai"], base_url: "", model_list_path: "", weight: 100, api_key: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerProvider, setPickerProvider] = useState<ProviderRecord | null>(null);
   const [pickerModels, setPickerModels] = useState<PickerModel[]>([]);
@@ -178,6 +244,10 @@ export default function ProvidersClient() {
   const [selectedBindingKeys, setSelectedBindingKeys] = useState<Set<string>>(new Set());
   const [linkedBindingKeys, setLinkedBindingKeys] = useState<Set<string>>(new Set());
   const selection = useListSelection(providers.map((provider) => provider.id));
+
+  function clearFormFieldError(field: ProviderField) {
+    setFormError((current) => current?.field === field ? null : current);
+  }
 
   const loadProviders = useCallback(async () => {
     setLoading(true);
@@ -232,8 +302,8 @@ export default function ProvidersClient() {
    */
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
-    setEditForm({ display_name: record.display_name, protocol: record.protocol, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "" });
-    setFormError("");
+    setEditForm({ display_name: record.display_name, protocols: record.protocols, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "" });
+    setFormError(null);
   }
 
   /**
@@ -338,16 +408,34 @@ export default function ProvidersClient() {
    */
   async function createProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setMessage("");
-    setFormError("");
-    const response = await fetch("/api/admin/providers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createForm),
-    });
+    setFormError(null);
+    const clientError = validateProviderForm(createForm, true);
+    if (clientError) {
+      setFormError(clientError);
+      focusProviderField(clientError.field, false);
+      return;
+    }
+    setBusy(true);
+    let response: Response;
+    try {
+      response = await fetch("/api/admin/providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createForm),
+      });
+    } catch {
+      setBusy(false);
+      setFormError({ message: "无法连接后端服务，请稍后重试" });
+      return;
+    }
     setBusy(false);
-    if (!response.ok) { setFormError(await readError(response)); return; }
+    if (!response.ok) {
+      const responseError = await readProviderError(response);
+      setFormError(responseError);
+      focusProviderField(responseError.field, false);
+      return;
+    }
     /**
      * created 封装该名称对应的业务处理逻辑。
      * @param none 无参数。
@@ -371,24 +459,42 @@ export default function ProvidersClient() {
   async function updateProvider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingProvider) return;
-    setBusy(true);
     setMessage("");
-    setFormError("");
-    const payload: { display_name: string; protocol: Protocol; base_url: string; model_list_path: string; weight: number; api_key?: string } = {
+    setFormError(null);
+    const clientError = validateProviderForm(editForm, false);
+    if (clientError) {
+      setFormError(clientError);
+      focusProviderField(clientError.field, true);
+      return;
+    }
+    setBusy(true);
+    const payload: { display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key?: string } = {
       display_name: editForm.display_name,
-      protocol: editForm.protocol,
+      protocols: editForm.protocols,
       base_url: editForm.base_url,
       model_list_path: editForm.model_list_path,
       weight: editForm.weight,
     };
     if (editForm.api_key.trim()) payload.api_key = editForm.api_key;
-    const response = await fetch(`/api/admin/providers/${editingProvider.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/admin/providers/${editingProvider.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setBusy(false);
+      setFormError({ message: "无法连接后端服务，请稍后重试" });
+      return;
+    }
     setBusy(false);
-    if (!response.ok) { setFormError(await readError(response)); return; }
+    if (!response.ok) {
+      const responseError = await readProviderError(response);
+      setFormError(responseError);
+      focusProviderField(responseError.field, true);
+      return;
+    }
     setEditingProvider(null);
     setMessage("提供商配置已更新");
     await loadProviders();
@@ -647,7 +753,7 @@ export default function ProvidersClient() {
                       <TableCell><Checkbox aria-label={`选择提供商 ${item.display_name}`} checked={selection.isSelected(item.id)} onCheckedChange={(checked) => selection.toggleOne(item.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{item.display_name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.code}</p></TableCell>
                       <TableCell className="font-mono tabular-nums">{item.weight}</TableCell>
-                      <TableCell><Badge variant="secondary">{protocolLabel(item.protocol)}</Badge></TableCell>
+                      <TableCell><div className="flex flex-wrap gap-1">{item.protocols.map((protocol) => <Badge key={protocol} variant="secondary">{protocolLabel(protocol)}</Badge>)}</div></TableCell>
                       <TableCell><p className="max-w-72 truncate font-mono text-xs" title={item.base_url}>{item.base_url}</p></TableCell>
                       <TableCell className="font-mono text-xs">{item.has_api_key ? `••••${item.api_key_hint}` : "未配置"}</TableCell>
                       <TableCell><Badge variant={item.status === "active" ? "outline" : "secondary"}>{item.status === "active" ? "启用" : "停用"}</Badge></TableCell>
@@ -664,39 +770,39 @@ export default function ProvidersClient() {
 
       <TabsContent className="pt-3" value="routes"><ModelRoutesClient refreshKey={routeRefreshKey} /></TabsContent>
 
-      <Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(""); if (!open) setCreateForm(INITIAL_CREATE); }} open={createOpen}>
+      <Dialog onOpenChange={(open) => { setCreateOpen(open); setFormError(null); if (!open) setCreateForm(INITIAL_CREATE); }} open={createOpen}>
         <DialogContent className="w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] sm:max-w-3xl">
           <DialogHeader><DialogTitle>添加提供商</DialogTitle><DialogDescription>提供商代码创建后不可修改，凭据会加密保存。</DialogDescription></DialogHeader>
           <form className="flex flex-col gap-4" id="create-provider-form" onSubmit={createProvider}>
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
-              <Field><FieldLabel htmlFor="provider-code">提供商代码</FieldLabel><Input autoComplete="off" id="provider-code" maxLength={64} minLength={3} onChange={(event) => setCreateForm({ ...createForm, code: event.target.value.toLowerCase() })} pattern="[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]" placeholder="例如 kimi-0.2" required title="提供商代码需为 3 到 64 位，只能使用小写字母、数字、点号和连字符，不能包含下划线或空格，且必须以字母或数字开头和结尾" value={createForm.code} /><FieldDescription className="text-xs">3 到 64 位；允许小写字母、数字、点号和连字符，不允许下划线或空格。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="provider-name">显示名称</FieldLabel><Input id="provider-name" maxLength={128} onChange={(event) => setCreateForm({ ...createForm, display_name: event.target.value })} placeholder="例如 DeepSeek 主账号" required value={createForm.display_name} /></Field>
-              <Field><FieldLabel htmlFor="provider-protocol">协议</FieldLabel><Select onValueChange={(protocol: Protocol) => setCreateForm({ ...createForm, protocol, base_url: defaultBaseURL(protocol) })} value={createForm.protocol}><SelectTrigger className="w-full" id="provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></Field>
-              <Field><FieldLabel htmlFor="provider-base-url">基础地址</FieldLabel><Input id="provider-base-url" onChange={(event) => setCreateForm({ ...createForm, base_url: event.target.value })} placeholder="https://api.example.com/v1" required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={createForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="provider-model-list-path">模型获取路径</FieldLabel><Input id="provider-model-list-path" onChange={(event) => setCreateForm({ ...createForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models，例如 /api/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={createForm.model_list_path} /><FieldDescription className="text-xs">填写站点路径，必须以 / 开头；不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="provider-weight">请求权重</FieldLabel><Input id="provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => setCreateForm({ ...createForm, weight: Number(event.target.value) })} required type="number" value={createForm.weight} /><FieldDescription className="text-xs">同一分组和模型有多个提供商时，权重越大越优先请求；单个提供商失败后会重试两次再切换。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="provider-api-key">API Key</FieldLabel><Input autoComplete="new-password" id="provider-api-key" maxLength={1024} onChange={(event) => setCreateForm({ ...createForm, api_key: event.target.value })} required type="password" value={createForm.api_key} /></Field>
+              <Field data-invalid={formError?.field === "code"}><FieldLabel htmlFor="provider-code">提供商代码</FieldLabel><Input aria-invalid={formError?.field === "code"} autoComplete="off" id="provider-code" maxLength={64} minLength={3} onChange={(event) => { clearFormFieldError("code"); setCreateForm({ ...createForm, code: event.target.value.toLowerCase() }); }} pattern="[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]" placeholder="例如 kimi-0.2" required title="提供商代码需为 3 到 64 位，只能使用小写字母、数字、点号和连字符，不能包含下划线或空格，且必须以字母或数字开头和结尾" value={createForm.code} /><FieldDescription className="text-xs">3 到 64 位；允许小写字母、数字、点号和连字符，不允许下划线或空格。</FieldDescription><FieldError>{formError?.field === "code" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "display_name"}><FieldLabel htmlFor="provider-name">显示名称</FieldLabel><Input aria-invalid={formError?.field === "display_name"} id="provider-name" maxLength={128} onChange={(event) => { clearFormFieldError("display_name"); setCreateForm({ ...createForm, display_name: event.target.value }); }} placeholder="例如 DeepSeek 主账号" required value={createForm.display_name} /><FieldError>{formError?.field === "display_name" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "protocols"}><FieldLabel id="provider-protocols-label">支持协议</FieldLabel><ToggleGroup aria-invalid={formError?.field === "protocols"} aria-labelledby="provider-protocols-label" className="w-full" onValueChange={(values) => { if (values.length === 0) return; clearFormFieldError("protocols"); const protocols = values as Protocol[]; setCreateForm({ ...createForm, protocols, base_url: createForm.base_url === defaultBaseURL(createForm.protocols) ? defaultBaseURL(protocols) : createForm.base_url }); }} type="multiple" value={createForm.protocols} variant="outline"><ToggleGroupItem className="flex-1" id="provider-protocol-openai" value="openai">OpenAI 兼容</ToggleGroupItem><ToggleGroupItem className="flex-1" value="anthropic">Anthropic</ToggleGroupItem></ToggleGroup><FieldError>{formError?.field === "protocols" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "base_url"}><FieldLabel htmlFor="provider-base-url">基础地址</FieldLabel><Input aria-invalid={formError?.field === "base_url"} id="provider-base-url" onChange={(event) => { clearFormFieldError("base_url"); setCreateForm({ ...createForm, base_url: event.target.value }); }} placeholder="https://api.example.com/v1" required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={createForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription><FieldError>{formError?.field === "base_url" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "model_list_path"}><FieldLabel htmlFor="provider-model-list-path">模型获取路径</FieldLabel><Input aria-invalid={formError?.field === "model_list_path"} id="provider-model-list-path" onChange={(event) => { clearFormFieldError("model_list_path"); setCreateForm({ ...createForm, model_list_path: event.target.value }); }} placeholder="留空默认使用 /v1/models，例如 /api/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={createForm.model_list_path} /><FieldDescription className="text-xs">填写站点路径，必须以 / 开头；不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription><FieldError>{formError?.field === "model_list_path" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "weight"}><FieldLabel htmlFor="provider-weight">请求权重</FieldLabel><Input aria-invalid={formError?.field === "weight"} id="provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => { clearFormFieldError("weight"); setCreateForm({ ...createForm, weight: Number(event.target.value) }); }} required type="number" value={createForm.weight} /><FieldDescription className="text-xs">同一分组和模型有多个提供商时，权重越大越优先请求；单个提供商失败后会重试两次再切换。</FieldDescription><FieldError>{formError?.field === "weight" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "api_key"}><FieldLabel htmlFor="provider-api-key">API Key</FieldLabel><Input aria-invalid={formError?.field === "api_key"} autoComplete="new-password" id="provider-api-key" maxLength={1024} onChange={(event) => { clearFormFieldError("api_key"); setCreateForm({ ...createForm, api_key: event.target.value }); }} required type="password" value={createForm.api_key} /><FieldError>{formError?.field === "api_key" ? formError.message : undefined}</FieldError></Field>
             </FieldGroup>
-            {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
+            {formError && !formError.field ? <p className="text-sm text-destructive" role="alert">{formError.message}</p> : null}
           </form>
           <DialogFooter><Button onClick={() => setCreateOpen(false)} type="button" variant="outline">取消</Button><Button disabled={busy} form="create-provider-form" type="submit"><ServerCog />{busy ? "正在创建..." : "创建提供商"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Sheet onOpenChange={(open) => { setFormError(""); if (!open) setEditingProvider(null); }} open={editingProvider !== null}>
+      <Sheet onOpenChange={(open) => { setFormError(null); if (!open) setEditingProvider(null); }} open={editingProvider !== null}>
         <SheetContent className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden data-[side=right]:w-full! sm:data-[side=right]:w-[min(48rem,calc(100vw-2rem))]! sm:data-[side=right]:max-w-none!" side="right">
           <SheetHeader className="border-b px-6 py-5"><SheetTitle>编辑提供商</SheetTitle><SheetDescription>{editingProvider?.code}</SheetDescription></SheetHeader>
           {editingProvider ? <form className="flex flex-col gap-4 overflow-y-auto px-6 py-5" id="edit-provider-form" onSubmit={updateProvider}>
             <div className="grid grid-cols-2 gap-4 border-y py-4 text-sm"><div><p className="text-xs text-muted-foreground">状态</p><Badge className="mt-2" variant={editingProvider.status === "active" ? "outline" : "secondary"}>{editingProvider.status === "active" ? "启用" : "停用"}</Badge></div><div><p className="text-xs text-muted-foreground">当前凭据</p><p className="mt-2 font-mono text-xs">{editingProvider.has_api_key ? `••••${editingProvider.api_key_hint}` : "未配置"}</p></div></div>
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
-              <Field><FieldLabel htmlFor="edit-provider-name">显示名称</FieldLabel><Input id="edit-provider-name" maxLength={128} onChange={(event) => setEditForm({ ...editForm, display_name: event.target.value })} required value={editForm.display_name} /></Field>
-              <Field><FieldLabel htmlFor="edit-provider-protocol">协议</FieldLabel><Select onValueChange={(protocol: Protocol) => setEditForm({ ...editForm, protocol })} value={editForm.protocol}><SelectTrigger className="w-full" id="edit-provider-protocol"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI 兼容</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent></Select></Field>
-              <Field><FieldLabel htmlFor="edit-provider-base-url">基础地址</FieldLabel><Input id="edit-provider-base-url" onChange={(event) => setEditForm({ ...editForm, base_url: event.target.value })} required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={editForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="edit-provider-model-list-path">模型获取路径</FieldLabel><Input id="edit-provider-model-list-path" onChange={(event) => setEditForm({ ...editForm, model_list_path: event.target.value })} placeholder="留空默认使用 /v1/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={editForm.model_list_path} /><FieldDescription className="text-xs">例如 /api/models；必须以 / 开头，不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="edit-provider-weight">请求权重</FieldLabel><Input id="edit-provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => setEditForm({ ...editForm, weight: Number(event.target.value) })} required type="number" value={editForm.weight} /><FieldDescription className="text-xs">权重越大越优先请求，失败后会在当前提供商重试两次。</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="edit-provider-api-key">替换 API Key</FieldLabel><Input autoComplete="new-password" id="edit-provider-api-key" maxLength={1024} onChange={(event) => setEditForm({ ...editForm, api_key: event.target.value })} placeholder="留空则保留当前凭据" type="password" value={editForm.api_key} /><FieldDescription className="text-xs"><KeyRound aria-hidden="true" className="mr-1 inline size-3" />保存新 Key 后，旧凭据会立即被替换。</FieldDescription></Field>
+              <Field data-invalid={formError?.field === "display_name"}><FieldLabel htmlFor="edit-provider-name">显示名称</FieldLabel><Input aria-invalid={formError?.field === "display_name"} id="edit-provider-name" maxLength={128} onChange={(event) => { clearFormFieldError("display_name"); setEditForm({ ...editForm, display_name: event.target.value }); }} required value={editForm.display_name} /><FieldError>{formError?.field === "display_name" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "protocols"}><FieldLabel id="edit-provider-protocols-label">支持协议</FieldLabel><ToggleGroup aria-invalid={formError?.field === "protocols"} aria-labelledby="edit-provider-protocols-label" className="w-full" onValueChange={(values) => { if (values.length > 0) { clearFormFieldError("protocols"); setEditForm({ ...editForm, protocols: values as Protocol[] }); } }} type="multiple" value={editForm.protocols} variant="outline"><ToggleGroupItem className="flex-1" id="edit-provider-protocol-openai" value="openai">OpenAI 兼容</ToggleGroupItem><ToggleGroupItem className="flex-1" value="anthropic">Anthropic</ToggleGroupItem></ToggleGroup><FieldError>{formError?.field === "protocols" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "base_url"}><FieldLabel htmlFor="edit-provider-base-url">基础地址</FieldLabel><Input aria-invalid={formError?.field === "base_url"} id="edit-provider-base-url" onChange={(event) => { clearFormFieldError("base_url"); setEditForm({ ...editForm, base_url: event.target.value }); }} required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={editForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription><FieldError>{formError?.field === "base_url" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "model_list_path"}><FieldLabel htmlFor="edit-provider-model-list-path">模型获取路径</FieldLabel><Input aria-invalid={formError?.field === "model_list_path"} id="edit-provider-model-list-path" onChange={(event) => { clearFormFieldError("model_list_path"); setEditForm({ ...editForm, model_list_path: event.target.value }); }} placeholder="留空默认使用 /v1/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={editForm.model_list_path} /><FieldDescription className="text-xs">例如 /api/models；必须以 / 开头，不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription><FieldError>{formError?.field === "model_list_path" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "weight"}><FieldLabel htmlFor="edit-provider-weight">请求权重</FieldLabel><Input aria-invalid={formError?.field === "weight"} id="edit-provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => { clearFormFieldError("weight"); setEditForm({ ...editForm, weight: Number(event.target.value) }); }} required type="number" value={editForm.weight} /><FieldDescription className="text-xs">权重越大越优先请求，失败后会在当前提供商重试两次。</FieldDescription><FieldError>{formError?.field === "weight" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "api_key"}><FieldLabel htmlFor="edit-provider-api-key">替换 API Key</FieldLabel><Input aria-invalid={formError?.field === "api_key"} autoComplete="new-password" id="edit-provider-api-key" maxLength={1024} onChange={(event) => { clearFormFieldError("api_key"); setEditForm({ ...editForm, api_key: event.target.value }); }} placeholder="留空则保留当前凭据" type="password" value={editForm.api_key} /><FieldDescription className="text-xs"><KeyRound aria-hidden="true" className="mr-1 inline size-3" />保存新 Key 后，旧凭据会立即被替换。</FieldDescription><FieldError>{formError?.field === "api_key" ? formError.message : undefined}</FieldError></Field>
             </FieldGroup>
-            {formError ? <p className="text-sm text-destructive" role="alert">{formError}</p> : null}
+            {formError && !formError.field ? <p className="text-sm text-destructive" role="alert">{formError.message}</p> : null}
           </form> : null}
           <SheetFooter className="border-t px-6 py-4"><Button onClick={() => setEditingProvider(null)} type="button" variant="outline">取消</Button><Button disabled={busy} form="edit-provider-form" type="submit"><Pencil />{busy ? "正在保存..." : "保存修改"}</Button></SheetFooter>
         </SheetContent>

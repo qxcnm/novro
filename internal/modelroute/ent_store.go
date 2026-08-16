@@ -312,7 +312,7 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	p, _ := entity.Edges.ProviderOrErr()
 	summary := ProviderSummary{}
 	if p != nil {
-		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Weight: p.Weight, Protocol: provider.Protocol(p.Protocol), Status: provider.Status(p.Status)}
+		summary = ProviderSummary{ID: p.ID, Code: p.Code, DisplayName: p.DisplayName, Weight: p.Weight, Protocols: provider.ProtocolsFromStrings(p.Protocols, provider.Protocol(p.Protocol)), Status: provider.Status(p.Status)}
 	}
 	groupSummary := billinggroup.Summary{}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {

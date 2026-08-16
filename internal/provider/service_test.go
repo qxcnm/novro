@@ -97,13 +97,13 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
-		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocol: ProtocolOpenAI,
+		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocols: []Protocol{ProtocolAnthropic, ProtocolOpenAI, ProtocolAnthropic},
 		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.Weight != 250 || store.createParams.APIKeyHint != "1234" {
+	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.Weight != 250 || store.createParams.APIKeyHint != "1234" || store.createParams.PrimaryProtocol != ProtocolOpenAI || len(store.createParams.Protocols) != 2 || store.createParams.Protocols[0] != ProtocolOpenAI || store.createParams.Protocols[1] != ProtocolAnthropic {
 		t.Fatalf("unexpected provider: record=%+v params=%+v", record, store.createParams)
 	}
 	if store.createParams.EncryptedAPIKey == "provider-secret-1234" || strings.Contains(store.createParams.EncryptedAPIKey, "provider-secret") {
@@ -119,15 +119,24 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
  */
 func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 	service := testService(t, &fakeStore{})
-	inputs := []CreateInput{
-		{Code: "x", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret"},
-		{Code: "valid-code", DisplayName: "X", Protocol: Protocol("other"), BaseURL: "https://api.example.com", APIKey: "secret"},
-		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "api.example.com", APIKey: "secret"},
-		{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", ModelListPath: "models", APIKey: "secret"},
+	inputs := []struct {
+		input CreateInput
+		field ValidationField
+	}{
+		{input: CreateInput{Code: "x", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldCode},
+		{input: CreateInput{Code: "valid-code", DisplayName: "", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldDisplayName},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: nil, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldProtocols},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{Protocol("other")}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldProtocols},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "api.example.com", APIKey: "secret"}, field: ValidationFieldBaseURL},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", ModelListPath: "models", APIKey: "secret"}, field: ValidationFieldModelListPath},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", Weight: -1, APIKey: "secret"}, field: ValidationFieldWeight},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com"}, field: ValidationFieldAPIKey},
 	}
-	for _, input := range inputs {
-		if _, err := service.Create(context.Background(), input); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("expected invalid input for %+v, got %v", input, err)
+	for _, test := range inputs {
+		_, err := service.Create(context.Background(), test.input)
+		var validationError *ValidationError
+		if !errors.Is(err, ErrInvalidInput) || !errors.As(err, &validationError) || validationError.Field != test.field {
+			t.Fatalf("expected field %s for %+v, got %v", test.field, test.input, err)
 		}
 	}
 }
@@ -142,7 +151,7 @@ func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
-		Code: "kimi-0.2", DisplayName: "Kimi", Protocol: ProtocolOpenAI,
+		Code: "kimi-0.2", DisplayName: "Kimi", Protocols: []Protocol{ProtocolOpenAI},
 		BaseURL: "https://api.example.com/v1", APIKey: "secret",
 	})
 	if err != nil {
@@ -163,7 +172,7 @@ func TestProviderValidationAcceptsHTTPForSelfHostedUpstream(t *testing.T) {
 	store := &fakeStore{}
 	service := testService(t, store)
 	_, err := service.Create(context.Background(), CreateInput{
-		Code: "self-hosted", DisplayName: "自建网关", Protocol: ProtocolOpenAI,
+		Code: "self-hosted", DisplayName: "自建网关", Protocols: []Protocol{ProtocolOpenAI},
 		BaseURL: "http://203.0.113.10:3000/v1/", APIKey: "secret",
 	})
 	if err != nil {
@@ -197,6 +206,17 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 	if store.updateParams.EncryptedAPIKey == nil || store.updateParams.APIKeyHint == nil || *store.updateParams.APIKeyHint != "5678" {
 		t.Fatalf("credential was not replaced safely: %+v", store.updateParams)
 	}
+	protocols := []Protocol{ProtocolAnthropic, ProtocolOpenAI}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Protocols: &protocols}); err != nil {
+		t.Fatalf("update protocols: %v", err)
+	}
+	if store.updateParams.Protocols == nil || len(*store.updateParams.Protocols) != 2 || store.updateParams.PrimaryProtocol == nil || *store.updateParams.PrimaryProtocol != ProtocolOpenAI {
+		t.Fatalf("protocol update was not normalized: %+v", store.updateParams)
+	}
+	emptyProtocols := []Protocol{}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Protocols: &emptyProtocols}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty protocol update error=%v", err)
+	}
 }
 
 /**
@@ -208,7 +228,7 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 func TestProviderValidationRejectsNonPositiveWeight(t *testing.T) {
 	service := testService(t, &fakeStore{})
 	for _, weight := range []int{-1, MaxWeight + 1} {
-		_, err := service.Create(context.Background(), CreateInput{Code: "valid-code", DisplayName: "X", Protocol: ProtocolOpenAI, BaseURL: "https://api.example.com", APIKey: "secret", Weight: weight})
+		_, err := service.Create(context.Background(), CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret", Weight: weight})
 		if !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("weight=%d err=%v", weight, err)
 		}

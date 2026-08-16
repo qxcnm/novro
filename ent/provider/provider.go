@@ -22,6 +22,8 @@ const (
 	FieldDisplayName = "display_name"
 	// FieldProtocol holds the string denoting the protocol field in the database.
 	FieldProtocol = "protocol"
+	// FieldProtocols holds the string denoting the protocols field in the database.
+	FieldProtocols = "protocols"
 	// FieldBaseURL holds the string denoting the base_url field in the database.
 	FieldBaseURL = "base_url"
 	// FieldModelListPath holds the string denoting the model_list_path field in the database.
@@ -59,6 +61,7 @@ var Columns = []string{
 	FieldCode,
 	FieldDisplayName,
 	FieldProtocol,
+	FieldProtocols,
 	FieldBaseURL,
 	FieldModelListPath,
 	FieldWeight,
@@ -85,6 +88,8 @@ var (
 	CodeValidator func(string) error
 	// DisplayNameValidator is a validator for the "display_name" field. It is called by the builders before save.
 	DisplayNameValidator func(string) error
+	// DefaultProtocols holds the default value on creation for the "protocols" field.
+	DefaultProtocols []string
 	// BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	BaseURLValidator func(string) error
 	// DefaultModelListPath holds the default value on creation for the "model_list_path" field.

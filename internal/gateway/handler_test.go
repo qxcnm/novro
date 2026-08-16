@@ -464,7 +464,7 @@ func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
  */
 func openAIRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
-	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Weight: 100, Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
+	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "deepseek-chat", UpstreamName: "deepseek-v3", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "deepseek", Weight: 100, Protocols: []provider.Protocol{provider.ProtocolOpenAI}}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "deepseek-v3", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.example.com/v1", APIKey: "upstream-secret"}
 }
 
 /**
@@ -475,7 +475,13 @@ func openAIRoute() modelroute.Resolved {
  */
 func anthropicRoute() modelroute.Resolved {
 	routeID, upstreamID := uuid.New(), uuid.New()
-	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocol: provider.ProtocolAnthropic}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "kimi-k3-upstream", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
+	return modelroute.Resolved{Record: modelroute.Record{ID: routeID, UpstreamModelID: &upstreamID, PublicName: "kimi-k3", UpstreamName: "kimi-k3-upstream", InputPriceMicros: 2_000_000, OutputPriceMicros: 8_000_000, Provider: modelroute.ProviderSummary{Code: "kimi", Protocols: []provider.Protocol{provider.ProtocolAnthropic}}, UpstreamModel: &upstreammodel.Record{ID: upstreamID, UpstreamName: "kimi-k3-upstream", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}}}, BaseURL: "https://api.anthropic.com/v1", APIKey: "anthropic-secret"}
+}
+
+func dualProtocolRoute() modelroute.Resolved {
+	route := openAIRoute()
+	route.Provider.Protocols = []provider.Protocol{provider.ProtocolOpenAI, provider.ProtocolAnthropic}
+	return route
 }
 
 /**
@@ -1540,7 +1546,7 @@ func TestSettlementRetryStopsWhenContextIsCanceled(t *testing.T) {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
+func TestDualProtocolProviderRoutesResponsesAndAnthropicMessages(t *testing.T) {
 	tests := []struct {
 		name              string
 		path              string
@@ -1558,7 +1564,7 @@ func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 			name:              "responses",
 			path:              "/v1/responses",
 			body:              `{"model":"deepseek-chat","input":"hello","max_output_tokens":32}`,
-			route:             openAIRoute(),
+			route:             dualProtocolRoute(),
 			wantURL:           "https://api.example.com/v1/responses",
 			wantAuthorization: "Bearer upstream-secret",
 			wantEndpoint:      "responses",
@@ -1569,10 +1575,10 @@ func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 		{
 			name:         "anthropic messages",
 			path:         "/v1/messages",
-			body:         `{"model":"kimi-k3","messages":[{"role":"user","content":"hello"}],"max_tokens":32}`,
-			route:        anthropicRoute(),
-			wantURL:      "https://api.anthropic.com/v1/messages",
-			wantAPIKey:   "anthropic-secret",
+			body:         `{"model":"deepseek-chat","messages":[{"role":"user","content":"hello"}],"max_tokens":32}`,
+			route:        dualProtocolRoute(),
+			wantURL:      "https://api.example.com/v1/messages",
+			wantAPIKey:   "upstream-secret",
 			wantEndpoint: "messages",
 			upstreamBody: `{"id":"msg-1","usage":{"input_tokens":5,"output_tokens":8}}`,
 			wantInput:    5,
@@ -1612,6 +1618,26 @@ func TestProxyRoutesResponsesAndAnthropicMessages(t *testing.T) {
 			}
 			if biller.usage.InputTokens != tt.wantInput || biller.usage.OutputTokens != tt.wantOutput || biller.usage.Endpoint != tt.wantEndpoint {
 				t.Fatalf("unexpected usage %+v", biller.usage)
+			}
+		})
+	}
+}
+
+func TestProxyRejectsRoutesWithoutRequestedProtocol(t *testing.T) {
+	tests := []struct {
+		name, path, body string
+		route            modelroute.Resolved
+	}{
+		{name: "Anthropic request with OpenAI route", path: "/v1/messages", body: `{"model":"deepseek-chat","messages":[],"max_tokens":20}`, route: openAIRoute()},
+		{name: "OpenAI request with Anthropic route", path: "/v1/responses", body: `{"model":"kimi-k3","input":"hello","max_output_tokens":20}`, route: anthropicRoute()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: tt.route}, Billing: &fakeBilling{}, Client: &http.Client{}})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body)))
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "unsupported_endpoint") {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
 	}

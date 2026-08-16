@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent/modelroute"
@@ -55,6 +56,18 @@ func (_u *ProviderUpdate) SetNillableProtocol(v *provider.Protocol) *ProviderUpd
 	if v != nil {
 		_u.SetProtocol(*v)
 	}
+	return _u
+}
+
+// SetProtocols sets the "protocols" field.
+func (_u *ProviderUpdate) SetProtocols(v []string) *ProviderUpdate {
+	_u.mutation.SetProtocols(v)
+	return _u
+}
+
+// AppendProtocols appends value to the "protocols" field.
+func (_u *ProviderUpdate) AppendProtocols(v []string) *ProviderUpdate {
+	_u.mutation.AppendProtocols(v)
 	return _u
 }
 
@@ -315,6 +328,14 @@ func (_u *ProviderUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Protocol(); ok {
 		_spec.SetField(provider.FieldProtocol, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.Protocols(); ok {
+		_spec.SetField(provider.FieldProtocols, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedProtocols(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, provider.FieldProtocols, value)
+		})
+	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)
 	}
@@ -435,6 +456,18 @@ func (_u *ProviderUpdateOne) SetNillableProtocol(v *provider.Protocol) *Provider
 	if v != nil {
 		_u.SetProtocol(*v)
 	}
+	return _u
+}
+
+// SetProtocols sets the "protocols" field.
+func (_u *ProviderUpdateOne) SetProtocols(v []string) *ProviderUpdateOne {
+	_u.mutation.SetProtocols(v)
+	return _u
+}
+
+// AppendProtocols appends value to the "protocols" field.
+func (_u *ProviderUpdateOne) AppendProtocols(v []string) *ProviderUpdateOne {
+	_u.mutation.AppendProtocols(v)
 	return _u
 }
 
@@ -724,6 +757,14 @@ func (_u *ProviderUpdateOne) sqlSave(ctx context.Context) (_node *Provider, err 
 	}
 	if value, ok := _u.mutation.Protocol(); ok {
 		_spec.SetField(provider.FieldProtocol, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.Protocols(); ok {
+		_spec.SetField(provider.FieldProtocols, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedProtocols(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, provider.FieldProtocols, value)
+		})
 	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)

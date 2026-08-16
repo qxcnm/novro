@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ type Provider struct {
 	DisplayName string `json:"display_name,omitempty"`
 	// Protocol holds the value of the "protocol" field.
 	Protocol provider.Protocol `json:"protocol,omitempty"`
+	// Protocols holds the value of the "protocols" field.
+	Protocols []string `json:"protocols,omitempty"`
 	// BaseURL holds the value of the "base_url" field.
 	BaseURL string `json:"base_url,omitempty"`
 	// ModelListPath holds the value of the "model_list_path" field.
@@ -71,6 +74,8 @@ func (*Provider) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case provider.FieldProtocols:
+			values[i] = new([]byte)
 		case provider.FieldWeight:
 			values[i] = new(sql.NullInt64)
 		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldBaseURL, provider.FieldModelListPath, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
@@ -117,6 +122,14 @@ func (_m *Provider) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field protocol", values[i])
 			} else if value.Valid {
 				_m.Protocol = provider.Protocol(value.String)
+			}
+		case provider.FieldProtocols:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field protocols", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Protocols); err != nil {
+					return fmt.Errorf("unmarshal field protocols: %w", err)
+				}
 			}
 		case provider.FieldBaseURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -222,6 +235,9 @@ func (_m *Provider) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("protocol=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Protocol))
+	builder.WriteString(", ")
+	builder.WriteString("protocols=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Protocols))
 	builder.WriteString(", ")
 	builder.WriteString("base_url=")
 	builder.WriteString(_m.BaseURL)

@@ -38,6 +38,7 @@ func (Provider) Fields() []ent.Field {
 		field.String("code").NotEmpty().MaxLen(64).Unique().Immutable(),
 		field.String("display_name").NotEmpty().MaxLen(128),
 		field.Enum("protocol").Values("openai", "anthropic"),
+		field.JSON("protocols", []string{}).Default([]string{"openai"}),
 		field.String("base_url").NotEmpty().MaxLen(512),
 		field.String("model_list_path").Default("").MaxLen(512),
 		field.Int("weight").Positive().Max(1_000_000).Default(100),

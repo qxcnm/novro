@@ -24,7 +24,7 @@ type AvailableModel = {
   id: string;
   display_name: string;
   provider_name: string;
-  protocol: "openai" | "anthropic";
+  protocols: Array<"openai" | "anthropic">;
   channel_count: number;
   prices: Prices;
 };
@@ -156,7 +156,7 @@ export default function AvailableModelsClient() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return models.filter((model) => {
-      const matchesProtocol = protocol === "all" || model.protocol === protocol;
+      const matchesProtocol = protocol === "all" || model.protocols.includes(protocol as "openai" | "anthropic");
       const matchesProvider = provider === "all" || model.provider_name === provider;
       const matchesQuery = !needle || `${model.id} ${model.display_name} ${model.provider_name}`.toLowerCase().includes(needle);
       return matchesProtocol && matchesProvider && matchesQuery;
@@ -224,11 +224,11 @@ export default function AvailableModelsClient() {
           <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-medium">{filtered.length} 个模型</p>{provider !== "all" ? <Button onClick={() => setProvider("all")} size="sm" variant="ghost">清除厂商筛选</Button> : null}</div>
           {filtered.length === 0 ? <div className="border-y bg-background py-20 text-center"><p className="font-medium">没有匹配的模型</p><p className="mt-1 text-sm text-muted-foreground">调整搜索内容、厂商或协议筛选后再试。</p></div> : null}
           {filtered.length > 0 ? <div className="grid gap-4 xl:grid-cols-2">{filtered.map((model) => (
-        <Card className="rounded-lg" key={`${model.id}-${model.protocol}`}>
+        <Card className="rounded-lg" key={model.id}>
           <CardHeader className="gap-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0"><CardTitle className="truncate text-base">{model.display_name}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{model.provider_name} · {model.channel_count} 个渠道</p></div>
-              <Badge variant="outline">{model.protocol === "anthropic" ? "Anthropic" : "OpenAI"}</Badge>
+              <div className="flex flex-wrap justify-end gap-1">{model.protocols.map((item) => <Badge key={item} variant="outline">{item === "anthropic" ? "Anthropic" : "OpenAI"}</Badge>)}</div>
             </div>
             <div className="flex min-w-0 items-center gap-2 border-y py-2">
               <code className="min-w-0 flex-1 truncate text-xs">{model.id}</code>

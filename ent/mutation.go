@@ -13206,6 +13206,8 @@ type ProviderMutation struct {
 	code                *string
 	display_name        *string
 	protocol            *provider.Protocol
+	protocols           *[]string
+	appendprotocols     []string
 	base_url            *string
 	model_list_path     *string
 	weight              *int
@@ -13435,6 +13437,57 @@ func (m *ProviderMutation) OldProtocol(ctx context.Context) (v provider.Protocol
 // ResetProtocol resets all changes to the "protocol" field.
 func (m *ProviderMutation) ResetProtocol() {
 	m.protocol = nil
+}
+
+// SetProtocols sets the "protocols" field.
+func (m *ProviderMutation) SetProtocols(s []string) {
+	m.protocols = &s
+	m.appendprotocols = nil
+}
+
+// Protocols returns the value of the "protocols" field in the mutation.
+func (m *ProviderMutation) Protocols() (r []string, exists bool) {
+	v := m.protocols
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProtocols returns the old "protocols" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldProtocols(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProtocols is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProtocols requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProtocols: %w", err)
+	}
+	return oldValue.Protocols, nil
+}
+
+// AppendProtocols adds s to the "protocols" field.
+func (m *ProviderMutation) AppendProtocols(s []string) {
+	m.appendprotocols = append(m.appendprotocols, s...)
+}
+
+// AppendedProtocols returns the list of values that were appended to the "protocols" field in this mutation.
+func (m *ProviderMutation) AppendedProtocols() ([]string, bool) {
+	if len(m.appendprotocols) == 0 {
+		return nil, false
+	}
+	return m.appendprotocols, true
+}
+
+// ResetProtocols resets all changes to the "protocols" field.
+func (m *ProviderMutation) ResetProtocols() {
+	m.protocols = nil
+	m.appendprotocols = nil
 }
 
 // SetBaseURL sets the "base_url" field.
@@ -13882,7 +13935,7 @@ func (m *ProviderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProviderMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.code != nil {
 		fields = append(fields, provider.FieldCode)
 	}
@@ -13891,6 +13944,9 @@ func (m *ProviderMutation) Fields() []string {
 	}
 	if m.protocol != nil {
 		fields = append(fields, provider.FieldProtocol)
+	}
+	if m.protocols != nil {
+		fields = append(fields, provider.FieldProtocols)
 	}
 	if m.base_url != nil {
 		fields = append(fields, provider.FieldBaseURL)
@@ -13933,6 +13989,8 @@ func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 		return m.DisplayName()
 	case provider.FieldProtocol:
 		return m.Protocol()
+	case provider.FieldProtocols:
+		return m.Protocols()
 	case provider.FieldBaseURL:
 		return m.BaseURL()
 	case provider.FieldModelListPath:
@@ -13966,6 +14024,8 @@ func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDisplayName(ctx)
 	case provider.FieldProtocol:
 		return m.OldProtocol(ctx)
+	case provider.FieldProtocols:
+		return m.OldProtocols(ctx)
 	case provider.FieldBaseURL:
 		return m.OldBaseURL(ctx)
 	case provider.FieldModelListPath:
@@ -14013,6 +14073,13 @@ func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetProtocol(v)
+		return nil
+	case provider.FieldProtocols:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProtocols(v)
 		return nil
 	case provider.FieldBaseURL:
 		v, ok := value.(string)
@@ -14158,6 +14225,9 @@ func (m *ProviderMutation) ResetField(name string) error {
 		return nil
 	case provider.FieldProtocol:
 		m.ResetProtocol()
+		return nil
+	case provider.FieldProtocols:
+		m.ResetProtocols()
 		return nil
 	case provider.FieldBaseURL:
 		m.ResetBaseURL()

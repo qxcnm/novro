@@ -209,7 +209,8 @@ EmailVerificationCode
 ## 11. providers
 
 - `id`、`code`、`display_name`
-- `protocol`，`openai` 或 `anthropic`
+- `protocols`，JSON 数组，至少包含 `openai` 或 `anthropic` 中的一项，可同时包含两项
+- `protocol`，兼容字段，保存模型目录同步使用的主协议；双协议提供商固定为 `openai`
 - `base_url`
 - `model_list_path`，可选的模型获取路径覆盖值
 - `weight`，1 到 1000000 的请求优先级，默认 100，数值越大越优先
@@ -221,6 +222,8 @@ EmailVerificationCode
 站点绝对路径，并在模型目录同步时覆盖默认拼接规则。基础地址允许 HTTP 或 HTTPS，以支持自建和第三方网关；生产环境建议使用 HTTPS，避免 API Key
 明文传输。网关默认拒绝解析到回环、私有、链路本地、未指定或组播地址的上游目标，并禁止跟随
 上游重定向。
+网关按请求入口检查 `protocols`：Chat Completions 与 Responses 使用 OpenAI，Messages 使用
+Anthropic。协议之间不做请求或响应转换。同一提供商的所有模型路由继承这组协议能力。
 供应商不再直接关联计费分组；一个供应商可以通过多条模型路由为多个分组提供同一模型。
 网关解析候选路由时按模型路由的 `billing_group_id` 过滤，再按提供商 `weight` 降序请求；同权重保留稳定路由顺序。
 

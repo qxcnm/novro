@@ -352,6 +352,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	publicModel := strings.TrimSpace(model)
+	requestProtocol := protocolForEndpoint(endpoint)
 	routes, err := h.routes.ResolveCandidates(r.Context(), publicModel, actor.APIKey.BillingGroupID)
 	if err != nil {
 		if errors.Is(err, modelroute.ErrNotFound) {
@@ -389,7 +390,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	compatible := make([]modelroute.Resolved, 0, len(routes))
 	invalidBillingRoute := false
 	for _, route := range routes {
-		if !protocolSupports(route.Provider.Protocol, endpoint) {
+		if !protocolSupports(route.Provider.Protocols, requestProtocol) {
 			continue
 		}
 		if route.UpstreamModel == nil || route.UpstreamModelID == nil {
@@ -521,7 +522,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Warn("build gateway upstream request body", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
-		upstreamURL, err := buildUpstreamURL(route.BaseURL, route.Provider.Protocol, endpoint)
+		upstreamURL, err := buildUpstreamURL(route.BaseURL, requestProtocol, endpoint)
 		if err != nil {
 			failureCode, failureMessage = "upstream_configuration_error", "上游地址配置无效"
 			h.logger.Warn("gateway route has invalid upstream URL", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
@@ -539,7 +540,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
-		setUpstreamHeaders(upstreamRequest, r, route)
+		setUpstreamHeaders(upstreamRequest, r, route, requestProtocol)
 		setUpstreamIdempotencyKey(upstreamRequest, requestID)
 		retryDelays := h.upstreamRetryDelays
 		if stream && upstreamStream {
@@ -558,7 +559,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			if fallbackErr == nil {
 				fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
 				if requestErr == nil {
-					setUpstreamHeaders(fallbackRequest, r, route)
+					setUpstreamHeaders(fallbackRequest, r, route, requestProtocol)
 					setUpstreamIdempotencyKey(fallbackRequest, requestID)
 					fallbackRetryDelays := h.upstreamRetryDelays
 					if len(fallbackRetryDelays) > 0 {
@@ -734,7 +735,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
 		return
 	}
-	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
+	usage := parseUsage(body, usageSemanticsFor(endpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
@@ -883,7 +884,7 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
 		return
 	}
-	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
+	usage := parseUsage(body, usageSemanticsFor(endpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
@@ -1021,11 +1022,11 @@ func bufferedUpstreamStream(route modelroute.Resolved) bool {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route modelroute.Resolved) {
+func setUpstreamHeaders(upstreamRequest, inboundRequest *http.Request, route modelroute.Resolved, protocol provider.Protocol) {
 	upstreamRequest.Header.Set("Content-Type", "application/json")
 	upstreamRequest.Header.Set("Accept", "application/json, text/event-stream")
 	upstreamRequest.Header.Set("User-Agent", "Novro-Gateway/1")
-	if route.Provider.Protocol == provider.ProtocolAnthropic {
+	if protocol == provider.ProtocolAnthropic {
 		upstreamRequest.Header.Set("X-API-Key", route.APIKey)
 		version := strings.TrimSpace(inboundRequest.Header.Get("Anthropic-Version"))
 		if version == "" {
@@ -1254,7 +1255,7 @@ streamLoop:
 				failureCode, failureMessage = eventCode, eventMessage
 			}
 			if !bytes.Equal(data, []byte("[DONE]")) {
-				usage.merge(parseUsage(data, usageSemanticsFor(endpoint, route.Provider.Protocol)))
+				usage.merge(parseUsage(data, usageSemanticsFor(endpoint)))
 			}
 		}
 		if clientConnected && len(fragment) > 0 {
@@ -1622,12 +1623,11 @@ const (
 /**
  * usageSemanticsFor 执行该名称对应的业务处理逻辑。
  * @param endpoint 本次操作需要使用的输入参数。
- * @param protocol 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func usageSemanticsFor(endpoint string, protocol provider.Protocol) usageSemantics {
-	if endpoint == "messages" && protocol == provider.ProtocolAnthropic {
+func usageSemanticsFor(endpoint string) usageSemantics {
+	if endpoint == "messages" {
 		return usageSemanticsAnthropicAdditional
 	}
 	return usageSemanticsOpenAITotal
@@ -2028,16 +2028,21 @@ func readMaxOutput(payload map[string]any, endpoint string) (int, bool) {
 
 /**
  * protocolSupports 执行该名称对应的业务处理逻辑。
- * @param protocol 本次操作需要使用的输入参数。
- * @param endpoint 本次操作需要使用的输入参数。
+ * @param protocols 提供商声明支持的协议集合。
+ * @param protocol 当前请求入口要求的协议。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func protocolSupports(protocol provider.Protocol, endpoint string) bool {
+func protocolSupports(protocols []provider.Protocol, protocol provider.Protocol) bool {
+	return provider.SupportsProtocol(protocols, protocol)
+}
+
+// protocolForEndpoint returns the protocol required by a public gateway endpoint.
+func protocolForEndpoint(endpoint string) provider.Protocol {
 	if endpoint == "messages" {
-		return protocol == provider.ProtocolAnthropic
+		return provider.ProtocolAnthropic
 	}
-	return protocol == provider.ProtocolOpenAI
+	return provider.ProtocolOpenAI
 }
 
 /**

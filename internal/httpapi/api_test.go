@@ -768,7 +768,7 @@ func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, bindi
  */
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
 	f.createInput = input
-	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocol: input.Protocol, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
+	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocols: input.Protocols, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
 }
 
 /**
@@ -2304,7 +2304,7 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	groups := &fakeBillingGroups{records: []billinggroup.Record{group}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{{
 		PublicName: "deepseek-chat", DisplayName: "DeepSeek Chat",
-		Provider: modelroute.ProviderSummary{DisplayName: "DeepSeek", Protocol: provider.ProtocolOpenAI},
+		Provider: modelroute.ProviderSummary{DisplayName: "DeepSeek", Protocols: []provider.Protocol{provider.ProtocolOpenAI, provider.ProtocolAnthropic}},
 		UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{
 			InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 200_000, RequestMicros: 1_000,
 		}},
@@ -2319,10 +2319,10 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 
 	var body struct {
 		Models []struct {
-			ID           string            `json:"id"`
-			ProviderName string            `json:"provider_name"`
-			Protocol     provider.Protocol `json:"protocol"`
-			Prices       billing.RateCard  `json:"prices"`
+			ID           string              `json:"id"`
+			ProviderName string              `json:"provider_name"`
+			Protocols    []provider.Protocol `json:"protocols"`
+			Prices       billing.RateCard    `json:"prices"`
 		} `json:"models"`
 		BillingGroup struct {
 			DisplayName            string `json:"display_name"`
@@ -2337,7 +2337,7 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 		t.Fatalf("status=%d models=%+v routeGroup=%s groupFilter=%+v body=%s", response.Code, body.Models, routes.listActiveGroupID, groups.listFilter, response.Body.String())
 	}
 	model := body.Models[0]
-	if model.ID != "deepseek-chat" || model.ProviderName != "DeepSeek" || model.Protocol != provider.ProtocolOpenAI {
+	if model.ID != "deepseek-chat" || model.ProviderName != "DeepSeek" || len(model.Protocols) != 2 || !provider.SupportsProtocol(model.Protocols, provider.ProtocolOpenAI) || !provider.SupportsProtocol(model.Protocols, provider.ProtocolAnthropic) {
 		t.Fatalf("unexpected model metadata: %+v", model)
 	}
 	if body.BillingGroup.DisplayName != "个人版" || body.BillingGroup.MultiplierBPS != 12_500 || body.BillingGroup.EffectiveMultiplierBPS != 10_000 {
@@ -2355,7 +2355,7 @@ func TestUserModelListUsesCurrentlyResolvedScheduledPrice(t *testing.T) {
 	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 12_500, true)}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{{
 		PublicName: "scheduled-chat", DisplayName: "Scheduled Chat",
-		Provider:      modelroute.ProviderSummary{DisplayName: "Provider", Protocol: provider.ProtocolOpenAI},
+		Provider:      modelroute.ProviderSummary{DisplayName: "Provider", Protocols: []provider.Protocol{provider.ProtocolOpenAI}},
 		UpstreamModel: &upstreammodel.Record{ID: modelID, Prices: upstreammodel.Prices{InputMicros: 1_000_000, OutputMicros: 2_000_000}},
 	}}}
 	pricing := &fakeModelPricing{resolution: modelpricing.Resolution{Rates: billing.RateCard{InputMicros: 4_000_000, OutputMicros: 10_000_000}}}
@@ -2512,8 +2512,8 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	}}
 	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 10_000, true)}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{
-		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "First", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 500_000}}},
-		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "Second", Protocol: provider.ProtocolOpenAI}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 3_000_000, OutputMicros: 7_000_000, CacheReadMicros: 600_000}}},
+		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "First", Protocols: []provider.Protocol{provider.ProtocolOpenAI}}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000, CacheReadMicros: 500_000}}},
+		{PublicName: "shared-chat", DisplayName: "Shared Chat", Provider: modelroute.ProviderSummary{DisplayName: "Second", Protocols: []provider.Protocol{provider.ProtocolAnthropic}}, UpstreamModel: &upstreammodel.Record{Prices: upstreammodel.Prices{InputMicros: 3_000_000, OutputMicros: 7_000_000, CacheReadMicros: 600_000}}},
 	}}
 	handler := New(Dependencies{
 		Auth: authService, Users: &fakeAPIUsers{}, APIKeys: &fakeAPIKeys{}, BillingGroups: groups, ModelRoutes: routes,
@@ -2523,10 +2523,11 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models", nil))
 	var body struct {
 		Models []struct {
-			ID           string           `json:"id"`
-			ProviderName string           `json:"provider_name"`
-			ChannelCount int              `json:"channel_count"`
-			Prices       billing.RateCard `json:"prices"`
+			ID           string              `json:"id"`
+			ProviderName string              `json:"provider_name"`
+			Protocols    []provider.Protocol `json:"protocols"`
+			ChannelCount int                 `json:"channel_count"`
+			Prices       billing.RateCard    `json:"prices"`
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -2536,7 +2537,7 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 		t.Fatalf("status=%d models=%+v body=%s", response.Code, body.Models, response.Body.String())
 	}
 	model := body.Models[0]
-	if model.ID != "shared-chat" || model.ChannelCount != 2 || model.ProviderName != "First" || model.Prices.InputMicros != 3_000_000 || model.Prices.OutputMicros != 8_000_000 || model.Prices.CacheReadMicros != 600_000 {
+	if model.ID != "shared-chat" || model.ChannelCount != 2 || model.ProviderName != "First" || len(model.Protocols) != 2 || !provider.SupportsProtocol(model.Protocols, provider.ProtocolOpenAI) || !provider.SupportsProtocol(model.Protocols, provider.ProtocolAnthropic) || model.Prices.InputMicros != 3_000_000 || model.Prices.OutputMicros != 8_000_000 || model.Prices.CacheReadMicros != 600_000 {
 		t.Fatalf("unexpected aggregate model: %+v", model)
 	}
 }
@@ -2572,11 +2573,11 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocol":"openai","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocols":["openai","anthropic"],"base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || strings.Contains(response.Body.String(), "upstream-secret") {
+	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || len(providers.createInput.Protocols) != 2 || strings.Contains(response.Body.String(), "upstream-secret") {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.createInput)
 	}
 
@@ -2587,6 +2588,18 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || providers.updateInput.DisplayName == nil || *providers.updateInput.DisplayName != "DeepSeek API" || providers.updateInput.ModelListPath == nil || *providers.updateInput.ModelListPath != "/v1/model/list" {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.updateInput)
+	}
+}
+
+func TestProviderValidationErrorIdentifiesField(t *testing.T) {
+	response := httptest.NewRecorder()
+	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeProviderError(
+		response,
+		"create provider",
+		&provider.ValidationError{Field: provider.ValidationFieldModelListPath},
+	)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"field":"model_list_path"`) || !strings.Contains(response.Body.String(), "必须留空或以 / 开头") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

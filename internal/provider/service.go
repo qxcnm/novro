@@ -60,7 +60,8 @@ type Store interface {
 type CreateParams struct {
 	Code            string
 	DisplayName     string
-	Protocol        Protocol
+	Protocols       []Protocol
+	PrimaryProtocol Protocol
 	BaseURL         string
 	ModelListPath   string
 	Weight          int
@@ -98,18 +99,37 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	modelListPath, pathOK := normalizeModelListPath(input.ModelListPath)
 	apiKey := strings.TrimSpace(input.APIKey)
 	weight := input.Weight
+	protocols, protocolsOK := NormalizeProtocols(input.Protocols)
 	if weight == 0 {
 		weight = DefaultWeight
 	}
-	if !providerCodePattern.MatchString(code) || displayName == "" || utf8.RuneCountInString(displayName) > 128 || !validProtocol(input.Protocol) || !ok || !pathOK || apiKey == "" || len(apiKey) > 1024 || weight <= 0 || weight > MaxWeight {
-		return Record{}, ErrInvalidInput
+	if !providerCodePattern.MatchString(code) {
+		return Record{}, invalidField(ValidationFieldCode)
+	}
+	if displayName == "" || utf8.RuneCountInString(displayName) > 128 {
+		return Record{}, invalidField(ValidationFieldDisplayName)
+	}
+	if !protocolsOK {
+		return Record{}, invalidField(ValidationFieldProtocols)
+	}
+	if !ok {
+		return Record{}, invalidField(ValidationFieldBaseURL)
+	}
+	if !pathOK {
+		return Record{}, invalidField(ValidationFieldModelListPath)
+	}
+	if weight <= 0 || weight > MaxWeight {
+		return Record{}, invalidField(ValidationFieldWeight)
+	}
+	if apiKey == "" || len(apiKey) > 1024 {
+		return Record{}, invalidField(ValidationFieldAPIKey)
 	}
 	encrypted, err := s.cipher.Encrypt(apiKey)
 	if err != nil {
 		return Record{}, err
 	}
 	return s.store.Create(ctx, CreateParams{
-		Code: code, DisplayName: displayName, Protocol: input.Protocol, BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
+		Code: code, DisplayName: displayName, Protocols: protocols, PrimaryProtocol: PrimaryProtocol(protocols), BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
 		EncryptedAPIKey: encrypted, APIKeyHint: secretHint(apiKey),
 	})
 }
@@ -138,44 +158,50 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Protocol == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Protocols == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil) {
 		return Record{}, ErrInvalidInput
 	}
-	params := UpdateParams{Protocol: input.Protocol}
+	params := UpdateParams{}
 	if input.DisplayName != nil {
 		value := strings.TrimSpace(*input.DisplayName)
 		if value == "" || utf8.RuneCountInString(value) > 128 {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldDisplayName)
 		}
 		params.DisplayName = &value
 	}
-	if input.Protocol != nil && !validProtocol(*input.Protocol) {
-		return Record{}, ErrInvalidInput
+	if input.Protocols != nil {
+		protocols, ok := NormalizeProtocols(*input.Protocols)
+		if !ok {
+			return Record{}, invalidField(ValidationFieldProtocols)
+		}
+		primary := PrimaryProtocol(protocols)
+		params.Protocols = &protocols
+		params.PrimaryProtocol = &primary
 	}
 	if input.BaseURL != nil {
 		value, ok := normalizeBaseURL(*input.BaseURL)
 		if !ok {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldBaseURL)
 		}
 		params.BaseURL = &value
 	}
 	if input.ModelListPath != nil {
 		value, ok := normalizeModelListPath(*input.ModelListPath)
 		if !ok {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldModelListPath)
 		}
 		params.ModelListPath = &value
 	}
 	if input.Weight != nil {
 		if *input.Weight <= 0 || *input.Weight > MaxWeight {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldWeight)
 		}
 		params.Weight = input.Weight
 	}
 	if input.APIKey != nil {
 		value := strings.TrimSpace(*input.APIKey)
 		if value == "" || len(value) > 1024 {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldAPIKey)
 		}
 		encrypted, err := s.cipher.Encrypt(value)
 		if err != nil {
@@ -215,16 +241,6 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 		return ErrInvalidInput
 	}
 	return s.store.Delete(ctx, id)
-}
-
-/**
- * validProtocol 封装该名称对应的业务处理逻辑。
- * @param protocol 本次操作需要使用的输入参数。
- * @author Gao Hongshun
- * @date 2026-08-13
- */
-func validProtocol(protocol Protocol) bool {
-	return protocol == ProtocolOpenAI || protocol == ProtocolAnthropic
 }
 
 /**

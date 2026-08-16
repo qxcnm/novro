@@ -2434,12 +2434,12 @@ func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 type availableModel struct {
-	ID           string            `json:"id"`
-	DisplayName  string            `json:"display_name"`
-	ProviderName string            `json:"provider_name"`
-	Protocol     provider.Protocol `json:"protocol"`
-	ChannelCount int               `json:"channel_count"`
-	Prices       billing.RateCard  `json:"prices"`
+	ID           string              `json:"id"`
+	DisplayName  string              `json:"display_name"`
+	ProviderName string              `json:"provider_name"`
+	Protocols    []provider.Protocol `json:"protocols"`
+	ChannelCount int                 `json:"channel_count"`
+	Prices       billing.RateCard    `json:"prices"`
 }
 
 /**
@@ -2520,7 +2520,7 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 		}
 		candidate := availableModel{
 			ID: route.PublicName, DisplayName: route.DisplayName,
-			ProviderName: providerName, Protocol: route.Provider.Protocol, ChannelCount: 1,
+			ProviderName: providerName, Protocols: route.Provider.Protocols, ChannelCount: 1,
 			Prices: billing.RateCard{
 				InputMicros:        priceWithMultiplier(prices.InputMicros, effectiveMultiplierBPS),
 				OutputMicros:       priceWithMultiplier(prices.OutputMicros, effectiveMultiplierBPS),
@@ -2530,10 +2530,11 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 				RequestMicros:      priceWithMultiplier(prices.RequestMicros, effectiveMultiplierBPS),
 			},
 		}
-		key := candidate.ID + "\x00" + string(candidate.Protocol)
+		key := candidate.ID
 		if index, exists := modelIndexes[key]; exists {
 			models[index].ChannelCount++
 			models[index].Prices = maximumRateCard(models[index].Prices, candidate.Prices)
+			models[index].Protocols, _ = provider.NormalizeProtocols(append(models[index].Protocols, candidate.Protocols...))
 			continue
 		}
 		modelIndexes[key] = len(models)
@@ -3577,15 +3578,39 @@ func (h *apiHandler) writeAPIKeyError(w http.ResponseWriter, operation string, e
  * @date 2026-08-13
  */
 func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string, err error) {
+	var validationError *provider.ValidationError
 	switch {
+	case errors.As(err, &validationError):
+		writeFieldError(w, http.StatusBadRequest, "invalid_request", string(validationError.Field), providerValidationMessage(validationError.Field))
 	case errors.Is(err, provider.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", "提供商信息无效")
 	case errors.Is(err, provider.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "提供商不存在")
 	case errors.Is(err, provider.ErrCodeTaken):
-		writeError(w, http.StatusConflict, "provider_code_taken", "提供商标识已存在")
+		writeFieldError(w, http.StatusConflict, "provider_code_taken", string(provider.ValidationFieldCode), "提供商代码已被使用")
 	default:
 		h.internalError(w, operation, err)
+	}
+}
+
+func providerValidationMessage(field provider.ValidationField) string {
+	switch field {
+	case provider.ValidationFieldCode:
+		return "提供商代码必须为 3 到 64 位，只能使用小写字母、数字、点号和连字符"
+	case provider.ValidationFieldDisplayName:
+		return "显示名称不能为空且不能超过 128 个字符"
+	case provider.ValidationFieldProtocols:
+		return "至少选择一个支持协议"
+	case provider.ValidationFieldBaseURL:
+		return "基础地址必须是完整的 HTTP 或 HTTPS 地址，且不能包含凭据、查询参数或片段"
+	case provider.ValidationFieldModelListPath:
+		return "模型获取路径必须留空或以 / 开头，且不能包含 ? 或 #"
+	case provider.ValidationFieldWeight:
+		return "请求权重必须是 1 到 1000000 之间的整数"
+	case provider.ValidationFieldAPIKey:
+		return "API Key 不能为空且不能超过 1024 个字符"
+	default:
+		return "提供商信息无效"
 	}
 }
 
@@ -3909,6 +3934,16 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	value := map[string]any{
 		"error": map[string]string{"code": code, "message": message, "type": "novro_error"},
+	}
+	if id := requestid.ResponseID(w); id != uuid.Nil {
+		value["request_id"] = id.String()
+	}
+	writeJSON(w, status, value)
+}
+
+func writeFieldError(w http.ResponseWriter, status int, code, field, message string) {
+	value := map[string]any{
+		"error": map[string]string{"code": code, "field": field, "message": message, "type": "novro_error"},
 	}
 	if id := requestid.ResponseID(w); id != uuid.Nil {
 		value["request_id"] = id.String()

@@ -40,6 +40,12 @@ func (_c *ProviderCreate) SetProtocol(v provider.Protocol) *ProviderCreate {
 	return _c
 }
 
+// SetProtocols sets the "protocols" field.
+func (_c *ProviderCreate) SetProtocols(v []string) *ProviderCreate {
+	_c.mutation.SetProtocols(v)
+	return _c
+}
+
 // SetBaseURL sets the "base_url" field.
 func (_c *ProviderCreate) SetBaseURL(v string) *ProviderCreate {
 	_c.mutation.SetBaseURL(v)
@@ -206,6 +212,10 @@ func (_c *ProviderCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *ProviderCreate) defaults() {
+	if _, ok := _c.mutation.Protocols(); !ok {
+		v := provider.DefaultProtocols
+		_c.mutation.SetProtocols(v)
+	}
 	if _, ok := _c.mutation.ModelListPath(); !ok {
 		v := provider.DefaultModelListPath
 		_c.mutation.SetModelListPath(v)
@@ -257,6 +267,9 @@ func (_c *ProviderCreate) check() error {
 		if err := provider.ProtocolValidator(v); err != nil {
 			return &ValidationError{Name: "protocol", err: fmt.Errorf(`ent: validator failed for field "Provider.protocol": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Protocols(); !ok {
+		return &ValidationError{Name: "protocols", err: errors.New(`ent: missing required field "Provider.protocols"`)}
 	}
 	if _, ok := _c.mutation.BaseURL(); !ok {
 		return &ValidationError{Name: "base_url", err: errors.New(`ent: missing required field "Provider.base_url"`)}
@@ -358,6 +371,10 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Protocol(); ok {
 		_spec.SetField(provider.FieldProtocol, field.TypeEnum, value)
 		_node.Protocol = value
+	}
+	if value, ok := _c.mutation.Protocols(); ok {
+		_spec.SetField(provider.FieldProtocols, field.TypeJSON, value)
+		_node.Protocols = value
 	}
 	if value, ok := _c.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)

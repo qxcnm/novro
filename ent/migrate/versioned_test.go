@@ -41,13 +41,25 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql", "0013_model_route_billing_groups.sql", "0014_billing_group_discounts.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql", "0013_model_route_billing_groups.sql", "0014_billing_group_discounts.sql", "0015_provider_protocols.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}
 	for index, name := range expected {
 		if entries[index].IsDir() || entries[index].Name() != name {
 			t.Fatalf("expected migrations %v, got %+v", expected, entries)
+		}
+	}
+}
+
+func TestProviderProtocolsMigrationPreservesExistingProtocol(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0015_provider_protocols.sql")
+	if err != nil {
+		t.Fatalf("read provider protocols migration: %v", err)
+	}
+	for _, expected := range []string{"ADD COLUMN protocols JSON", "JSON_ARRAY(protocol)", "MODIFY COLUMN protocols JSON NOT NULL"} {
+		if !strings.Contains(string(contents), expected) {
+			t.Fatalf("provider protocols migration is missing %q", expected)
 		}
 	}
 }

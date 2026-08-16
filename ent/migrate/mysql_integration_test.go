@@ -103,6 +103,68 @@ func TestMySQLMigrationChecksumsUpgradeAndRejectDrift(t *testing.T) {
 	}
 }
 
+func TestMySQLProviderProtocolsMigrationPreservesExistingProtocol(t *testing.T) {
+	database := openMigrationIntegrationDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	migrations, err := readMigrations(VersionedSQL)
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	var protocolMigration migrationFile
+	for _, migration := range migrations {
+		if migration.Version == "0015_provider_protocols" {
+			protocolMigration = migration
+			break
+		}
+		if _, err := database.ExecContext(ctx, migration.SQL); err != nil {
+			t.Fatalf("apply pre-protocol migration %s: %v", migration.Version, err)
+		}
+	}
+	if protocolMigration.Version == "" {
+		t.Fatal("provider protocols migration not found")
+	}
+
+	for _, seed := range []struct {
+		id, code, protocol string
+	}{
+		{id: "f1000000-0000-0000-0000-000000000001", code: "openai-provider", protocol: "openai"},
+		{id: "f1000000-0000-0000-0000-000000000002", code: "anthropic-provider", protocol: "anthropic"},
+	} {
+		if _, err := database.ExecContext(ctx, `INSERT INTO providers (id, code, display_name, protocol, base_url, model_list_path, encrypted_api_key, api_key_hint, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'https://example.com/v1', '', 'encrypted', 'rypt', 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, seed.id, seed.code, seed.code, seed.protocol); err != nil {
+			t.Fatalf("seed provider %s: %v", seed.code, err)
+		}
+	}
+	if _, err := database.ExecContext(ctx, protocolMigration.SQL); err != nil {
+		t.Fatalf("apply provider protocols migration: %v", err)
+	}
+
+	rows, err := database.QueryContext(ctx, `SELECT code, JSON_UNQUOTE(JSON_EXTRACT(protocols, '$[0]')), JSON_LENGTH(protocols) FROM providers WHERE code IN ('openai-provider', 'anthropic-provider') ORDER BY code`)
+	if err != nil {
+		t.Fatalf("read migrated provider protocols: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	want := map[string]string{"openai-provider": "openai", "anthropic-provider": "anthropic"}
+	for rows.Next() {
+		var code, protocol string
+		var count int
+		if err := rows.Scan(&code, &protocol, &count); err != nil {
+			t.Fatalf("scan migrated provider protocols: %v", err)
+		}
+		if protocol != want[code] || count != 1 {
+			t.Fatalf("provider %s protocols=%s count=%d", code, protocol, count)
+		}
+		delete(want, code)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate migrated provider protocols: %v", err)
+	}
+	if len(want) != 0 {
+		t.Fatalf("providers missing after migration: %+v", want)
+	}
+}
+
 /**
  * TestMySQLModelRouteBillingGroupMigrationMovesExistingAssignments 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
