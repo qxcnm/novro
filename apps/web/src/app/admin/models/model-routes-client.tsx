@@ -48,6 +48,7 @@ type BillingGroup = {
   id: string;
   display_name: string;
   multiplier_bps: number;
+  effective_multiplier_bps?: number;
   status: "active" | "disabled";
 };
 
@@ -56,7 +57,7 @@ type ModelRoute = {
   provider_id: string;
   upstream_model_id: string | null;
   billing_group_id: string;
-  billing_group: Pick<BillingGroup, "id" | "display_name" | "multiplier_bps">;
+  billing_group: Pick<BillingGroup, "id" | "display_name" | "multiplier_bps" | "effective_multiplier_bps">;
   public_name: string;
   display_name: string;
   status: "active" | "disabled";
@@ -356,7 +357,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
                   <TableRow key={route.id}>
                     <TableCell><Checkbox aria-label={`选择 ${route.display_name}`} checked={selection.isSelected(route.id)} onCheckedChange={(checked) => selection.toggleOne(route.id, checked === true)} /></TableCell>
                     <TableCell><p className="font-medium">{route.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.public_name}</p></TableCell>
-                    <TableCell><p>{route.billing_group.display_name}</p><p className="font-mono text-xs text-muted-foreground">{(route.billing_group.multiplier_bps / 10_000).toFixed(4)}×</p></TableCell>
+                    <TableCell><p>{route.billing_group.display_name}</p><p className="font-mono text-xs text-muted-foreground">{((route.billing_group.effective_multiplier_bps ?? route.billing_group.multiplier_bps) / 10_000).toFixed(4)}×</p></TableCell>
                     <TableCell><p>{route.provider.display_name}</p><p className="font-mono text-xs text-muted-foreground">{route.provider.code}</p></TableCell>
                     <TableCell><p>{route.upstream_model?.display_name ?? "未关联"}</p><p className="text-xs text-muted-foreground">{route.upstream_model ? `${route.upstream_model.provider_name} · ${route.upstream_model.upstream_name}` : "-"}</p></TableCell>
                     <TableCell><p>{money(route.upstream_model?.prices.input_price_micros ?? 0)}</p><p className="text-xs text-muted-foreground">命中 {money(route.upstream_model?.prices.cache_read_price_micros ?? 0)}</p></TableCell>
@@ -375,7 +376,7 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? "编辑关联模型路由" : "新增关联模型路由"}</DialogTitle><DialogDescription>路由将一个对外模型名称绑定到计费分组、提供商配置和模型目录记录。</DialogDescription></DialogHeader>
           <form className="space-y-4" id="model-route-form" onSubmit={submit}>
-            <div className="space-y-2"><Label htmlFor="route-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger className="w-full" id="route-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×{group.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger className="w-full" id="route-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×{group.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-provider">提供商配置</Label><Select onValueChange={(provider_id) => setForm({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id="route-provider"><SelectValue placeholder="选择提供商配置" /></SelectTrigger><SelectContent>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name}{provider.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-catalog-model">目录模型</Label><Select onValueChange={(upstream_model_id) => setForm({ ...form, upstream_model_id })} value={form.upstream_model_id}><SelectTrigger className="w-full" id="route-catalog-model"><SelectValue placeholder="选择目录模型" /></SelectTrigger><SelectContent>{catalog.map((model) => <SelectItem key={model.id} value={model.id}>{model.provider_name} · {model.display_name}{!model.pricing_configured ? "（待定价）" : model.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-public-name">对外模型名称</Label><Input disabled={editing !== null} id="route-public-name" maxLength={256} minLength={2} onChange={(event) => setForm({ ...form, public_name: event.target.value })} pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{1,255}" placeholder="例如 deepseek-chat" required title="对外模型名称需为 2 到 256 位，以字母或数字开头，只能使用字母、数字、点号、下划线、冒号、斜杠和连字符，不能包含空格或中文" value={form.public_name} /><p className="text-xs text-muted-foreground">2 到 256 位；以字母或数字开头，允许点号、下划线、冒号、斜杠和连字符，不允许空格或中文。</p></div>

@@ -41,8 +41,9 @@ type Record struct {
 }
 
 type Actor struct {
-	APIKey Record
-	User   user.Record
+	APIKey              Record
+	User                user.Record
+	PinnedMultiplierBPS int64
 }
 
 type Owner struct {

@@ -24,6 +24,14 @@ type BillingGroup struct {
 	DisplayName string `json:"display_name,omitempty"`
 	// MultiplierBps holds the value of the "multiplier_bps" field.
 	MultiplierBps int64 `json:"multiplier_bps,omitempty"`
+	// DiscountName holds the value of the "discount_name" field.
+	DiscountName string `json:"discount_name,omitempty"`
+	// DiscountMultiplierBps holds the value of the "discount_multiplier_bps" field.
+	DiscountMultiplierBps int64 `json:"discount_multiplier_bps,omitempty"`
+	// DiscountStartsAt holds the value of the "discount_starts_at" field.
+	DiscountStartsAt *time.Time `json:"discount_starts_at,omitempty"`
+	// DiscountEndsAt holds the value of the "discount_ends_at" field.
+	DiscountEndsAt *time.Time `json:"discount_ends_at,omitempty"`
 	// IsDefault holds the value of the "is_default" field.
 	IsDefault bool `json:"is_default,omitempty"`
 	// IsHidden holds the value of the "is_hidden" field.
@@ -100,11 +108,11 @@ func (*BillingGroup) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case billinggroup.FieldIsDefault, billinggroup.FieldIsHidden:
 			values[i] = new(sql.NullBool)
-		case billinggroup.FieldMultiplierBps:
+		case billinggroup.FieldMultiplierBps, billinggroup.FieldDiscountMultiplierBps:
 			values[i] = new(sql.NullInt64)
-		case billinggroup.FieldCode, billinggroup.FieldDisplayName, billinggroup.FieldStatus:
+		case billinggroup.FieldCode, billinggroup.FieldDisplayName, billinggroup.FieldDiscountName, billinggroup.FieldStatus:
 			values[i] = new(sql.NullString)
-		case billinggroup.FieldCreatedAt, billinggroup.FieldUpdatedAt, billinggroup.FieldDeletedAt:
+		case billinggroup.FieldDiscountStartsAt, billinggroup.FieldDiscountEndsAt, billinggroup.FieldCreatedAt, billinggroup.FieldUpdatedAt, billinggroup.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
 		case billinggroup.FieldID:
 			values[i] = new(uuid.UUID)
@@ -146,6 +154,32 @@ func (_m *BillingGroup) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field multiplier_bps", values[i])
 			} else if value.Valid {
 				_m.MultiplierBps = value.Int64
+			}
+		case billinggroup.FieldDiscountName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_name", values[i])
+			} else if value.Valid {
+				_m.DiscountName = value.String
+			}
+		case billinggroup.FieldDiscountMultiplierBps:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_multiplier_bps", values[i])
+			} else if value.Valid {
+				_m.DiscountMultiplierBps = value.Int64
+			}
+		case billinggroup.FieldDiscountStartsAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_starts_at", values[i])
+			} else if value.Valid {
+				_m.DiscountStartsAt = new(time.Time)
+				*_m.DiscountStartsAt = value.Time
+			}
+		case billinggroup.FieldDiscountEndsAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_ends_at", values[i])
+			} else if value.Valid {
+				_m.DiscountEndsAt = new(time.Time)
+				*_m.DiscountEndsAt = value.Time
 			}
 		case billinggroup.FieldIsDefault:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -248,6 +282,22 @@ func (_m *BillingGroup) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("multiplier_bps=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MultiplierBps))
+	builder.WriteString(", ")
+	builder.WriteString("discount_name=")
+	builder.WriteString(_m.DiscountName)
+	builder.WriteString(", ")
+	builder.WriteString("discount_multiplier_bps=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DiscountMultiplierBps))
+	builder.WriteString(", ")
+	if v := _m.DiscountStartsAt; v != nil {
+		builder.WriteString("discount_starts_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.DiscountEndsAt; v != nil {
+		builder.WriteString("discount_ends_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("is_default=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsDefault))

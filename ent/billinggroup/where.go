@@ -71,6 +71,26 @@ func MultiplierBps(v int64) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.FieldEQ(FieldMultiplierBps, v))
 }
 
+// DiscountName applies equality check predicate on the "discount_name" field. It's identical to DiscountNameEQ.
+func DiscountName(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountName, v))
+}
+
+// DiscountMultiplierBps applies equality check predicate on the "discount_multiplier_bps" field. It's identical to DiscountMultiplierBpsEQ.
+func DiscountMultiplierBps(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountStartsAt applies equality check predicate on the "discount_starts_at" field. It's identical to DiscountStartsAtEQ.
+func DiscountStartsAt(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountStartsAt, v))
+}
+
+// DiscountEndsAt applies equality check predicate on the "discount_ends_at" field. It's identical to DiscountEndsAtEQ.
+func DiscountEndsAt(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountEndsAt, v))
+}
+
 // IsDefault applies equality check predicate on the "is_default" field. It's identical to IsDefaultEQ.
 func IsDefault(v bool) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.FieldEQ(FieldIsDefault, v))
@@ -264,6 +284,211 @@ func MultiplierBpsLT(v int64) predicate.BillingGroup {
 // MultiplierBpsLTE applies the LTE predicate on the "multiplier_bps" field.
 func MultiplierBpsLTE(v int64) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.FieldLTE(FieldMultiplierBps, v))
+}
+
+// DiscountNameEQ applies the EQ predicate on the "discount_name" field.
+func DiscountNameEQ(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountName, v))
+}
+
+// DiscountNameNEQ applies the NEQ predicate on the "discount_name" field.
+func DiscountNameNEQ(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNEQ(FieldDiscountName, v))
+}
+
+// DiscountNameIn applies the In predicate on the "discount_name" field.
+func DiscountNameIn(vs ...string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIn(FieldDiscountName, vs...))
+}
+
+// DiscountNameNotIn applies the NotIn predicate on the "discount_name" field.
+func DiscountNameNotIn(vs ...string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotIn(FieldDiscountName, vs...))
+}
+
+// DiscountNameGT applies the GT predicate on the "discount_name" field.
+func DiscountNameGT(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGT(FieldDiscountName, v))
+}
+
+// DiscountNameGTE applies the GTE predicate on the "discount_name" field.
+func DiscountNameGTE(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGTE(FieldDiscountName, v))
+}
+
+// DiscountNameLT applies the LT predicate on the "discount_name" field.
+func DiscountNameLT(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLT(FieldDiscountName, v))
+}
+
+// DiscountNameLTE applies the LTE predicate on the "discount_name" field.
+func DiscountNameLTE(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLTE(FieldDiscountName, v))
+}
+
+// DiscountNameContains applies the Contains predicate on the "discount_name" field.
+func DiscountNameContains(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldContains(FieldDiscountName, v))
+}
+
+// DiscountNameHasPrefix applies the HasPrefix predicate on the "discount_name" field.
+func DiscountNameHasPrefix(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldHasPrefix(FieldDiscountName, v))
+}
+
+// DiscountNameHasSuffix applies the HasSuffix predicate on the "discount_name" field.
+func DiscountNameHasSuffix(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldHasSuffix(FieldDiscountName, v))
+}
+
+// DiscountNameEqualFold applies the EqualFold predicate on the "discount_name" field.
+func DiscountNameEqualFold(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEqualFold(FieldDiscountName, v))
+}
+
+// DiscountNameContainsFold applies the ContainsFold predicate on the "discount_name" field.
+func DiscountNameContainsFold(v string) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldContainsFold(FieldDiscountName, v))
+}
+
+// DiscountMultiplierBpsEQ applies the EQ predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsEQ(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountMultiplierBpsNEQ applies the NEQ predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsNEQ(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNEQ(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountMultiplierBpsIn applies the In predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsIn(vs ...int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIn(FieldDiscountMultiplierBps, vs...))
+}
+
+// DiscountMultiplierBpsNotIn applies the NotIn predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsNotIn(vs ...int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotIn(FieldDiscountMultiplierBps, vs...))
+}
+
+// DiscountMultiplierBpsGT applies the GT predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsGT(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGT(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountMultiplierBpsGTE applies the GTE predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsGTE(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGTE(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountMultiplierBpsLT applies the LT predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsLT(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLT(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountMultiplierBpsLTE applies the LTE predicate on the "discount_multiplier_bps" field.
+func DiscountMultiplierBpsLTE(v int64) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLTE(FieldDiscountMultiplierBps, v))
+}
+
+// DiscountStartsAtEQ applies the EQ predicate on the "discount_starts_at" field.
+func DiscountStartsAtEQ(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtNEQ applies the NEQ predicate on the "discount_starts_at" field.
+func DiscountStartsAtNEQ(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNEQ(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtIn applies the In predicate on the "discount_starts_at" field.
+func DiscountStartsAtIn(vs ...time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIn(FieldDiscountStartsAt, vs...))
+}
+
+// DiscountStartsAtNotIn applies the NotIn predicate on the "discount_starts_at" field.
+func DiscountStartsAtNotIn(vs ...time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotIn(FieldDiscountStartsAt, vs...))
+}
+
+// DiscountStartsAtGT applies the GT predicate on the "discount_starts_at" field.
+func DiscountStartsAtGT(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGT(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtGTE applies the GTE predicate on the "discount_starts_at" field.
+func DiscountStartsAtGTE(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGTE(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtLT applies the LT predicate on the "discount_starts_at" field.
+func DiscountStartsAtLT(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLT(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtLTE applies the LTE predicate on the "discount_starts_at" field.
+func DiscountStartsAtLTE(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLTE(FieldDiscountStartsAt, v))
+}
+
+// DiscountStartsAtIsNil applies the IsNil predicate on the "discount_starts_at" field.
+func DiscountStartsAtIsNil() predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIsNull(FieldDiscountStartsAt))
+}
+
+// DiscountStartsAtNotNil applies the NotNil predicate on the "discount_starts_at" field.
+func DiscountStartsAtNotNil() predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotNull(FieldDiscountStartsAt))
+}
+
+// DiscountEndsAtEQ applies the EQ predicate on the "discount_ends_at" field.
+func DiscountEndsAtEQ(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtNEQ applies the NEQ predicate on the "discount_ends_at" field.
+func DiscountEndsAtNEQ(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNEQ(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtIn applies the In predicate on the "discount_ends_at" field.
+func DiscountEndsAtIn(vs ...time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIn(FieldDiscountEndsAt, vs...))
+}
+
+// DiscountEndsAtNotIn applies the NotIn predicate on the "discount_ends_at" field.
+func DiscountEndsAtNotIn(vs ...time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotIn(FieldDiscountEndsAt, vs...))
+}
+
+// DiscountEndsAtGT applies the GT predicate on the "discount_ends_at" field.
+func DiscountEndsAtGT(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGT(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtGTE applies the GTE predicate on the "discount_ends_at" field.
+func DiscountEndsAtGTE(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldGTE(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtLT applies the LT predicate on the "discount_ends_at" field.
+func DiscountEndsAtLT(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLT(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtLTE applies the LTE predicate on the "discount_ends_at" field.
+func DiscountEndsAtLTE(v time.Time) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldLTE(FieldDiscountEndsAt, v))
+}
+
+// DiscountEndsAtIsNil applies the IsNil predicate on the "discount_ends_at" field.
+func DiscountEndsAtIsNil() predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIsNull(FieldDiscountEndsAt))
+}
+
+// DiscountEndsAtNotNil applies the NotNil predicate on the "discount_ends_at" field.
+func DiscountEndsAtNotNil() predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotNull(FieldDiscountEndsAt))
 }
 
 // IsDefaultEQ applies the EQ predicate on the "is_default" field.

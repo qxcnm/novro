@@ -8,8 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
+	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
 	entmodelpriceplan "github.com/novro-gateway/novro/ent/modelpriceplan"
 	entmodelpricewindow "github.com/novro-gateway/novro/ent/modelpricewindow"
+	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
+	entprovider "github.com/novro-gateway/novro/ent/provider"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
 	"github.com/novro-gateway/novro/internal/billing"
 )
@@ -109,6 +112,12 @@ func (s *EntStore) CreateDraft(ctx context.Context, modelID uuid.UUID, input Pla
  * @date 2026-08-14
  */
 func (s *EntStore) UpdateDraft(ctx context.Context, planID uuid.UUID, input PlanInput) (Plan, error) {
+	input.EffectiveFrom = time.Unix(0, 0).UTC()
+	input.EffectiveTo = nil
+	if input.Mode == ModeFixed {
+		input.Timezone = "UTC"
+		input.Windows = nil
+	}
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return Plan{}, fmt.Errorf("begin model price plan update: %w", err)
@@ -174,7 +183,7 @@ func (s *EntStore) Publish(ctx context.Context, planID uuid.UUID) (Plan, error) 
 	if plan.Status != entmodelpriceplan.StatusDraft {
 		return Plan{}, ErrImmutable
 	}
-	if err := s.publishDraftTx(tx, ctx, plan); err != nil {
+	if err := s.publishDraftTx(tx, ctx, plan, time.Now().UTC()); err != nil {
 		return Plan{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -233,10 +242,9 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
 	if source == nil {
 		return RepublishResult{}, ErrImmutable
 	}
-	if current := effectivePlanAt(published, at); current != nil && current.ID == source.ID {
-		return RepublishResult{Plan: planFromEnt(current), Created: false}, nil
-	}
-	var next *ent.ModelPricePlan
+	current := effectivePlanAt(published, at)
+	currentIsSource := current != nil && current.ID == source.ID
+	hadFuturePlan := false
 	for _, plan := range published {
 		if plan.ID == source.ID {
 			continue
@@ -244,9 +252,15 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
 		if plan.EffectiveFrom.Equal(at) {
 			return RepublishResult{}, ErrConflict
 		}
-		if plan.EffectiveFrom.After(at) && (next == nil || plan.EffectiveFrom.Before(next.EffectiveFrom)) {
-			next = plan
+		if plan.EffectiveFrom.After(at) {
+			hadFuturePlan = true
+			if _, err := tx.ModelPricePlan.UpdateOne(plan).SetStatus(entmodelpriceplan.StatusRetired).Save(ctx); err != nil {
+				return RepublishResult{}, fmt.Errorf("retire future model price plan during switch: %w", err)
+			}
 		}
+	}
+	if currentIsSource && !hadFuturePlan {
+		return RepublishResult{Plan: planFromEnt(current), Created: false}, nil
 	}
 	for _, plan := range published {
 		if plan.ID == source.ID || !plan.EffectiveFrom.Before(at) {
@@ -258,25 +272,15 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
 			}
 		}
 	}
-	update := tx.ModelPricePlan.UpdateOne(source).SetEffectiveFrom(at)
-	if next == nil {
-		update.ClearEffectiveTo()
-	} else {
-		update.SetEffectiveTo(next.EffectiveFrom)
+	update := tx.ModelPricePlan.UpdateOne(source).ClearEffectiveTo()
+	if !currentIsSource {
+		update.SetEffectiveFrom(at)
 	}
 	if _, err := update.Save(ctx); err != nil {
 		return RepublishResult{}, fmt.Errorf("switch model price plan effective interval: %w", err)
 	}
-	if _, err := tx.UpstreamModel.UpdateOneID(source.UpstreamModelID).
-		SetPricingConfigured(true).
-		SetInputPriceMicros(source.DefaultInputPriceMicros).
-		SetOutputPriceMicros(source.DefaultOutputPriceMicros).
-		SetCacheReadPriceMicros(source.DefaultCacheReadPriceMicros).
-		SetCacheWritePriceMicros(source.DefaultCacheWritePriceMicros).
-		SetCacheWrite1hPriceMicros(source.DefaultCacheWrite1hPriceMicros).
-		SetRequestPriceMicros(source.DefaultRequestPriceMicros).
-		Save(ctx); err != nil {
-		return RepublishResult{}, fmt.Errorf("update upstream model compatibility pricing: %w", err)
+	if err := activatePricedModelTx(tx, ctx, source.UpstreamModelID, defaultRates(source)); err != nil {
+		return RepublishResult{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return RepublishResult{}, fmt.Errorf("commit model price plan switch: %w", err)
@@ -289,9 +293,9 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
 }
 
 /**
- * publishDraftTx 在当前事务中发布草稿并收口相邻版本。
- * 发布后，同一模型的版本时间线始终由互不重叠的半开区间组成；草稿插入历史时间点时，
- * 前一版本在草稿开始时刻结束，草稿则最多持续到下一版本开始时刻。
+ * publishDraftTx 在当前事务中立即发布草稿并关闭当前版本。
+ * 管理员不能为模型价格安排未来发布时间；发现旧数据中的未来版本时将其退役，
+ * 避免它随后覆盖本次明确发布的价格。
  * @param tx 当前数据库事务。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param plan 已锁定的待发布草稿。
@@ -299,61 +303,57 @@ func (s *EntStore) Republish(ctx context.Context, planID uuid.UUID, at time.Time
  * @author Gao Hongshun
  * @date 2026-08-14
  */
-func (s *EntStore) publishDraftTx(tx *ent.Tx, ctx context.Context, plan *ent.ModelPricePlan) error {
+func (s *EntStore) publishDraftTx(tx *ent.Tx, ctx context.Context, plan *ent.ModelPricePlan, at time.Time) error {
 	published, err := tx.ModelPricePlan.Query().Where(
 		entmodelpriceplan.UpstreamModelIDEQ(plan.UpstreamModelID),
 		entmodelpriceplan.StatusEQ(entmodelpriceplan.StatusPublished),
-	).Order(ent.Asc(entmodelpriceplan.FieldEffectiveFrom)).ForUpdate().All(ctx)
+	).ForUpdate().All(ctx)
 	if err != nil {
 		return fmt.Errorf("lock published model price plans: %w", err)
 	}
-	var previous, next *ent.ModelPricePlan
 	for _, existing := range published {
-		if existing.EffectiveFrom.Equal(plan.EffectiveFrom) {
-			return ErrConflict
-		}
-		if existing.EffectiveFrom.Before(plan.EffectiveFrom) {
-			previous = existing
+		if existing.EffectiveFrom.After(at) {
+			if _, err := tx.ModelPricePlan.UpdateOne(existing).SetStatus(entmodelpriceplan.StatusRetired).Save(ctx); err != nil {
+				return fmt.Errorf("retire future model price plan: %w", err)
+			}
 			continue
 		}
-		if next == nil {
-			next = existing
+		if existing.EffectiveTo == nil || existing.EffectiveTo.After(at) {
+			if _, err := tx.ModelPricePlan.UpdateOne(existing).SetEffectiveTo(at).Save(ctx); err != nil {
+				return fmt.Errorf("close previous model price plan: %w", err)
+			}
 		}
 	}
-	effectiveTo := plan.EffectiveTo
-	// 下一版本优先于草稿自己的结束时间，防止新草稿覆盖已发布未来版本的时间段。
-	if next != nil && (effectiveTo == nil || effectiveTo.After(next.EffectiveFrom)) {
-		value := next.EffectiveFrom
-		effectiveTo = &value
-	}
-	if effectiveTo != nil && !effectiveTo.After(plan.EffectiveFrom) {
-		return ErrConflict
-	}
-	if previous != nil && (previous.EffectiveTo == nil || previous.EffectiveTo.After(plan.EffectiveFrom)) {
-		// 用相同边界闭合前一版本；半开区间确保这一刻只属于新版本。
-		if _, err := tx.ModelPricePlan.UpdateOne(previous).SetEffectiveTo(plan.EffectiveFrom).Save(ctx); err != nil {
-			return fmt.Errorf("close previous model price plan: %w", err)
-		}
-	}
-	update := tx.ModelPricePlan.UpdateOne(plan).SetStatus(entmodelpriceplan.StatusPublished)
-	if effectiveTo == nil {
-		update.ClearEffectiveTo()
-	} else {
-		update.SetEffectiveTo(*effectiveTo)
-	}
-	if _, err := update.Save(ctx); err != nil {
+	if _, err := tx.ModelPricePlan.UpdateOne(plan).SetStatus(entmodelpriceplan.StatusPublished).SetEffectiveFrom(at).ClearEffectiveTo().Save(ctx); err != nil {
 		return fmt.Errorf("publish model price plan: %w", err)
 	}
-	if _, err := tx.UpstreamModel.UpdateOneID(plan.UpstreamModelID).
+	return activatePricedModelTx(tx, ctx, plan.UpstreamModelID, defaultRates(plan))
+}
+
+// activatePricedModelTx keeps pricing publication and route availability atomic.
+func activatePricedModelTx(tx *ent.Tx, ctx context.Context, modelID uuid.UUID, rates billing.RateCard) error {
+	if _, err := tx.UpstreamModel.UpdateOneID(modelID).
 		SetPricingConfigured(true).
-		SetInputPriceMicros(plan.DefaultInputPriceMicros).
-		SetOutputPriceMicros(plan.DefaultOutputPriceMicros).
-		SetCacheReadPriceMicros(plan.DefaultCacheReadPriceMicros).
-		SetCacheWritePriceMicros(plan.DefaultCacheWritePriceMicros).
-		SetCacheWrite1hPriceMicros(plan.DefaultCacheWrite1hPriceMicros).
-		SetRequestPriceMicros(plan.DefaultRequestPriceMicros).
+		SetStatus(entupstreammodel.StatusActive).
+		SetInputPriceMicros(rates.InputMicros).
+		SetOutputPriceMicros(rates.OutputMicros).
+		SetCacheReadPriceMicros(rates.CacheReadMicros).
+		SetCacheWritePriceMicros(rates.CacheWriteMicros).
+		SetCacheWrite1hPriceMicros(rates.CacheWrite1hMicros).
+		SetRequestPriceMicros(rates.RequestMicros).
 		Save(ctx); err != nil {
-		return fmt.Errorf("mark upstream model pricing configured: %w", err)
+		return fmt.Errorf("activate priced upstream model: %w", err)
+	}
+	if _, err := tx.ModelRoute.Update().Where(
+		entmodelroute.UpstreamModelIDEQ(modelID),
+		entmodelroute.DeletedAtIsNil(),
+		entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()),
+		entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()),
+	).SetInputPriceMicros(rates.InputMicros).
+		SetOutputPriceMicros(rates.OutputMicros).
+		SetStatus(entmodelroute.StatusActive).
+		Save(ctx); err != nil {
+		return fmt.Errorf("activate routes for priced upstream model: %w", err)
 	}
 	return nil
 }
@@ -396,7 +396,7 @@ func (s *EntStore) DeleteDraft(ctx context.Context, planID uuid.UUID) error {
 
 /**
  * Resolve 从数据库解析请求时间对应的已发布方案和峰谷窗口。
- * 查询条件使用 EffectiveFrom <= at 且 EffectiveTo > at（或无结束时间），与内存快照解析保持完全相同的半开区间语义。
+ * 数据库兼容路径加载已发布版本后复用内存解析函数，保证版本边界和窗口选择完全一致。
  * @param ctx 请求上下文，用于传递取消信号、截止时间和请求级数据。
  * @param modelID 上游模型的唯一标识。
  * @param at 已统一为 UTC 的请求开始时间。
@@ -405,57 +405,23 @@ func (s *EntStore) DeleteDraft(ctx context.Context, planID uuid.UUID) error {
  * @date 2026-08-14
  */
 func (s *EntStore) Resolve(ctx context.Context, modelID uuid.UUID, at time.Time) (Resolution, error) {
-	plan, err := s.client.ModelPricePlan.Query().Where(
+	plans, err := s.client.ModelPricePlan.Query().Where(
 		entmodelpriceplan.UpstreamModelIDEQ(modelID),
 		entmodelpriceplan.StatusEQ(entmodelpriceplan.StatusPublished),
-		entmodelpriceplan.EffectiveFromLTE(at),
-		entmodelpriceplan.Or(entmodelpriceplan.EffectiveToIsNil(), entmodelpriceplan.EffectiveToGT(at)),
 	).WithWindows(func(query *ent.ModelPriceWindowQuery) {
 		query.Order(ent.Asc(entmodelpricewindow.FieldStartMinute), ent.Asc(entmodelpricewindow.FieldLabel))
-	}).Order(ent.Desc(entmodelpriceplan.FieldEffectiveFrom)).First(ctx)
-	if ent.IsNotFound(err) {
-		hasPublishedPlan, existsErr := s.client.ModelPricePlan.Query().Where(
-			entmodelpriceplan.UpstreamModelIDEQ(modelID),
-			entmodelpriceplan.StatusEQ(entmodelpriceplan.StatusPublished),
-		).Exist(ctx)
-		if existsErr != nil {
-			return Resolution{}, fmt.Errorf("check published model price plans: %w", existsErr)
-		}
-		if hasPublishedPlan {
-			return Resolution{}, ErrNoPrice
-		}
-		return s.resolveLegacy(ctx, modelID)
-	}
+	}).Order(ent.Desc(entmodelpriceplan.FieldVersion)).All(ctx)
 	if err != nil {
-		return Resolution{}, fmt.Errorf("resolve model price plan: %w", err)
+		return Resolution{}, fmt.Errorf("resolve model price plans: %w", err)
 	}
-	location, err := time.LoadLocation(plan.Timezone)
-	if err != nil {
-		return Resolution{}, fmt.Errorf("load model price timezone: %w", err)
-	}
-	local := at.In(location)
-	// 按价格方案的 IANA 时区转为本地时间后，才可正确处理星期与日内峰谷窗口。
-	minute := local.Hour()*60 + local.Minute()
-	weekdayMask := 1 << int(local.Weekday())
-	resolution := Resolution{
-		Rates:         defaultRates(plan),
-		PlanID:        &plan.ID,
-		PlanVersion:   plan.Version,
-		Timezone:      plan.Timezone,
-		EffectiveFrom: plan.EffectiveFrom,
-	}
-	windows, _ := plan.Edges.WindowsOrErr()
-	for _, window := range windows {
-		// EndMinute 为排他边界；相邻窗口在边界分钟不会同时命中。
-		if window.WeekdayMask&weekdayMask == 0 || minute < window.StartMinute || minute >= window.EndMinute {
-			continue
+	if len(plans) > 0 {
+		published := make([]Plan, 0, len(plans))
+		for _, plan := range plans {
+			published = append(published, planFromEnt(plan))
 		}
-		resolution.Rates = windowRates(window)
-		resolution.WindowID = &window.ID
-		resolution.WindowLabel = window.Label
-		break
+		return resolvePublishedPlans(published, at.UTC())
 	}
-	return resolution, nil
+	return s.resolveLegacy(ctx, modelID)
 }
 
 /**
@@ -520,7 +486,7 @@ func effectivePlanAt(plans []*ent.ModelPricePlan, at time.Time) *ent.ModelPriceP
 		if plan.EffectiveFrom.After(at) || (plan.EffectiveTo != nil && !at.Before(*plan.EffectiveTo)) {
 			continue
 		}
-		if selected == nil || plan.EffectiveFrom.After(selected.EffectiveFrom) {
+		if selected == nil || plan.EffectiveFrom.After(selected.EffectiveFrom) || (plan.EffectiveFrom.Equal(selected.EffectiveFrom) && plan.Version > selected.Version) {
 			selected = plan
 		}
 	}
@@ -539,15 +505,17 @@ func effectivePlanAt(plans []*ent.ModelPricePlan, at time.Time) *ent.ModelPriceP
  * @date 2026-08-14
  */
 func createPlan(tx *ent.Tx, ctx context.Context, modelID uuid.UUID, version int, input PlanInput) (*ent.ModelPricePlan, error) {
+	input.EffectiveFrom = time.Unix(0, 0).UTC()
+	input.EffectiveTo = nil
+	if input.Mode == ModeFixed {
+		input.Timezone = "UTC"
+	}
 	create := tx.ModelPricePlan.Create().SetUpstreamModelID(modelID).SetVersion(version).
 		SetMode(entmodelpriceplan.Mode(input.Mode)).SetTimezone(input.Timezone).SetEffectiveFrom(input.EffectiveFrom).
 		SetStatus(entmodelpriceplan.StatusDraft).SetDefaultInputPriceMicros(input.DefaultRates.InputMicros).
 		SetDefaultOutputPriceMicros(input.DefaultRates.OutputMicros).SetDefaultCacheReadPriceMicros(input.DefaultRates.CacheReadMicros).
 		SetDefaultCacheWritePriceMicros(input.DefaultRates.CacheWriteMicros).SetDefaultCacheWrite1hPriceMicros(input.DefaultRates.CacheWrite1hMicros).
 		SetDefaultRequestPriceMicros(input.DefaultRates.RequestMicros)
-	if input.EffectiveTo != nil {
-		create.SetEffectiveTo(*input.EffectiveTo)
-	}
 	return create.Save(ctx)
 }
 

@@ -25,7 +25,6 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
   const [form, setForm] = useState({
     username: "",
     email: "",
-    display_name: "",
     password: "",
     confirm: "",
     verification_code: "",
@@ -91,7 +90,6 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
         body: JSON.stringify({
           username: form.username,
           email: form.email,
-          display_name: form.display_name,
           password: form.password,
           verification_code: form.verification_code,
           referral_code: form.referral_code,
@@ -210,8 +208,9 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="display-name">显示名称</Label>
-                <Input autoComplete="name" id="display-name" onChange={(event) => setForm({ ...form, display_name: event.target.value })} value={form.display_name} />
+                <Label htmlFor="password">密码</Label>
+                <Input autoComplete="new-password" id="password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.password} />
+                <p className="text-xs text-muted-foreground">至少 8 位，且必须包含英文和数字。</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="referral-code">邀请码（选填）</Label>
@@ -224,11 +223,6 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
                   onChange={(event) => setForm({ ...form, referral_code: event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 12) })}
                   value={form.referral_code}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
-                <Input autoComplete="new-password" id="password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.password} />
-                <p className="text-xs text-muted-foreground">至少 8 位，且必须包含英文和数字。</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm">确认密码</Label>

@@ -316,7 +316,7 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	}
 	groupSummary := billinggroup.Summary{}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
-		groupSummary = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+		groupSummary = billinggroup.NewSummary(group.ID, group.Code, group.DisplayName, group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt)
 	}
 	var upstreamRecord *upstreammodel.Record
 	upstreamName, inputPrice, outputPrice := entity.UpstreamName, entity.InputPriceMicros, entity.OutputPriceMicros

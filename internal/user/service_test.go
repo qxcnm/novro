@@ -183,6 +183,9 @@ func TestRegisterCannotCreateAdministrator(t *testing.T) {
 	if store.createParams.ReferralCode != "ABCD1234EF56" {
 		t.Fatalf("referral code was not normalized: %+v", store.createParams)
 	}
+	if store.createParams.DisplayName != "member.one" {
+		t.Fatalf("registration did not use username as display name: %+v", store.createParams)
+	}
 }
 
 /**

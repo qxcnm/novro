@@ -180,6 +180,10 @@ var (
 		{Name: "code", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "multiplier_bps", Type: field.TypeInt64, Default: 10000},
+		{Name: "discount_name", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "discount_multiplier_bps", Type: field.TypeInt64, Default: 10000},
+		{Name: "discount_starts_at", Type: field.TypeTime, Nullable: true},
+		{Name: "discount_ends_at", Type: field.TypeTime, Nullable: true},
 		{Name: "is_default", Type: field.TypeBool, Default: false},
 		{Name: "is_hidden", Type: field.TypeBool, Default: false},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"active", "disabled"}, Default: "active"},
@@ -196,17 +200,22 @@ var (
 			{
 				Name:    "billinggroup_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[6], BillingGroupsColumns[7]},
+				Columns: []*schema.Column{BillingGroupsColumns[10], BillingGroupsColumns[11]},
 			},
 			{
 				Name:    "billinggroup_is_default",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[4]},
+				Columns: []*schema.Column{BillingGroupsColumns[8]},
+			},
+			{
+				Name:    "billinggroup_discount_starts_at_discount_ends_at",
+				Unique:  false,
+				Columns: []*schema.Column{BillingGroupsColumns[6], BillingGroupsColumns[7]},
 			},
 			{
 				Name:    "billinggroup_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[9]},
+				Columns: []*schema.Column{BillingGroupsColumns[13]},
 			},
 		},
 	}

@@ -41,6 +41,10 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 	}
 	create := tx.BillingGroup.Create().SetCode(input.Code).SetDisplayName(input.DisplayName).
 		SetMultiplierBps(input.MultiplierBPS).SetIsHidden(input.IsHidden).SetStatus(entbillinggroup.StatusActive)
+	if input.Discount != nil {
+		create.SetDiscountName(input.Discount.Name).SetDiscountMultiplierBps(input.Discount.MultiplierBPS).
+			SetDiscountStartsAt(input.Discount.StartsAt).SetDiscountEndsAt(input.Discount.EndsAt)
+	}
 	if input.IsHidden {
 		create.AddAuthorizedUserIDs(input.AuthorizedUserIDs...)
 	}
@@ -132,6 +136,12 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, input UpdateInput) 
 	}
 	if input.MultiplierBPS != nil {
 		update.SetMultiplierBps(*input.MultiplierBPS)
+	}
+	if input.Discount != nil {
+		update.SetDiscountName(input.Discount.Name).SetDiscountMultiplierBps(input.Discount.MultiplierBPS).
+			SetDiscountStartsAt(input.Discount.StartsAt).SetDiscountEndsAt(input.Discount.EndsAt)
+	} else if input.ClearDiscount {
+		update.SetDiscountName("").SetDiscountMultiplierBps(DefaultMultiplierBPS).ClearDiscountStartsAt().ClearDiscountEndsAt()
 	}
 	if input.IsHidden != nil {
 		update.SetIsHidden(*input.IsHidden)
@@ -260,7 +270,10 @@ func fromEntList(entities []*ent.BillingGroup) []Record {
  * @date 2026-08-13
  */
 func fromEnt(entity *ent.BillingGroup) Record {
+	summary := NewSummary(entity.ID, entity.Code, entity.DisplayName, entity.MultiplierBps, entity.DiscountName, entity.DiscountMultiplierBps, entity.DiscountStartsAt, entity.DiscountEndsAt)
 	record := Record{ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName, MultiplierBPS: entity.MultiplierBps,
+		DiscountName: entity.DiscountName, DiscountMultiplierBPS: entity.DiscountMultiplierBps, DiscountStartsAt: entity.DiscountStartsAt, DiscountEndsAt: entity.DiscountEndsAt,
+		EffectiveMultiplierBPS: summary.EffectiveMultiplierBPS, DiscountActive: summary.DiscountActive,
 		IsDefault: entity.IsDefault, IsHidden: entity.IsHidden, Status: Status(entity.Status), APIKeyCount: len(entity.Edges.APIKeys), ModelRouteCount: len(entity.Edges.ModelRoutes), AuthorizedUsers: make([]AuthorizedUser, 0, len(entity.Edges.AuthorizedUsers)), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt}
 	for _, authorized := range entity.Edges.AuthorizedUsers {
 		record.AuthorizedUsers = append(record.AuthorizedUsers, AuthorizedUser{ID: authorized.ID, Username: authorized.Username, DisplayName: authorized.DisplayName, Status: string(authorized.Status)})

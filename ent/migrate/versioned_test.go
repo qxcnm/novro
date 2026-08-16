@@ -41,13 +41,26 @@ func TestVersionedSQLContainsExpectedMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration directory: %v", err)
 	}
-	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql", "0013_model_route_billing_groups.sql"}
+	expected := []string{"0001_initial_schema.sql", "0002_provider_weight.sql", "0006_api_keys_secret_ciphertext.sql", "0007_usage_history_indexes.sql", "0008_hidden_billing_groups.sql", "0009_gateway_billing_safety.sql", "0010_billing_group_user_authorizations.sql", "0011_system_announcement.sql", "0012_model_price_plans.sql", "0013_model_route_billing_groups.sql", "0014_billing_group_discounts.sql"}
 	if len(entries) != len(expected) {
 		t.Fatalf("expected migrations %v, got %+v", expected, entries)
 	}
 	for index, name := range expected {
 		if entries[index].IsDir() || entries[index].Name() != name {
 			t.Fatalf("expected migrations %v, got %+v", expected, entries)
+		}
+	}
+}
+
+func TestBillingGroupDiscountMigrationAddsScheduleFields(t *testing.T) {
+	contents, err := fs.ReadFile(VersionedSQL, "migrations/0014_billing_group_discounts.sql")
+	if err != nil {
+		t.Fatalf("read billing group discount migration: %v", err)
+	}
+	sql := string(contents)
+	for _, expected := range []string{"discount_name", "discount_multiplier_bps", "discount_starts_at", "discount_ends_at", "billinggroup_discount_window"} {
+		if !strings.Contains(sql, expected) {
+			t.Fatalf("billing group discount migration is missing %q", expected)
 		}
 	}
 }

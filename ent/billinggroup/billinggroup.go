@@ -22,6 +22,14 @@ const (
 	FieldDisplayName = "display_name"
 	// FieldMultiplierBps holds the string denoting the multiplier_bps field in the database.
 	FieldMultiplierBps = "multiplier_bps"
+	// FieldDiscountName holds the string denoting the discount_name field in the database.
+	FieldDiscountName = "discount_name"
+	// FieldDiscountMultiplierBps holds the string denoting the discount_multiplier_bps field in the database.
+	FieldDiscountMultiplierBps = "discount_multiplier_bps"
+	// FieldDiscountStartsAt holds the string denoting the discount_starts_at field in the database.
+	FieldDiscountStartsAt = "discount_starts_at"
+	// FieldDiscountEndsAt holds the string denoting the discount_ends_at field in the database.
+	FieldDiscountEndsAt = "discount_ends_at"
 	// FieldIsDefault holds the string denoting the is_default field in the database.
 	FieldIsDefault = "is_default"
 	// FieldIsHidden holds the string denoting the is_hidden field in the database.
@@ -78,6 +86,10 @@ var Columns = []string{
 	FieldCode,
 	FieldDisplayName,
 	FieldMultiplierBps,
+	FieldDiscountName,
+	FieldDiscountMultiplierBps,
+	FieldDiscountStartsAt,
+	FieldDiscountEndsAt,
 	FieldIsDefault,
 	FieldIsHidden,
 	FieldStatus,
@@ -111,6 +123,14 @@ var (
 	DefaultMultiplierBps int64
 	// MultiplierBpsValidator is a validator for the "multiplier_bps" field. It is called by the builders before save.
 	MultiplierBpsValidator func(int64) error
+	// DefaultDiscountName holds the default value on creation for the "discount_name" field.
+	DefaultDiscountName string
+	// DiscountNameValidator is a validator for the "discount_name" field. It is called by the builders before save.
+	DiscountNameValidator func(string) error
+	// DefaultDiscountMultiplierBps holds the default value on creation for the "discount_multiplier_bps" field.
+	DefaultDiscountMultiplierBps int64
+	// DiscountMultiplierBpsValidator is a validator for the "discount_multiplier_bps" field. It is called by the builders before save.
+	DiscountMultiplierBpsValidator func(int64) error
 	// DefaultIsDefault holds the default value on creation for the "is_default" field.
 	DefaultIsDefault bool
 	// DefaultIsHidden holds the default value on creation for the "is_hidden" field.
@@ -172,6 +192,26 @@ func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 // ByMultiplierBps orders the results by the multiplier_bps field.
 func ByMultiplierBps(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMultiplierBps, opts...).ToFunc()
+}
+
+// ByDiscountName orders the results by the discount_name field.
+func ByDiscountName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountName, opts...).ToFunc()
+}
+
+// ByDiscountMultiplierBps orders the results by the discount_multiplier_bps field.
+func ByDiscountMultiplierBps(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountMultiplierBps, opts...).ToFunc()
+}
+
+// ByDiscountStartsAt orders the results by the discount_starts_at field.
+func ByDiscountStartsAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountStartsAt, opts...).ToFunc()
+}
+
+// ByDiscountEndsAt orders the results by the discount_ends_at field.
+func ByDiscountEndsAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountEndsAt, opts...).ToFunc()
 }
 
 // ByIsDefault orders the results by the is_default field.

@@ -84,8 +84,6 @@ type PricingWindowForm = {
 type PricingForm = {
   mode: "fixed" | "scheduled";
   timezone: string;
-  effectiveFrom: string;
-  effectiveTo: string;
   defaultRates: RateForm;
   windows: PricingWindowForm[];
 };
@@ -102,14 +100,8 @@ const EMPTY_FORM: ModelForm = {
   request: "",
 };
 
-function nowForDateTimeInput() {
-  const value = new Date(Date.now() + 5 * 60 * 1000);
-  const offset = value.getTimezoneOffset() * 60 * 1000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
-}
-
 const EMPTY_RATE_FORM: RateForm = { input: "", cacheRead: "", cacheWrite: "", cacheWrite1h: "", output: "", request: "" };
-const EMPTY_PRICING_FORM: PricingForm = { mode: "fixed", timezone: "Asia/Shanghai", effectiveFrom: nowForDateTimeInput(), effectiveTo: "", defaultRates: EMPTY_RATE_FORM, windows: [] };
+const EMPTY_PRICING_FORM: PricingForm = { mode: "fixed", timezone: "UTC", defaultRates: EMPTY_RATE_FORM, windows: [] };
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
 const ALL_PROVIDERS = "__all__";
@@ -169,13 +161,6 @@ function rateFormFromPrices(prices: Prices): RateForm {
   };
 }
 
-function dateTimeInput(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return nowForDateTimeInput();
-  const offset = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
 function minuteTime(value: number) {
   if (value === 1440) return "00:00";
   const hours = Math.floor(value / 60).toString().padStart(2, "0");
@@ -204,6 +189,14 @@ function ratePayload(rate: RateForm): Prices | null {
 function planPayload(form: PricingForm) {
   const defaultRates = ratePayload(form.defaultRates);
   if (!defaultRates) return null;
+  if (form.mode === "fixed") {
+    return {
+      mode: "fixed" as const,
+      timezone: "UTC",
+      default_rates: defaultRates,
+      windows: [],
+    };
+  }
   const windows = [] as Array<{ label: string; weekday_mask: number; start_minute: number; end_minute: number; rates: Prices }>;
   for (const window of form.windows) {
     const rates = ratePayload(window.rates);
@@ -219,14 +212,9 @@ function planPayload(form: PricingForm) {
       rates,
     });
   }
-  const effectiveFrom = new Date(form.effectiveFrom);
-  const effectiveTo = form.effectiveTo ? new Date(form.effectiveTo) : null;
-  if (Number.isNaN(effectiveFrom.getTime()) || (effectiveTo && Number.isNaN(effectiveTo.getTime()))) return null;
   return {
     mode: form.mode,
     timezone: form.timezone,
-    effective_from: effectiveFrom.toISOString(),
-    ...(effectiveTo ? { effective_to: effectiveTo.toISOString() } : {}),
     default_rates: defaultRates,
     windows,
   };
@@ -240,8 +228,6 @@ function pricingFormFromPlan(plan: PricePlan): PricingForm {
   return {
     mode: plan.mode,
     timezone: plan.timezone,
-    effectiveFrom: dateTimeInput(plan.effective_from),
-    effectiveTo: plan.effective_to ? dateTimeInput(plan.effective_to) : "",
     defaultRates: rateFormFromPrices(plan.default_rates),
     windows: plan.windows.map((window) => ({
       label: window.label,
@@ -539,13 +525,14 @@ export default function UpstreamModelsClient() {
     setPricingPlans(plans);
     setPricingDraftID(draft?.id ?? null);
     if (draft) setPricingForm(pricingFormFromPlan(draft));
-    else if (source) setPricingForm({ ...pricingFormFromPlan(source), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+    else if (source) setPricingForm(pricingFormFromPlan(source));
   }
 
   function addPricingWindow() {
     setPricingForm((current) => ({
       ...current,
       mode: "scheduled",
+      timezone: current.timezone === "UTC" ? "Asia/Shanghai" : current.timezone,
       windows: [...current.windows, { label: `高峰时段 ${current.windows.length + 1}`, weekdayMask: 127, start: "09:00", end: "12:00", rates: { ...current.defaultRates } }],
     }));
   }
@@ -557,7 +544,7 @@ export default function UpstreamModelsClient() {
   async function submitPricing(publish: boolean) {
     if (!pricingModel) return;
     const body = planPayload(pricingForm);
-    if (!body) { setPricingMessage("请检查价格、生效时间和时段填写"); return; }
+    if (!body) { setPricingMessage("请检查价格和时段填写"); return; }
     if (pricingForm.mode === "scheduled" && pricingForm.windows.length === 0) { setPricingMessage("分时价格至少需要一个特殊时段"); return; }
     setPricingBusy(true);
     const endpoint = pricingDraftID ? `/api/admin/upstream-models/${pricingModel.id}/price-plans/${pricingDraftID}` : `/api/admin/upstream-models/${pricingModel.id}/price-plans`;
@@ -568,7 +555,7 @@ export default function UpstreamModelsClient() {
     if (publish) {
       const published = await fetch(`/api/admin/upstream-models/${pricingModel.id}/price-plans/${created.id}/publish`, { method: "POST" });
       if (!published.ok) { setPricingBusy(false); setPricingMessage(await errorMessage(published)); return; }
-      setPricingMessage("价格方案已发布");
+      setPricingMessage("价格方案已发布，目录模型和可用关联路由已启用");
       setPricingDraftID(null);
     } else {
       setPricingMessage("价格方案草稿已保存");
@@ -579,7 +566,7 @@ export default function UpstreamModelsClient() {
       setPricingPlans(plans);
       if (publish) {
         const publishedPlan = plans.find((plan) => plan.id === created.id);
-        if (publishedPlan) setPricingForm({ ...pricingFormFromPlan(publishedPlan), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+        if (publishedPlan) setPricingForm(pricingFormFromPlan(publishedPlan));
         await load();
       }
     }
@@ -610,7 +597,7 @@ export default function UpstreamModelsClient() {
       setPricingPlans(plans);
       const current = plans.find((item) => item.status === "published" && !item.effective_to);
       if (current) {
-        setPricingForm({ ...pricingFormFromPlan(current), effectiveFrom: nowForDateTimeInput(), effectiveTo: "" });
+        setPricingForm(pricingFormFromPlan(current));
         setPricingDraftID(null);
       }
     }
@@ -821,30 +808,32 @@ export default function UpstreamModelsClient() {
         <SheetContent className="w-full! overflow-y-auto data-[side=right]:w-full! sm:data-[side=right]:w-[min(64rem,calc(100vw-2rem))]! sm:data-[side=right]:max-w-none!" side="right">
           <SheetHeader className="border-b px-6 py-5">
             <SheetTitle>{pricingModel ? `${pricingModel.display_name} 价格方案` : "价格方案"}</SheetTitle>
-            <SheetDescription>这里配置 Novro 对客户结算使用的价格。草稿发布后生效，已发布版本不可编辑。</SheetDescription>
+            <SheetDescription>这里配置 Novro 对客户结算使用的价格。发布后会启用目录模型和可用关联路由，已发布版本不可编辑。</SheetDescription>
           </SheetHeader>
           <form className="flex flex-col gap-6 px-6" id="model-pricing-form" onSubmit={(event) => { event.preventDefault(); void submitPricing(false); }}>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="pricing-mode">计价方式</Label>
-                <Select value={pricingForm.mode} onValueChange={(value) => setPricingForm((current) => ({ ...current, mode: value as PricingForm["mode"], windows: value === "fixed" ? [] : current.windows }))}>
+                <Select value={pricingForm.mode} onValueChange={(value) => setPricingForm((current) => ({
+                  ...current,
+                  mode: value as PricingForm["mode"],
+                  timezone: value === "fixed" ? "UTC" : current.timezone === "UTC" ? "Asia/Shanghai" : current.timezone,
+                  windows: value === "fixed" ? [] : current.windows,
+                }))}>
                   <SelectTrigger id="pricing-mode"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="fixed">固定价格</SelectItem><SelectItem value="scheduled">分时价格</SelectItem></SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="pricing-timezone">计价时区</Label>
-                <Input id="pricing-timezone" list="pricing-timezones" maxLength={64} onChange={(event) => setPricingForm((current) => ({ ...current, timezone: event.target.value }))} required value={pricingForm.timezone} />
-                <datalist id="pricing-timezones"><option value="Asia/Shanghai" /><option value="UTC" /><option value="America/Los_Angeles" /><option value="Europe/London" /></datalist>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="pricing-effective-from">生效时间</Label>
-                <Input id="pricing-effective-from" onChange={(event) => setPricingForm((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={pricingForm.effectiveFrom} />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="pricing-effective-to">失效时间</Label>
-                <Input id="pricing-effective-to" onChange={(event) => setPricingForm((current) => ({ ...current, effectiveTo: event.target.value }))} type="datetime-local" value={pricingForm.effectiveTo} />
-              </div>
+              {pricingForm.mode === "fixed" ? <div className="self-end sm:pb-2 xl:col-span-3"><Badge variant="outline">发布即生效</Badge></div> : (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="pricing-timezone">计价时区</Label>
+                    <Input id="pricing-timezone" list="pricing-timezones" maxLength={64} onChange={(event) => setPricingForm((current) => ({ ...current, timezone: event.target.value }))} required value={pricingForm.timezone} />
+                    <datalist id="pricing-timezones"><option value="Asia/Shanghai" /><option value="UTC" /><option value="America/Los_Angeles" /><option value="Europe/London" /></datalist>
+                  </div>
+                  <div className="self-end sm:pb-2 xl:col-span-2"><Badge variant="outline">发布即生效</Badge></div>
+                </>
+              )}
             </div>
 
             <section className="flex flex-col gap-4 border-t pt-5" aria-labelledby="default-pricing-title">
@@ -888,7 +877,7 @@ export default function UpstreamModelsClient() {
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <p className="font-medium">版本 {plan.version} · {plan.mode === "fixed" ? "固定价格" : "分时价格"}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">生效区间：{formatPlanDate(plan.effective_from)} 至 {plan.effective_to ? formatPlanDate(plan.effective_to) : "持续生效"}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{plan.status === "draft" ? "待发布" : `发布：${formatPlanDate(plan.effective_from)}${plan.effective_to ? ` · 替换：${formatPlanDate(plan.effective_to)}` : ""}`}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant={plan.status === "draft" ? "secondary" : "outline"}>{status.label}</Badge>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -12,6 +13,9 @@ type fakeStore struct {
 	deletedID   uuid.UUID
 	createInput CreateInput
 	updateInput UpdateInput
+	created     Record
+	updated     Record
+	status      Record
 }
 
 /**
@@ -22,7 +26,7 @@ type fakeStore struct {
  */
 func (f *fakeStore) Create(_ context.Context, input CreateInput) (Record, error) {
 	f.createInput = input
-	return Record{}, nil
+	return f.created, nil
 }
 
 /**
@@ -41,7 +45,7 @@ func (*fakeStore) List(context.Context, ListFilter) ([]Record, error) { return n
  */
 func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, input UpdateInput) (Record, error) {
 	f.updateInput = input
-	return Record{}, nil
+	return f.updated, nil
 }
 
 /**
@@ -50,8 +54,8 @@ func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, input UpdateInput) (R
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (*fakeStore) SetStatus(context.Context, uuid.UUID, Status) (Record, error) {
-	return Record{}, nil
+func (f *fakeStore) SetStatus(context.Context, uuid.UUID, Status) (Record, error) {
+	return f.status, nil
 }
 
 /**
@@ -96,6 +100,72 @@ func TestUpdateRejectsInvalidAuthorizedUserIDs(t *testing.T) {
 	ids := []uuid.UUID{uuid.Nil}
 	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{AuthorizedUserIDs: &ids}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected nil authorization ID rejection, got %v", err)
+	}
+}
+
+func TestDiscountValidationAndScheduledMultiplier(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store)
+	start := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	end := start.Add(7 * 24 * time.Hour)
+	discount := &DiscountInput{Name: " 国庆优惠 ", MultiplierBPS: 8_800, StartsAt: start, EndsAt: end}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Discount: discount}); err != nil {
+		t.Fatalf("schedule discount: %v", err)
+	}
+	if store.updateInput.Discount == nil || store.updateInput.Discount.Name != "国庆优惠" || store.updateInput.Discount.StartsAt.Location() != time.UTC {
+		t.Fatalf("discount was not normalized: %+v", store.updateInput.Discount)
+	}
+	summary := Summary{MultiplierBPS: 5_000, DiscountMultiplierBPS: 8_800, DiscountStartsAt: &store.updateInput.Discount.StartsAt, DiscountEndsAt: &store.updateInput.Discount.EndsAt}
+	if got := summary.MultiplierAt(store.updateInput.Discount.StartsAt); got != 4_400 {
+		t.Fatalf("active multiplier=%d", got)
+	}
+	if got := summary.MultiplierAt(store.updateInput.Discount.EndsAt); got != 5_000 {
+		t.Fatalf("ended multiplier=%d", got)
+	}
+	rounded := Summary{MultiplierBPS: 10_001, DiscountMultiplierBPS: 3_333, DiscountStartsAt: &store.updateInput.Discount.StartsAt, DiscountEndsAt: &store.updateInput.Discount.EndsAt}
+	if got := rounded.MultiplierAt(store.updateInput.Discount.StartsAt); got != 3_334 {
+		t.Fatalf("rounded multiplier=%d", got)
+	}
+
+	invalid := &DiscountInput{Name: "无效", MultiplierBPS: 10_000, StartsAt: start, EndsAt: end}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Discount: invalid}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected invalid non-discount multiplier, got %v", err)
+	}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Discount: discount, ClearDiscount: true}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected conflicting discount update, got %v", err)
+	}
+}
+
+func TestDiscountSnapshotUpdatesAndDeletesWithoutDatabaseReads(t *testing.T) {
+	groupID := uuid.New()
+	start := time.Now().UTC().Add(-time.Hour)
+	end := start.Add(2 * time.Hour)
+	store := &fakeStore{updated: Record{
+		ID: groupID, Code: "group-a", DisplayName: "A", MultiplierBPS: 10_000,
+		DiscountName: "holiday", DiscountMultiplierBPS: 5_000, DiscountStartsAt: &start, DiscountEndsAt: &end,
+	}}
+	service := NewService(store)
+	fallback := Summary{ID: groupID, Code: "group-a", DisplayName: "A", MultiplierBPS: 10_000}
+	if got := service.MultiplierAt(fallback, time.Now().UTC()); got != 10_000 {
+		t.Fatalf("initial cached multiplier=%d", got)
+	}
+	name := "A"
+	if _, err := service.Update(context.Background(), groupID, UpdateInput{DisplayName: &name}); err != nil {
+		t.Fatalf("update cached discount: %v", err)
+	}
+	if got := service.MultiplierAt(fallback, time.Now().UTC()); got != 5_000 {
+		t.Fatalf("updated cached multiplier=%d", got)
+	}
+	if err := service.Delete(context.Background(), groupID); err != nil {
+		t.Fatalf("delete cached discount: %v", err)
+	}
+	// Simulate a list or update that read the old row before Delete committed
+	// and reached the cache afterward.
+	service.remember(store.updated)
+	refreshedFallback := fallback
+	refreshedFallback.MultiplierBPS = 8_000
+	if got := service.MultiplierAt(refreshedFallback, time.Now().UTC()); got != 8_000 {
+		t.Fatalf("stale result restored deleted snapshot: multiplier=%d", got)
 	}
 }
 

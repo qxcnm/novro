@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/internal/apikey"
 	"github.com/novro-gateway/novro/internal/billing"
+	"github.com/novro-gateway/novro/internal/billinggroup"
 	"github.com/novro-gateway/novro/internal/gatewaysettings"
 	"github.com/novro-gateway/novro/internal/modelpricing"
 	"github.com/novro-gateway/novro/internal/modelroute"
@@ -162,14 +163,19 @@ type PriceResolver interface {
 	Resolve(context.Context, uuid.UUID, time.Time) (modelpricing.Resolution, error)
 }
 
+type MultiplierResolver interface {
+	MultiplierAt(billinggroup.Summary, time.Time) int64
+}
+
 type Dependencies struct {
-	APIKeys  KeyAuthenticator
-	Routes   RouteService
-	Billing  BillingService
-	Settings SettingsService
-	Pricing  PriceResolver
-	Client   *http.Client
-	Logger   *slog.Logger
+	APIKeys   KeyAuthenticator
+	Routes    RouteService
+	Billing   BillingService
+	Settings  SettingsService
+	Pricing   PriceResolver
+	Discounts MultiplierResolver
+	Client    *http.Client
+	Logger    *slog.Logger
 }
 
 type Handler struct {
@@ -178,6 +184,7 @@ type Handler struct {
 	billing               BillingService
 	settings              SettingsService
 	pricing               PriceResolver
+	discounts             MultiplierResolver
 	client                *http.Client
 	logger                *slog.Logger
 	now                   func() time.Time
@@ -201,10 +208,20 @@ func New(deps Dependencies) *Handler {
 		logger = slog.Default()
 	}
 	return &Handler{
-		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, pricing: deps.Pricing, client: client, logger: logger,
+		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, pricing: deps.Pricing, discounts: deps.Discounts, client: client, logger: logger,
 		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
 		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
 	}
+}
+
+func (h *Handler) multiplierAt(actor apikey.Actor, at time.Time) int64 {
+	if actor.PinnedMultiplierBPS > 0 {
+		return actor.PinnedMultiplierBPS
+	}
+	if h.discounts != nil {
+		return h.discounts.MultiplierAt(actor.APIKey.BillingGroup, at)
+	}
+	return actor.APIKey.BillingGroup.MultiplierAt(at)
 }
 
 /**
@@ -350,6 +367,10 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		writeError(w, http.StatusInternalServerError, "billing_configuration_error", "模型计费配置暂时不可用")
 		return
 	}
+	// Pin the shared discount snapshot once per request so an administrator
+	// update during a long upstream call cannot change the final multiplier
+	// after the reservation was calculated.
+	actor.PinnedMultiplierBPS = h.multiplierAt(actor, startedAt)
 	stream, _ := payload["stream"].(bool)
 	requestSettings := gatewaysettings.DefaultConfig()
 	if h.settings != nil {
@@ -429,7 +450,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		}
 		inputEstimate := estimateInputTokens(upstreamBody)
 		// 输入和输出分别被上限截断，防止超大请求或 max_tokens 使一次预占无限增长。
-		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
+		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), h.multiplierAt(actor, startedAt))
 		if err != nil {
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
@@ -716,7 +737,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
 	if err != nil {
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -865,7 +886,7 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	usage := parseUsage(body, usageSemanticsFor(endpoint, route.Provider.Protocol))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, actor.APIKey.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
 	if err != nil {
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -1294,7 +1315,7 @@ streamLoop:
 		return
 	}
 	usage = applyUsageFallback(usage, inputEstimate, outputMaximum, rateCardFor(route))
-	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), actor.APIKey.BillingGroup.MultiplierBPS)
+	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), h.multiplierAt(actor, startedAt))
 	if err != nil {
 		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
@@ -1361,7 +1382,7 @@ func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelrou
 func (h *Handler) usageInput(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) billing.UsageInput {
 	billingGroupID := actor.APIKey.BillingGroupID
 	return billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
-		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: h.multiplierAt(actor, startedAt), CostMicros: quote.CostMicros, ReservedMicros: reserved,
 		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 }
 
@@ -1454,7 +1475,7 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	input := billing.FailureInput{
 		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID,
 		RequestID: requestID, Endpoint: endpoint, StatusCode: statusCode, ErrorCode: errorCode, ErrorMessage: errorMessage,
-		MultiplierBPS: actor.APIKey.BillingGroup.MultiplierBPS, ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName,
+		MultiplierBPS: h.multiplierAt(actor, startedAt), ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName,
 		CreatedAt: startedAt, FinishedAt: finishedAt, DurationMS: duration.Milliseconds(),
 	}
 	if err := h.billing.RecordFailure(ctx, input); err != nil {

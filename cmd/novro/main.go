@@ -259,7 +259,7 @@ func main() {
 			BillingGroups:       billingGroupService,
 			GatewaySettings:     gatewaySettingsService,
 			Announcements:       announcementService,
-			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Pricing: modelPricingService, Logger: logger}),
+			Gateway:             gateway.New(gateway.Dependencies{APIKeys: apiKeyService, Routes: modelRouteService, Billing: billingService, Settings: gatewaySettingsService, Pricing: modelPricingService, Discounts: billingGroupService, Logger: logger}),
 			Logger:              logger,
 			CookieName:          cfg.Session.CookieName,
 			CookieSecure:        cfg.Session.CookieSecure,

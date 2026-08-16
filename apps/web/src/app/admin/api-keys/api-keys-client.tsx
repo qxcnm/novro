@@ -19,7 +19,7 @@ import { useListSelection } from "@/lib/use-list-selection";
 type APIKeyRecord = {
   id: string;
   billing_group_id: string;
-  billing_group: { id: string; code: string; display_name: string; multiplier_bps: number };
+  billing_group: { id: string; code: string; display_name: string; multiplier_bps: number; effective_multiplier_bps?: number };
   name: string;
   key_prefix: string;
   status: "active" | "revoked";
@@ -205,7 +205,7 @@ export default function AdminAPIKeysClient() {
                       <TableCell><Checkbox aria-label={`选择 ${key.owner.username} 的 ${key.name}`} checked={selection.isSelected(key.id)} disabled={key.status !== "active"} onCheckedChange={(checked) => selection.toggleOne(key.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{key.name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{key.key_prefix}••••</p></TableCell>
                       <TableCell><p>{key.owner.display_name || key.owner.username}</p><p className="mt-0.5 text-xs text-muted-foreground">@{key.owner.username}</p></TableCell>
-                      <TableCell><p>{key.billing_group?.display_name ?? "默认分组"}</p><p className="font-mono text-xs text-muted-foreground">{((key.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
+                      <TableCell><p>{key.billing_group?.display_name ?? "默认分组"}</p><p className="font-mono text-xs text-muted-foreground">{((key.billing_group?.effective_multiplier_bps ?? key.billing_group?.multiplier_bps ?? 10_000) / 10_000).toFixed(4)}×</p></TableCell>
                       <TableCell><Badge variant={key.status === "active" ? "outline" : "secondary"}>{key.status === "active" ? "启用" : "已撤销"}</Badge></TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(key.last_used_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(key.created_at)}</TableCell>

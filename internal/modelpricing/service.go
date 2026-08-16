@@ -298,7 +298,7 @@ func resolvePublishedPlans(plans []Plan, at time.Time) (Resolution, error) {
 		if plan.EffectiveFrom.After(at) || (plan.EffectiveTo != nil && !at.Before(*plan.EffectiveTo)) {
 			continue
 		}
-		if selected == nil || plan.EffectiveFrom.After(selected.EffectiveFrom) {
+		if selected == nil || plan.EffectiveFrom.After(selected.EffectiveFrom) || (plan.EffectiveFrom.Equal(selected.EffectiveFrom) && plan.Version > selected.Version) {
 			selected = plan
 		}
 	}
@@ -338,7 +338,7 @@ func resolvePublishedPlans(plans []Plan, at time.Time) (Resolution, error) {
 }
 
 /**
- * normalizeAndValidate 规范化时区和生效时间，并校验价格窗口不重叠。
+ * normalizeAndValidate 规范化计价模式和时区，并校验价格窗口不重叠。
  * 窗口不跨日；跨日价格由两个相邻窗口表达。这样每个时刻只需比较当日分钟，无需处理午夜回绕。
  * @param input 待规范化和校验的价格方案输入，会在成功前被标准化。
  * @return 输入是否满足价格方案业务约束。
@@ -346,29 +346,33 @@ func resolvePublishedPlans(plans []Plan, at time.Time) (Resolution, error) {
  * @date 2026-08-14
  */
 func normalizeAndValidate(input *PlanInput) bool {
-	input.Timezone = strings.TrimSpace(input.Timezone)
-	input.EffectiveFrom = input.EffectiveFrom.UTC()
-	if input.EffectiveTo != nil {
-		value := input.EffectiveTo.UTC()
-		input.EffectiveTo = &value
-	}
 	if input.Mode != ModeFixed && input.Mode != ModeScheduled {
 		return false
 	}
-	if input.Timezone == "" || utf8.RuneCountInString(input.Timezone) > 64 {
+	if !validRates(input.DefaultRates) {
 		return false
 	}
-	if _, err := time.LoadLocation(input.Timezone); err != nil {
-		return false
-	}
-	if input.EffectiveFrom.IsZero() || (input.EffectiveTo != nil && !input.EffectiveTo.After(input.EffectiveFrom)) || !validRates(input.DefaultRates) {
-		return false
-	}
-	if input.Mode == ModeFixed && len(input.Windows) != 0 {
-		return false
-	}
-	if input.Mode == ModeScheduled && len(input.Windows) == 0 {
-		return false
+	// Model price versions are never scheduled for a future publication. The
+	// store replaces this sentinel with the transaction's publication time.
+	input.EffectiveFrom = time.Unix(0, 0).UTC()
+	input.EffectiveTo = nil
+	if input.Mode == ModeFixed {
+		if len(input.Windows) != 0 {
+			return false
+		}
+		input.Timezone = "UTC"
+		input.Windows = nil
+	} else {
+		input.Timezone = strings.TrimSpace(input.Timezone)
+		if input.Timezone == "" || utf8.RuneCountInString(input.Timezone) > 64 {
+			return false
+		}
+		if _, err := time.LoadLocation(input.Timezone); err != nil {
+			return false
+		}
+		if len(input.Windows) == 0 {
+			return false
+		}
 	}
 	for index := range input.Windows {
 		window := &input.Windows[index]

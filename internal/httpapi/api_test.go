@@ -535,7 +535,7 @@ func (f *fakeModelRoutes) Delete(context.Context, uuid.UUID) error { return f.er
  */
 func activeBillingGroup(id uuid.UUID, code, displayName string, multiplierBPS int64, isDefault bool) billinggroup.Record {
 	return billinggroup.Record{
-		ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS,
+		ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS, DiscountMultiplierBPS: billinggroup.DefaultMultiplierBPS, EffectiveMultiplierBPS: multiplierBPS,
 		IsDefault: isDefault, Status: billinggroup.StatusActive,
 	}
 }
@@ -1099,7 +1099,7 @@ func TestAdminCreatesAndPublishesModelPricePlan(t *testing.T) {
 		Users: &fakeAPIUsers{}, ModelPricing: pricing,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	body := `{"mode":"scheduled","timezone":"Asia/Shanghai","effective_from":"2026-08-17T00:00:00Z","default_rates":{"input_price_micros":1000000,"output_price_micros":4000000},"windows":[{"label":"晚高峰","weekday_mask":62,"start_minute":1080,"end_minute":1320,"rates":{"input_price_micros":2000000,"output_price_micros":8000000}}]}`
+	body := `{"mode":"scheduled","timezone":"Asia/Shanghai","default_rates":{"input_price_micros":1000000,"output_price_micros":4000000},"windows":[{"label":"晚高峰","weekday_mask":62,"start_minute":1080,"end_minute":1320,"rates":{"input_price_micros":2000000,"output_price_micros":8000000}}]}`
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/upstream-models/"+modelID.String()+"/price-plans", strings.NewReader(body))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
@@ -1175,7 +1175,7 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 		Token: "nvs_test-token", ExpiresAt: time.Now().Add(time.Hour),
 		User: user.Record{ID: uuid.New(), Username: "member.one", Role: user.RoleMember, Status: user.StatusActive},
 	}}
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","display_name":"Member","password":"long-test-password","verification_code":"123456","referral_code":"ABCD1234EF56"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"member.one","email":"member@example.com","password":"long-test-password","verification_code":"123456","referral_code":"ABCD1234EF56"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	testAPI(authService, users).ServeHTTP(response, request)
@@ -2294,7 +2294,14 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	authService := &fakeAPIAuth{current: user.Record{
 		ID: currentID, Role: user.RoleMember, Status: user.StatusActive,
 	}}
-	groups := &fakeBillingGroups{records: []billinggroup.Record{activeBillingGroup(groupID, "personal", "个人版", 12_500, false)}}
+	group := activeBillingGroup(groupID, "personal", "个人版", 12_500, false)
+	discountStartsAt := time.Now().UTC().Add(-time.Hour)
+	discountEndsAt := discountStartsAt.Add(2 * time.Hour)
+	group.DiscountName = "节日优惠"
+	group.DiscountMultiplierBPS = 8_000
+	group.DiscountStartsAt = &discountStartsAt
+	group.DiscountEndsAt = &discountEndsAt
+	groups := &fakeBillingGroups{records: []billinggroup.Record{group}}
 	routes := &fakeModelRoutes{active: []modelroute.Record{{
 		PublicName: "deepseek-chat", DisplayName: "DeepSeek Chat",
 		Provider: modelroute.ProviderSummary{DisplayName: "DeepSeek", Protocol: provider.ProtocolOpenAI},
@@ -2318,8 +2325,9 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 			Prices       billing.RateCard  `json:"prices"`
 		} `json:"models"`
 		BillingGroup struct {
-			DisplayName   string `json:"display_name"`
-			MultiplierBPS int64  `json:"multiplier_bps"`
+			DisplayName            string `json:"display_name"`
+			MultiplierBPS          int64  `json:"multiplier_bps"`
+			EffectiveMultiplierBPS int64  `json:"effective_multiplier_bps"`
 		} `json:"billing_group"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -2332,10 +2340,10 @@ func TestUserListsOnlyActiveModelsAtTheirBillingGroupPrices(t *testing.T) {
 	if model.ID != "deepseek-chat" || model.ProviderName != "DeepSeek" || model.Protocol != provider.ProtocolOpenAI {
 		t.Fatalf("unexpected model metadata: %+v", model)
 	}
-	if body.BillingGroup.DisplayName != "个人版" || body.BillingGroup.MultiplierBPS != 12_500 {
+	if body.BillingGroup.DisplayName != "个人版" || body.BillingGroup.MultiplierBPS != 12_500 || body.BillingGroup.EffectiveMultiplierBPS != 10_000 {
 		t.Fatalf("unexpected billing group: %+v", body.BillingGroup)
 	}
-	if model.Prices.InputMicros != 2_500_000 || model.Prices.OutputMicros != 10_000_000 || model.Prices.CacheReadMicros != 250_000 || model.Prices.RequestMicros != 1_250 {
+	if model.Prices.InputMicros != 2_000_000 || model.Prices.OutputMicros != 8_000_000 || model.Prices.CacheReadMicros != 200_000 || model.Prices.RequestMicros != 1_000 {
 		t.Fatalf("unexpected customer prices: %+v", model.Prices)
 	}
 }
@@ -2385,6 +2393,11 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	activeID := uuid.New()
 	disabledID := uuid.New()
 	active := activeBillingGroup(activeID, "personal", "个人版", 12_500, false)
+	discountStartsAt := time.Now().UTC().Add(-time.Hour)
+	discountEndsAt := discountStartsAt.Add(2 * time.Hour)
+	active.DiscountMultiplierBPS = 8_000
+	active.DiscountStartsAt = &discountStartsAt
+	active.DiscountEndsAt = &discountEndsAt
 	active.APIKeyCount = 7
 	active.ModelRouteCount = 3
 	active.CreatedAt = time.Unix(1_700_000_000, 0).UTC()
@@ -2404,7 +2417,7 @@ func TestUserListsActiveBillingGroups(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/billing-groups", nil))
 	body := response.Body.String()
-	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || groups.listFilter.IncludeHidden || !strings.Contains(body, activeID.String()) || strings.Contains(body, hiddenID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "model_route_count") || strings.Contains(body, "created_at") {
+	if response.Code != http.StatusOK || groups.listFilter.Status != billinggroup.StatusActive || groups.listFilter.IncludeHidden || !strings.Contains(body, activeID.String()) || !strings.Contains(body, `"effective_multiplier_bps":10000`) || strings.Contains(body, hiddenID.String()) || strings.Contains(body, disabledID.String()) || strings.Contains(body, "api_key_count") || strings.Contains(body, "model_route_count") || strings.Contains(body, "created_at") {
 		t.Fatalf("status=%d filter=%+v body=%s", response.Code, groups.listFilter, response.Body.String())
 	}
 }
@@ -2632,7 +2645,7 @@ func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
 		CookieName:     "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/billing-groups", strings.NewReader(fmt.Sprintf(`{"code":"partner","display_name":"代理端","multiplier_bps":5000,"is_hidden":true,"authorized_user_ids":["%s","%s"]}`, firstUserID, secondUserID)))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/billing-groups", strings.NewReader(fmt.Sprintf(`{"code":"partner","display_name":"代理端","multiplier_bps":5000,"discount":{"name":"国庆优惠","multiplier_bps":8800,"starts_at":"2026-10-01T00:00:00+08:00","ends_at":"2026-10-08T00:00:00+08:00"},"is_hidden":true,"authorized_user_ids":["%s","%s"]}`, firstUserID, secondUserID)))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
@@ -2642,6 +2655,9 @@ func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
 	}
 	if !groups.createInput.IsHidden || len(groups.createInput.AuthorizedUserIDs) != 2 || groups.createInput.AuthorizedUserIDs[0] != firstUserID || groups.createInput.AuthorizedUserIDs[1] != secondUserID {
 		t.Fatalf("unexpected create input: %+v", groups.createInput)
+	}
+	if groups.createInput.Discount == nil || groups.createInput.Discount.Name != "国庆优惠" || groups.createInput.Discount.MultiplierBPS != 8_800 {
+		t.Fatalf("unexpected discount input: %+v", groups.createInput.Discount)
 	}
 }
 

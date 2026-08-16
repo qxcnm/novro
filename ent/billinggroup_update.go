@@ -68,6 +68,81 @@ func (_u *BillingGroupUpdate) AddMultiplierBps(v int64) *BillingGroupUpdate {
 	return _u
 }
 
+// SetDiscountName sets the "discount_name" field.
+func (_u *BillingGroupUpdate) SetDiscountName(v string) *BillingGroupUpdate {
+	_u.mutation.SetDiscountName(v)
+	return _u
+}
+
+// SetNillableDiscountName sets the "discount_name" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableDiscountName(v *string) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetDiscountName(*v)
+	}
+	return _u
+}
+
+// SetDiscountMultiplierBps sets the "discount_multiplier_bps" field.
+func (_u *BillingGroupUpdate) SetDiscountMultiplierBps(v int64) *BillingGroupUpdate {
+	_u.mutation.ResetDiscountMultiplierBps()
+	_u.mutation.SetDiscountMultiplierBps(v)
+	return _u
+}
+
+// SetNillableDiscountMultiplierBps sets the "discount_multiplier_bps" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableDiscountMultiplierBps(v *int64) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetDiscountMultiplierBps(*v)
+	}
+	return _u
+}
+
+// AddDiscountMultiplierBps adds value to the "discount_multiplier_bps" field.
+func (_u *BillingGroupUpdate) AddDiscountMultiplierBps(v int64) *BillingGroupUpdate {
+	_u.mutation.AddDiscountMultiplierBps(v)
+	return _u
+}
+
+// SetDiscountStartsAt sets the "discount_starts_at" field.
+func (_u *BillingGroupUpdate) SetDiscountStartsAt(v time.Time) *BillingGroupUpdate {
+	_u.mutation.SetDiscountStartsAt(v)
+	return _u
+}
+
+// SetNillableDiscountStartsAt sets the "discount_starts_at" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableDiscountStartsAt(v *time.Time) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetDiscountStartsAt(*v)
+	}
+	return _u
+}
+
+// ClearDiscountStartsAt clears the value of the "discount_starts_at" field.
+func (_u *BillingGroupUpdate) ClearDiscountStartsAt() *BillingGroupUpdate {
+	_u.mutation.ClearDiscountStartsAt()
+	return _u
+}
+
+// SetDiscountEndsAt sets the "discount_ends_at" field.
+func (_u *BillingGroupUpdate) SetDiscountEndsAt(v time.Time) *BillingGroupUpdate {
+	_u.mutation.SetDiscountEndsAt(v)
+	return _u
+}
+
+// SetNillableDiscountEndsAt sets the "discount_ends_at" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableDiscountEndsAt(v *time.Time) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetDiscountEndsAt(*v)
+	}
+	return _u
+}
+
+// ClearDiscountEndsAt clears the value of the "discount_ends_at" field.
+func (_u *BillingGroupUpdate) ClearDiscountEndsAt() *BillingGroupUpdate {
+	_u.mutation.ClearDiscountEndsAt()
+	return _u
+}
+
 // SetIsDefault sets the "is_default" field.
 func (_u *BillingGroupUpdate) SetIsDefault(v bool) *BillingGroupUpdate {
 	_u.mutation.SetIsDefault(v)
@@ -333,6 +408,16 @@ func (_u *BillingGroupUpdate) check() error {
 			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.multiplier_bps": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DiscountName(); ok {
+		if err := billinggroup.DiscountNameValidator(v); err != nil {
+			return &ValidationError{Name: "discount_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DiscountMultiplierBps(); ok {
+		if err := billinggroup.DiscountMultiplierBpsValidator(v); err != nil {
+			return &ValidationError{Name: "discount_multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_multiplier_bps": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := billinggroup.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.status": %w`, err)}
@@ -361,6 +446,27 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.AddedMultiplierBps(); ok {
 		_spec.AddField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DiscountName(); ok {
+		_spec.SetField(billinggroup.FieldDiscountName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DiscountMultiplierBps(); ok {
+		_spec.SetField(billinggroup.FieldDiscountMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDiscountMultiplierBps(); ok {
+		_spec.AddField(billinggroup.FieldDiscountMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DiscountStartsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountStartsAt, field.TypeTime, value)
+	}
+	if _u.mutation.DiscountStartsAtCleared() {
+		_spec.ClearField(billinggroup.FieldDiscountStartsAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DiscountEndsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountEndsAt, field.TypeTime, value)
+	}
+	if _u.mutation.DiscountEndsAtCleared() {
+		_spec.ClearField(billinggroup.FieldDiscountEndsAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)
@@ -612,6 +718,81 @@ func (_u *BillingGroupUpdateOne) SetNillableMultiplierBps(v *int64) *BillingGrou
 // AddMultiplierBps adds value to the "multiplier_bps" field.
 func (_u *BillingGroupUpdateOne) AddMultiplierBps(v int64) *BillingGroupUpdateOne {
 	_u.mutation.AddMultiplierBps(v)
+	return _u
+}
+
+// SetDiscountName sets the "discount_name" field.
+func (_u *BillingGroupUpdateOne) SetDiscountName(v string) *BillingGroupUpdateOne {
+	_u.mutation.SetDiscountName(v)
+	return _u
+}
+
+// SetNillableDiscountName sets the "discount_name" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableDiscountName(v *string) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetDiscountName(*v)
+	}
+	return _u
+}
+
+// SetDiscountMultiplierBps sets the "discount_multiplier_bps" field.
+func (_u *BillingGroupUpdateOne) SetDiscountMultiplierBps(v int64) *BillingGroupUpdateOne {
+	_u.mutation.ResetDiscountMultiplierBps()
+	_u.mutation.SetDiscountMultiplierBps(v)
+	return _u
+}
+
+// SetNillableDiscountMultiplierBps sets the "discount_multiplier_bps" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableDiscountMultiplierBps(v *int64) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetDiscountMultiplierBps(*v)
+	}
+	return _u
+}
+
+// AddDiscountMultiplierBps adds value to the "discount_multiplier_bps" field.
+func (_u *BillingGroupUpdateOne) AddDiscountMultiplierBps(v int64) *BillingGroupUpdateOne {
+	_u.mutation.AddDiscountMultiplierBps(v)
+	return _u
+}
+
+// SetDiscountStartsAt sets the "discount_starts_at" field.
+func (_u *BillingGroupUpdateOne) SetDiscountStartsAt(v time.Time) *BillingGroupUpdateOne {
+	_u.mutation.SetDiscountStartsAt(v)
+	return _u
+}
+
+// SetNillableDiscountStartsAt sets the "discount_starts_at" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableDiscountStartsAt(v *time.Time) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetDiscountStartsAt(*v)
+	}
+	return _u
+}
+
+// ClearDiscountStartsAt clears the value of the "discount_starts_at" field.
+func (_u *BillingGroupUpdateOne) ClearDiscountStartsAt() *BillingGroupUpdateOne {
+	_u.mutation.ClearDiscountStartsAt()
+	return _u
+}
+
+// SetDiscountEndsAt sets the "discount_ends_at" field.
+func (_u *BillingGroupUpdateOne) SetDiscountEndsAt(v time.Time) *BillingGroupUpdateOne {
+	_u.mutation.SetDiscountEndsAt(v)
+	return _u
+}
+
+// SetNillableDiscountEndsAt sets the "discount_ends_at" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableDiscountEndsAt(v *time.Time) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetDiscountEndsAt(*v)
+	}
+	return _u
+}
+
+// ClearDiscountEndsAt clears the value of the "discount_ends_at" field.
+func (_u *BillingGroupUpdateOne) ClearDiscountEndsAt() *BillingGroupUpdateOne {
+	_u.mutation.ClearDiscountEndsAt()
 	return _u
 }
 
@@ -893,6 +1074,16 @@ func (_u *BillingGroupUpdateOne) check() error {
 			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.multiplier_bps": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DiscountName(); ok {
+		if err := billinggroup.DiscountNameValidator(v); err != nil {
+			return &ValidationError{Name: "discount_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_name": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.DiscountMultiplierBps(); ok {
+		if err := billinggroup.DiscountMultiplierBpsValidator(v); err != nil {
+			return &ValidationError{Name: "discount_multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_multiplier_bps": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := billinggroup.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.status": %w`, err)}
@@ -938,6 +1129,27 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 	}
 	if value, ok := _u.mutation.AddedMultiplierBps(); ok {
 		_spec.AddField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DiscountName(); ok {
+		_spec.SetField(billinggroup.FieldDiscountName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DiscountMultiplierBps(); ok {
+		_spec.SetField(billinggroup.FieldDiscountMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDiscountMultiplierBps(); ok {
+		_spec.AddField(billinggroup.FieldDiscountMultiplierBps, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DiscountStartsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountStartsAt, field.TypeTime, value)
+	}
+	if _u.mutation.DiscountStartsAtCleared() {
+		_spec.ClearField(billinggroup.FieldDiscountStartsAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DiscountEndsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountEndsAt, field.TypeTime, value)
+	}
+	if _u.mutation.DiscountEndsAtCleared() {
+		_spec.ClearField(billinggroup.FieldDiscountEndsAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)

@@ -157,7 +157,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (Record, er
 		return Record{}, ErrInvalidReferralCode
 	}
 	return s.create(ctx, CreateInput{
-		Username: input.Username, Email: input.Email, DisplayName: input.DisplayName, Password: input.Password, Role: RoleMember,
+		Username: input.Username, Email: input.Email, DisplayName: input.Username, Password: input.Password, Role: RoleMember,
 	}, func(ctx context.Context, params CreateParams) (Record, error) {
 		params.ReferralCode = referralCode
 		return s.store.Create(ctx, params)

@@ -50,6 +50,18 @@ type fakePricing struct {
 	err        error
 }
 
+type fakeDiscounts struct {
+	multiplierBPS int64
+	calls         int
+	groupID       uuid.UUID
+}
+
+func (f *fakeDiscounts) MultiplierAt(group billinggroup.Summary, _ time.Time) int64 {
+	f.calls++
+	f.groupID = group.ID
+	return f.multiplierBPS
+}
+
 func (f *fakePricing) Resolve(_ context.Context, modelID uuid.UUID, at time.Time) (modelpricing.Resolution, error) {
 	f.modelID = modelID
 	f.at = at
@@ -630,13 +642,15 @@ func TestIdempotencyReplayDoesNotCallUpstreamOrReserveAgain(t *testing.T) {
 }
 
 /**
- * TestProxyAppliesBillingGroupMultiplierToReservationAndCharge 验证对应功能在指定场景下的行为。
+ * TestProxyAppliesScheduledBillingGroupDiscountToReservationAndCharge 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) {
+func TestProxyAppliesScheduledBillingGroupDiscountToReservationAndCharge(t *testing.T) {
+	startedAt := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
 	actor := gatewayActorWithMultiplier(4_000)
+	discounts := &fakeDiscounts{multiplierBPS: 3_200}
 	route := openAIRoute()
 	biller := &fakeBilling{}
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -646,7 +660,8 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 			Body:       io.NopCloser(strings.NewReader(`{"id":"up-multiplier","usage":{"prompt_tokens":10,"completion_tokens":20}}`)),
 		}, nil
 	})}
-	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: biller, Client: client})
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: biller, Discounts: discounts, Client: client})
+	handler.now = func() time.Time { return startedAt }
 	requestBody := `{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"max_tokens":100}`
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(requestBody)))
@@ -657,8 +672,11 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 	if biller.reserveCalls != 1 || biller.finalizeCalls != 1 || biller.refundCalls != 0 {
 		t.Fatalf("unexpected billing calls: %+v", biller)
 	}
-	if biller.usage.MultiplierBPS != 4_000 || biller.usage.BaseCostMicros != 180 || biller.usage.CostMicros != 72 {
-		t.Fatalf("billing group multiplier was not applied to final charge: %+v", biller.usage)
+	if biller.usage.MultiplierBPS != 3_200 || biller.usage.BaseCostMicros != 180 || biller.usage.CostMicros != 58 {
+		t.Fatalf("billing group discount was not applied to final charge: %+v", biller.usage)
+	}
+	if discounts.calls != 1 || discounts.groupID != actor.APIKey.BillingGroupID {
+		t.Fatalf("shared discount resolver was not used: calls=%d group=%s", discounts.calls, discounts.groupID)
 	}
 
 	var payload map[string]any
@@ -669,12 +687,12 @@ func TestProxyAppliesBillingGroupMultiplierToReservationAndCharge(t *testing.T) 
 	if err != nil {
 		t.Fatalf("build upstream body: %v", err)
 	}
-	expectedReservation, err := billing.EstimateReservation(estimateInputTokens(upstreamBody), 100, rateCardFor(route), 4_000)
+	expectedReservation, err := billing.EstimateReservation(estimateInputTokens(upstreamBody), 100, rateCardFor(route), 3_200)
 	if err != nil {
 		t.Fatalf("estimate expected reservation: %v", err)
 	}
 	if biller.reserved != expectedReservation.CostMicros {
-		t.Fatalf("billing group multiplier was not applied to reservation: got=%d want=%d", biller.reserved, expectedReservation.CostMicros)
+		t.Fatalf("billing group discount was not applied to reservation: got=%d want=%d", biller.reserved, expectedReservation.CostMicros)
 	}
 }
 

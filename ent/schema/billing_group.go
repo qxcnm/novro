@@ -26,6 +26,10 @@ func (BillingGroup) Fields() []ent.Field {
 		field.String("code").NotEmpty().MaxLen(64).Unique().Immutable(),
 		field.String("display_name").NotEmpty().MaxLen(128),
 		field.Int64("multiplier_bps").Positive().Default(10_000),
+		field.String("discount_name").Default("").MaxLen(64),
+		field.Int64("discount_multiplier_bps").Positive().Default(10_000),
+		field.Time("discount_starts_at").Optional().Nillable(),
+		field.Time("discount_ends_at").Optional().Nillable(),
 		field.Bool("is_default").Default(false),
 		field.Bool("is_hidden").Default(false),
 		field.Enum("status").Values("active", "disabled").Default("active"),
@@ -61,6 +65,7 @@ func (BillingGroup) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status", "created_at"),
 		index.Fields("is_default"),
+		index.Fields("discount_starts_at", "discount_ends_at"),
 		index.Fields("deleted_at"),
 	}
 }

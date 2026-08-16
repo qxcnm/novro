@@ -38,6 +38,33 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		return Record{}, fmt.Errorf("begin provider creation: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	existing, err := tx.Provider.Query().Where(entprovider.CodeEQ(params.Code)).ForUpdate().Only(ctx)
+	if err == nil {
+		if existing.DeletedAt == nil {
+			return Record{}, ErrCodeTaken
+		}
+		restored, restoreErr := tx.Provider.UpdateOne(existing).
+			SetDisplayName(params.DisplayName).
+			SetProtocol(entprovider.Protocol(params.Protocol)).
+			SetBaseURL(params.BaseURL).
+			SetModelListPath(params.ModelListPath).
+			SetWeight(params.Weight).
+			SetEncryptedAPIKey(params.EncryptedAPIKey).
+			SetAPIKeyHint(params.APIKeyHint).
+			SetStatus(entprovider.StatusActive).
+			ClearDeletedAt().
+			Save(ctx)
+		if restoreErr != nil {
+			return Record{}, fmt.Errorf("restore deleted provider: %w", restoreErr)
+		}
+		if err := tx.Commit(); err != nil {
+			return Record{}, fmt.Errorf("commit provider restoration: %w", err)
+		}
+		return fromEnt(restored), nil
+	}
+	if !ent.IsNotFound(err) {
+		return Record{}, fmt.Errorf("check provider code availability: %w", err)
+	}
 	created, err := tx.Provider.Create().
 		SetCode(params.Code).
 		SetDisplayName(params.DisplayName).

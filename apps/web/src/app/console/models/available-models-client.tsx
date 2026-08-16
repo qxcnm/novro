@@ -29,7 +29,7 @@ type AvailableModel = {
   prices: Prices;
 };
 
-type BillingGroup = { id: string; code: string; display_name: string; multiplier_bps: number; is_default?: boolean; status?: "active" | "disabled" };
+type BillingGroup = { id: string; code: string; display_name: string; multiplier_bps: number; effective_multiplier_bps?: number; is_default?: boolean; status?: "active" | "disabled" };
 
 type ErrorResponse = { error?: { message?: string } };
 
@@ -181,7 +181,7 @@ export default function AvailableModelsClient() {
   }
 
   const billingGroupName = billingGroup?.display_name ?? "--";
-  const multiplier = billingGroup ? `${(billingGroup.multiplier_bps / 10_000).toFixed(2)}x` : "--";
+  const multiplier = billingGroup ? `${((billingGroup.effective_multiplier_bps ?? billingGroup.multiplier_bps) / 10_000).toFixed(2)}x` : "--";
 
   return (
     <div className="space-y-5">
@@ -199,7 +199,7 @@ export default function AvailableModelsClient() {
         <div className="flex gap-2">
           <Select onValueChange={(value) => void load(value)} value={selectedBillingGroupID}>
             <SelectTrigger aria-label="选择计费分组" className="min-w-44"><SelectValue placeholder="选择计费分组" /></SelectTrigger>
-            <SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {(group.multiplier_bps / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent>
+            <SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent>
           </Select>
           <Select onValueChange={setProtocol} value={protocol}>
             <SelectTrigger aria-label="按兼容协议筛选" className="min-w-36"><SelectValue /></SelectTrigger>

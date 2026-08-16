@@ -243,13 +243,14 @@ EmailVerificationCode
 
 - `code`、`display_name`
 - `multiplier_bps`，10000 表示 1.0000 倍
+- `discount_name`、`discount_multiplier_bps`、`discount_starts_at`、`discount_ends_at`，保存一个定时优惠窗口
 - `is_default`、`status`、`created_at`、`updated_at`
 
 计费分组用于 API Key 和模型路由两个维度。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
 `billing_group_authorized_users` 用 `(billing_group_id, user_id)` 唯一记录普通成员的逐组授权；管理员
 自动拥有全部隐藏组权限，不写入该表。`0010` 会将旧 `can_access_hidden_groups = TRUE` 的普通成员
 回填到迁移时所有未删除隐藏组，以保持升级前的有效权限；应用不再读取或写入旧布尔列。创建 API Key
-时用户选择分组；管理员在模型关联和模型路由配置时为每条路由选择分组。调用时以 API Key 的 `billing_group_id` 选择路由，以该分组的 `multiplier_bps` 计算费用，倍率数值不参与路由匹配。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
+时用户选择分组；管理员在模型关联和模型路由配置时为每条路由选择分组。调用时以 API Key 的 `billing_group_id` 选择路由。请求开始时间命中优惠半开区间 `[discount_starts_at, discount_ends_at)` 时，实际倍率为 `multiplier_bps × discount_multiplier_bps / 10000`，否则使用基础倍率；分组倍率和优惠规则由进程级共享快照提供，首次使用可由 API Key 认证结果填充，管理服务写操作成功后同步更新或移除缓存项。最终倍率随用量快照保存，倍率数值不参与路由匹配。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
 用于空库初始化和默认选择，不能停用。
 
 ## 14. upstream_models
@@ -286,18 +287,20 @@ flowchart LR
 ```
 
 - `upstream_model_id + version` 唯一，`mode` 为 `fixed` 或 `scheduled`
-- `timezone` 使用 IANA 时区名，`effective_from` 和可选 `effective_to` 定义版本生效区间
+- 固定价使用 `timezone=UTC`，只保存默认六维费率
+- 分时价的 `timezone` 使用 IANA 时区名；两种模式都在发布时由服务端写入 `effective_from`
+- `effective_to` 只记录该版本被新版本替换或历史版本切换的时间，不接受管理员排期
 - `status` 为 `draft`、`published` 或 `retired`
 - 默认费率包含普通输入、输出、缓存命中、两种缓存创建和按次固定费六个维度
 
-`scheduled` 方案必须有一个或多个 `model_price_windows`。窗口用 `weekday_mask`、
+`fixed` 方案只包含默认六维费率。`scheduled` 方案必须有一个或多个 `model_price_windows`。窗口用 `weekday_mask`、
 `start_minute` 和 `end_minute` 表示不跨日的周重复时段，并保存完整六维费率；未命中窗口时使用
 方案默认费率。同一星期内窗口不能重叠，结束分钟不属于当前窗口。管理员只能修改或删除草稿；
-发布新版本时，服务会自动把前一个已发布版本的失效时间收口到新版本生效时间。
-历史版本切换直接调整已有版本的生效区间：目标版本从当前时间开始生效，当前版本在该时刻失效，
+发布任一模式的新版本时，服务会以事务内的发布时间立即启用新版本并关闭当前版本，不存在未来生效空档。
+历史版本切换直接调整已有版本的审计区间：目标版本从当前时间开始生效，当前版本在该时刻失效，
 版本号和完整价格定义保持不变，因此不会生成新版本。若目标版本已经是当前生效版本，切换操作幂等完成。
 
-网关在请求开始时按方案时区解析一次价格，并把结果固定到本次预占和最终结算。请求执行期间即使
+网关在请求开始时选择当前已发布版本，再按方案时区解析窗口，并把结果固定到本次预占和最终结算。请求执行期间即使
 跨过时段边界或管理员发布新版本，也不会改变本次调用价格。只有模型完全没有已发布版本时才允许
 读取旧版价格字段；已有已发布版本但当前处于生效空档时返回无有效价格，不静默回退。
 网关服务会将每个模型的已发布方案和窗口作为共享内存快照复用，首次访问该模型时加载一次；发布新版本
@@ -318,7 +321,7 @@ flowchart LR
 该表，但费用和 Token 保持为 0，并通过状态码和错误字段标记失败。该表保存调用审计和不可变结算依据，
 不保存请求提示词、完整响应或上游凭据。`token-v3-confirmed-usage` 算法只结算上游明确报告的
 Token 维度；缺失维度保持 0 并设置 `estimated`，保守请求预占只用于余额校验，不能作为最终费用。
-预占和最终费用都应用 API Key 请求时绑定的 `multiplier_bps`。
+预占和最终费用都应用 API Key 在请求开始时命中的有效倍率，并把该倍率保存为 `multiplier_bps` 快照。
 
 ## 17. gateway_operations
 

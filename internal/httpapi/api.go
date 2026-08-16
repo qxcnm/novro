@@ -2493,6 +2493,7 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	models := make([]availableModel, 0, len(routes))
 	modelIndexes := make(map[string]int, len(routes))
 	resolvedAt := time.Now().UTC()
+	effectiveMultiplierBPS := selected.MultiplierAt(resolvedAt)
 	for _, route := range routes {
 		if route.UpstreamModel == nil {
 			continue
@@ -2521,12 +2522,12 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 			ID: route.PublicName, DisplayName: route.DisplayName,
 			ProviderName: providerName, Protocol: route.Provider.Protocol, ChannelCount: 1,
 			Prices: billing.RateCard{
-				InputMicros:        priceWithMultiplier(prices.InputMicros, selected.MultiplierBPS),
-				OutputMicros:       priceWithMultiplier(prices.OutputMicros, selected.MultiplierBPS),
-				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, selected.MultiplierBPS),
-				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, selected.MultiplierBPS),
-				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, selected.MultiplierBPS),
-				RequestMicros:      priceWithMultiplier(prices.RequestMicros, selected.MultiplierBPS),
+				InputMicros:        priceWithMultiplier(prices.InputMicros, effectiveMultiplierBPS),
+				OutputMicros:       priceWithMultiplier(prices.OutputMicros, effectiveMultiplierBPS),
+				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, effectiveMultiplierBPS),
+				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, effectiveMultiplierBPS),
+				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, effectiveMultiplierBPS),
+				RequestMicros:      priceWithMultiplier(prices.RequestMicros, effectiveMultiplierBPS),
 			},
 		}
 		key := candidate.ID + "\x00" + string(candidate.Protocol)
@@ -2541,10 +2542,11 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"models": models,
 		"billing_group": map[string]any{
-			"id":             selected.ID,
-			"code":           selected.Code,
-			"display_name":   selected.DisplayName,
-			"multiplier_bps": selected.MultiplierBPS,
+			"id":                       selected.ID,
+			"code":                     selected.Code,
+			"display_name":             selected.DisplayName,
+			"multiplier_bps":           selected.MultiplierBPS,
+			"effective_multiplier_bps": effectiveMultiplierBPS,
 		},
 	})
 }
@@ -2567,26 +2569,29 @@ func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	groups := make([]accountBillingGroup, 0, len(records))
+	now := time.Now().UTC()
 	for _, record := range records {
 		groups = append(groups, accountBillingGroup{
-			ID:            record.ID,
-			Code:          record.Code,
-			DisplayName:   record.DisplayName,
-			MultiplierBPS: record.MultiplierBPS,
-			IsDefault:     record.IsDefault,
-			Status:        record.Status,
+			ID:                     record.ID,
+			Code:                   record.Code,
+			DisplayName:            record.DisplayName,
+			MultiplierBPS:          record.MultiplierBPS,
+			EffectiveMultiplierBPS: record.MultiplierAt(now),
+			IsDefault:              record.IsDefault,
+			Status:                 record.Status,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"billing_groups": groups})
 }
 
 type accountBillingGroup struct {
-	ID            uuid.UUID           `json:"id"`
-	Code          string              `json:"code"`
-	DisplayName   string              `json:"display_name"`
-	MultiplierBPS int64               `json:"multiplier_bps"`
-	IsDefault     bool                `json:"is_default"`
-	Status        billinggroup.Status `json:"status"`
+	ID                     uuid.UUID           `json:"id"`
+	Code                   string              `json:"code"`
+	DisplayName            string              `json:"display_name"`
+	MultiplierBPS          int64               `json:"multiplier_bps"`
+	EffectiveMultiplierBPS int64               `json:"effective_multiplier_bps"`
+	IsDefault              bool                `json:"is_default"`
+	Status                 billinggroup.Status `json:"status"`
 }
 
 /**
@@ -3729,7 +3734,7 @@ func (h *apiHandler) writeUpstreamModelError(w http.ResponseWriter, operation st
 func (h *apiHandler) writeModelPricingError(w http.ResponseWriter, operation string, err error) {
 	switch {
 	case errors.Is(err, modelpricing.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "invalid_price_plan", "价格方案无效，请检查时区、生效时间、价格和时段")
+		writeError(w, http.StatusBadRequest, "invalid_price_plan", "价格方案无效，请检查时区、价格和时段")
 	case errors.Is(err, modelpricing.ErrModelMissing), errors.Is(err, modelpricing.ErrNotFound), errors.Is(err, modelpricing.ErrNoPrice):
 		writeError(w, http.StatusNotFound, "not_found", "价格方案或模型不存在")
 	case errors.Is(err, modelpricing.ErrImmutable):

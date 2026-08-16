@@ -315,7 +315,7 @@ func fromEnt(entity *ent.APIKey) Record {
 		KeySecretCiphertext: entity.KeySecretCiphertext,
 	}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
-		record.BillingGroup = billinggroup.Summary{ID: group.ID, Code: group.Code, DisplayName: group.DisplayName, MultiplierBPS: group.MultiplierBps}
+		record.BillingGroup = billinggroup.NewSummary(group.ID, group.Code, group.DisplayName, group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt)
 	}
 	return record
 }

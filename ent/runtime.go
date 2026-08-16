@@ -320,20 +320,32 @@ func init() {
 	billinggroup.DefaultMultiplierBps = billinggroupDescMultiplierBps.Default.(int64)
 	// billinggroup.MultiplierBpsValidator is a validator for the "multiplier_bps" field. It is called by the builders before save.
 	billinggroup.MultiplierBpsValidator = billinggroupDescMultiplierBps.Validators[0].(func(int64) error)
+	// billinggroupDescDiscountName is the schema descriptor for discount_name field.
+	billinggroupDescDiscountName := billinggroupFields[4].Descriptor()
+	// billinggroup.DefaultDiscountName holds the default value on creation for the discount_name field.
+	billinggroup.DefaultDiscountName = billinggroupDescDiscountName.Default.(string)
+	// billinggroup.DiscountNameValidator is a validator for the "discount_name" field. It is called by the builders before save.
+	billinggroup.DiscountNameValidator = billinggroupDescDiscountName.Validators[0].(func(string) error)
+	// billinggroupDescDiscountMultiplierBps is the schema descriptor for discount_multiplier_bps field.
+	billinggroupDescDiscountMultiplierBps := billinggroupFields[5].Descriptor()
+	// billinggroup.DefaultDiscountMultiplierBps holds the default value on creation for the discount_multiplier_bps field.
+	billinggroup.DefaultDiscountMultiplierBps = billinggroupDescDiscountMultiplierBps.Default.(int64)
+	// billinggroup.DiscountMultiplierBpsValidator is a validator for the "discount_multiplier_bps" field. It is called by the builders before save.
+	billinggroup.DiscountMultiplierBpsValidator = billinggroupDescDiscountMultiplierBps.Validators[0].(func(int64) error)
 	// billinggroupDescIsDefault is the schema descriptor for is_default field.
-	billinggroupDescIsDefault := billinggroupFields[4].Descriptor()
+	billinggroupDescIsDefault := billinggroupFields[8].Descriptor()
 	// billinggroup.DefaultIsDefault holds the default value on creation for the is_default field.
 	billinggroup.DefaultIsDefault = billinggroupDescIsDefault.Default.(bool)
 	// billinggroupDescIsHidden is the schema descriptor for is_hidden field.
-	billinggroupDescIsHidden := billinggroupFields[5].Descriptor()
+	billinggroupDescIsHidden := billinggroupFields[9].Descriptor()
 	// billinggroup.DefaultIsHidden holds the default value on creation for the is_hidden field.
 	billinggroup.DefaultIsHidden = billinggroupDescIsHidden.Default.(bool)
 	// billinggroupDescCreatedAt is the schema descriptor for created_at field.
-	billinggroupDescCreatedAt := billinggroupFields[7].Descriptor()
+	billinggroupDescCreatedAt := billinggroupFields[11].Descriptor()
 	// billinggroup.DefaultCreatedAt holds the default value on creation for the created_at field.
 	billinggroup.DefaultCreatedAt = billinggroupDescCreatedAt.Default.(func() time.Time)
 	// billinggroupDescUpdatedAt is the schema descriptor for updated_at field.
-	billinggroupDescUpdatedAt := billinggroupFields[8].Descriptor()
+	billinggroupDescUpdatedAt := billinggroupFields[12].Descriptor()
 	// billinggroup.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	billinggroup.DefaultUpdatedAt = billinggroupDescUpdatedAt.Default.(func() time.Time)
 	// billinggroup.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

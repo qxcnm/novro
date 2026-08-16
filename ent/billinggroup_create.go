@@ -51,6 +51,62 @@ func (_c *BillingGroupCreate) SetNillableMultiplierBps(v *int64) *BillingGroupCr
 	return _c
 }
 
+// SetDiscountName sets the "discount_name" field.
+func (_c *BillingGroupCreate) SetDiscountName(v string) *BillingGroupCreate {
+	_c.mutation.SetDiscountName(v)
+	return _c
+}
+
+// SetNillableDiscountName sets the "discount_name" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableDiscountName(v *string) *BillingGroupCreate {
+	if v != nil {
+		_c.SetDiscountName(*v)
+	}
+	return _c
+}
+
+// SetDiscountMultiplierBps sets the "discount_multiplier_bps" field.
+func (_c *BillingGroupCreate) SetDiscountMultiplierBps(v int64) *BillingGroupCreate {
+	_c.mutation.SetDiscountMultiplierBps(v)
+	return _c
+}
+
+// SetNillableDiscountMultiplierBps sets the "discount_multiplier_bps" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableDiscountMultiplierBps(v *int64) *BillingGroupCreate {
+	if v != nil {
+		_c.SetDiscountMultiplierBps(*v)
+	}
+	return _c
+}
+
+// SetDiscountStartsAt sets the "discount_starts_at" field.
+func (_c *BillingGroupCreate) SetDiscountStartsAt(v time.Time) *BillingGroupCreate {
+	_c.mutation.SetDiscountStartsAt(v)
+	return _c
+}
+
+// SetNillableDiscountStartsAt sets the "discount_starts_at" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableDiscountStartsAt(v *time.Time) *BillingGroupCreate {
+	if v != nil {
+		_c.SetDiscountStartsAt(*v)
+	}
+	return _c
+}
+
+// SetDiscountEndsAt sets the "discount_ends_at" field.
+func (_c *BillingGroupCreate) SetDiscountEndsAt(v time.Time) *BillingGroupCreate {
+	_c.mutation.SetDiscountEndsAt(v)
+	return _c
+}
+
+// SetNillableDiscountEndsAt sets the "discount_ends_at" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableDiscountEndsAt(v *time.Time) *BillingGroupCreate {
+	if v != nil {
+		_c.SetDiscountEndsAt(*v)
+	}
+	return _c
+}
+
 // SetIsDefault sets the "is_default" field.
 func (_c *BillingGroupCreate) SetIsDefault(v bool) *BillingGroupCreate {
 	_c.mutation.SetIsDefault(v)
@@ -248,6 +304,14 @@ func (_c *BillingGroupCreate) defaults() {
 		v := billinggroup.DefaultMultiplierBps
 		_c.mutation.SetMultiplierBps(v)
 	}
+	if _, ok := _c.mutation.DiscountName(); !ok {
+		v := billinggroup.DefaultDiscountName
+		_c.mutation.SetDiscountName(v)
+	}
+	if _, ok := _c.mutation.DiscountMultiplierBps(); !ok {
+		v := billinggroup.DefaultDiscountMultiplierBps
+		_c.mutation.SetDiscountMultiplierBps(v)
+	}
 	if _, ok := _c.mutation.IsDefault(); !ok {
 		v := billinggroup.DefaultIsDefault
 		_c.mutation.SetIsDefault(v)
@@ -298,6 +362,22 @@ func (_c *BillingGroupCreate) check() error {
 	if v, ok := _c.mutation.MultiplierBps(); ok {
 		if err := billinggroup.MultiplierBpsValidator(v); err != nil {
 			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.multiplier_bps": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DiscountName(); !ok {
+		return &ValidationError{Name: "discount_name", err: errors.New(`ent: missing required field "BillingGroup.discount_name"`)}
+	}
+	if v, ok := _c.mutation.DiscountName(); ok {
+		if err := billinggroup.DiscountNameValidator(v); err != nil {
+			return &ValidationError{Name: "discount_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.DiscountMultiplierBps(); !ok {
+		return &ValidationError{Name: "discount_multiplier_bps", err: errors.New(`ent: missing required field "BillingGroup.discount_multiplier_bps"`)}
+	}
+	if v, ok := _c.mutation.DiscountMultiplierBps(); ok {
+		if err := billinggroup.DiscountMultiplierBpsValidator(v); err != nil {
+			return &ValidationError{Name: "discount_multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.discount_multiplier_bps": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.IsDefault(); !ok {
@@ -366,6 +446,22 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.MultiplierBps(); ok {
 		_spec.SetField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
 		_node.MultiplierBps = value
+	}
+	if value, ok := _c.mutation.DiscountName(); ok {
+		_spec.SetField(billinggroup.FieldDiscountName, field.TypeString, value)
+		_node.DiscountName = value
+	}
+	if value, ok := _c.mutation.DiscountMultiplierBps(); ok {
+		_spec.SetField(billinggroup.FieldDiscountMultiplierBps, field.TypeInt64, value)
+		_node.DiscountMultiplierBps = value
+	}
+	if value, ok := _c.mutation.DiscountStartsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountStartsAt, field.TypeTime, value)
+		_node.DiscountStartsAt = &value
+	}
+	if value, ok := _c.mutation.DiscountEndsAt(); ok {
+		_spec.SetField(billinggroup.FieldDiscountEndsAt, field.TypeTime, value)
+		_node.DiscountEndsAt = &value
 	}
 	if value, ok := _c.mutation.IsDefault(); ok {
 		_spec.SetField(billinggroup.FieldIsDefault, field.TypeBool, value)

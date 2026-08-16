@@ -177,8 +177,43 @@ func TestCreateDraftAcceptsValidPeakValleySchedule(t *testing.T) {
 	if _, err := service.CreateDraft(context.Background(), modelID, input); err != nil {
 		t.Fatalf("create peak-valley draft: %v", err)
 	}
-	if store.modelID != modelID || !store.created.EffectiveFrom.Equal(from.UTC()) || len(store.created.Windows) != 2 {
+	if store.modelID != modelID || !store.created.EffectiveFrom.Equal(time.Unix(0, 0).UTC()) || len(store.created.Windows) != 2 {
 		t.Fatalf("unexpected normalized input: %+v", store.created)
+	}
+}
+
+func TestCreateDraftNormalizesFixedVersionForImmediatePublication(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store)
+	future := time.Now().UTC().Add(30 * 24 * time.Hour)
+	ends := future.Add(time.Hour)
+	input := PlanInput{
+		Mode: ModeFixed, Timezone: "not/a-zone", EffectiveFrom: future, EffectiveTo: &ends,
+		DefaultRates: billing.RateCard{InputMicros: 1_000_000, OutputMicros: 2_000_000},
+	}
+	if _, err := service.CreateDraft(context.Background(), uuid.New(), input); err != nil {
+		t.Fatalf("create fixed price draft: %v", err)
+	}
+	if store.created.Timezone != "UTC" || !store.created.EffectiveFrom.Equal(time.Unix(0, 0).UTC()) || store.created.EffectiveTo != nil {
+		t.Fatalf("fixed version retained caller publication dates: %+v", store.created)
+	}
+}
+
+func TestCreateDraftNormalizesScheduledVersionForImmediatePublication(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store)
+	future := time.Now().UTC().Add(30 * 24 * time.Hour)
+	ends := future.Add(time.Hour)
+	input := PlanInput{
+		Mode: ModeScheduled, Timezone: "Asia/Shanghai", EffectiveFrom: future, EffectiveTo: &ends,
+		DefaultRates: billing.RateCard{InputMicros: 1_000_000, OutputMicros: 2_000_000},
+		Windows:      []WindowInput{{Label: "all day", WeekdayMask: 127, StartMinute: 0, EndMinute: 1440, Rates: billing.RateCard{InputMicros: 1_000_000, OutputMicros: 2_000_000}}},
+	}
+	if _, err := service.CreateDraft(context.Background(), uuid.New(), input); err != nil {
+		t.Fatalf("create scheduled price draft: %v", err)
+	}
+	if !store.created.EffectiveFrom.Equal(time.Unix(0, 0).UTC()) || store.created.EffectiveTo != nil {
+		t.Fatalf("scheduled version retained caller publication dates: %+v", store.created)
 	}
 }
 
@@ -202,7 +237,10 @@ func TestCreateDraftRejectsOverlappingWindowsOnSharedWeekday(t *testing.T) {
 
 func TestCreateDraftRejectsInvalidModeAndTimezone(t *testing.T) {
 	service := NewService(&fakeStore{})
-	base := PlanInput{Mode: ModeFixed, Timezone: "not/a-zone", EffectiveFrom: time.Now()}
+	base := PlanInput{
+		Mode: ModeScheduled, Timezone: "not/a-zone", EffectiveFrom: time.Now(),
+		Windows: []WindowInput{{Label: "all day", WeekdayMask: 127, StartMinute: 0, EndMinute: 1440}},
+	}
 	if _, err := service.CreateDraft(context.Background(), uuid.New(), base); err != ErrInvalidInput {
 		t.Fatalf("expected invalid timezone rejection, got %v", err)
 	}

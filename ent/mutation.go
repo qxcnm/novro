@@ -4292,35 +4292,40 @@ func (m *APIUsageMutation) ResetEdge(name string) error {
 // BillingGroupMutation represents an operation that mutates the BillingGroup nodes in the graph.
 type BillingGroupMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *uuid.UUID
-	code                    *string
-	display_name            *string
-	multiplier_bps          *int64
-	addmultiplier_bps       *int64
-	is_default              *bool
-	is_hidden               *bool
-	status                  *billinggroup.Status
-	created_at              *time.Time
-	updated_at              *time.Time
-	deleted_at              *time.Time
-	clearedFields           map[string]struct{}
-	api_keys                map[uuid.UUID]struct{}
-	removedapi_keys         map[uuid.UUID]struct{}
-	clearedapi_keys         bool
-	model_routes            map[uuid.UUID]struct{}
-	removedmodel_routes     map[uuid.UUID]struct{}
-	clearedmodel_routes     bool
-	api_usages              map[uuid.UUID]struct{}
-	removedapi_usages       map[uuid.UUID]struct{}
-	clearedapi_usages       bool
-	authorized_users        map[uuid.UUID]struct{}
-	removedauthorized_users map[uuid.UUID]struct{}
-	clearedauthorized_users bool
-	done                    bool
-	oldValue                func(context.Context) (*BillingGroup, error)
-	predicates              []predicate.BillingGroup
+	op                         Op
+	typ                        string
+	id                         *uuid.UUID
+	code                       *string
+	display_name               *string
+	multiplier_bps             *int64
+	addmultiplier_bps          *int64
+	discount_name              *string
+	discount_multiplier_bps    *int64
+	adddiscount_multiplier_bps *int64
+	discount_starts_at         *time.Time
+	discount_ends_at           *time.Time
+	is_default                 *bool
+	is_hidden                  *bool
+	status                     *billinggroup.Status
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	deleted_at                 *time.Time
+	clearedFields              map[string]struct{}
+	api_keys                   map[uuid.UUID]struct{}
+	removedapi_keys            map[uuid.UUID]struct{}
+	clearedapi_keys            bool
+	model_routes               map[uuid.UUID]struct{}
+	removedmodel_routes        map[uuid.UUID]struct{}
+	clearedmodel_routes        bool
+	api_usages                 map[uuid.UUID]struct{}
+	removedapi_usages          map[uuid.UUID]struct{}
+	clearedapi_usages          bool
+	authorized_users           map[uuid.UUID]struct{}
+	removedauthorized_users    map[uuid.UUID]struct{}
+	clearedauthorized_users    bool
+	done                       bool
+	oldValue                   func(context.Context) (*BillingGroup, error)
+	predicates                 []predicate.BillingGroup
 }
 
 var _ ent.Mutation = (*BillingGroupMutation)(nil)
@@ -4553,6 +4558,196 @@ func (m *BillingGroupMutation) AddedMultiplierBps() (r int64, exists bool) {
 func (m *BillingGroupMutation) ResetMultiplierBps() {
 	m.multiplier_bps = nil
 	m.addmultiplier_bps = nil
+}
+
+// SetDiscountName sets the "discount_name" field.
+func (m *BillingGroupMutation) SetDiscountName(s string) {
+	m.discount_name = &s
+}
+
+// DiscountName returns the value of the "discount_name" field in the mutation.
+func (m *BillingGroupMutation) DiscountName() (r string, exists bool) {
+	v := m.discount_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountName returns the old "discount_name" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldDiscountName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountName: %w", err)
+	}
+	return oldValue.DiscountName, nil
+}
+
+// ResetDiscountName resets all changes to the "discount_name" field.
+func (m *BillingGroupMutation) ResetDiscountName() {
+	m.discount_name = nil
+}
+
+// SetDiscountMultiplierBps sets the "discount_multiplier_bps" field.
+func (m *BillingGroupMutation) SetDiscountMultiplierBps(i int64) {
+	m.discount_multiplier_bps = &i
+	m.adddiscount_multiplier_bps = nil
+}
+
+// DiscountMultiplierBps returns the value of the "discount_multiplier_bps" field in the mutation.
+func (m *BillingGroupMutation) DiscountMultiplierBps() (r int64, exists bool) {
+	v := m.discount_multiplier_bps
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountMultiplierBps returns the old "discount_multiplier_bps" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldDiscountMultiplierBps(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountMultiplierBps is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountMultiplierBps requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountMultiplierBps: %w", err)
+	}
+	return oldValue.DiscountMultiplierBps, nil
+}
+
+// AddDiscountMultiplierBps adds i to the "discount_multiplier_bps" field.
+func (m *BillingGroupMutation) AddDiscountMultiplierBps(i int64) {
+	if m.adddiscount_multiplier_bps != nil {
+		*m.adddiscount_multiplier_bps += i
+	} else {
+		m.adddiscount_multiplier_bps = &i
+	}
+}
+
+// AddedDiscountMultiplierBps returns the value that was added to the "discount_multiplier_bps" field in this mutation.
+func (m *BillingGroupMutation) AddedDiscountMultiplierBps() (r int64, exists bool) {
+	v := m.adddiscount_multiplier_bps
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDiscountMultiplierBps resets all changes to the "discount_multiplier_bps" field.
+func (m *BillingGroupMutation) ResetDiscountMultiplierBps() {
+	m.discount_multiplier_bps = nil
+	m.adddiscount_multiplier_bps = nil
+}
+
+// SetDiscountStartsAt sets the "discount_starts_at" field.
+func (m *BillingGroupMutation) SetDiscountStartsAt(t time.Time) {
+	m.discount_starts_at = &t
+}
+
+// DiscountStartsAt returns the value of the "discount_starts_at" field in the mutation.
+func (m *BillingGroupMutation) DiscountStartsAt() (r time.Time, exists bool) {
+	v := m.discount_starts_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountStartsAt returns the old "discount_starts_at" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldDiscountStartsAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountStartsAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountStartsAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountStartsAt: %w", err)
+	}
+	return oldValue.DiscountStartsAt, nil
+}
+
+// ClearDiscountStartsAt clears the value of the "discount_starts_at" field.
+func (m *BillingGroupMutation) ClearDiscountStartsAt() {
+	m.discount_starts_at = nil
+	m.clearedFields[billinggroup.FieldDiscountStartsAt] = struct{}{}
+}
+
+// DiscountStartsAtCleared returns if the "discount_starts_at" field was cleared in this mutation.
+func (m *BillingGroupMutation) DiscountStartsAtCleared() bool {
+	_, ok := m.clearedFields[billinggroup.FieldDiscountStartsAt]
+	return ok
+}
+
+// ResetDiscountStartsAt resets all changes to the "discount_starts_at" field.
+func (m *BillingGroupMutation) ResetDiscountStartsAt() {
+	m.discount_starts_at = nil
+	delete(m.clearedFields, billinggroup.FieldDiscountStartsAt)
+}
+
+// SetDiscountEndsAt sets the "discount_ends_at" field.
+func (m *BillingGroupMutation) SetDiscountEndsAt(t time.Time) {
+	m.discount_ends_at = &t
+}
+
+// DiscountEndsAt returns the value of the "discount_ends_at" field in the mutation.
+func (m *BillingGroupMutation) DiscountEndsAt() (r time.Time, exists bool) {
+	v := m.discount_ends_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountEndsAt returns the old "discount_ends_at" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldDiscountEndsAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountEndsAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountEndsAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountEndsAt: %w", err)
+	}
+	return oldValue.DiscountEndsAt, nil
+}
+
+// ClearDiscountEndsAt clears the value of the "discount_ends_at" field.
+func (m *BillingGroupMutation) ClearDiscountEndsAt() {
+	m.discount_ends_at = nil
+	m.clearedFields[billinggroup.FieldDiscountEndsAt] = struct{}{}
+}
+
+// DiscountEndsAtCleared returns if the "discount_ends_at" field was cleared in this mutation.
+func (m *BillingGroupMutation) DiscountEndsAtCleared() bool {
+	_, ok := m.clearedFields[billinggroup.FieldDiscountEndsAt]
+	return ok
+}
+
+// ResetDiscountEndsAt resets all changes to the "discount_ends_at" field.
+func (m *BillingGroupMutation) ResetDiscountEndsAt() {
+	m.discount_ends_at = nil
+	delete(m.clearedFields, billinggroup.FieldDiscountEndsAt)
 }
 
 // SetIsDefault sets the "is_default" field.
@@ -5034,7 +5229,7 @@ func (m *BillingGroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BillingGroupMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 13)
 	if m.code != nil {
 		fields = append(fields, billinggroup.FieldCode)
 	}
@@ -5043,6 +5238,18 @@ func (m *BillingGroupMutation) Fields() []string {
 	}
 	if m.multiplier_bps != nil {
 		fields = append(fields, billinggroup.FieldMultiplierBps)
+	}
+	if m.discount_name != nil {
+		fields = append(fields, billinggroup.FieldDiscountName)
+	}
+	if m.discount_multiplier_bps != nil {
+		fields = append(fields, billinggroup.FieldDiscountMultiplierBps)
+	}
+	if m.discount_starts_at != nil {
+		fields = append(fields, billinggroup.FieldDiscountStartsAt)
+	}
+	if m.discount_ends_at != nil {
+		fields = append(fields, billinggroup.FieldDiscountEndsAt)
 	}
 	if m.is_default != nil {
 		fields = append(fields, billinggroup.FieldIsDefault)
@@ -5076,6 +5283,14 @@ func (m *BillingGroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DisplayName()
 	case billinggroup.FieldMultiplierBps:
 		return m.MultiplierBps()
+	case billinggroup.FieldDiscountName:
+		return m.DiscountName()
+	case billinggroup.FieldDiscountMultiplierBps:
+		return m.DiscountMultiplierBps()
+	case billinggroup.FieldDiscountStartsAt:
+		return m.DiscountStartsAt()
+	case billinggroup.FieldDiscountEndsAt:
+		return m.DiscountEndsAt()
 	case billinggroup.FieldIsDefault:
 		return m.IsDefault()
 	case billinggroup.FieldIsHidden:
@@ -5103,6 +5318,14 @@ func (m *BillingGroupMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldDisplayName(ctx)
 	case billinggroup.FieldMultiplierBps:
 		return m.OldMultiplierBps(ctx)
+	case billinggroup.FieldDiscountName:
+		return m.OldDiscountName(ctx)
+	case billinggroup.FieldDiscountMultiplierBps:
+		return m.OldDiscountMultiplierBps(ctx)
+	case billinggroup.FieldDiscountStartsAt:
+		return m.OldDiscountStartsAt(ctx)
+	case billinggroup.FieldDiscountEndsAt:
+		return m.OldDiscountEndsAt(ctx)
 	case billinggroup.FieldIsDefault:
 		return m.OldIsDefault(ctx)
 	case billinggroup.FieldIsHidden:
@@ -5144,6 +5367,34 @@ func (m *BillingGroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetMultiplierBps(v)
+		return nil
+	case billinggroup.FieldDiscountName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountName(v)
+		return nil
+	case billinggroup.FieldDiscountMultiplierBps:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountMultiplierBps(v)
+		return nil
+	case billinggroup.FieldDiscountStartsAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountStartsAt(v)
+		return nil
+	case billinggroup.FieldDiscountEndsAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountEndsAt(v)
 		return nil
 	case billinggroup.FieldIsDefault:
 		v, ok := value.(bool)
@@ -5198,6 +5449,9 @@ func (m *BillingGroupMutation) AddedFields() []string {
 	if m.addmultiplier_bps != nil {
 		fields = append(fields, billinggroup.FieldMultiplierBps)
 	}
+	if m.adddiscount_multiplier_bps != nil {
+		fields = append(fields, billinggroup.FieldDiscountMultiplierBps)
+	}
 	return fields
 }
 
@@ -5208,6 +5462,8 @@ func (m *BillingGroupMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case billinggroup.FieldMultiplierBps:
 		return m.AddedMultiplierBps()
+	case billinggroup.FieldDiscountMultiplierBps:
+		return m.AddedDiscountMultiplierBps()
 	}
 	return nil, false
 }
@@ -5224,6 +5480,13 @@ func (m *BillingGroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddMultiplierBps(v)
 		return nil
+	case billinggroup.FieldDiscountMultiplierBps:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDiscountMultiplierBps(v)
+		return nil
 	}
 	return fmt.Errorf("unknown BillingGroup numeric field %s", name)
 }
@@ -5232,6 +5495,12 @@ func (m *BillingGroupMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *BillingGroupMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(billinggroup.FieldDiscountStartsAt) {
+		fields = append(fields, billinggroup.FieldDiscountStartsAt)
+	}
+	if m.FieldCleared(billinggroup.FieldDiscountEndsAt) {
+		fields = append(fields, billinggroup.FieldDiscountEndsAt)
+	}
 	if m.FieldCleared(billinggroup.FieldDeletedAt) {
 		fields = append(fields, billinggroup.FieldDeletedAt)
 	}
@@ -5249,6 +5518,12 @@ func (m *BillingGroupMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *BillingGroupMutation) ClearField(name string) error {
 	switch name {
+	case billinggroup.FieldDiscountStartsAt:
+		m.ClearDiscountStartsAt()
+		return nil
+	case billinggroup.FieldDiscountEndsAt:
+		m.ClearDiscountEndsAt()
+		return nil
 	case billinggroup.FieldDeletedAt:
 		m.ClearDeletedAt()
 		return nil
@@ -5268,6 +5543,18 @@ func (m *BillingGroupMutation) ResetField(name string) error {
 		return nil
 	case billinggroup.FieldMultiplierBps:
 		m.ResetMultiplierBps()
+		return nil
+	case billinggroup.FieldDiscountName:
+		m.ResetDiscountName()
+		return nil
+	case billinggroup.FieldDiscountMultiplierBps:
+		m.ResetDiscountMultiplierBps()
+		return nil
+	case billinggroup.FieldDiscountStartsAt:
+		m.ResetDiscountStartsAt()
+		return nil
+	case billinggroup.FieldDiscountEndsAt:
+		m.ResetDiscountEndsAt()
 		return nil
 	case billinggroup.FieldIsDefault:
 		m.ResetIsDefault()
