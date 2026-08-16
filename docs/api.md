@@ -293,9 +293,10 @@ POST /v1/messages
 ### 用量字段兼容
 
 网关读取 OpenAI/GLM 的 `prompt_tokens_details.cached_tokens`、DeepSeek 的
-`prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`、Kimi 的 `cached_tokens`，以及
-Anthropic 的 `cache_read_input_tokens`、`cache_creation_input_tokens` 和 5 分钟/1 小时
-明细。普通输入、缓存命中、缓存创建和输出分别乘各自单价，原始 Token 数、单价、分组
+`prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`、Kimi 的 `cached_tokens`、百炼显式缓存的
+`prompt_tokens_details.cache_creation_input_tokens`，以及 Anthropic 的
+`cache_read_input_tokens`、`cache_creation_input_tokens` 和 5 分钟/1 小时明细。普通输入、缓存
+命中、缓存创建和输出分别乘各自单价，原始 Token 数、单价、分组
 倍率、基础成本、最终费用和算法版本都会写入 `api_usages`，后续改价不会改变历史账单。
 
 ## 7. 错误响应

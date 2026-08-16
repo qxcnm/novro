@@ -1695,6 +1695,8 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 	if details == nil {
 		details = mapValue(candidate["input_tokens_details"])
 	}
+	cacheWriteTop, hasCacheWriteTop := intField(candidate, "cache_creation_input_tokens")
+	cacheWriteDetails, hasCacheWriteDetails := intField(details, "cache_creation_input_tokens")
 	invalidCacheField := hasInvalidMapField(candidate, "prompt_tokens_details") ||
 		hasInvalidMapField(candidate, "input_tokens_details") ||
 		hasInvalidMapField(candidate, "cache_creation") ||
@@ -1704,13 +1706,16 @@ func parseUsageCandidate(candidate map[string]any, semantics usageSemantics) tok
 		hasInvalidIntField(candidate, "cache_read_input_tokens") ||
 		hasInvalidIntField(candidate, "prompt_cache_miss_tokens") ||
 		hasInvalidIntField(candidate, "cache_creation_input_tokens") ||
+		hasInvalidIntField(details, "cache_creation_input_tokens") ||
 		hasInvalidIntField(candidate, "cache_creation_1h_input_tokens") ||
 		hasInvalidIntField(candidate, "cache_creation_5m_input_tokens") ||
 		hasInvalidIntField(mapValue(candidate["cache_creation"]), "ephemeral_1h_input_tokens") ||
-		hasInvalidIntField(mapValue(candidate["cache_creation"]), "ephemeral_5m_input_tokens")
+		hasInvalidIntField(mapValue(candidate["cache_creation"]), "ephemeral_5m_input_tokens") ||
+		conflictingNonzeroAliases(cacheWriteTop, hasCacheWriteTop, cacheWriteDetails, hasCacheWriteDetails)
 	cacheRead := max(intValue(candidate["prompt_cache_hit_tokens"]), intValue(candidate["cached_tokens"]), intValue(details["cached_tokens"]), intValue(candidate["cache_read_input_tokens"]))
 	cacheMiss := intValue(candidate["prompt_cache_miss_tokens"])
-	cacheWriteTotal, hasCacheWriteTotal := intField(candidate, "cache_creation_input_tokens")
+	cacheWriteTotal := max(cacheWriteTop, cacheWriteDetails)
+	hasCacheWriteTotal := hasCacheWriteTop || hasCacheWriteDetails
 	cacheCreation := mapValue(candidate["cache_creation"])
 	cacheWrite1h := max(intValue(candidate["cache_creation_1h_input_tokens"]), intValue(cacheCreation["ephemeral_1h_input_tokens"]))
 	cacheWrite5m := max(intValue(candidate["cache_creation_5m_input_tokens"]), intValue(cacheCreation["ephemeral_5m_input_tokens"]))

@@ -859,6 +859,7 @@ func TestParseUsageRejectsMalformedReportedFields(t *testing.T) {
 		{name: "fractional input", body: `{"usage":{"prompt_tokens":1.5,"completion_tokens":20}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
 		{name: "large output", body: `{"usage":{"prompt_tokens":10,"completion_tokens":100000001}}`, wantInput: 10, wantOutput: 100000001, wantEstimate: false},
 		{name: "invalid cache field", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cached_tokens":"4"}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
+		{name: "invalid nested cache creation field", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"prompt_tokens_details":{"cache_creation_input_tokens":"4"}}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
 		{name: "invalid cache container", body: `{"usage":{"prompt_tokens":10,"completion_tokens":20,"cache_creation":"4"}}`, wantInput: 0, wantOutput: 20, wantEstimate: true},
 	}
 	for _, tt := range tests {
@@ -2155,6 +2156,7 @@ func TestParseUsageSupportsProviderCacheShapes(t *testing.T) {
 		{name: "kimi top level cached", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":10}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
 		{name: "openai cache read field is prompt subset", body: `{"usage":{"prompt_tokens":100,"completion_tokens":20,"cache_read_input_tokens":10}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 90, CacheRead: 10, Output: 20}},
 		{name: "responses cached details are input subset", body: `{"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 100, UncachedInput: 60, CacheRead: 40, Output: 20}},
+		{name: "bailian explicit cache creation is prompt subset", body: `{"usage":{"prompt_tokens":2000,"completion_tokens":500,"prompt_tokens_details":{"cached_tokens":1000,"cache_creation_input_tokens":500}}}`, semantics: usageSemanticsOpenAITotal, want: tokenUsage{Input: 2000, UncachedInput: 500, CacheRead: 1000, CacheWrite: 500, Output: 500}},
 		{name: "anthropic cache read is additional input", body: `{"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":10}}`, semantics: usageSemanticsAnthropicAdditional, want: tokenUsage{Input: 110, UncachedInput: 100, CacheRead: 10, Output: 20}},
 		{name: "anthropic cache creation", body: `{"usage":{"input_tokens":800,"output_tokens":500,"cache_read_input_tokens":1200,"cache_creation_input_tokens":300,"cache_creation":{"ephemeral_5m_input_tokens":200,"ephemeral_1h_input_tokens":100}}}`, semantics: usageSemanticsAnthropicAdditional, want: tokenUsage{Input: 2300, UncachedInput: 800, CacheRead: 1200, CacheWrite: 200, CacheWrite1h: 100, Output: 500}},
 	}
@@ -2219,6 +2221,11 @@ func TestUsageRejectsConflictingAliasTotals(t *testing.T) {
 			name: "conflicting output aliases reverse order",
 			body: `{"usage":{"prompt_tokens":100,"input_tokens":100,"completion_tokens":100000,"output_tokens":2}}`,
 			want: tokenUsage{Input: 100, UncachedInput: 100, InputReported: true, Estimated: true},
+		},
+		{
+			name: "conflicting cache creation aliases",
+			body: `{"usage":{"prompt_tokens":100,"completion_tokens":2,"cache_creation_input_tokens":20,"prompt_tokens_details":{"cache_creation_input_tokens":30}}}`,
+			want: tokenUsage{Output: 2, OutputReported: true, Estimated: true},
 		},
 		{
 			name: "matching aliases",
@@ -2328,6 +2335,7 @@ func TestOpenAIUsageRejectsCacheBreakdownAboveTotal(t *testing.T) {
 	for _, body := range []string{
 		`{"usage":{"input_tokens":100,"output_tokens":2,"input_tokens_details":{"cached_tokens":101}}}`,
 		`{"usage":{"prompt_tokens":100,"completion_tokens":2,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":30}}`,
+		`{"usage":{"prompt_tokens":100,"completion_tokens":2,"prompt_tokens_details":{"cache_creation_input_tokens":101}}}`,
 	} {
 		usage := applyUsageFallback(parseUsage([]byte(body), usageSemanticsOpenAITotal), 500, 50, billing.RateCard{})
 		if usage.Input != 0 || usage.UncachedInput != 0 || usage.CacheRead != 0 || usage.InputReported || !usage.Estimated {
