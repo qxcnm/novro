@@ -213,6 +213,10 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
                 <p className="text-xs text-muted-foreground">至少 8 位，且必须包含英文和数字。</p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="confirm">确认密码</Label>
+                <Input autoComplete="new-password" id="confirm" minLength={8} onChange={(event) => setForm({ ...form, confirm: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.confirm} />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="referral-code">邀请码（选填）</Label>
                 <Input
                   autoCapitalize="characters"
@@ -223,10 +227,6 @@ export default function RegisterClient({ initialReferralCode }: { initialReferra
                   onChange={(event) => setForm({ ...form, referral_code: event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 12) })}
                   value={form.referral_code}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm">确认密码</Label>
-                <Input autoComplete="new-password" id="confirm" minLength={8} onChange={(event) => setForm({ ...form, confirm: event.target.value })} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" required title="密码至少 8 位，且必须包含英文和数字" type="password" value={form.confirm} />
               </div>
               {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
               <Button className="w-full" disabled={submitting} type="submit">
