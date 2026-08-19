@@ -3,6 +3,7 @@ package providersync
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -151,6 +152,15 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	}
 	if !seenGroups[group.ID] || !seenGroups[premiumGroup.ID] {
 		t.Fatalf("same-provider routes did not preserve group bindings: %+v", firstProviderRoutes)
+	}
+	compositeGroup, err := client.BillingGroup.Create().
+		SetCode("sync-composite").SetDisplayName("Sync Composite").SetKind(entbillinggroup.KindComposite).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create composite billing group: %v", err)
+	}
+	if _, err := service.Link(ctx, firstProvider.ID, []ModelBinding{{UpstreamModelID: modelID, BillingGroupID: compositeGroup.ID}}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("link provider model directly to composite group error=%v", err)
 	}
 
 	// A model removed from the catalog can be advertised again by an

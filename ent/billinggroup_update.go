@@ -15,6 +15,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
@@ -43,6 +44,20 @@ func (_u *BillingGroupUpdate) SetDisplayName(v string) *BillingGroupUpdate {
 func (_u *BillingGroupUpdate) SetNillableDisplayName(v *string) *BillingGroupUpdate {
 	if v != nil {
 		_u.SetDisplayName(*v)
+	}
+	return _u
+}
+
+// SetKind sets the "kind" field.
+func (_u *BillingGroupUpdate) SetKind(v billinggroup.Kind) *BillingGroupUpdate {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *BillingGroupUpdate) SetNillableKind(v *billinggroup.Kind) *BillingGroupUpdate {
+	if v != nil {
+		_u.SetKind(*v)
 	}
 	return _u
 }
@@ -256,6 +271,36 @@ func (_u *BillingGroupUpdate) AddAPIUsages(v ...*APIUsage) *BillingGroupUpdate {
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddCompositionIDs adds the "compositions" edge to the BillingGroupComposition entity by IDs.
+func (_u *BillingGroupUpdate) AddCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.AddCompositionIDs(ids...)
+	return _u
+}
+
+// AddCompositions adds the "compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdate) AddCompositions(v ...*BillingGroupComposition) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCompositionIDs(ids...)
+}
+
+// AddMemberCompositionIDs adds the "member_compositions" edge to the BillingGroupComposition entity by IDs.
+func (_u *BillingGroupUpdate) AddMemberCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.AddMemberCompositionIDs(ids...)
+	return _u
+}
+
+// AddMemberCompositions adds the "member_compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdate) AddMemberCompositions(v ...*BillingGroupComposition) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMemberCompositionIDs(ids...)
+}
+
 // AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
 func (_u *BillingGroupUpdate) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdate {
 	_u.mutation.AddAuthorizedUserIDs(ids...)
@@ -339,6 +384,48 @@ func (_u *BillingGroupUpdate) RemoveAPIUsages(v ...*APIUsage) *BillingGroupUpdat
 	return _u.RemoveAPIUsageIDs(ids...)
 }
 
+// ClearCompositions clears all "compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdate) ClearCompositions() *BillingGroupUpdate {
+	_u.mutation.ClearCompositions()
+	return _u
+}
+
+// RemoveCompositionIDs removes the "compositions" edge to BillingGroupComposition entities by IDs.
+func (_u *BillingGroupUpdate) RemoveCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.RemoveCompositionIDs(ids...)
+	return _u
+}
+
+// RemoveCompositions removes "compositions" edges to BillingGroupComposition entities.
+func (_u *BillingGroupUpdate) RemoveCompositions(v ...*BillingGroupComposition) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCompositionIDs(ids...)
+}
+
+// ClearMemberCompositions clears all "member_compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdate) ClearMemberCompositions() *BillingGroupUpdate {
+	_u.mutation.ClearMemberCompositions()
+	return _u
+}
+
+// RemoveMemberCompositionIDs removes the "member_compositions" edge to BillingGroupComposition entities by IDs.
+func (_u *BillingGroupUpdate) RemoveMemberCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdate {
+	_u.mutation.RemoveMemberCompositionIDs(ids...)
+	return _u
+}
+
+// RemoveMemberCompositions removes "member_compositions" edges to BillingGroupComposition entities.
+func (_u *BillingGroupUpdate) RemoveMemberCompositions(v ...*BillingGroupComposition) *BillingGroupUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMemberCompositionIDs(ids...)
+}
+
 // ClearAuthorizedUsers clears all "authorized_users" edges to the User entity.
 func (_u *BillingGroupUpdate) ClearAuthorizedUsers() *BillingGroupUpdate {
 	_u.mutation.ClearAuthorizedUsers()
@@ -403,6 +490,11 @@ func (_u *BillingGroupUpdate) check() error {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.display_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Kind(); ok {
+		if err := billinggroup.KindValidator(v); err != nil {
+			return &ValidationError{Name: "kind", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.kind": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MultiplierBps(); ok {
 		if err := billinggroup.MultiplierBpsValidator(v); err != nil {
 			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.multiplier_bps": %w`, err)}
@@ -440,6 +532,9 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(billinggroup.FieldDisplayName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(billinggroup.FieldKind, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.MultiplierBps(); ok {
 		_spec.SetField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
@@ -621,6 +716,96 @@ func (_u *BillingGroupUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.CompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCompositionsIDs(); len(nodes) > 0 && !_u.mutation.CompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MemberCompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMemberCompositionsIDs(); len(nodes) > 0 && !_u.mutation.MemberCompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MemberCompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.AuthorizedUsersCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2M,
@@ -696,6 +881,20 @@ func (_u *BillingGroupUpdateOne) SetDisplayName(v string) *BillingGroupUpdateOne
 func (_u *BillingGroupUpdateOne) SetNillableDisplayName(v *string) *BillingGroupUpdateOne {
 	if v != nil {
 		_u.SetDisplayName(*v)
+	}
+	return _u
+}
+
+// SetKind sets the "kind" field.
+func (_u *BillingGroupUpdateOne) SetKind(v billinggroup.Kind) *BillingGroupUpdateOne {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *BillingGroupUpdateOne) SetNillableKind(v *billinggroup.Kind) *BillingGroupUpdateOne {
+	if v != nil {
+		_u.SetKind(*v)
 	}
 	return _u
 }
@@ -909,6 +1108,36 @@ func (_u *BillingGroupUpdateOne) AddAPIUsages(v ...*APIUsage) *BillingGroupUpdat
 	return _u.AddAPIUsageIDs(ids...)
 }
 
+// AddCompositionIDs adds the "compositions" edge to the BillingGroupComposition entity by IDs.
+func (_u *BillingGroupUpdateOne) AddCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.AddCompositionIDs(ids...)
+	return _u
+}
+
+// AddCompositions adds the "compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdateOne) AddCompositions(v ...*BillingGroupComposition) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCompositionIDs(ids...)
+}
+
+// AddMemberCompositionIDs adds the "member_compositions" edge to the BillingGroupComposition entity by IDs.
+func (_u *BillingGroupUpdateOne) AddMemberCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.AddMemberCompositionIDs(ids...)
+	return _u
+}
+
+// AddMemberCompositions adds the "member_compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdateOne) AddMemberCompositions(v ...*BillingGroupComposition) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMemberCompositionIDs(ids...)
+}
+
 // AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
 func (_u *BillingGroupUpdateOne) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
 	_u.mutation.AddAuthorizedUserIDs(ids...)
@@ -992,6 +1221,48 @@ func (_u *BillingGroupUpdateOne) RemoveAPIUsages(v ...*APIUsage) *BillingGroupUp
 	return _u.RemoveAPIUsageIDs(ids...)
 }
 
+// ClearCompositions clears all "compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdateOne) ClearCompositions() *BillingGroupUpdateOne {
+	_u.mutation.ClearCompositions()
+	return _u
+}
+
+// RemoveCompositionIDs removes the "compositions" edge to BillingGroupComposition entities by IDs.
+func (_u *BillingGroupUpdateOne) RemoveCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.RemoveCompositionIDs(ids...)
+	return _u
+}
+
+// RemoveCompositions removes "compositions" edges to BillingGroupComposition entities.
+func (_u *BillingGroupUpdateOne) RemoveCompositions(v ...*BillingGroupComposition) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCompositionIDs(ids...)
+}
+
+// ClearMemberCompositions clears all "member_compositions" edges to the BillingGroupComposition entity.
+func (_u *BillingGroupUpdateOne) ClearMemberCompositions() *BillingGroupUpdateOne {
+	_u.mutation.ClearMemberCompositions()
+	return _u
+}
+
+// RemoveMemberCompositionIDs removes the "member_compositions" edge to BillingGroupComposition entities by IDs.
+func (_u *BillingGroupUpdateOne) RemoveMemberCompositionIDs(ids ...uuid.UUID) *BillingGroupUpdateOne {
+	_u.mutation.RemoveMemberCompositionIDs(ids...)
+	return _u
+}
+
+// RemoveMemberCompositions removes "member_compositions" edges to BillingGroupComposition entities.
+func (_u *BillingGroupUpdateOne) RemoveMemberCompositions(v ...*BillingGroupComposition) *BillingGroupUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMemberCompositionIDs(ids...)
+}
+
 // ClearAuthorizedUsers clears all "authorized_users" edges to the User entity.
 func (_u *BillingGroupUpdateOne) ClearAuthorizedUsers() *BillingGroupUpdateOne {
 	_u.mutation.ClearAuthorizedUsers()
@@ -1069,6 +1340,11 @@ func (_u *BillingGroupUpdateOne) check() error {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.display_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Kind(); ok {
+		if err := billinggroup.KindValidator(v); err != nil {
+			return &ValidationError{Name: "kind", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.kind": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MultiplierBps(); ok {
 		if err := billinggroup.MultiplierBpsValidator(v); err != nil {
 			return &ValidationError{Name: "multiplier_bps", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.multiplier_bps": %w`, err)}
@@ -1123,6 +1399,9 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 	}
 	if value, ok := _u.mutation.DisplayName(); ok {
 		_spec.SetField(billinggroup.FieldDisplayName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(billinggroup.FieldKind, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.MultiplierBps(); ok {
 		_spec.SetField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
@@ -1297,6 +1576,96 @@ func (_u *BillingGroupUpdateOne) sqlSave(ctx context.Context) (_node *BillingGro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCompositionsIDs(); len(nodes) > 0 && !_u.mutation.CompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MemberCompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMemberCompositionsIDs(); len(nodes) > 0 && !_u.mutation.MemberCompositionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MemberCompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

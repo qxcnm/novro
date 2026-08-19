@@ -58,6 +58,8 @@ go run ./cmd/novro migrate
 
 迁移位于 `ent/migrate/migrations`，需要与 Ent Schema 一起审查。`migrate` 按文件名顺序
 执行迁移，由数据库锁避免并发执行，并核对已执行文件的 SHA-256。
+当前主分组功能要求迁移记录至少达到 `0016_billing_group_compositions`；该迁移将历史分组
+标记为 `standard`，并新增主分组成员关系，不改写 API Key、模型路由或历史用量。
 
 ## 4. 初始化管理员
 

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { copyText } from "@/lib/clipboard";
 
 type Prices = {
@@ -27,9 +27,11 @@ type AvailableModel = {
   protocols: Array<"openai" | "anthropic">;
   channel_count: number;
   prices: Prices;
+  price_range?: { minimum: Prices; maximum: Prices };
+  billing_groups?: Array<{ id: string; code?: string; display_name: string; effective_multiplier_bps: number }>;
 };
 
-type BillingGroup = { id: string; code: string; display_name: string; multiplier_bps: number; effective_multiplier_bps?: number; is_default?: boolean; status?: "active" | "disabled" };
+type BillingGroup = { id: string; code: string; display_name: string; kind?: "standard" | "composite"; member_group_count?: number; member_groups?: Array<{ id: string; display_name: string; effective_multiplier_bps: number }>; multiplier_bps: number; effective_multiplier_bps?: number; is_default?: boolean; status?: "active" | "disabled" };
 
 type ErrorResponse = { error?: { message?: string } };
 
@@ -181,7 +183,7 @@ export default function AvailableModelsClient() {
   }
 
   const billingGroupName = billingGroup?.display_name ?? "--";
-  const multiplier = billingGroup ? `${((billingGroup.effective_multiplier_bps ?? billingGroup.multiplier_bps) / 10_000).toFixed(2)}x` : "--";
+  const multiplier = billingGroup?.kind === "composite" ? "按命中成员" : billingGroup ? `${((billingGroup.effective_multiplier_bps ?? billingGroup.multiplier_bps) / 10_000).toFixed(2)}x` : "--";
 
   return (
     <div className="space-y-5">
@@ -199,11 +201,11 @@ export default function AvailableModelsClient() {
         <div className="flex gap-2">
           <Select onValueChange={(value) => void load(value)} value={selectedBillingGroupID}>
             <SelectTrigger aria-label="选择计费分组" className="min-w-44"><SelectValue placeholder="选择计费分组" /></SelectTrigger>
-            <SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent>
+            <SelectContent><SelectGroup>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.kind === "composite" ? `${group.display_name} · 主分组 · ${group.member_group_count ?? group.member_groups?.length ?? 0} 个成员` : `${group.display_name} · ${((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×`}</SelectItem>)}</SelectGroup></SelectContent>
           </Select>
           <Select onValueChange={setProtocol} value={protocol}>
             <SelectTrigger aria-label="按兼容协议筛选" className="min-w-36"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">全部协议</SelectItem><SelectItem value="openai">OpenAI</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectContent>
+            <SelectContent><SelectGroup><SelectItem value="all">全部协议</SelectItem><SelectItem value="openai">OpenAI</SelectItem><SelectItem value="anthropic">Anthropic</SelectItem></SelectGroup></SelectContent>
           </Select>
           <Button aria-label="刷新可用模型" disabled={loading} onClick={() => void load(selectedBillingGroupID)} size="icon" title="刷新可用模型" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
         </div>
@@ -239,6 +241,8 @@ export default function AvailableModelsClient() {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
               {priceFields.map((field) => <div className="min-w-0" key={field.key}><dt className="text-xs text-muted-foreground">{field.label}</dt><dd className="mt-1 truncate font-medium tabular-nums">{formatPrice(model.prices[field.key])} <span className="text-xs font-normal text-muted-foreground">{field.unit}</span></dd></div>)}
             </dl>
+            {model.price_range && (model.billing_groups?.length ?? 0) > 1 ? <div className="mt-4 border-t pt-3"><p className="text-xs font-medium text-muted-foreground">候选价格范围</p><p className="mt-1 text-xs text-muted-foreground">输入 {formatPrice(model.price_range.minimum.input_price_micros)} - {formatPrice(model.price_range.maximum.input_price_micros)} / 1M tokens</p><p className="text-xs text-muted-foreground">输出 {formatPrice(model.price_range.minimum.output_price_micros)} - {formatPrice(model.price_range.maximum.output_price_micros)} / 1M tokens</p></div> : null}
+            {billingGroup?.kind === "composite" && model.billing_groups && model.billing_groups.length > 0 ? <div className="mt-4 border-t pt-3"><p className="text-xs font-medium text-muted-foreground">可能命中的成员分组</p><div className="mt-2 flex flex-wrap gap-1.5">{model.billing_groups.map((group) => <Badge key={group.id} variant="secondary">{group.display_name} · {(group.effective_multiplier_bps / 10_000).toFixed(4)}×</Badge>)}</div></div> : null}
           </CardContent>
         </Card>
           ))}</div> : null}

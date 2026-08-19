@@ -25,6 +25,7 @@ func (BillingGroup) Fields() []ent.Field {
 		field.UUID("id", uuid.UUID{}).Default(uuid.New).Immutable(),
 		field.String("code").NotEmpty().MaxLen(64).Unique().Immutable(),
 		field.String("display_name").NotEmpty().MaxLen(128),
+		field.Enum("kind").Values("standard", "composite").Default("standard"),
 		field.Int64("multiplier_bps").Positive().Default(10_000),
 		field.String("discount_name").Default("").MaxLen(64),
 		field.Int64("discount_multiplier_bps").Positive().Default(10_000),
@@ -50,6 +51,8 @@ func (BillingGroup) Edges() []ent.Edge {
 		edge.To("api_keys", APIKey.Type),
 		edge.To("model_routes", ModelRoute.Type),
 		edge.To("api_usages", APIUsage.Type),
+		edge.To("compositions", BillingGroupComposition.Type),
+		edge.To("member_compositions", BillingGroupComposition.Type),
 		edge.To("authorized_users", User.Type).
 			StorageKey(edge.Table("billing_group_authorized_users"), edge.Columns("billing_group_id", "user_id")),
 	}

@@ -15,6 +15,9 @@ type APIUsage func(*sql.Selector)
 // BillingGroup is the predicate function for billinggroup builders.
 type BillingGroup func(*sql.Selector)
 
+// BillingGroupComposition is the predicate function for billinggroupcomposition builders.
+type BillingGroupComposition func(*sql.Selector)
+
 // EmailSMTPConfig is the predicate function for emailsmtpconfig builders.
 type EmailSMTPConfig func(*sql.Selector)
 

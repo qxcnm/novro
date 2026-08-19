@@ -15,6 +15,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
@@ -43,25 +44,26 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeAPIKey                = "APIKey"
-	TypeAPIUsage              = "APIUsage"
-	TypeBillingGroup          = "BillingGroup"
-	TypeEmailSMTPConfig       = "EmailSMTPConfig"
-	TypeEmailVerificationCode = "EmailVerificationCode"
-	TypeGatewayOperation      = "GatewayOperation"
-	TypeModelPricePlan        = "ModelPricePlan"
-	TypeModelPriceWindow      = "ModelPriceWindow"
-	TypeModelRoute            = "ModelRoute"
-	TypePaymentConfig         = "PaymentConfig"
-	TypeProvider              = "Provider"
-	TypeSystemSetting         = "SystemSetting"
-	TypeTopUpOrder            = "TopUpOrder"
-	TypeUpstreamModel         = "UpstreamModel"
-	TypeUser                  = "User"
-	TypeUserIdentity          = "UserIdentity"
-	TypeUserSession           = "UserSession"
-	TypeWallet                = "Wallet"
-	TypeWalletEntry           = "WalletEntry"
+	TypeAPIKey                  = "APIKey"
+	TypeAPIUsage                = "APIUsage"
+	TypeBillingGroup            = "BillingGroup"
+	TypeBillingGroupComposition = "BillingGroupComposition"
+	TypeEmailSMTPConfig         = "EmailSMTPConfig"
+	TypeEmailVerificationCode   = "EmailVerificationCode"
+	TypeGatewayOperation        = "GatewayOperation"
+	TypeModelPricePlan          = "ModelPricePlan"
+	TypeModelPriceWindow        = "ModelPriceWindow"
+	TypeModelRoute              = "ModelRoute"
+	TypePaymentConfig           = "PaymentConfig"
+	TypeProvider                = "Provider"
+	TypeSystemSetting           = "SystemSetting"
+	TypeTopUpOrder              = "TopUpOrder"
+	TypeUpstreamModel           = "UpstreamModel"
+	TypeUser                    = "User"
+	TypeUserIdentity            = "UserIdentity"
+	TypeUserSession             = "UserSession"
+	TypeWallet                  = "Wallet"
+	TypeWalletEntry             = "WalletEntry"
 )
 
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
@@ -4297,6 +4299,7 @@ type BillingGroupMutation struct {
 	id                         *uuid.UUID
 	code                       *string
 	display_name               *string
+	kind                       *billinggroup.Kind
 	multiplier_bps             *int64
 	addmultiplier_bps          *int64
 	discount_name              *string
@@ -4320,6 +4323,12 @@ type BillingGroupMutation struct {
 	api_usages                 map[uuid.UUID]struct{}
 	removedapi_usages          map[uuid.UUID]struct{}
 	clearedapi_usages          bool
+	compositions               map[uuid.UUID]struct{}
+	removedcompositions        map[uuid.UUID]struct{}
+	clearedcompositions        bool
+	member_compositions        map[uuid.UUID]struct{}
+	removedmember_compositions map[uuid.UUID]struct{}
+	clearedmember_compositions bool
 	authorized_users           map[uuid.UUID]struct{}
 	removedauthorized_users    map[uuid.UUID]struct{}
 	clearedauthorized_users    bool
@@ -4502,6 +4511,42 @@ func (m *BillingGroupMutation) OldDisplayName(ctx context.Context) (v string, er
 // ResetDisplayName resets all changes to the "display_name" field.
 func (m *BillingGroupMutation) ResetDisplayName() {
 	m.display_name = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *BillingGroupMutation) SetKind(b billinggroup.Kind) {
+	m.kind = &b
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *BillingGroupMutation) Kind() (r billinggroup.Kind, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the BillingGroup entity.
+// If the BillingGroup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupMutation) OldKind(ctx context.Context) (v billinggroup.Kind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *BillingGroupMutation) ResetKind() {
+	m.kind = nil
 }
 
 // SetMultiplierBps sets the "multiplier_bps" field.
@@ -5141,6 +5186,114 @@ func (m *BillingGroupMutation) ResetAPIUsages() {
 	m.removedapi_usages = nil
 }
 
+// AddCompositionIDs adds the "compositions" edge to the BillingGroupComposition entity by ids.
+func (m *BillingGroupMutation) AddCompositionIDs(ids ...uuid.UUID) {
+	if m.compositions == nil {
+		m.compositions = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.compositions[ids[i]] = struct{}{}
+	}
+}
+
+// ClearCompositions clears the "compositions" edge to the BillingGroupComposition entity.
+func (m *BillingGroupMutation) ClearCompositions() {
+	m.clearedcompositions = true
+}
+
+// CompositionsCleared reports if the "compositions" edge to the BillingGroupComposition entity was cleared.
+func (m *BillingGroupMutation) CompositionsCleared() bool {
+	return m.clearedcompositions
+}
+
+// RemoveCompositionIDs removes the "compositions" edge to the BillingGroupComposition entity by IDs.
+func (m *BillingGroupMutation) RemoveCompositionIDs(ids ...uuid.UUID) {
+	if m.removedcompositions == nil {
+		m.removedcompositions = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.compositions, ids[i])
+		m.removedcompositions[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedCompositions returns the removed IDs of the "compositions" edge to the BillingGroupComposition entity.
+func (m *BillingGroupMutation) RemovedCompositionsIDs() (ids []uuid.UUID) {
+	for id := range m.removedcompositions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// CompositionsIDs returns the "compositions" edge IDs in the mutation.
+func (m *BillingGroupMutation) CompositionsIDs() (ids []uuid.UUID) {
+	for id := range m.compositions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetCompositions resets all changes to the "compositions" edge.
+func (m *BillingGroupMutation) ResetCompositions() {
+	m.compositions = nil
+	m.clearedcompositions = false
+	m.removedcompositions = nil
+}
+
+// AddMemberCompositionIDs adds the "member_compositions" edge to the BillingGroupComposition entity by ids.
+func (m *BillingGroupMutation) AddMemberCompositionIDs(ids ...uuid.UUID) {
+	if m.member_compositions == nil {
+		m.member_compositions = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.member_compositions[ids[i]] = struct{}{}
+	}
+}
+
+// ClearMemberCompositions clears the "member_compositions" edge to the BillingGroupComposition entity.
+func (m *BillingGroupMutation) ClearMemberCompositions() {
+	m.clearedmember_compositions = true
+}
+
+// MemberCompositionsCleared reports if the "member_compositions" edge to the BillingGroupComposition entity was cleared.
+func (m *BillingGroupMutation) MemberCompositionsCleared() bool {
+	return m.clearedmember_compositions
+}
+
+// RemoveMemberCompositionIDs removes the "member_compositions" edge to the BillingGroupComposition entity by IDs.
+func (m *BillingGroupMutation) RemoveMemberCompositionIDs(ids ...uuid.UUID) {
+	if m.removedmember_compositions == nil {
+		m.removedmember_compositions = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.member_compositions, ids[i])
+		m.removedmember_compositions[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedMemberCompositions returns the removed IDs of the "member_compositions" edge to the BillingGroupComposition entity.
+func (m *BillingGroupMutation) RemovedMemberCompositionsIDs() (ids []uuid.UUID) {
+	for id := range m.removedmember_compositions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// MemberCompositionsIDs returns the "member_compositions" edge IDs in the mutation.
+func (m *BillingGroupMutation) MemberCompositionsIDs() (ids []uuid.UUID) {
+	for id := range m.member_compositions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetMemberCompositions resets all changes to the "member_compositions" edge.
+func (m *BillingGroupMutation) ResetMemberCompositions() {
+	m.member_compositions = nil
+	m.clearedmember_compositions = false
+	m.removedmember_compositions = nil
+}
+
 // AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by ids.
 func (m *BillingGroupMutation) AddAuthorizedUserIDs(ids ...uuid.UUID) {
 	if m.authorized_users == nil {
@@ -5229,12 +5382,15 @@ func (m *BillingGroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BillingGroupMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.code != nil {
 		fields = append(fields, billinggroup.FieldCode)
 	}
 	if m.display_name != nil {
 		fields = append(fields, billinggroup.FieldDisplayName)
+	}
+	if m.kind != nil {
+		fields = append(fields, billinggroup.FieldKind)
 	}
 	if m.multiplier_bps != nil {
 		fields = append(fields, billinggroup.FieldMultiplierBps)
@@ -5281,6 +5437,8 @@ func (m *BillingGroupMutation) Field(name string) (ent.Value, bool) {
 		return m.Code()
 	case billinggroup.FieldDisplayName:
 		return m.DisplayName()
+	case billinggroup.FieldKind:
+		return m.Kind()
 	case billinggroup.FieldMultiplierBps:
 		return m.MultiplierBps()
 	case billinggroup.FieldDiscountName:
@@ -5316,6 +5474,8 @@ func (m *BillingGroupMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCode(ctx)
 	case billinggroup.FieldDisplayName:
 		return m.OldDisplayName(ctx)
+	case billinggroup.FieldKind:
+		return m.OldKind(ctx)
 	case billinggroup.FieldMultiplierBps:
 		return m.OldMultiplierBps(ctx)
 	case billinggroup.FieldDiscountName:
@@ -5360,6 +5520,13 @@ func (m *BillingGroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDisplayName(v)
+		return nil
+	case billinggroup.FieldKind:
+		v, ok := value.(billinggroup.Kind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
 		return nil
 	case billinggroup.FieldMultiplierBps:
 		v, ok := value.(int64)
@@ -5541,6 +5708,9 @@ func (m *BillingGroupMutation) ResetField(name string) error {
 	case billinggroup.FieldDisplayName:
 		m.ResetDisplayName()
 		return nil
+	case billinggroup.FieldKind:
+		m.ResetKind()
+		return nil
 	case billinggroup.FieldMultiplierBps:
 		m.ResetMultiplierBps()
 		return nil
@@ -5580,7 +5750,7 @@ func (m *BillingGroupMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *BillingGroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 6)
 	if m.api_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5589,6 +5759,12 @@ func (m *BillingGroupMutation) AddedEdges() []string {
 	}
 	if m.api_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.compositions != nil {
+		edges = append(edges, billinggroup.EdgeCompositions)
+	}
+	if m.member_compositions != nil {
+		edges = append(edges, billinggroup.EdgeMemberCompositions)
 	}
 	if m.authorized_users != nil {
 		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
@@ -5618,6 +5794,18 @@ func (m *BillingGroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case billinggroup.EdgeCompositions:
+		ids := make([]ent.Value, 0, len(m.compositions))
+		for id := range m.compositions {
+			ids = append(ids, id)
+		}
+		return ids
+	case billinggroup.EdgeMemberCompositions:
+		ids := make([]ent.Value, 0, len(m.member_compositions))
+		for id := range m.member_compositions {
+			ids = append(ids, id)
+		}
+		return ids
 	case billinggroup.EdgeAuthorizedUsers:
 		ids := make([]ent.Value, 0, len(m.authorized_users))
 		for id := range m.authorized_users {
@@ -5630,7 +5818,7 @@ func (m *BillingGroupMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *BillingGroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 6)
 	if m.removedapi_keys != nil {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5639,6 +5827,12 @@ func (m *BillingGroupMutation) RemovedEdges() []string {
 	}
 	if m.removedapi_usages != nil {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.removedcompositions != nil {
+		edges = append(edges, billinggroup.EdgeCompositions)
+	}
+	if m.removedmember_compositions != nil {
+		edges = append(edges, billinggroup.EdgeMemberCompositions)
 	}
 	if m.removedauthorized_users != nil {
 		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
@@ -5668,6 +5862,18 @@ func (m *BillingGroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case billinggroup.EdgeCompositions:
+		ids := make([]ent.Value, 0, len(m.removedcompositions))
+		for id := range m.removedcompositions {
+			ids = append(ids, id)
+		}
+		return ids
+	case billinggroup.EdgeMemberCompositions:
+		ids := make([]ent.Value, 0, len(m.removedmember_compositions))
+		for id := range m.removedmember_compositions {
+			ids = append(ids, id)
+		}
+		return ids
 	case billinggroup.EdgeAuthorizedUsers:
 		ids := make([]ent.Value, 0, len(m.removedauthorized_users))
 		for id := range m.removedauthorized_users {
@@ -5680,7 +5886,7 @@ func (m *BillingGroupMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *BillingGroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 6)
 	if m.clearedapi_keys {
 		edges = append(edges, billinggroup.EdgeAPIKeys)
 	}
@@ -5689,6 +5895,12 @@ func (m *BillingGroupMutation) ClearedEdges() []string {
 	}
 	if m.clearedapi_usages {
 		edges = append(edges, billinggroup.EdgeAPIUsages)
+	}
+	if m.clearedcompositions {
+		edges = append(edges, billinggroup.EdgeCompositions)
+	}
+	if m.clearedmember_compositions {
+		edges = append(edges, billinggroup.EdgeMemberCompositions)
 	}
 	if m.clearedauthorized_users {
 		edges = append(edges, billinggroup.EdgeAuthorizedUsers)
@@ -5706,6 +5918,10 @@ func (m *BillingGroupMutation) EdgeCleared(name string) bool {
 		return m.clearedmodel_routes
 	case billinggroup.EdgeAPIUsages:
 		return m.clearedapi_usages
+	case billinggroup.EdgeCompositions:
+		return m.clearedcompositions
+	case billinggroup.EdgeMemberCompositions:
+		return m.clearedmember_compositions
 	case billinggroup.EdgeAuthorizedUsers:
 		return m.clearedauthorized_users
 	}
@@ -5733,11 +5949,557 @@ func (m *BillingGroupMutation) ResetEdge(name string) error {
 	case billinggroup.EdgeAPIUsages:
 		m.ResetAPIUsages()
 		return nil
+	case billinggroup.EdgeCompositions:
+		m.ResetCompositions()
+		return nil
+	case billinggroup.EdgeMemberCompositions:
+		m.ResetMemberCompositions()
+		return nil
 	case billinggroup.EdgeAuthorizedUsers:
 		m.ResetAuthorizedUsers()
 		return nil
 	}
 	return fmt.Errorf("unknown BillingGroup edge %s", name)
+}
+
+// BillingGroupCompositionMutation represents an operation that mutates the BillingGroupComposition nodes in the graph.
+type BillingGroupCompositionMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *uuid.UUID
+	created_at             *time.Time
+	clearedFields          map[string]struct{}
+	composite_group        *uuid.UUID
+	clearedcomposite_group bool
+	member_group           *uuid.UUID
+	clearedmember_group    bool
+	done                   bool
+	oldValue               func(context.Context) (*BillingGroupComposition, error)
+	predicates             []predicate.BillingGroupComposition
+}
+
+var _ ent.Mutation = (*BillingGroupCompositionMutation)(nil)
+
+// billinggroupcompositionOption allows management of the mutation configuration using functional options.
+type billinggroupcompositionOption func(*BillingGroupCompositionMutation)
+
+// newBillingGroupCompositionMutation creates new mutation for the BillingGroupComposition entity.
+func newBillingGroupCompositionMutation(c config, op Op, opts ...billinggroupcompositionOption) *BillingGroupCompositionMutation {
+	m := &BillingGroupCompositionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeBillingGroupComposition,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withBillingGroupCompositionID sets the ID field of the mutation.
+func withBillingGroupCompositionID(id uuid.UUID) billinggroupcompositionOption {
+	return func(m *BillingGroupCompositionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *BillingGroupComposition
+		)
+		m.oldValue = func(ctx context.Context) (*BillingGroupComposition, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().BillingGroupComposition.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withBillingGroupComposition sets the old BillingGroupComposition of the mutation.
+func withBillingGroupComposition(node *BillingGroupComposition) billinggroupcompositionOption {
+	return func(m *BillingGroupCompositionMutation) {
+		m.oldValue = func(context.Context) (*BillingGroupComposition, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m BillingGroupCompositionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m BillingGroupCompositionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of BillingGroupComposition entities.
+func (m *BillingGroupCompositionMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *BillingGroupCompositionMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *BillingGroupCompositionMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().BillingGroupComposition.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCompositeGroupID sets the "composite_group_id" field.
+func (m *BillingGroupCompositionMutation) SetCompositeGroupID(u uuid.UUID) {
+	m.composite_group = &u
+}
+
+// CompositeGroupID returns the value of the "composite_group_id" field in the mutation.
+func (m *BillingGroupCompositionMutation) CompositeGroupID() (r uuid.UUID, exists bool) {
+	v := m.composite_group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompositeGroupID returns the old "composite_group_id" field's value of the BillingGroupComposition entity.
+// If the BillingGroupComposition object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupCompositionMutation) OldCompositeGroupID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompositeGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompositeGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompositeGroupID: %w", err)
+	}
+	return oldValue.CompositeGroupID, nil
+}
+
+// ResetCompositeGroupID resets all changes to the "composite_group_id" field.
+func (m *BillingGroupCompositionMutation) ResetCompositeGroupID() {
+	m.composite_group = nil
+}
+
+// SetMemberGroupID sets the "member_group_id" field.
+func (m *BillingGroupCompositionMutation) SetMemberGroupID(u uuid.UUID) {
+	m.member_group = &u
+}
+
+// MemberGroupID returns the value of the "member_group_id" field in the mutation.
+func (m *BillingGroupCompositionMutation) MemberGroupID() (r uuid.UUID, exists bool) {
+	v := m.member_group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemberGroupID returns the old "member_group_id" field's value of the BillingGroupComposition entity.
+// If the BillingGroupComposition object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupCompositionMutation) OldMemberGroupID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemberGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemberGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberGroupID: %w", err)
+	}
+	return oldValue.MemberGroupID, nil
+}
+
+// ResetMemberGroupID resets all changes to the "member_group_id" field.
+func (m *BillingGroupCompositionMutation) ResetMemberGroupID() {
+	m.member_group = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *BillingGroupCompositionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *BillingGroupCompositionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the BillingGroupComposition entity.
+// If the BillingGroupComposition object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BillingGroupCompositionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *BillingGroupCompositionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearCompositeGroup clears the "composite_group" edge to the BillingGroup entity.
+func (m *BillingGroupCompositionMutation) ClearCompositeGroup() {
+	m.clearedcomposite_group = true
+	m.clearedFields[billinggroupcomposition.FieldCompositeGroupID] = struct{}{}
+}
+
+// CompositeGroupCleared reports if the "composite_group" edge to the BillingGroup entity was cleared.
+func (m *BillingGroupCompositionMutation) CompositeGroupCleared() bool {
+	return m.clearedcomposite_group
+}
+
+// CompositeGroupIDs returns the "composite_group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// CompositeGroupID instead. It exists only for internal usage by the builders.
+func (m *BillingGroupCompositionMutation) CompositeGroupIDs() (ids []uuid.UUID) {
+	if id := m.composite_group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetCompositeGroup resets all changes to the "composite_group" edge.
+func (m *BillingGroupCompositionMutation) ResetCompositeGroup() {
+	m.composite_group = nil
+	m.clearedcomposite_group = false
+}
+
+// ClearMemberGroup clears the "member_group" edge to the BillingGroup entity.
+func (m *BillingGroupCompositionMutation) ClearMemberGroup() {
+	m.clearedmember_group = true
+	m.clearedFields[billinggroupcomposition.FieldMemberGroupID] = struct{}{}
+}
+
+// MemberGroupCleared reports if the "member_group" edge to the BillingGroup entity was cleared.
+func (m *BillingGroupCompositionMutation) MemberGroupCleared() bool {
+	return m.clearedmember_group
+}
+
+// MemberGroupIDs returns the "member_group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// MemberGroupID instead. It exists only for internal usage by the builders.
+func (m *BillingGroupCompositionMutation) MemberGroupIDs() (ids []uuid.UUID) {
+	if id := m.member_group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetMemberGroup resets all changes to the "member_group" edge.
+func (m *BillingGroupCompositionMutation) ResetMemberGroup() {
+	m.member_group = nil
+	m.clearedmember_group = false
+}
+
+// Where appends a list predicates to the BillingGroupCompositionMutation builder.
+func (m *BillingGroupCompositionMutation) Where(ps ...predicate.BillingGroupComposition) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the BillingGroupCompositionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *BillingGroupCompositionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.BillingGroupComposition, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *BillingGroupCompositionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *BillingGroupCompositionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (BillingGroupComposition).
+func (m *BillingGroupCompositionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *BillingGroupCompositionMutation) Fields() []string {
+	fields := make([]string, 0, 3)
+	if m.composite_group != nil {
+		fields = append(fields, billinggroupcomposition.FieldCompositeGroupID)
+	}
+	if m.member_group != nil {
+		fields = append(fields, billinggroupcomposition.FieldMemberGroupID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, billinggroupcomposition.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *BillingGroupCompositionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case billinggroupcomposition.FieldCompositeGroupID:
+		return m.CompositeGroupID()
+	case billinggroupcomposition.FieldMemberGroupID:
+		return m.MemberGroupID()
+	case billinggroupcomposition.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *BillingGroupCompositionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case billinggroupcomposition.FieldCompositeGroupID:
+		return m.OldCompositeGroupID(ctx)
+	case billinggroupcomposition.FieldMemberGroupID:
+		return m.OldMemberGroupID(ctx)
+	case billinggroupcomposition.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown BillingGroupComposition field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BillingGroupCompositionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case billinggroupcomposition.FieldCompositeGroupID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompositeGroupID(v)
+		return nil
+	case billinggroupcomposition.FieldMemberGroupID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemberGroupID(v)
+		return nil
+	case billinggroupcomposition.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown BillingGroupComposition field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *BillingGroupCompositionMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *BillingGroupCompositionMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BillingGroupCompositionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown BillingGroupComposition numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *BillingGroupCompositionMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *BillingGroupCompositionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *BillingGroupCompositionMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown BillingGroupComposition nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *BillingGroupCompositionMutation) ResetField(name string) error {
+	switch name {
+	case billinggroupcomposition.FieldCompositeGroupID:
+		m.ResetCompositeGroupID()
+		return nil
+	case billinggroupcomposition.FieldMemberGroupID:
+		m.ResetMemberGroupID()
+		return nil
+	case billinggroupcomposition.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown BillingGroupComposition field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *BillingGroupCompositionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.composite_group != nil {
+		edges = append(edges, billinggroupcomposition.EdgeCompositeGroup)
+	}
+	if m.member_group != nil {
+		edges = append(edges, billinggroupcomposition.EdgeMemberGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *BillingGroupCompositionMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case billinggroupcomposition.EdgeCompositeGroup:
+		if id := m.composite_group; id != nil {
+			return []ent.Value{*id}
+		}
+	case billinggroupcomposition.EdgeMemberGroup:
+		if id := m.member_group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *BillingGroupCompositionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *BillingGroupCompositionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *BillingGroupCompositionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedcomposite_group {
+		edges = append(edges, billinggroupcomposition.EdgeCompositeGroup)
+	}
+	if m.clearedmember_group {
+		edges = append(edges, billinggroupcomposition.EdgeMemberGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *BillingGroupCompositionMutation) EdgeCleared(name string) bool {
+	switch name {
+	case billinggroupcomposition.EdgeCompositeGroup:
+		return m.clearedcomposite_group
+	case billinggroupcomposition.EdgeMemberGroup:
+		return m.clearedmember_group
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *BillingGroupCompositionMutation) ClearEdge(name string) error {
+	switch name {
+	case billinggroupcomposition.EdgeCompositeGroup:
+		m.ClearCompositeGroup()
+		return nil
+	case billinggroupcomposition.EdgeMemberGroup:
+		m.ClearMemberGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown BillingGroupComposition unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *BillingGroupCompositionMutation) ResetEdge(name string) error {
+	switch name {
+	case billinggroupcomposition.EdgeCompositeGroup:
+		m.ResetCompositeGroup()
+		return nil
+	case billinggroupcomposition.EdgeMemberGroup:
+		m.ResetMemberGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown BillingGroupComposition edge %s", name)
 }
 
 // EmailSMTPConfigMutation represents an operation that mutates the EmailSMTPConfig nodes in the graph.

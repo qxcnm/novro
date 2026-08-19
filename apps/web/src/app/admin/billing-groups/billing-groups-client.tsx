@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
 import { useListSelection } from "@/lib/use-list-selection";
 
@@ -22,6 +23,7 @@ type Group = {
   id: string;
   code: string;
   display_name: string;
+  kind: "standard" | "composite";
   multiplier_bps: number;
   discount_name: string;
   discount_multiplier_bps: number;
@@ -35,6 +37,8 @@ type Group = {
   api_key_count: number;
   model_route_count: number;
   authorized_users: AuthorizedUser[] | null;
+  member_groups: Array<{ id: string; display_name: string; kind: "standard" | "composite" }> | null;
+  member_group_count: number;
 };
 
 type AuthorizedUser = {
@@ -50,6 +54,7 @@ type UserPage = { users: UserOption[]; total: number; offset: number; limit: num
 type Form = {
   code: string;
   display_name: string;
+  kind: "standard" | "composite";
   multiplier: string;
   discount_enabled: boolean;
   discount_name: string;
@@ -58,9 +63,10 @@ type Form = {
   discount_ends_at: string;
   is_hidden: boolean;
   authorized_user_ids: string[];
+  member_group_ids: string[];
 };
 
-const emptyForm: Form = { code: "", display_name: "", multiplier: "1", discount_enabled: false, discount_name: "", discount: "0.9", discount_starts_at: "", discount_ends_at: "", is_hidden: false, authorized_user_ids: [] };
+const emptyForm: Form = { code: "", display_name: "", kind: "standard", multiplier: "1", discount_enabled: false, discount_name: "", discount: "0.9", discount_starts_at: "", discount_ends_at: "", is_hidden: false, authorized_user_ids: [], member_group_ids: [] };
 
 /**
  * errorMessage 封装该名称对应的业务处理逻辑。
@@ -209,6 +215,7 @@ export default function BillingGroupsClient() {
     setForm({
       code: group.code,
       display_name: group.display_name,
+      kind: group.kind === "composite" ? "composite" : "standard",
       multiplier: String(group.multiplier_bps / 10_000),
       discount_enabled: Boolean(group.discount_starts_at && group.discount_ends_at && group.discount_multiplier_bps < 10_000),
       discount_name: group.discount_name,
@@ -217,6 +224,7 @@ export default function BillingGroupsClient() {
       discount_ends_at: toDateTimeLocal(group.discount_ends_at),
       is_hidden: group.is_hidden,
       authorized_user_ids: (group.authorized_users ?? []).map((record) => record.id),
+      member_group_ids: (group.member_groups ?? []).map((record) => record.id),
     });
     void loadUserOptions();
   }
@@ -229,7 +237,7 @@ export default function BillingGroupsClient() {
    */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const bps = multiplierBPS(form.multiplier);
+    const bps = form.kind === "composite" ? 10_000 : multiplierBPS(form.multiplier);
     if (bps === null) { setMessage("计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数"); return; }
     const parsedDiscountMultiplierBPS = form.discount_enabled ? discountMultiplierBPS(form.discount) : null;
     const startsAt = form.discount_enabled ? new Date(form.discount_starts_at) : null;
@@ -244,7 +252,8 @@ export default function BillingGroupsClient() {
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
     } : undefined;
-    const common = { display_name: form.display_name, multiplier_bps: bps, is_hidden: form.is_hidden, authorized_user_ids: form.is_hidden ? form.authorized_user_ids : [], discount };
+    if (form.kind === "composite" && form.member_group_ids.length === 0) { setMessage("主分组至少选择一个普通分组"); return; }
+    const common = { display_name: form.display_name, kind: form.kind, multiplier_bps: bps, is_hidden: form.is_hidden, authorized_user_ids: form.is_hidden ? form.authorized_user_ids : [], member_group_ids: form.kind === "composite" ? form.member_group_ids : [], discount: form.kind === "composite" ? undefined : discount };
     const body = editing
       ? { ...common, clear_discount: !form.discount_enabled }
       : { code: form.code, ...common };
@@ -347,8 +356,9 @@ export default function BillingGroupsClient() {
   const fields = <>
     <div className="space-y-2"><Label htmlFor="group-code">分组标识</Label><Input disabled={editing !== null} id="group-code" maxLength={64} onChange={(event) => setForm({ ...form, code: event.target.value })} pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" placeholder="例如 vip" required title="分组标识需为 3 到 64 位，只能使用小写字母、数字和连字符，不能包含点号、小数点、下划线或空格，且必须以字母或数字开头和结尾" value={form.code} /><p className="text-xs text-muted-foreground">3 到 64 位；只允许小写字母、数字和连字符，不允许点号、小数点、下划线或空格。</p></div>
     <div className="space-y-2"><Label htmlFor="group-name">显示名称</Label><Input id="group-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} required value={form.display_name} /></div>
-    <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" title="计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">范围 0.0001 到 100；1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>
-    <fieldset className="space-y-4 border-y py-4">
+    <div className="space-y-2"><Label htmlFor="group-kind">分组类型</Label><Select disabled={editing?.is_default === true} onValueChange={(value) => setForm({ ...form, kind: value as Form["kind"], discount_enabled: value === "composite" ? false : form.discount_enabled })} value={form.kind}><SelectTrigger id="group-kind"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="standard">普通计费分组</SelectItem><SelectItem value="composite">主分组（组合多个普通分组）</SelectItem></SelectGroup></SelectContent></Select></div>
+    {form.kind === "composite" ? <fieldset className="space-y-3 border-y py-4"><legend className="text-sm font-medium">成员分组</legend><p className="text-xs text-muted-foreground">主分组只组合普通分组；调用时按实际命中的成员分组倍率结算。</p><div className="max-h-56 overflow-y-auto border-y">{groups.filter((group) => group.kind !== "composite" && group.id !== editing?.id && (group.status === "active" || form.member_group_ids.includes(group.id))).length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">没有可选的普通计费分组</p> : null}{groups.filter((group) => group.kind !== "composite" && group.id !== editing?.id && (group.status === "active" || form.member_group_ids.includes(group.id))).map((group) => <label className="flex cursor-pointer items-center gap-3 border-b px-3 py-2.5 last:border-b-0" key={group.id}><Checkbox aria-label={`将 ${group.display_name} 设为成员分组`} checked={form.member_group_ids.includes(group.id)} onCheckedChange={(checked) => setForm({ ...form, member_group_ids: checked === true ? [...form.member_group_ids, group.id] : form.member_group_ids.filter((id) => id !== group.id) })} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.display_name}</span><span className="font-mono text-xs text-muted-foreground">{(group.multiplier_bps / 10_000).toFixed(4)}×{group.status === "disabled" ? " · 已停用" : ""}</span></span></label>)}</div></fieldset> : <div className="space-y-2"><Label htmlFor="group-multiplier">计费倍率</Label><Input id="group-multiplier" inputMode="decimal" max="100" min="0.0001" onChange={(event) => setForm({ ...form, multiplier: event.target.value })} required step="0.0001" title="计费倍率必须在 0.0001 到 100 之间，最多保留 4 位小数" type="number" value={form.multiplier} /><p className="text-xs text-muted-foreground">范围 0.0001 到 100；1.0000 表示按模型目录基础价格计费，1.2000 表示加价 20%。</p></div>}
+    {form.kind === "standard" ? <fieldset className="space-y-4 border-y py-4">
       <legend className="sr-only">定时优惠</legend>
       <label className="flex cursor-pointer items-start gap-3"><Checkbox aria-label="启用定时优惠" checked={form.discount_enabled} onCheckedChange={(checked) => setForm({ ...form, discount_enabled: checked === true })} /><span><span className="block text-sm font-medium">定时优惠</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">在指定时间内自动降低该分组的实际计费倍率。</span></span></label>
       {form.discount_enabled ? <div className="grid gap-4 sm:grid-cols-2">
@@ -358,7 +368,7 @@ export default function BillingGroupsClient() {
         <div className="space-y-2"><Label htmlFor="discount-ends-at">结束时间</Label><Input id="discount-ends-at" onChange={(event) => setForm({ ...form, discount_ends_at: event.target.value })} required type="datetime-local" value={form.discount_ends_at} /></div>
         <div className="space-y-2"><Label>优惠后倍率</Label><div className="flex h-9 items-center border-y font-mono text-sm">{(() => { const base = multiplierBPS(form.multiplier); const rate = discountMultiplierBPS(form.discount); return base !== null && rate !== null ? `${(Math.ceil((base * rate) / 10_000) / 10_000).toFixed(4)}x` : "-"; })()}</div></div>
       </div> : null}
-    </fieldset>
+    </fieldset> : null}
     <label className="flex cursor-pointer items-start gap-3 border-y py-3"><Checkbox aria-label="隐藏计费分组" checked={form.is_hidden} disabled={editing?.is_default === true} onCheckedChange={(checked) => setForm({ ...form, is_hidden: checked === true, authorized_user_ids: checked === true ? form.authorized_user_ids : [] })} /><span><span className="block text-sm font-medium">隐藏分组</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">仅管理员和此分组已授权的用户可以查看、选择和使用。</span></span></label>
     {form.is_hidden ? <div className="space-y-3"><div className="flex items-center justify-between gap-3"><div><Label htmlFor="authorized-user-search">授权用户</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">每个隐藏分组独立授权；管理员无需选择即可访问。</p></div><Badge variant="secondary">已选 {form.authorized_user_ids.length}</Badge></div><div className="relative"><Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input id="authorized-user-search" className="pl-8" onChange={(event) => setUserQuery(event.target.value)} placeholder="搜索用户名、显示名称或邮箱" value={userQuery} /></div><div className="max-h-56 overflow-y-auto border-y" role="group" aria-label="选择授权用户">{userOptionsLoading ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">正在加载用户...</p> : null}{!userOptionsLoading && filteredUserOptions.length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">没有符合条件的普通成员</p> : null}{!userOptionsLoading ? filteredUserOptions.map((record) => { const selected = form.authorized_user_ids.includes(record.id); return <label className="flex cursor-pointer items-center gap-3 border-b px-3 py-2.5 last:border-b-0 hover:bg-muted/50" key={record.id}><Checkbox aria-label={`授权用户 ${record.username}`} checked={selected} onCheckedChange={(checked) => setForm({ ...form, authorized_user_ids: checked === true ? [...form.authorized_user_ids, record.id] : form.authorized_user_ids.filter((id) => id !== record.id) })} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{record.display_name || record.username}</span><span className="block truncate text-xs text-muted-foreground">@{record.username}{record.email ? ` · ${record.email}` : ""}</span></span>{record.status === "disabled" ? <Badge variant="outline">已停用</Badge> : null}</label>; }) : null}</div></div> : null}
   </>;
@@ -394,9 +404,9 @@ export default function BillingGroupsClient() {
               {!loading && filtered.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>还没有计费分组</TableCell></TableRow> : null}
               {filtered.map((group) => { const promotion = discountStatus(group); return <TableRow key={group.id}>
                 <TableCell><Checkbox aria-label={`选择 ${group.display_name}`} checked={selection.isSelected(group.id)} disabled={group.is_default} onCheckedChange={(checked) => selection.toggleOne(group.id, checked === true)} /></TableCell>
-                <TableCell><p className="font-medium">{group.display_name} {group.is_default ? <Badge className="ml-1" variant="secondary">默认</Badge> : null}{group.is_hidden ? <Badge className="ml-1" variant="outline">隐藏</Badge> : null}</p><p className="font-mono text-xs text-muted-foreground">{group.code}</p></TableCell>
-                <TableCell className="font-mono"><p>{(group.effective_multiplier_bps / 10_000).toFixed(4)}x</p>{group.discount_active ? <p className="text-xs text-muted-foreground line-through">{(group.multiplier_bps / 10_000).toFixed(4)}x</p> : null}</TableCell>
-                <TableCell>{promotion ? <div className="min-w-36"><span className="inline-flex items-center gap-2"><Badge variant={promotion.variant}>{promotion.label}</Badge><span className="font-mono text-sm">{(group.discount_multiplier_bps / 10_000).toFixed(4)}x</span></span><p className="mt-1 text-xs text-muted-foreground">{group.discount_name}</p><p className="text-xs text-muted-foreground">{formatDiscountTime(group.discount_starts_at)} - {formatDiscountTime(group.discount_ends_at)}</p></div> : <span className="text-muted-foreground">无</span>}</TableCell>
+                <TableCell><p className="font-medium">{group.display_name} {group.kind === "composite" ? <Badge className="ml-1" variant="default">主分组</Badge> : null}{group.is_default ? <Badge className="ml-1" variant="secondary">默认</Badge> : null}{group.is_hidden ? <Badge className="ml-1" variant="outline">隐藏</Badge> : null}</p><p className="font-mono text-xs text-muted-foreground">{group.code}</p></TableCell>
+                <TableCell className="font-mono">{group.kind === "composite" ? <p className="text-sm font-normal">按命中成员结算<br /><span className="text-xs text-muted-foreground">{group.member_group_count ?? group.member_groups?.length ?? 0} 个成员</span></p> : <><p>{(group.effective_multiplier_bps / 10_000).toFixed(4)}x</p>{group.discount_active ? <p className="text-xs text-muted-foreground line-through">{(group.multiplier_bps / 10_000).toFixed(4)}x</p> : null}</>}</TableCell>
+                <TableCell>{group.kind === "composite" ? <span className="text-muted-foreground">不适用</span> : promotion ? <div className="min-w-36"><span className="inline-flex items-center gap-2"><Badge variant={promotion.variant}>{promotion.label}</Badge><span className="font-mono text-sm">{(group.discount_multiplier_bps / 10_000).toFixed(4)}x</span></span><p className="mt-1 text-xs text-muted-foreground">{group.discount_name}</p><p className="text-xs text-muted-foreground">{formatDiscountTime(group.discount_starts_at)} - {formatDiscountTime(group.discount_ends_at)}</p></div> : <span className="text-muted-foreground">无</span>}</TableCell>
                 <TableCell>{group.is_hidden ? <span className="inline-flex items-center gap-1"><UsersRound className="size-4 text-muted-foreground" />{(group.authorized_users ?? []).length}</span> : <span className="text-muted-foreground">全部用户</span>}</TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><KeyRound className="size-4 text-muted-foreground" />{group.api_key_count}</span></TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><Route className="size-4 text-muted-foreground" />{group.model_route_count}</span></TableCell>

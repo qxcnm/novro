@@ -213,6 +213,7 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) (Page, error) {
 		return Page{}, fmt.Errorf("count users: %w", err)
 	}
 	entities, err := query.
+		WithWallet().
 		Order(ent.Desc(entuser.FieldCreatedAt)).
 		Offset(filter.Offset).
 		Limit(filter.Limit).
@@ -220,9 +221,9 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) (Page, error) {
 	if err != nil {
 		return Page{}, fmt.Errorf("list users: %w", err)
 	}
-	records := make([]Record, 0, len(entities))
+	records := make([]AdminRecord, 0, len(entities))
 	for _, entity := range entities {
-		records = append(records, fromEnt(entity))
+		records = append(records, adminRecordFromEnt(entity))
 	}
 	return Page{Users: records, Total: total, Offset: filter.Offset, Limit: filter.Limit}, nil
 }
@@ -391,6 +392,14 @@ func fromEnt(entity *ent.User) Record {
 	}
 	if entity.Email != nil {
 		record.Email = *entity.Email
+	}
+	return record
+}
+
+func adminRecordFromEnt(entity *ent.User) AdminRecord {
+	record := AdminRecord{Record: fromEnt(entity)}
+	if entity != nil && entity.Edges.Wallet != nil {
+		record.BalanceMicros = entity.Edges.Wallet.BalanceMicros
 	}
 	return record
 }

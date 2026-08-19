@@ -214,12 +214,25 @@ func (s *Service) SummaryPage(ctx context.Context, userID uuid.UUID, filter Entr
  * @date 2026-08-13
  */
 func (s *Service) Usage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
+	if userID == uuid.Nil {
+		return UsagePage{}, ErrInvalidInput
+	}
+	return s.usage(ctx, userID, filter)
+}
+
+// AdminUsage returns usage across all users when userID is nil, or scopes the
+// result to one selected user. Authorization is enforced by the HTTP boundary.
+func (s *Service) AdminUsage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
+	return s.usage(ctx, userID, filter)
+}
+
+func (s *Service) usage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
 	filter.Search = strings.TrimSpace(filter.Search)
 	filter.Model = strings.TrimSpace(filter.Model)
 	if filter.Limit == 0 {
 		filter.Limit = 20
 	}
-	if userID == uuid.Nil || filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 || len([]rune(filter.Search)) > 128 || len([]rune(filter.Model)) > 256 ||
+	if filter.Offset < 0 || filter.Limit < 1 || filter.Limit > 100 || len([]rune(filter.Search)) > 128 || len([]rune(filter.Model)) > 256 ||
 		(filter.Status != UsageStatusAll && filter.Status != UsageStatusSuccess && filter.Status != UsageStatusFailed) {
 		return UsagePage{}, ErrInvalidInput
 	}

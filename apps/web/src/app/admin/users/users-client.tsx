@@ -29,6 +29,7 @@ type UserRecord = {
   created_at: string;
 	updated_at: string;
 	last_login_at: string | null;
+	balance_micros?: number;
 };
 
 type UserPage = { users: UserRecord[]; total: number; offset: number; limit: number };
@@ -300,7 +301,9 @@ export default function UsersClient() {
     try {
       const response = await fetch(`/api/admin/users/${balanceUser.id}/balance-adjustments`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ amount_micros: amount, note: adjustmentNote }) });
       if (!response.ok) { setBalanceError(await readError(response)); return; }
-      setBalanceSummary((await response.json()) as BalanceSummary);
+      const summary = (await response.json()) as BalanceSummary;
+      setBalanceSummary(summary);
+      setUsers((records) => records.map((record) => record.id === balanceUser.id ? { ...record, balance_micros: summary.wallet.balance_micros } : record));
       setAdjustmentAmount(""); setAdjustmentNote(""); setAdjustmentIdempotencyKey(""); setMessage("用户余额已调整");
     } catch {
       setBalanceError("网络异常，未能确认调整结果。请保持金额和备注不变后重试");
@@ -349,16 +352,17 @@ export default function UsersClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-				<TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有用户" checked={selection.checkboxState} disabled={loading || users.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
+				<TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择本页所有用户" checked={selection.checkboxState} disabled={loading || users.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">用户</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead className="min-w-32 text-right">余额</TableHead><TableHead className="min-w-40">最近登录</TableHead><TableHead className="min-w-40">创建时间</TableHead><TableHead className="w-36 text-right">操作</TableHead></TableRow></TableHeader>
 				<TableBody>
-				  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={7}>加载中...</TableCell></TableRow> : null}
-				  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>没有符合条件的用户</TableCell></TableRow> : null}
+				  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={8}>加载中...</TableCell></TableRow> : null}
+				  {!loading && users.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={8}>没有符合条件的用户</TableCell></TableRow> : null}
                   {!loading ? users.map((record) => (
                     <TableRow key={record.id}>
 					  <TableCell><Checkbox aria-label={`选择用户 ${record.username}`} checked={selection.isSelected(record.id)} onCheckedChange={(checked) => selection.toggleOne(record.id, checked === true)} /></TableCell>
                       <TableCell><button className="max-w-64 text-left outline-none focus-visible:underline" onClick={() => openDetails(record)} type="button"><span className="block font-medium">{record.display_name || record.username}</span><span className="block text-xs text-muted-foreground">@{record.username}</span><span className="block truncate text-xs text-muted-foreground">{record.email || "未设置邮箱"}</span></button></TableCell>
 					  <TableCell><Badge variant={record.role === "admin" ? "default" : "secondary"}>{record.role === "admin" ? "管理员" : "成员"}</Badge></TableCell>
 					  <TableCell><Badge variant={record.status === "active" ? "outline" : "destructive"}>{record.status === "active" ? "启用" : "停用"}</Badge></TableCell>
+					  <TableCell className="whitespace-nowrap text-right font-medium tabular-nums">{typeof record.balance_micros === "number" ? formatMoney(record.balance_micros) : "--"}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.last_login_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.created_at)}</TableCell>
                       <TableCell><div className="flex justify-end gap-1">

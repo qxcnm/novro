@@ -8,10 +8,13 @@ import (
 )
 
 type Status string
+type Kind string
 
 const (
 	StatusActive         Status = "active"
 	StatusDisabled       Status = "disabled"
+	KindStandard         Kind   = "standard"
+	KindComposite        Kind   = "composite"
 	DefaultCode                 = "default"
 	DefaultMultiplierBPS        = int64(10_000)
 )
@@ -28,6 +31,7 @@ type Record struct {
 	ID                     uuid.UUID        `json:"id"`
 	Code                   string           `json:"code"`
 	DisplayName            string           `json:"display_name"`
+	Kind                   Kind             `json:"kind"`
 	MultiplierBPS          int64            `json:"multiplier_bps"`
 	DiscountName           string           `json:"discount_name"`
 	DiscountMultiplierBPS  int64            `json:"discount_multiplier_bps"`
@@ -41,6 +45,8 @@ type Record struct {
 	APIKeyCount            int              `json:"api_key_count"`
 	ModelRouteCount        int              `json:"model_route_count"`
 	AuthorizedUsers        []AuthorizedUser `json:"authorized_users"`
+	MemberGroups           []Summary        `json:"member_groups"`
+	MemberGroupCount       int              `json:"member_group_count"`
 	CreatedAt              time.Time        `json:"created_at"`
 	UpdatedAt              time.Time        `json:"updated_at"`
 }
@@ -53,16 +59,19 @@ type AuthorizedUser struct {
 }
 
 type Summary struct {
-	ID                     uuid.UUID  `json:"id"`
-	Code                   string     `json:"code"`
-	DisplayName            string     `json:"display_name"`
-	MultiplierBPS          int64      `json:"multiplier_bps"`
-	DiscountName           string     `json:"discount_name"`
-	DiscountMultiplierBPS  int64      `json:"discount_multiplier_bps"`
-	DiscountStartsAt       *time.Time `json:"discount_starts_at"`
-	DiscountEndsAt         *time.Time `json:"discount_ends_at"`
-	EffectiveMultiplierBPS int64      `json:"effective_multiplier_bps"`
-	DiscountActive         bool       `json:"discount_active"`
+	ID                     uuid.UUID   `json:"id"`
+	Code                   string      `json:"code"`
+	DisplayName            string      `json:"display_name"`
+	Kind                   Kind        `json:"kind"`
+	MemberGroupIDs         []uuid.UUID `json:"member_group_ids,omitempty"`
+	MemberGroupCount       int         `json:"member_group_count,omitempty"`
+	MultiplierBPS          int64       `json:"multiplier_bps"`
+	DiscountName           string      `json:"discount_name"`
+	DiscountMultiplierBPS  int64       `json:"discount_multiplier_bps"`
+	DiscountStartsAt       *time.Time  `json:"discount_starts_at"`
+	DiscountEndsAt         *time.Time  `json:"discount_ends_at"`
+	EffectiveMultiplierBPS int64       `json:"effective_multiplier_bps"`
+	DiscountActive         bool        `json:"discount_active"`
 }
 
 type DiscountInput struct {
@@ -75,26 +84,36 @@ type DiscountInput struct {
 type CreateInput struct {
 	Code              string         `json:"code"`
 	DisplayName       string         `json:"display_name"`
+	Kind              Kind           `json:"kind"`
 	MultiplierBPS     int64          `json:"multiplier_bps"`
 	IsHidden          bool           `json:"is_hidden"`
 	AuthorizedUserIDs []uuid.UUID    `json:"authorized_user_ids"`
+	MemberGroupIDs    []uuid.UUID    `json:"member_group_ids"`
 	Discount          *DiscountInput `json:"discount"`
 }
 
 type UpdateInput struct {
 	DisplayName       *string        `json:"display_name"`
+	Kind              *Kind          `json:"kind"`
 	MultiplierBPS     *int64         `json:"multiplier_bps"`
 	IsHidden          *bool          `json:"is_hidden"`
 	AuthorizedUserIDs *[]uuid.UUID   `json:"authorized_user_ids"`
+	MemberGroupIDs    *[]uuid.UUID   `json:"member_group_ids"`
 	Discount          *DiscountInput `json:"discount"`
 	ClearDiscount     bool           `json:"clear_discount"`
 }
 
 func (s Summary) MultiplierAt(at time.Time) int64 {
+	if s.Kind == KindComposite {
+		return DefaultMultiplierBPS
+	}
 	return multiplierAt(s.MultiplierBPS, s.DiscountMultiplierBPS, s.DiscountStartsAt, s.DiscountEndsAt, at)
 }
 
 func (r Record) MultiplierAt(at time.Time) int64 {
+	if r.Kind == KindComposite {
+		return DefaultMultiplierBPS
+	}
 	return multiplierAt(r.MultiplierBPS, r.DiscountMultiplierBPS, r.DiscountStartsAt, r.DiscountEndsAt, at)
 }
 
@@ -106,8 +125,12 @@ func multiplierAt(base, discount int64, startsAt, endsAt *time.Time, at time.Tim
 }
 
 func NewSummary(id uuid.UUID, code, displayName string, multiplierBPS int64, discountName string, discountMultiplierBPS int64, discountStartsAt, discountEndsAt *time.Time) Summary {
+	return NewSummaryWithKind(id, code, displayName, KindStandard, multiplierBPS, discountName, discountMultiplierBPS, discountStartsAt, discountEndsAt, nil)
+}
+
+func NewSummaryWithKind(id uuid.UUID, code, displayName string, kind Kind, multiplierBPS int64, discountName string, discountMultiplierBPS int64, discountStartsAt, discountEndsAt *time.Time, memberGroupIDs []uuid.UUID) Summary {
 	summary := Summary{ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS,
-		DiscountName: discountName, DiscountMultiplierBPS: discountMultiplierBPS, DiscountStartsAt: discountStartsAt, DiscountEndsAt: discountEndsAt}
+		Kind: kind, MemberGroupIDs: append([]uuid.UUID(nil), memberGroupIDs...), MemberGroupCount: len(memberGroupIDs), DiscountName: discountName, DiscountMultiplierBPS: discountMultiplierBPS, DiscountStartsAt: discountStartsAt, DiscountEndsAt: discountEndsAt}
 	summary.EffectiveMultiplierBPS = summary.MultiplierAt(time.Now().UTC())
 	summary.DiscountActive = summary.EffectiveMultiplierBPS != summary.MultiplierBPS
 	return summary
@@ -118,4 +141,15 @@ type ListFilter struct {
 	Status           Status
 	IncludeHidden    bool
 	AuthorizedUserID uuid.UUID
+}
+
+// normalizeRecord keeps response metadata coherent for store implementations
+// that return member summaries without separately calculating the count. The
+// Ent store already populates both fields, but this fallback preserves the API
+// contract for older repository adapters and test doubles.
+func normalizeRecord(record Record) Record {
+	if record.MemberGroupCount == 0 && len(record.MemberGroups) > 0 {
+		record.MemberGroupCount = len(record.MemberGroups)
+	}
+	return record
 }

@@ -52,13 +52,19 @@ type fakePricing struct {
 
 type fakeDiscounts struct {
 	multiplierBPS int64
+	multipliers   map[uuid.UUID]int64
 	calls         int
 	groupID       uuid.UUID
+	groupIDs      []uuid.UUID
 }
 
 func (f *fakeDiscounts) MultiplierAt(group billinggroup.Summary, _ time.Time) int64 {
 	f.calls++
 	f.groupID = group.ID
+	f.groupIDs = append(f.groupIDs, group.ID)
+	if multiplier, ok := f.multipliers[group.ID]; ok {
+		return multiplier
+	}
 	return f.multiplierBPS
 }
 
@@ -456,6 +462,20 @@ func gatewayActorWithMultiplier(multiplierBPS int64) apikey.Actor {
 	return actor
 }
 
+func compositeGatewayActor(memberGroupIDs ...uuid.UUID) apikey.Actor {
+	actor := gatewayActor()
+	actor.APIKey.BillingGroup.Kind = billinggroup.KindComposite
+	actor.APIKey.BillingGroup.MemberGroupIDs = append([]uuid.UUID(nil), memberGroupIDs...)
+	actor.APIKey.BillingGroup.MemberGroupCount = len(memberGroupIDs)
+	return actor
+}
+
+func routeWithBillingGroup(route modelroute.Resolved, groupID uuid.UUID, code, displayName string, multiplierBPS int64) modelroute.Resolved {
+	route.BillingGroupID = groupID
+	route.BillingGroup = billinggroup.NewSummaryWithKind(groupID, code, displayName, billinggroup.KindStandard, multiplierBPS, "", billinggroup.DefaultMultiplierBPS, nil, nil, nil)
+	return route
+}
+
 /**
  * openAIRoute 封装该名称对应的业务处理逻辑。
  * @param none 无参数。
@@ -699,6 +719,115 @@ func TestProxyAppliesScheduledBillingGroupDiscountToReservationAndCharge(t *test
 	}
 	if biller.reserved != expectedReservation.CostMicros {
 		t.Fatalf("billing group discount was not applied to reservation: got=%d want=%d", biller.reserved, expectedReservation.CostMicros)
+	}
+}
+
+func TestCompositeProxyReservesHighestCandidateAndChargesDirectHitGroup(t *testing.T) {
+	startedAt := time.Date(2026, time.October, 2, 12, 0, 0, 0, time.UTC)
+	fastGroupID, expensiveGroupID := uuid.New(), uuid.New()
+	actor := compositeGatewayActor(fastGroupID, expensiveGroupID)
+	fast := routeWithBillingGroup(openAIChannel("fast", "fast.example.com", "fast-upstream"), fastGroupID, "fast-group", "Fast Group", 3_000)
+	fast.Provider.Weight = 20
+	expensive := routeWithBillingGroup(openAIChannel("expensive", "expensive.example.com", "expensive-upstream"), expensiveGroupID, "expensive-group", "Expensive Group", 8_000)
+	expensive.Provider.Weight = 10
+	discounts := &fakeDiscounts{multipliers: map[uuid.UUID]int64{fastGroupID: 3_000, expensiveGroupID: 8_000}}
+	biller := &fakeBilling{}
+	hosts := make([]string, 0, 2)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"fast-hit","usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{candidates: []modelroute.Resolved{expensive, fast}, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: biller, Discounts: discounts, Client: client})
+	handler.now = func() time.Time { return startedAt }
+	handler.upstreamRetryDelays = nil
+	body := `{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"max_tokens":100}`
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "fast.example.com" {
+		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		t.Fatal(err)
+	}
+	wantReserved := int64(0)
+	for _, candidate := range []struct {
+		route      modelroute.Resolved
+		multiplier int64
+	}{{route: fast, multiplier: 3_000}, {route: expensive, multiplier: 8_000}} {
+		upstreamBody, err := buildUpstreamBody(payload, candidate.route, "chat_completions", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reservation, err := billing.EstimateReservation(estimateInputTokens(upstreamBody), 100, rateCardFor(candidate.route), candidate.multiplier)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantReserved = max(wantReserved, reservation.CostMicros)
+	}
+	if biller.reserved != wantReserved {
+		t.Fatalf("composite reservation=%d, want highest candidate %d", biller.reserved, wantReserved)
+	}
+	if biller.usage.BillingGroupID == nil || *biller.usage.BillingGroupID != fastGroupID || biller.usage.BillingGroupCode != "fast-group" || biller.usage.BillingGroupName != "Fast Group" || biller.usage.MultiplierBPS != 3_000 || biller.usage.ModelRouteID != fast.ID {
+		t.Fatalf("direct hit did not use actual member billing snapshot: %+v", biller.usage)
+	}
+	if discounts.calls != 2 {
+		t.Fatalf("candidate multipliers were not pinned once: calls=%d groups=%v", discounts.calls, discounts.groupIDs)
+	}
+}
+
+func TestCompositeProxySafeFailoverChargesFallbackMember(t *testing.T) {
+	primaryGroupID, fallbackGroupID := uuid.New(), uuid.New()
+	actor := compositeGatewayActor(primaryGroupID, fallbackGroupID)
+	primary := routeWithBillingGroup(openAIChannel("primary", "primary.example.com", "primary-upstream"), primaryGroupID, "primary-group", "Primary Group", 2_500)
+	primary.Provider.Weight = 20
+	fallback := routeWithBillingGroup(openAIChannel("fallback", "fallback.example.com", "fallback-upstream"), fallbackGroupID, "fallback-group", "Fallback Group", 6_000)
+	fallback.Provider.Weight = 10
+	discounts := &fakeDiscounts{multipliers: map[uuid.UUID]int64{primaryGroupID: 2_500, fallbackGroupID: 6_000}}
+	biller := &fakeBilling{}
+	hosts := make([]string, 0, 2)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		if request.URL.Host == "primary.example.com" {
+			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection failed before request write")}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"id":"fallback-hit","usage":{"prompt_tokens":10,"completion_tokens":20}}`))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{candidates: []modelroute.Resolved{fallback, primary}, expectedGroupID: actor.APIKey.BillingGroupID}, Billing: biller, Discounts: discounts, Client: client})
+	handler.upstreamRetryDelays = nil
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":100}`)))
+	if response.Code != http.StatusOK || strings.Join(hosts, ",") != "primary.example.com,fallback.example.com" {
+		t.Fatalf("status=%d hosts=%v body=%s", response.Code, hosts, response.Body.String())
+	}
+	if biller.usage.BillingGroupID == nil || *biller.usage.BillingGroupID != fallbackGroupID || biller.usage.BillingGroupCode != "fallback-group" || biller.usage.MultiplierBPS != 6_000 || biller.usage.ModelRouteID != fallback.ID {
+		t.Fatalf("safe failover did not settle against fallback member: %+v", biller.usage)
+	}
+}
+
+func TestCompositeProxyFailureRecordsLastAttemptedMember(t *testing.T) {
+	firstGroupID, secondGroupID := uuid.New(), uuid.New()
+	actor := compositeGatewayActor(firstGroupID, secondGroupID)
+	first := routeWithBillingGroup(openAIChannel("first-member", "first-member.example.com", "first-member-upstream"), firstGroupID, "first-member", "First Member", 3_000)
+	first.Provider.Weight = 20
+	second := routeWithBillingGroup(openAIChannel("second-member", "second-member.example.com", "second-member-upstream"), secondGroupID, "second-member", "Second Member", 7_000)
+	second.Provider.Weight = 10
+	discounts := &fakeDiscounts{multipliers: map[uuid.UUID]int64{firstGroupID: 3_000, secondGroupID: 7_000}}
+	biller := &fakeBilling{}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection failed before request write")}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{candidates: []modelroute.Resolved{second, first}}, Billing: biller, Discounts: discounts, Client: client})
+	handler.upstreamRetryDelays = nil
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"deepseek-chat","messages":[],"max_tokens":10}`)))
+	if response.Code != http.StatusBadGateway || len(biller.failures) != 1 {
+		t.Fatalf("status=%d failures=%+v body=%s", response.Code, biller.failures, response.Body.String())
+	}
+	failure := biller.failures[0]
+	if failure.BillingGroupID == nil || *failure.BillingGroupID != secondGroupID || failure.BillingGroupCode != "second-member" || failure.BillingGroupName != "Second Member" || failure.MultiplierBPS != 7_000 || failure.ModelRouteID != second.ID {
+		t.Fatalf("failure did not use last attempted member: %+v", failure)
 	}
 }
 

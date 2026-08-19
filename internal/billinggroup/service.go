@@ -121,11 +121,25 @@ func (s *Service) MultiplierAt(fallback Summary, at time.Time) int64 {
 func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error) {
 	input.Code = strings.ToLower(strings.TrimSpace(input.Code))
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	if !codePattern.MatchString(input.Code) || !validName(input.DisplayName) || !validMultiplier(input.MultiplierBPS) || !validAuthorizedUserIDs(input.AuthorizedUserIDs) || (!input.IsHidden && len(input.AuthorizedUserIDs) > 0) || !normalizeDiscount(input.Discount) {
+	if input.Kind == "" {
+		input.Kind = KindStandard
+	}
+	if input.Kind == KindComposite && input.MultiplierBPS == 0 {
+		input.MultiplierBPS = DefaultMultiplierBPS
+	}
+	if !codePattern.MatchString(input.Code) || !validName(input.DisplayName) || !validKind(input.Kind) || !validMultiplier(input.MultiplierBPS) || !validAuthorizedUserIDs(input.AuthorizedUserIDs) || !validMemberGroupIDs(input.MemberGroupIDs) || (!input.IsHidden && len(input.AuthorizedUserIDs) > 0) || !normalizeDiscount(input.Discount) {
+		return Record{}, ErrInvalidInput
+	}
+	if input.Kind == KindComposite {
+		if input.MultiplierBPS != DefaultMultiplierBPS || input.Discount != nil || len(input.MemberGroupIDs) == 0 {
+			return Record{}, ErrInvalidInput
+		}
+	} else if len(input.MemberGroupIDs) > 0 {
 		return Record{}, ErrInvalidInput
 	}
 	record, err := s.store.Create(ctx, input)
 	if err == nil {
+		record = normalizeRecord(record)
 		s.remember(record)
 	}
 	return record, err
@@ -145,7 +159,8 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 	}
 	records, err := s.store.List(ctx, filter)
 	if err == nil {
-		for _, record := range records {
+		for index, record := range records {
+			records[index] = normalizeRecord(record)
 			s.remember(record)
 		}
 	}
@@ -161,7 +176,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.MultiplierBPS == nil && input.IsHidden == nil && input.AuthorizedUserIDs == nil && input.Discount == nil && !input.ClearDiscount) || (input.Discount != nil && input.ClearDiscount) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Kind == nil && input.MultiplierBPS == nil && input.IsHidden == nil && input.AuthorizedUserIDs == nil && input.MemberGroupIDs == nil && input.Discount == nil && !input.ClearDiscount) || (input.Discount != nil && input.ClearDiscount) {
+		return Record{}, ErrInvalidInput
+	}
+	if input.Kind != nil && !validKind(*input.Kind) {
 		return Record{}, ErrInvalidInput
 	}
 	if input.DisplayName != nil {
@@ -177,11 +195,15 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 	if input.AuthorizedUserIDs != nil && !validAuthorizedUserIDs(*input.AuthorizedUserIDs) {
 		return Record{}, ErrInvalidInput
 	}
+	if input.MemberGroupIDs != nil && !validMemberGroupIDs(*input.MemberGroupIDs) {
+		return Record{}, ErrInvalidInput
+	}
 	if !normalizeDiscount(input.Discount) {
 		return Record{}, ErrInvalidInput
 	}
 	record, err := s.store.Update(ctx, id, input)
 	if err == nil {
+		record = normalizeRecord(record)
 		s.remember(record)
 	}
 	return record, err
@@ -201,6 +223,7 @@ func (s *Service) SetStatus(ctx context.Context, id uuid.UUID, status Status) (R
 	}
 	record, err := s.store.SetStatus(ctx, id, status)
 	if err == nil {
+		record = normalizeRecord(record)
 		s.remember(record)
 	}
 	return record, err
@@ -232,10 +255,14 @@ func (s *Service) remember(record Record) {
 		return
 	}
 	summary := Summary{
-		ID: record.ID, Code: record.Code, DisplayName: record.DisplayName, MultiplierBPS: record.MultiplierBPS,
+		ID: record.ID, Code: record.Code, DisplayName: record.DisplayName, Kind: record.Kind, MultiplierBPS: record.MultiplierBPS,
 		DiscountName: record.DiscountName, DiscountMultiplierBPS: record.DiscountMultiplierBPS,
 		DiscountStartsAt: record.DiscountStartsAt, DiscountEndsAt: record.DiscountEndsAt,
 	}
+	for _, member := range record.MemberGroups {
+		summary.MemberGroupIDs = append(summary.MemberGroupIDs, member.ID)
+	}
+	summary.MemberGroupCount = len(summary.MemberGroupIDs)
 	s.cacheMu.Lock()
 	// A list or update may have read this record just before a concurrent delete
 	// committed. Keep the delete tombstone authoritative so that stale results
@@ -276,6 +303,8 @@ func validName(value string) bool { return value != "" && utf8.RuneCountInString
  */
 func validMultiplier(value int64) bool { return value >= 1 && value <= 1_000_000 }
 
+func validKind(kind Kind) bool { return kind == KindStandard || kind == KindComposite }
+
 func normalizeDiscount(discount *DiscountInput) bool {
 	if discount == nil {
 		return true
@@ -307,4 +336,8 @@ func validAuthorizedUserIDs(ids []uuid.UUID) bool {
 		seen[id] = struct{}{}
 	}
 	return true
+}
+
+func validMemberGroupIDs(ids []uuid.UUID) bool {
+	return validAuthorizedUserIDs(ids)
 }

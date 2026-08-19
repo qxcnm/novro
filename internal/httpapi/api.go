@@ -276,6 +276,7 @@ type BillingService interface {
 	 * @date 2026-08-13
 	 */
 	Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error)
+	AdminUsage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error)
 	/**
 	 * UsageRate 声明该接口方法需要提供的业务能力。
 	 * @param arg1 类型为 context.Context 的接口输入参数。
@@ -824,6 +825,7 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/admin/email/test", h.testEmailConfig)
 	mux.HandleFunc("GET /api/admin/top-ups", h.listAllTopUps)
 	mux.HandleFunc("GET /api/admin/users", h.listUsers)
+	mux.HandleFunc("GET /api/admin/usage", h.adminUsage)
 	mux.HandleFunc("POST /api/admin/users", h.createUser)
 	mux.HandleFunc("PATCH /api/admin/users/{id}", h.updateUser)
 	mux.HandleFunc("PATCH /api/admin/users/{id}/status", h.setUserStatus)
@@ -2434,12 +2436,26 @@ func (h *apiHandler) myBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 type availableModel struct {
-	ID           string              `json:"id"`
-	DisplayName  string              `json:"display_name"`
-	ProviderName string              `json:"provider_name"`
-	Protocols    []provider.Protocol `json:"protocols"`
-	ChannelCount int                 `json:"channel_count"`
-	Prices       billing.RateCard    `json:"prices"`
+	ID            string                       `json:"id"`
+	DisplayName   string                       `json:"display_name"`
+	ProviderName  string                       `json:"provider_name"`
+	Protocols     []provider.Protocol          `json:"protocols"`
+	ChannelCount  int                          `json:"channel_count"`
+	Prices        billing.RateCard             `json:"prices"`
+	PriceRange    availablePriceRange          `json:"price_range"`
+	BillingGroups []availableModelBillingGroup `json:"billing_groups"`
+}
+
+type availablePriceRange struct {
+	Minimum billing.RateCard `json:"minimum"`
+	Maximum billing.RateCard `json:"maximum"`
+}
+
+type availableModelBillingGroup struct {
+	ID                     uuid.UUID `json:"id"`
+	Code                   string    `json:"code"`
+	DisplayName            string    `json:"display_name"`
+	EffectiveMultiplierBPS int64     `json:"effective_multiplier_bps"`
 }
 
 /**
@@ -2518,22 +2534,32 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 		if strings.TrimSpace(providerName) == "" {
 			providerName = route.Provider.DisplayName
 		}
+		routeGroup := route.BillingGroup
+		if routeGroup.ID == uuid.Nil {
+			routeGroup = billinggroup.NewSummaryWithKind(selected.ID, selected.Code, selected.DisplayName, selected.Kind, selected.MultiplierBPS, selected.DiscountName, selected.DiscountMultiplierBPS, selected.DiscountStartsAt, selected.DiscountEndsAt, nil)
+		}
+		routeMultiplierBPS := routeGroup.MultiplierAt(resolvedAt)
+		candidatePrices := billing.RateCard{
+			InputMicros:        priceWithMultiplier(prices.InputMicros, routeMultiplierBPS),
+			OutputMicros:       priceWithMultiplier(prices.OutputMicros, routeMultiplierBPS),
+			CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, routeMultiplierBPS),
+			CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, routeMultiplierBPS),
+			CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, routeMultiplierBPS),
+			RequestMicros:      priceWithMultiplier(prices.RequestMicros, routeMultiplierBPS),
+		}
 		candidate := availableModel{
 			ID: route.PublicName, DisplayName: route.DisplayName,
 			ProviderName: providerName, Protocols: route.Provider.Protocols, ChannelCount: 1,
-			Prices: billing.RateCard{
-				InputMicros:        priceWithMultiplier(prices.InputMicros, effectiveMultiplierBPS),
-				OutputMicros:       priceWithMultiplier(prices.OutputMicros, effectiveMultiplierBPS),
-				CacheReadMicros:    priceWithMultiplier(prices.CacheReadMicros, effectiveMultiplierBPS),
-				CacheWriteMicros:   priceWithMultiplier(prices.CacheWriteMicros, effectiveMultiplierBPS),
-				CacheWrite1hMicros: priceWithMultiplier(prices.CacheWrite1hMicros, effectiveMultiplierBPS),
-				RequestMicros:      priceWithMultiplier(prices.RequestMicros, effectiveMultiplierBPS),
-			},
+			Prices: candidatePrices, PriceRange: availablePriceRange{Minimum: candidatePrices, Maximum: candidatePrices},
+			BillingGroups: []availableModelBillingGroup{{ID: routeGroup.ID, Code: routeGroup.Code, DisplayName: routeGroup.DisplayName, EffectiveMultiplierBPS: routeMultiplierBPS}},
 		}
 		key := candidate.ID
 		if index, exists := modelIndexes[key]; exists {
 			models[index].ChannelCount++
 			models[index].Prices = maximumRateCard(models[index].Prices, candidate.Prices)
+			models[index].PriceRange.Maximum = maximumRateCard(models[index].PriceRange.Maximum, candidate.Prices)
+			models[index].PriceRange.Minimum = minimumRateCard(models[index].PriceRange.Minimum, candidate.Prices)
+			models[index].BillingGroups = mergeAvailableBillingGroups(models[index].BillingGroups, candidate.BillingGroups)
 			models[index].Protocols, _ = provider.NormalizeProtocols(append(models[index].Protocols, candidate.Protocols...))
 			continue
 		}
@@ -2546,6 +2572,8 @@ func (h *apiHandler) listAvailableModels(w http.ResponseWriter, r *http.Request)
 			"id":                       selected.ID,
 			"code":                     selected.Code,
 			"display_name":             selected.DisplayName,
+			"kind":                     kindOrStandard(selected.Kind),
+			"member_group_count":       memberGroupCount(selected),
 			"multiplier_bps":           selected.MultiplierBPS,
 			"effective_multiplier_bps": effectiveMultiplierBPS,
 		},
@@ -2576,6 +2604,9 @@ func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request)
 			ID:                     record.ID,
 			Code:                   record.Code,
 			DisplayName:            record.DisplayName,
+			Kind:                   kindOrStandard(record.Kind),
+			MemberGroups:           record.MemberGroups,
+			MemberGroupCount:       memberGroupCount(record),
 			MultiplierBPS:          record.MultiplierBPS,
 			EffectiveMultiplierBPS: record.MultiplierAt(now),
 			IsDefault:              record.IsDefault,
@@ -2586,13 +2617,30 @@ func (h *apiHandler) listMyBillingGroups(w http.ResponseWriter, r *http.Request)
 }
 
 type accountBillingGroup struct {
-	ID                     uuid.UUID           `json:"id"`
-	Code                   string              `json:"code"`
-	DisplayName            string              `json:"display_name"`
-	MultiplierBPS          int64               `json:"multiplier_bps"`
-	EffectiveMultiplierBPS int64               `json:"effective_multiplier_bps"`
-	IsDefault              bool                `json:"is_default"`
-	Status                 billinggroup.Status `json:"status"`
+	ID                     uuid.UUID              `json:"id"`
+	Code                   string                 `json:"code"`
+	DisplayName            string                 `json:"display_name"`
+	Kind                   billinggroup.Kind      `json:"kind"`
+	MemberGroups           []billinggroup.Summary `json:"member_groups"`
+	MemberGroupCount       int                    `json:"member_group_count"`
+	MultiplierBPS          int64                  `json:"multiplier_bps"`
+	EffectiveMultiplierBPS int64                  `json:"effective_multiplier_bps"`
+	IsDefault              bool                   `json:"is_default"`
+	Status                 billinggroup.Status    `json:"status"`
+}
+
+func kindOrStandard(kind billinggroup.Kind) billinggroup.Kind {
+	if kind == billinggroup.KindComposite {
+		return kind
+	}
+	return billinggroup.KindStandard
+}
+
+func memberGroupCount(record billinggroup.Record) int {
+	if record.MemberGroupCount > 0 {
+		return record.MemberGroupCount
+	}
+	return len(record.MemberGroups)
 }
 
 /**
@@ -2611,6 +2659,30 @@ func maximumRateCard(first, second billing.RateCard) billing.RateCard {
 		CacheWrite1hMicros: max(first.CacheWrite1hMicros, second.CacheWrite1hMicros),
 		RequestMicros:      max(first.RequestMicros, second.RequestMicros),
 	}
+}
+
+func minimumRateCard(first, second billing.RateCard) billing.RateCard {
+	return billing.RateCard{
+		InputMicros: min(first.InputMicros, second.InputMicros), OutputMicros: min(first.OutputMicros, second.OutputMicros),
+		CacheReadMicros: min(first.CacheReadMicros, second.CacheReadMicros), CacheWriteMicros: min(first.CacheWriteMicros, second.CacheWriteMicros),
+		CacheWrite1hMicros: min(first.CacheWrite1hMicros, second.CacheWrite1hMicros), RequestMicros: min(first.RequestMicros, second.RequestMicros),
+	}
+}
+
+func mergeAvailableBillingGroups(existing, incoming []availableModelBillingGroup) []availableModelBillingGroup {
+	for _, candidate := range incoming {
+		found := false
+		for _, current := range existing {
+			if current.ID == candidate.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			existing = append(existing, candidate)
+		}
+	}
+	return existing
 }
 
 /**
@@ -2672,6 +2744,58 @@ func (h *apiHandler) myUsage(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.writeBillingError(w, "list account usage", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, usage)
+}
+
+// adminUsage lists usage across all users or for one selected user. Keeping
+// this separate from myUsage prevents account callers from choosing user IDs.
+func (h *apiHandler) adminUsage(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	var userID uuid.UUID
+	if raw := strings.TrimSpace(r.URL.Query().Get("user_id")); raw != "" {
+		userID, err = uuid.Parse(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "用户筛选无效")
+			return
+		}
+	}
+	var apiKeyID uuid.UUID
+	if raw := strings.TrimSpace(r.URL.Query().Get("api_key_id")); raw != "" {
+		apiKeyID, err = uuid.Parse(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "API Key 筛选无效")
+			return
+		}
+	}
+	var from *time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+		value, parseErr := time.Parse(time.RFC3339, raw)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "时间筛选无效")
+			return
+		}
+		from = &value
+	}
+	usage, err := h.billing.AdminUsage(r.Context(), userID, billing.UsageFilter{
+		Search: r.URL.Query().Get("search"), APIKeyID: apiKeyID, Model: r.URL.Query().Get("model"),
+		Status: billing.UsageStatus(r.URL.Query().Get("status")), From: from, Offset: offset, Limit: limit,
+	})
+	if err != nil {
+		h.writeBillingError(w, "list admin usage", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, usage)
@@ -3106,7 +3230,17 @@ func (h *apiHandler) userBalance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "用户 ID 无效")
 		return
 	}
-	summary, err := h.billing.Summary(r.Context(), id)
+	offset, err := parseQueryInt(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	limit, err := parseQueryInt(r, "limit", 20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "分页参数无效")
+		return
+	}
+	summary, err := h.billing.SummaryPage(r.Context(), id, billing.EntryFilter{Offset: offset, Limit: limit})
 	if err != nil {
 		h.writeBillingError(w, "read user balance", err)
 		return

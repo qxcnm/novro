@@ -28,6 +28,8 @@ const routeDetails: Record<string, { title: string; description: string }> = {
   "/console/api-keys": { title: "我的 API Keys", description: "创建和撤销你的访问密钥" },
   "/console/billing": { title: "余额与用量", description: "账户资金流水和最近模型调用" },
   "/admin/users": { title: "用户管理", description: "账号、角色与访问状态" },
+  "/admin/logs": { title: "使用日志", description: "跨用户检索每次模型调用" },
+  "/admin/billing": { title: "余额与用量", description: "查看所有用户余额、资金流水与使用日志" },
   "/admin/api-keys": { title: "API Key 审计", description: "跨用户检索和撤销访问密钥" },
   "/admin/providers": { title: "提供商与路由", description: "提供商配置、模型同步与关联路由" },
   "/admin/upstream-models": { title: "模型目录", description: "模型标识与各计费维度的基础价格" },
@@ -95,6 +97,7 @@ function ConsoleNavigation({ user, onNavigate }: { user: CurrentUser; onNavigate
     ] },
     { label: "管理", items: user.role === "admin" ? [
       { href: "/admin/users", label: "用户管理", icon: Users },
+      { href: "/admin/billing", label: "余额与用量", icon: WalletCards },
       { href: "/admin/api-keys", label: "Key 审计", icon: ShieldCheck },
       { href: "/admin/providers", label: "提供商与路由", icon: Boxes },
       { href: "/admin/upstream-models", label: "模型目录", icon: Network },

@@ -45,6 +45,18 @@ func (f BillingGroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BillingGroupMutation", m)
 }
 
+// The BillingGroupCompositionFunc type is an adapter to allow the use of ordinary
+// function as BillingGroupComposition mutator.
+type BillingGroupCompositionFunc func(context.Context, *ent.BillingGroupCompositionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BillingGroupCompositionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BillingGroupCompositionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BillingGroupCompositionMutation", m)
+}
+
 // The EmailSMTPConfigFunc type is an adapter to allow the use of ordinary
 // function as EmailSMTPConfig mutator.
 type EmailSMTPConfigFunc func(context.Context, *ent.EmailSMTPConfigMutation) (ent.Value, error)

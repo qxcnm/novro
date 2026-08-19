@@ -19,6 +19,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
@@ -48,6 +49,8 @@ type Client struct {
 	APIUsage *APIUsageClient
 	// BillingGroup is the client for interacting with the BillingGroup builders.
 	BillingGroup *BillingGroupClient
+	// BillingGroupComposition is the client for interacting with the BillingGroupComposition builders.
+	BillingGroupComposition *BillingGroupCompositionClient
 	// EmailSMTPConfig is the client for interacting with the EmailSMTPConfig builders.
 	EmailSMTPConfig *EmailSMTPConfigClient
 	// EmailVerificationCode is the client for interacting with the EmailVerificationCode builders.
@@ -94,6 +97,7 @@ func (c *Client) init() {
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIUsage = NewAPIUsageClient(c.config)
 	c.BillingGroup = NewBillingGroupClient(c.config)
+	c.BillingGroupComposition = NewBillingGroupCompositionClient(c.config)
 	c.EmailSMTPConfig = NewEmailSMTPConfigClient(c.config)
 	c.EmailVerificationCode = NewEmailVerificationCodeClient(c.config)
 	c.GatewayOperation = NewGatewayOperationClient(c.config)
@@ -200,27 +204,28 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		APIKey:                NewAPIKeyClient(cfg),
-		APIUsage:              NewAPIUsageClient(cfg),
-		BillingGroup:          NewBillingGroupClient(cfg),
-		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
-		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
-		GatewayOperation:      NewGatewayOperationClient(cfg),
-		ModelPricePlan:        NewModelPricePlanClient(cfg),
-		ModelPriceWindow:      NewModelPriceWindowClient(cfg),
-		ModelRoute:            NewModelRouteClient(cfg),
-		PaymentConfig:         NewPaymentConfigClient(cfg),
-		Provider:              NewProviderClient(cfg),
-		SystemSetting:         NewSystemSettingClient(cfg),
-		TopUpOrder:            NewTopUpOrderClient(cfg),
-		UpstreamModel:         NewUpstreamModelClient(cfg),
-		User:                  NewUserClient(cfg),
-		UserIdentity:          NewUserIdentityClient(cfg),
-		UserSession:           NewUserSessionClient(cfg),
-		Wallet:                NewWalletClient(cfg),
-		WalletEntry:           NewWalletEntryClient(cfg),
+		ctx:                     ctx,
+		config:                  cfg,
+		APIKey:                  NewAPIKeyClient(cfg),
+		APIUsage:                NewAPIUsageClient(cfg),
+		BillingGroup:            NewBillingGroupClient(cfg),
+		BillingGroupComposition: NewBillingGroupCompositionClient(cfg),
+		EmailSMTPConfig:         NewEmailSMTPConfigClient(cfg),
+		EmailVerificationCode:   NewEmailVerificationCodeClient(cfg),
+		GatewayOperation:        NewGatewayOperationClient(cfg),
+		ModelPricePlan:          NewModelPricePlanClient(cfg),
+		ModelPriceWindow:        NewModelPriceWindowClient(cfg),
+		ModelRoute:              NewModelRouteClient(cfg),
+		PaymentConfig:           NewPaymentConfigClient(cfg),
+		Provider:                NewProviderClient(cfg),
+		SystemSetting:           NewSystemSettingClient(cfg),
+		TopUpOrder:              NewTopUpOrderClient(cfg),
+		UpstreamModel:           NewUpstreamModelClient(cfg),
+		User:                    NewUserClient(cfg),
+		UserIdentity:            NewUserIdentityClient(cfg),
+		UserSession:             NewUserSessionClient(cfg),
+		Wallet:                  NewWalletClient(cfg),
+		WalletEntry:             NewWalletEntryClient(cfg),
 	}, nil
 }
 
@@ -238,27 +243,28 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		APIKey:                NewAPIKeyClient(cfg),
-		APIUsage:              NewAPIUsageClient(cfg),
-		BillingGroup:          NewBillingGroupClient(cfg),
-		EmailSMTPConfig:       NewEmailSMTPConfigClient(cfg),
-		EmailVerificationCode: NewEmailVerificationCodeClient(cfg),
-		GatewayOperation:      NewGatewayOperationClient(cfg),
-		ModelPricePlan:        NewModelPricePlanClient(cfg),
-		ModelPriceWindow:      NewModelPriceWindowClient(cfg),
-		ModelRoute:            NewModelRouteClient(cfg),
-		PaymentConfig:         NewPaymentConfigClient(cfg),
-		Provider:              NewProviderClient(cfg),
-		SystemSetting:         NewSystemSettingClient(cfg),
-		TopUpOrder:            NewTopUpOrderClient(cfg),
-		UpstreamModel:         NewUpstreamModelClient(cfg),
-		User:                  NewUserClient(cfg),
-		UserIdentity:          NewUserIdentityClient(cfg),
-		UserSession:           NewUserSessionClient(cfg),
-		Wallet:                NewWalletClient(cfg),
-		WalletEntry:           NewWalletEntryClient(cfg),
+		ctx:                     ctx,
+		config:                  cfg,
+		APIKey:                  NewAPIKeyClient(cfg),
+		APIUsage:                NewAPIUsageClient(cfg),
+		BillingGroup:            NewBillingGroupClient(cfg),
+		BillingGroupComposition: NewBillingGroupCompositionClient(cfg),
+		EmailSMTPConfig:         NewEmailSMTPConfigClient(cfg),
+		EmailVerificationCode:   NewEmailVerificationCodeClient(cfg),
+		GatewayOperation:        NewGatewayOperationClient(cfg),
+		ModelPricePlan:          NewModelPricePlanClient(cfg),
+		ModelPriceWindow:        NewModelPriceWindowClient(cfg),
+		ModelRoute:              NewModelRouteClient(cfg),
+		PaymentConfig:           NewPaymentConfigClient(cfg),
+		Provider:                NewProviderClient(cfg),
+		SystemSetting:           NewSystemSettingClient(cfg),
+		TopUpOrder:              NewTopUpOrderClient(cfg),
+		UpstreamModel:           NewUpstreamModelClient(cfg),
+		User:                    NewUserClient(cfg),
+		UserIdentity:            NewUserIdentityClient(cfg),
+		UserSession:             NewUserSessionClient(cfg),
+		Wallet:                  NewWalletClient(cfg),
+		WalletEntry:             NewWalletEntryClient(cfg),
 	}, nil
 }
 
@@ -288,11 +294,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.GatewayOperation, c.ModelPricePlan,
-		c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig, c.Provider, c.SystemSetting,
-		c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity, c.UserSession, c.Wallet,
-		c.WalletEntry,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.BillingGroupComposition,
+		c.EmailSMTPConfig, c.EmailVerificationCode, c.GatewayOperation,
+		c.ModelPricePlan, c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig,
+		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Use(hooks...)
 	}
@@ -302,11 +308,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIUsage, c.BillingGroup, c.EmailSMTPConfig,
-		c.EmailVerificationCode, c.GatewayOperation, c.ModelPricePlan,
-		c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig, c.Provider, c.SystemSetting,
-		c.TopUpOrder, c.UpstreamModel, c.User, c.UserIdentity, c.UserSession, c.Wallet,
-		c.WalletEntry,
+		c.APIKey, c.APIUsage, c.BillingGroup, c.BillingGroupComposition,
+		c.EmailSMTPConfig, c.EmailVerificationCode, c.GatewayOperation,
+		c.ModelPricePlan, c.ModelPriceWindow, c.ModelRoute, c.PaymentConfig,
+		c.Provider, c.SystemSetting, c.TopUpOrder, c.UpstreamModel, c.User,
+		c.UserIdentity, c.UserSession, c.Wallet, c.WalletEntry,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -321,6 +327,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIUsage.mutate(ctx, m)
 	case *BillingGroupMutation:
 		return c.BillingGroup.mutate(ctx, m)
+	case *BillingGroupCompositionMutation:
+		return c.BillingGroupComposition.mutate(ctx, m)
 	case *EmailSMTPConfigMutation:
 		return c.EmailSMTPConfig.mutate(ctx, m)
 	case *EmailVerificationCodeMutation:
@@ -924,6 +932,38 @@ func (c *BillingGroupClient) QueryAPIUsages(_m *BillingGroup) *APIUsageQuery {
 	return query
 }
 
+// QueryCompositions queries the compositions edge of a BillingGroup.
+func (c *BillingGroupClient) QueryCompositions(_m *BillingGroup) *BillingGroupCompositionQuery {
+	query := (&BillingGroupCompositionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(billinggroupcomposition.Table, billinggroupcomposition.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.CompositionsTable, billinggroup.CompositionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryMemberCompositions queries the member_compositions edge of a BillingGroup.
+func (c *BillingGroupClient) QueryMemberCompositions(_m *BillingGroup) *BillingGroupCompositionQuery {
+	query := (&BillingGroupCompositionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, id),
+			sqlgraph.To(billinggroupcomposition.Table, billinggroupcomposition.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.MemberCompositionsTable, billinggroup.MemberCompositionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryAuthorizedUsers queries the authorized_users edge of a BillingGroup.
 func (c *BillingGroupClient) QueryAuthorizedUsers(_m *BillingGroup) *UserQuery {
 	query := (&UserClient{config: c.config}).Query()
@@ -962,6 +1002,171 @@ func (c *BillingGroupClient) mutate(ctx context.Context, m *BillingGroupMutation
 		return (&BillingGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown BillingGroup mutation op: %q", m.Op())
+	}
+}
+
+// BillingGroupCompositionClient is a client for the BillingGroupComposition schema.
+type BillingGroupCompositionClient struct {
+	config
+}
+
+// NewBillingGroupCompositionClient returns a client for the BillingGroupComposition from the given config.
+func NewBillingGroupCompositionClient(c config) *BillingGroupCompositionClient {
+	return &BillingGroupCompositionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `billinggroupcomposition.Hooks(f(g(h())))`.
+func (c *BillingGroupCompositionClient) Use(hooks ...Hook) {
+	c.hooks.BillingGroupComposition = append(c.hooks.BillingGroupComposition, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `billinggroupcomposition.Intercept(f(g(h())))`.
+func (c *BillingGroupCompositionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.BillingGroupComposition = append(c.inters.BillingGroupComposition, interceptors...)
+}
+
+// Create returns a builder for creating a BillingGroupComposition entity.
+func (c *BillingGroupCompositionClient) Create() *BillingGroupCompositionCreate {
+	mutation := newBillingGroupCompositionMutation(c.config, OpCreate)
+	return &BillingGroupCompositionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of BillingGroupComposition entities.
+func (c *BillingGroupCompositionClient) CreateBulk(builders ...*BillingGroupCompositionCreate) *BillingGroupCompositionCreateBulk {
+	return &BillingGroupCompositionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *BillingGroupCompositionClient) MapCreateBulk(slice any, setFunc func(*BillingGroupCompositionCreate, int)) *BillingGroupCompositionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &BillingGroupCompositionCreateBulk{err: fmt.Errorf("calling to BillingGroupCompositionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*BillingGroupCompositionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &BillingGroupCompositionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for BillingGroupComposition.
+func (c *BillingGroupCompositionClient) Update() *BillingGroupCompositionUpdate {
+	mutation := newBillingGroupCompositionMutation(c.config, OpUpdate)
+	return &BillingGroupCompositionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *BillingGroupCompositionClient) UpdateOne(_m *BillingGroupComposition) *BillingGroupCompositionUpdateOne {
+	mutation := newBillingGroupCompositionMutation(c.config, OpUpdateOne, withBillingGroupComposition(_m))
+	return &BillingGroupCompositionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *BillingGroupCompositionClient) UpdateOneID(id uuid.UUID) *BillingGroupCompositionUpdateOne {
+	mutation := newBillingGroupCompositionMutation(c.config, OpUpdateOne, withBillingGroupCompositionID(id))
+	return &BillingGroupCompositionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for BillingGroupComposition.
+func (c *BillingGroupCompositionClient) Delete() *BillingGroupCompositionDelete {
+	mutation := newBillingGroupCompositionMutation(c.config, OpDelete)
+	return &BillingGroupCompositionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *BillingGroupCompositionClient) DeleteOne(_m *BillingGroupComposition) *BillingGroupCompositionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *BillingGroupCompositionClient) DeleteOneID(id uuid.UUID) *BillingGroupCompositionDeleteOne {
+	builder := c.Delete().Where(billinggroupcomposition.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &BillingGroupCompositionDeleteOne{builder}
+}
+
+// Query returns a query builder for BillingGroupComposition.
+func (c *BillingGroupCompositionClient) Query() *BillingGroupCompositionQuery {
+	return &BillingGroupCompositionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeBillingGroupComposition},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a BillingGroupComposition entity by its id.
+func (c *BillingGroupCompositionClient) Get(ctx context.Context, id uuid.UUID) (*BillingGroupComposition, error) {
+	return c.Query().Where(billinggroupcomposition.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *BillingGroupCompositionClient) GetX(ctx context.Context, id uuid.UUID) *BillingGroupComposition {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryCompositeGroup queries the composite_group edge of a BillingGroupComposition.
+func (c *BillingGroupCompositionClient) QueryCompositeGroup(_m *BillingGroupComposition) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroupcomposition.Table, billinggroupcomposition.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, billinggroupcomposition.CompositeGroupTable, billinggroupcomposition.CompositeGroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryMemberGroup queries the member_group edge of a BillingGroupComposition.
+func (c *BillingGroupCompositionClient) QueryMemberGroup(_m *BillingGroupComposition) *BillingGroupQuery {
+	query := (&BillingGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroupcomposition.Table, billinggroupcomposition.FieldID, id),
+			sqlgraph.To(billinggroup.Table, billinggroup.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, billinggroupcomposition.MemberGroupTable, billinggroupcomposition.MemberGroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *BillingGroupCompositionClient) Hooks() []Hook {
+	return c.hooks.BillingGroupComposition
+}
+
+// Interceptors returns the client interceptors.
+func (c *BillingGroupCompositionClient) Interceptors() []Interceptor {
+	return c.inters.BillingGroupComposition
+}
+
+func (c *BillingGroupCompositionClient) mutate(ctx context.Context, m *BillingGroupCompositionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&BillingGroupCompositionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&BillingGroupCompositionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&BillingGroupCompositionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&BillingGroupCompositionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown BillingGroupComposition mutation op: %q", m.Op())
 	}
 }
 
@@ -3592,15 +3797,15 @@ func (c *WalletEntryClient) mutate(ctx context.Context, m *WalletEntryMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		GatewayOperation, ModelPricePlan, ModelPriceWindow, ModelRoute, PaymentConfig,
-		Provider, SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity,
-		UserSession, Wallet, WalletEntry []ent.Hook
+		APIKey, APIUsage, BillingGroup, BillingGroupComposition, EmailSMTPConfig,
+		EmailVerificationCode, GatewayOperation, ModelPricePlan, ModelPriceWindow,
+		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
+		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Hook
 	}
 	inters struct {
-		APIKey, APIUsage, BillingGroup, EmailSMTPConfig, EmailVerificationCode,
-		GatewayOperation, ModelPricePlan, ModelPriceWindow, ModelRoute, PaymentConfig,
-		Provider, SystemSetting, TopUpOrder, UpstreamModel, User, UserIdentity,
-		UserSession, Wallet, WalletEntry []ent.Interceptor
+		APIKey, APIUsage, BillingGroup, BillingGroupComposition, EmailSMTPConfig,
+		EmailVerificationCode, GatewayOperation, ModelPricePlan, ModelPriceWindow,
+		ModelRoute, PaymentConfig, Provider, SystemSetting, TopUpOrder, UpstreamModel,
+		User, UserIdentity, UserSession, Wallet, WalletEntry []ent.Interceptor
 	}
 )

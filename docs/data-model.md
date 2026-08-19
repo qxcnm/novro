@@ -105,7 +105,8 @@ EmailVerificationCode
 新增持久化网关 operation 和计费补偿流水类型；`0010_billing_group_user_authorizations.sql` 新增隐藏
 计费分组与普通成员的多对多授权表；`0011_system_announcement.sql` 将全局设置值扩为 `TEXT`；
 `0012_model_price_plans.sql` 新增版本化固定价和分时价方案，并把已有目录价格回填为版本 1；
-`0013_model_route_billing_groups.sql` 将旧提供商分组关联迁移到模型路由。部署包含本功能的代码前必须先成功执行到 `0013`。
+`0013_model_route_billing_groups.sql` 将旧提供商分组关联迁移到模型路由；`0016_billing_group_compositions.sql`
+为计费分组增加 `kind` 并创建主分组成员关系。部署包含主分组功能的代码前必须先成功执行到 `0016`。
 迁移创建认证、用户、API Key、供应商、模型目录、模型路由、计费分组、钱包、充值、
 邮件、邀请返现、系统公告、用量审计和结算恢复相关表，并写入默认计费分组与默认邀请返现比例。
 服务启动不修改数据库结构；部署和本地升级都必须显式运行 `migrate`。旧库升级不再作为
@@ -225,7 +226,8 @@ EmailVerificationCode
 网关按请求入口检查 `protocols`：Chat Completions 与 Responses 使用 OpenAI，Messages 使用
 Anthropic。协议之间不做请求或响应转换。同一提供商的所有模型路由继承这组协议能力。
 供应商不再直接关联计费分组；一个供应商可以通过多条模型路由为多个分组提供同一模型。
-网关解析候选路由时按模型路由的 `billing_group_id` 过滤，再按提供商 `weight` 降序请求；同权重保留稳定路由顺序。
+网关解析候选路由时，普通 Key 按自身 `billing_group_id` 过滤，主分组 Key 按启用成员集合过滤，再按提供商
+`weight` 降序请求；同权重保留稳定路由顺序。
 
 ## 12. model_routes
 
@@ -238,22 +240,26 @@ Anthropic。协议之间不做请求或响应转换。同一提供商的所有�
 - `status`、`created_at`、`updated_at`
 
 `billing_group_id + public_name + provider_id + upstream_model_id` 组合唯一，防止同一分组中完全相同的渠道重复配置。同一
-`public_name` 下只有模型路由、提供商配置、所属分组和目录模型都启用，且路由分组
-与当前 API Key 的 `billing_group_id` 一致的记录才进入候选池；
+`public_name` 下只有模型路由、提供商配置、所属分组和目录模型都启用，且路由分组属于当前 API Key 的普通分组
+或主分组成员集合的记录才进入候选池；
 `/v1/models` 对同名候选去重后返回。
 
 ## 13. billing_groups
 
-- `code`、`display_name`
+- `code`、`display_name`、`kind`（`standard` 或 `composite`）
 - `multiplier_bps`，10000 表示 1.0000 倍
 - `discount_name`、`discount_multiplier_bps`、`discount_starts_at`、`discount_ends_at`，保存一个定时优惠窗口
 - `is_default`、`status`、`created_at`、`updated_at`
 
-计费分组用于 API Key 和模型路由两个维度。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
+计费分组用于 API Key 和模型路由两个维度。`standard` 分组可配置倍率、定时优惠和模型路由；`composite`
+主分组只绑定 API Key 和成员，不配置自身倍率、优惠或路由。`billing_group_compositions` 使用
+`composite_group_id + member_group_id` 唯一保存显式成员；成员只能是普通分组，不能嵌套主分组。一个普通分组
+可以复用于多个主分组。`is_hidden` 标记分组是否只对管理员和该分组已授权用户可见。
 `billing_group_authorized_users` 用 `(billing_group_id, user_id)` 唯一记录普通成员的逐组授权；管理员
 自动拥有全部隐藏组权限，不写入该表。`0010` 会将旧 `can_access_hidden_groups = TRUE` 的普通成员
 回填到迁移时所有未删除隐藏组，以保持升级前的有效权限；应用不再读取或写入旧布尔列。创建 API Key
-时用户选择分组；管理员在模型关联和模型路由配置时为每条路由选择分组。调用时以 API Key 的 `billing_group_id` 选择路由。请求开始时间命中优惠半开区间 `[discount_starts_at, discount_ends_at)` 时，实际倍率为 `multiplier_bps × discount_multiplier_bps / 10000`，否则使用基础倍率；分组倍率和优惠规则由进程级共享快照提供，首次使用可由 API Key 认证结果填充，管理服务写操作成功后同步更新或移除缓存项。最终倍率随用量快照保存，倍率数值不参与路由匹配。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
+时用户选择分组；主分组 Key 的路由候选为所有启用成员的路由，同一公开模型跨成员合并，最终命中成员决定倍率。
+管理员在模型关联和模型路由配置时只能选择普通分组。请求开始时间命中优惠半开区间 `[discount_starts_at, discount_ends_at)` 时，实际倍率为 `multiplier_bps × discount_multiplier_bps / 10000`，否则使用基础倍率；分组倍率和优惠规则由进程级共享快照提供，首次使用可由 API Key 认证结果填充，管理服务写操作成功后同步更新或移除缓存项。最终倍率随用量快照保存，倍率数值不参与路由匹配。撤销某一隐藏组授权后，该用户绑定该组的现有 API Key 立即停止认证，但其他分组授权不受影响。默认分组
 用于空库初始化和默认选择，不能停用。
 
 ## 14. upstream_models
@@ -320,11 +326,12 @@ flowchart LR
 - `reserved_micros`、`cost_micros`、`estimated`
 - `upstream_request_id`、`created_at`、`finished_at`
 
-网关按各维度 `token × 单价` 汇总原始分子，乘计费分组倍率后只向上取整一次；所有候选上游均失败的请求也会写入
+网关按各维度 `token × 单价` 汇总原始分子，乘实际命中普通成员的倍率后只向上取整一次；所有候选上游均失败的请求也会写入
 该表，但费用和 Token 保持为 0，并通过状态码和错误字段标记失败。该表保存调用审计和不可变结算依据，
 不保存请求提示词、完整响应或上游凭据。`token-v3-confirmed-usage` 算法只结算上游明确报告的
 Token 维度；缺失维度保持 0 并设置 `estimated`，保守请求预占只用于余额校验，不能作为最终费用。
-预占和最终费用都应用 API Key 在请求开始时命中的有效倍率，并把该倍率保存为 `multiplier_bps` 快照。
+预占取全部候选渠道在各自成员倍率下的最高估算金额；最终费用、计费分组和倍率均使用实际命中路由的普通成员，
+并把请求开始时固定的优惠结果保存为 `multiplier_bps` 快照。
 
 ## 17. gateway_operations
 

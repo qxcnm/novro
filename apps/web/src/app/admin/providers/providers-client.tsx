@@ -14,7 +14,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -58,7 +58,7 @@ type RouteRecord = {
 type ProviderField = "code" | "display_name" | "protocols" | "base_url" | "model_list_path" | "weight" | "api_key";
 type ProviderFormError = { field?: ProviderField; message: string };
 type ErrorResponse = { error?: { field?: string; message?: string } };
-type BillingGroup = { id: string; display_name: string; multiplier_bps: number; effective_multiplier_bps?: number; is_default: boolean; status: "active" | "disabled" };
+type BillingGroup = { id: string; display_name: string; kind: "standard" | "composite"; multiplier_bps: number; effective_multiplier_bps?: number; is_default: boolean; status: "active" | "disabled" };
 type CreateForm = { code: string; display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
 type EditForm = { display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
 
@@ -320,7 +320,7 @@ export default function ProvidersClient() {
     setPickerNotice(sync ? "正在同步模型..." : "");
     setPickerQuery("");
     setPickerModels([]);
-    const activeGroups = billingGroups.filter((group) => group.status === "active");
+    const activeGroups = billingGroups.filter((group) => group.status === "active" && group.kind !== "composite");
     const defaultGroupID = activeGroups.find((group) => group.is_default)?.id ?? activeGroups[0]?.id ?? "";
     setPickerGroupByModelID({});
     setSelectedBindingKeys(new Set());
@@ -700,7 +700,7 @@ export default function ProvidersClient() {
 
   const activeCount = providers.filter((item) => item.status === "active").length;
   const disabledCount = providers.filter((item) => item.status === "disabled").length;
-  const activeBillingGroups = billingGroups.filter((group) => group.status === "active");
+  const activeBillingGroups = billingGroups.filter((group) => group.status === "active" && group.kind !== "composite");
 
   return (
     <Tabs onValueChange={setActiveTab} value={activeTab}>
@@ -724,7 +724,7 @@ export default function ProvidersClient() {
           <div className="flex flex-wrap items-center gap-2">
             <Select onValueChange={(value: "all" | "active" | "disabled") => { selection.clearSelection(); setStatus(value); }} value={status}>
               <SelectTrigger aria-label="按状态筛选" className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent>
+              <SelectContent><SelectGroup><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectGroup></SelectContent>
             </Select>
             <Button aria-label="刷新提供商列表" disabled={loading} onClick={() => void loadProviders()} size="icon" title="刷新提供商列表" variant="outline"><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
             <Button onClick={() => { setCreateForm(INITIAL_CREATE); setCreateOpen(true); }}><Plus />添加提供商</Button>
@@ -821,7 +821,7 @@ export default function ProvidersClient() {
                 const groupID = pickerGroupByModelID[model.id] ?? "";
                 const key = groupID ? bindingKey(model.id, groupID) : "";
                 const linked = key !== "" && linkedBindingKeys.has(key);
-                return <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_12rem] sm:items-center" key={model.id}><Checkbox checked={linked || (key !== "" && selectedBindingKeys.has(key))} disabled={linked || !groupID} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><label className="min-w-0 cursor-pointer" htmlFor={`provider-model-${model.id}`}><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">该分组已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">统一模型 ID · {model.upstream_name} · 厂商标签 {model.provider_name}</span></label><div className="col-span-2 sm:col-span-1"><Select disabled={activeBillingGroups.length === 0} onValueChange={(billingGroupID) => changeModelBillingGroup(model.id, groupID, billingGroupID)} value={groupID}><SelectTrigger aria-label={`选择 ${model.display_name} 的计费分组`} className="w-full"><SelectValue placeholder="选择倍率分组" /></SelectTrigger><SelectContent>{activeBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×</SelectItem>)}</SelectContent></Select></div></div>;
+                return <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_12rem] sm:items-center" key={model.id}><Checkbox checked={linked || (key !== "" && selectedBindingKeys.has(key))} disabled={linked || !groupID} id={`provider-model-${model.id}`} onCheckedChange={(checked) => toggleModel(model.id, checked === true)} /><label className="min-w-0 cursor-pointer" htmlFor={`provider-model-${model.id}`}><span className="flex flex-wrap items-center gap-2"><span className="font-medium">{model.display_name}</span>{linked ? <Badge variant="secondary">该分组已关联</Badge> : !model.pricing_configured ? <Badge variant="destructive">待定价</Badge> : model.status === "disabled" ? <Badge variant="secondary">已停用</Badge> : null}</span><span className="mt-1 block truncate text-xs text-muted-foreground">统一模型 ID · {model.upstream_name} · 厂商标签 {model.provider_name}</span></label><div className="col-span-2 sm:col-span-1"><Select disabled={activeBillingGroups.length === 0} onValueChange={(billingGroupID) => changeModelBillingGroup(model.id, groupID, billingGroupID)} value={groupID}><SelectTrigger aria-label={`选择 ${model.display_name} 的计费分组`} className="w-full"><SelectValue placeholder="选择倍率分组" /></SelectTrigger><SelectContent><SelectGroup>{activeBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×</SelectItem>)}</SelectGroup></SelectContent></Select></div></div>;
               }) : null}
             </div>
           </div>

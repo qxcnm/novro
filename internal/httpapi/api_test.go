@@ -91,6 +91,8 @@ type fakeAPIUsers struct {
 	createInput   user.CreateInput
 	updateInput   user.UpdateInput
 	registerInput user.RegisterInput
+	listFilter    user.ListFilter
+	listPage      user.Page
 	emailTaken    bool
 	emailCheckErr error
 	setupRequired bool
@@ -263,8 +265,14 @@ func (f *fakeAnnouncements) Update(_ context.Context, config announcement.Config
 }
 
 type fakeAPIBilling struct {
+	summary         billing.Summary
+	summaryUserID   uuid.UUID
+	summaryFilter   billing.EntryFilter
 	rate            billing.UsageRate
 	rateUserID      uuid.UUID
+	usage           billing.UsagePage
+	usageUserID     uuid.UUID
+	usageFilter     billing.UsageFilter
 	adjustReference uuid.UUID
 	adjustAmount    int64
 	err             error
@@ -276,8 +284,9 @@ type fakeAPIBilling struct {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (f *fakeAPIBilling) Summary(context.Context, uuid.UUID) (billing.Summary, error) {
-	return billing.Summary{}, f.err
+func (f *fakeAPIBilling) Summary(_ context.Context, userID uuid.UUID) (billing.Summary, error) {
+	f.summaryUserID, f.summaryFilter = userID, billing.EntryFilter{Limit: 20}
+	return f.summary, f.err
 }
 
 /**
@@ -286,8 +295,9 @@ func (f *fakeAPIBilling) Summary(context.Context, uuid.UUID) (billing.Summary, e
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (f *fakeAPIBilling) SummaryPage(context.Context, uuid.UUID, billing.EntryFilter) (billing.Summary, error) {
-	return billing.Summary{}, f.err
+func (f *fakeAPIBilling) SummaryPage(_ context.Context, userID uuid.UUID, filter billing.EntryFilter) (billing.Summary, error) {
+	f.summaryUserID, f.summaryFilter = userID, filter
+	return f.summary, f.err
 }
 
 /**
@@ -296,8 +306,14 @@ func (f *fakeAPIBilling) SummaryPage(context.Context, uuid.UUID, billing.EntryFi
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (f *fakeAPIBilling) Usage(context.Context, uuid.UUID, billing.UsageFilter) (billing.UsagePage, error) {
-	return billing.UsagePage{}, f.err
+func (f *fakeAPIBilling) Usage(_ context.Context, userID uuid.UUID, filter billing.UsageFilter) (billing.UsagePage, error) {
+	f.usageUserID, f.usageFilter = userID, filter
+	return f.usage, f.err
+}
+
+func (f *fakeAPIBilling) AdminUsage(_ context.Context, userID uuid.UUID, filter billing.UsageFilter) (billing.UsagePage, error) {
+	f.usageUserID, f.usageFilter = userID, filter
+	return f.usage, f.err
 }
 
 /**
@@ -535,7 +551,7 @@ func (f *fakeModelRoutes) Delete(context.Context, uuid.UUID) error { return f.er
  */
 func activeBillingGroup(id uuid.UUID, code, displayName string, multiplierBPS int64, isDefault bool) billinggroup.Record {
 	return billinggroup.Record{
-		ID: id, Code: code, DisplayName: displayName, MultiplierBPS: multiplierBPS, DiscountMultiplierBPS: billinggroup.DefaultMultiplierBPS, EffectiveMultiplierBPS: multiplierBPS,
+		ID: id, Code: code, DisplayName: displayName, Kind: billinggroup.KindStandard, MultiplierBPS: multiplierBPS, DiscountMultiplierBPS: billinggroup.DefaultMultiplierBPS, EffectiveMultiplierBPS: multiplierBPS,
 		IsDefault: isDefault, Status: billinggroup.StatusActive,
 	}
 }
@@ -987,8 +1003,12 @@ func (f *fakeAPIUsers) SetupRequired(context.Context) (bool, error) { return f.s
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (f *fakeAPIUsers) List(context.Context, user.ListFilter) (user.Page, error) {
-	return user.Page{Users: []user.Record{}, Total: 0, Limit: 50}, nil
+func (f *fakeAPIUsers) List(_ context.Context, filter user.ListFilter) (user.Page, error) {
+	f.listFilter = filter
+	if f.listPage.Users != nil {
+		return f.listPage, nil
+	}
+	return user.Page{Users: []user.AdminRecord{}, Total: 0, Limit: filter.Limit}, nil
 }
 
 /**
@@ -1234,6 +1254,36 @@ func TestUsageRateUsesAuthenticatedUser(t *testing.T) {
 
 	if response.Code != http.StatusOK || billingService.rateUserID != userID || !strings.Contains(response.Body.String(), `"rpm":4`) || !strings.Contains(response.Body.String(), `"tpm":1000`) || !strings.Contains(response.Body.String(), `"window_seconds":60`) {
 		t.Fatalf("status=%d user=%s body=%s", response.Code, billingService.rateUserID, response.Body.String())
+	}
+}
+
+func TestAdminUsageScopesAndRequiresAdmin(t *testing.T) {
+	selectedID := uuid.New()
+	billingService := &fakeAPIBilling{usage: billing.UsagePage{Total: 2}}
+	adminHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Billing: billingService, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/usage?user_id="+selectedID.String()+"&offset=20&limit=50&status=failed&search=demo", nil)
+	response := httptest.NewRecorder()
+	adminHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || billingService.usageUserID != selectedID || billingService.usageFilter.Offset != 20 || billingService.usageFilter.Limit != 50 || billingService.usageFilter.Status != billing.UsageStatusFailed || billingService.usageFilter.Search != "demo" {
+		t.Fatalf("status=%d user=%s filter=%+v body=%s", response.Code, billingService.usageUserID, billingService.usageFilter, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/admin/usage", nil)
+	response = httptest.NewRecorder()
+	adminHandler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || billingService.usageUserID != uuid.Nil {
+		t.Fatalf("all-users status=%d user=%s body=%s", response.Code, billingService.usageUserID, response.Body.String())
+	}
+	memberHandler := New(Dependencies{
+		Auth:  &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleMember, Status: user.StatusActive}},
+		Users: &fakeAPIUsers{}, Billing: billingService, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	response = httptest.NewRecorder()
+	memberHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/admin/usage?user_id="+selectedID.String(), nil))
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("member status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -1520,6 +1570,19 @@ func TestAdminBalanceAdjustmentReturnsConflictForChangedIdempotentRequest(t *tes
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"idempotency_conflict"`) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminUserBalanceSupportsPagedLedger(t *testing.T) {
+	admin := user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}
+	userID := uuid.New()
+	billingService := &fakeAPIBilling{summary: billing.Summary{Wallet: billing.Wallet{UserID: userID, BalanceMicros: 42_000_000}, EntriesTotal: 51, EntriesOffset: 40, EntriesLimit: 10}}
+	handler := New(Dependencies{Auth: &fakeAPIAuth{current: admin}, Users: &fakeAPIUsers{}, Billing: billingService, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/users/"+userID.String()+"/balance?offset=40&limit=10", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || billingService.summaryUserID != userID || billingService.summaryFilter.Offset != 40 || billingService.summaryFilter.Limit != 10 || !strings.Contains(response.Body.String(), `"entries_total":51`) {
+		t.Fatalf("status=%d user=%s filter=%+v body=%s", response.Code, billingService.summaryUserID, billingService.summaryFilter, response.Body.String())
 	}
 }
 
@@ -2072,6 +2135,7 @@ func TestAdminRoutesRequireAdmin(t *testing.T) {
 	id := uuid.New().String()
 	requests := []*http.Request{
 		httptest.NewRequest(http.MethodGet, "/api/admin/users", nil),
+		httptest.NewRequest(http.MethodGet, "/api/admin/usage", nil),
 		httptest.NewRequest(http.MethodPatch, "/api/admin/users/"+id, strings.NewReader(`{"display_name":"Denied"}`)),
 		httptest.NewRequest(http.MethodGet, "/api/admin/api-keys", nil),
 		httptest.NewRequest(http.MethodGet, "/api/admin/providers", nil),
@@ -2542,6 +2606,76 @@ func TestUserModelListAggregatesFailoverChannelsAtMaximumPrice(t *testing.T) {
 	}
 }
 
+func TestUserModelListMergesCompositeMembersAndReturnsPriceRange(t *testing.T) {
+	currentID := uuid.New()
+	compositeID, memberAID, memberBID := uuid.New(), uuid.New(), uuid.New()
+	memberA := billinggroup.NewSummaryWithKind(memberAID, "member-a", "Member A", billinggroup.KindStandard, 2_500, "", billinggroup.DefaultMultiplierBPS, nil, nil, nil)
+	memberB := billinggroup.NewSummaryWithKind(memberBID, "member-b", "Member B", billinggroup.KindStandard, 3_500, "", billinggroup.DefaultMultiplierBPS, nil, nil, nil)
+	composite := activeBillingGroup(compositeID, "all-models", "全模型主分组", billinggroup.DefaultMultiplierBPS, false)
+	composite.Kind = billinggroup.KindComposite
+	composite.MemberGroups = []billinggroup.Summary{memberA, memberB}
+	composite.MemberGroupCount = 2
+	groups := &fakeBillingGroups{records: []billinggroup.Record{composite}}
+	routes := &fakeModelRoutes{active: []modelroute.Record{
+		{
+			BillingGroupID: memberAID, BillingGroup: memberA, PublicName: "shared-chat", DisplayName: "Shared Chat",
+			Provider:      modelroute.ProviderSummary{DisplayName: "Provider A", Protocols: []provider.Protocol{provider.ProtocolOpenAI}},
+			UpstreamModel: &upstreammodel.Record{ProviderName: "Catalog A", Prices: upstreammodel.Prices{InputMicros: 2_000_000, OutputMicros: 8_000_000}},
+		},
+		{
+			BillingGroupID: memberBID, BillingGroup: memberB, PublicName: "shared-chat", DisplayName: "Shared Chat",
+			Provider:      modelroute.ProviderSummary{DisplayName: "Provider B", Protocols: []provider.Protocol{provider.ProtocolAnthropic}},
+			UpstreamModel: &upstreammodel.Record{ProviderName: "Catalog B", Prices: upstreammodel.Prices{InputMicros: 4_000_000, OutputMicros: 6_000_000}},
+		},
+	}}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{current: user.Record{ID: currentID, Role: user.RoleMember, Status: user.StatusActive}}, Users: &fakeAPIUsers{},
+		BillingGroups: groups, ModelRoutes: routes, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/account/models?billing_group_id="+compositeID.String(), nil))
+	var body struct {
+		Models []struct {
+			ID            string                       `json:"id"`
+			ChannelCount  int                          `json:"channel_count"`
+			Protocols     []provider.Protocol          `json:"protocols"`
+			Prices        billing.RateCard             `json:"prices"`
+			PriceRange    availablePriceRange          `json:"price_range"`
+			BillingGroups []availableModelBillingGroup `json:"billing_groups"`
+		} `json:"models"`
+		BillingGroup struct {
+			Kind             billinggroup.Kind `json:"kind"`
+			MemberGroupCount int               `json:"member_group_count"`
+		} `json:"billing_group"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode composite model response: %v; body=%s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || routes.listActiveGroupID != compositeID || len(body.Models) != 1 {
+		t.Fatalf("status=%d route_group=%s models=%+v body=%s", response.Code, routes.listActiveGroupID, body.Models, response.Body.String())
+	}
+	model := body.Models[0]
+	if model.ID != "shared-chat" || model.ChannelCount != 2 || len(model.Protocols) != 2 || len(model.BillingGroups) != 2 {
+		t.Fatalf("composite model union=%+v", model)
+	}
+	if model.Prices.InputMicros != 1_400_000 || model.Prices.OutputMicros != 2_100_000 {
+		t.Fatalf("conservative prices=%+v", model.Prices)
+	}
+	if model.PriceRange.Minimum.InputMicros != 500_000 || model.PriceRange.Maximum.InputMicros != 1_400_000 || model.PriceRange.Minimum.OutputMicros != 2_000_000 || model.PriceRange.Maximum.OutputMicros != 2_100_000 {
+		t.Fatalf("composite price range=%+v", model.PriceRange)
+	}
+	seenGroups := map[uuid.UUID]int64{}
+	for _, group := range model.BillingGroups {
+		seenGroups[group.ID] = group.EffectiveMultiplierBPS
+	}
+	if seenGroups[memberAID] != 2_500 || seenGroups[memberBID] != 3_500 {
+		t.Fatalf("candidate groups=%+v", model.BillingGroups)
+	}
+	if body.BillingGroup.Kind != billinggroup.KindComposite || body.BillingGroup.MemberGroupCount != 2 {
+		t.Fatalf("selected composite metadata=%+v", body.BillingGroup)
+	}
+}
+
 /**
  * TestAPIKeyErrorsAreStable 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2674,6 +2808,26 @@ func TestAdminCreatesHiddenBillingGroupWithAuthorizedUsers(t *testing.T) {
 	}
 }
 
+func TestAdminCreatesCompositeBillingGroupWithExplicitMembers(t *testing.T) {
+	memberAID, memberBID := uuid.New(), uuid.New()
+	groups := &fakeBillingGroups{}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}, Users: &fakeAPIUsers{},
+		BillingGroups: groups, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session", AllowedOrigins: []string{"http://localhost:3000"},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/billing-groups", strings.NewReader(fmt.Sprintf(`{"code":"all-models","display_name":"全模型主分组","kind":"composite","multiplier_bps":10000,"member_group_ids":["%s","%s"]}`, memberAID, memberBID)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if groups.createInput.Kind != billinggroup.KindComposite || groups.createInput.MultiplierBPS != billinggroup.DefaultMultiplierBPS || len(groups.createInput.MemberGroupIDs) != 2 || groups.createInput.MemberGroupIDs[0] != memberAID || groups.createInput.MemberGroupIDs[1] != memberBID {
+		t.Fatalf("unexpected composite create input: %+v", groups.createInput)
+	}
+}
+
 /**
  * TestProviderValidationErrorIsStable 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。
@@ -2797,6 +2951,32 @@ func TestAdminCreatesUserAndProtectsLastAdmin(t *testing.T) {
 	testAPI(authService, users).ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "last_active_admin") {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminListsUsersWithBalances(t *testing.T) {
+	authService := &fakeAPIAuth{current: user.Record{ID: uuid.New(), Role: user.RoleAdmin, Status: user.StatusActive}}
+	userID := uuid.New()
+	users := &fakeAPIUsers{listPage: user.Page{
+		Users: []user.AdminRecord{{
+			Record:        user.Record{ID: userID, Username: "member.one", Role: user.RoleMember, Status: user.StatusActive},
+			BalanceMicros: 12_345_678,
+		}},
+		Total: 1, Offset: 20, Limit: 10,
+	}}
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/users?search=member&status=active&offset=20&limit=10", nil)
+	response := httptest.NewRecorder()
+	testAPI(authService, users).ServeHTTP(response, request)
+
+	var page user.Page
+	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode user list: %v; body=%s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || len(page.Users) != 1 || page.Users[0].ID != userID || page.Users[0].BalanceMicros != 12_345_678 {
+		t.Fatalf("status=%d page=%+v body=%s", response.Code, page, response.Body.String())
+	}
+	if users.listFilter.Search != "member" || users.listFilter.Status != user.StatusActive || users.listFilter.Offset != 20 || users.listFilter.Limit != 10 {
+		t.Fatalf("unexpected list filter: %+v", users.listFilter)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
@@ -91,25 +92,26 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:                apikey.ValidColumn,
-			apiusage.Table:              apiusage.ValidColumn,
-			billinggroup.Table:          billinggroup.ValidColumn,
-			emailsmtpconfig.Table:       emailsmtpconfig.ValidColumn,
-			emailverificationcode.Table: emailverificationcode.ValidColumn,
-			gatewayoperation.Table:      gatewayoperation.ValidColumn,
-			modelpriceplan.Table:        modelpriceplan.ValidColumn,
-			modelpricewindow.Table:      modelpricewindow.ValidColumn,
-			modelroute.Table:            modelroute.ValidColumn,
-			paymentconfig.Table:         paymentconfig.ValidColumn,
-			provider.Table:              provider.ValidColumn,
-			systemsetting.Table:         systemsetting.ValidColumn,
-			topuporder.Table:            topuporder.ValidColumn,
-			upstreammodel.Table:         upstreammodel.ValidColumn,
-			user.Table:                  user.ValidColumn,
-			useridentity.Table:          useridentity.ValidColumn,
-			usersession.Table:           usersession.ValidColumn,
-			wallet.Table:                wallet.ValidColumn,
-			walletentry.Table:           walletentry.ValidColumn,
+			apikey.Table:                  apikey.ValidColumn,
+			apiusage.Table:                apiusage.ValidColumn,
+			billinggroup.Table:            billinggroup.ValidColumn,
+			billinggroupcomposition.Table: billinggroupcomposition.ValidColumn,
+			emailsmtpconfig.Table:         emailsmtpconfig.ValidColumn,
+			emailverificationcode.Table:   emailverificationcode.ValidColumn,
+			gatewayoperation.Table:        gatewayoperation.ValidColumn,
+			modelpriceplan.Table:          modelpriceplan.ValidColumn,
+			modelpricewindow.Table:        modelpricewindow.ValidColumn,
+			modelroute.Table:              modelroute.ValidColumn,
+			paymentconfig.Table:           paymentconfig.ValidColumn,
+			provider.Table:                provider.ValidColumn,
+			systemsetting.Table:           systemsetting.ValidColumn,
+			topuporder.Table:              topuporder.ValidColumn,
+			upstreammodel.Table:           upstreammodel.ValidColumn,
+			user.Table:                    user.ValidColumn,
+			useridentity.Table:            useridentity.ValidColumn,
+			usersession.Table:             usersession.ValidColumn,
+			wallet.Table:                  wallet.ValidColumn,
+			walletentry.Table:             walletentry.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

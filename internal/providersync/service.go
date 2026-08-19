@@ -294,7 +294,7 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, bindings []Mod
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read provider for model linking: %w", err)
 	}
-	groups, err := tx.BillingGroup.Query().Where(entbillinggroup.IDIn(groupIDs...), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).All(ctx)
+	groups, err := tx.BillingGroup.Query().Where(entbillinggroup.IDIn(groupIDs...), entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().All(ctx)
 	if err != nil {
 		return LinkResult{}, fmt.Errorf("read billing groups for provider model linking: %w", err)
 	}

@@ -246,6 +246,26 @@ func DisplayNameContainsFold(v string) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.FieldContainsFold(FieldDisplayName, v))
 }
 
+// KindEQ applies the EQ predicate on the "kind" field.
+func KindEQ(v Kind) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldEQ(FieldKind, v))
+}
+
+// KindNEQ applies the NEQ predicate on the "kind" field.
+func KindNEQ(v Kind) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNEQ(FieldKind, v))
+}
+
+// KindIn applies the In predicate on the "kind" field.
+func KindIn(vs ...Kind) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldIn(FieldKind, vs...))
+}
+
+// KindNotIn applies the NotIn predicate on the "kind" field.
+func KindNotIn(vs ...Kind) predicate.BillingGroup {
+	return predicate.BillingGroup(sql.FieldNotIn(FieldKind, vs...))
+}
+
 // MultiplierBpsEQ applies the EQ predicate on the "multiplier_bps" field.
 func MultiplierBpsEQ(v int64) predicate.BillingGroup {
 	return predicate.BillingGroup(sql.FieldEQ(FieldMultiplierBps, v))
@@ -722,6 +742,52 @@ func HasAPIUsages() predicate.BillingGroup {
 func HasAPIUsagesWith(preds ...predicate.APIUsage) predicate.BillingGroup {
 	return predicate.BillingGroup(func(s *sql.Selector) {
 		step := newAPIUsagesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasCompositions applies the HasEdge predicate on the "compositions" edge.
+func HasCompositions() predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, CompositionsTable, CompositionsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasCompositionsWith applies the HasEdge predicate on the "compositions" edge with a given conditions (other predicates).
+func HasCompositionsWith(preds ...predicate.BillingGroupComposition) predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := newCompositionsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasMemberCompositions applies the HasEdge predicate on the "member_compositions" edge.
+func HasMemberCompositions() predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, MemberCompositionsTable, MemberCompositionsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasMemberCompositionsWith applies the HasEdge predicate on the "member_compositions" edge with a given conditions (other predicates).
+func HasMemberCompositionsWith(preds ...predicate.BillingGroupComposition) predicate.BillingGroup {
+	return predicate.BillingGroup(func(s *sql.Selector) {
+		step := newMemberCompositionsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

@@ -165,6 +165,102 @@ func TestMySQLProviderProtocolsMigrationPreservesExistingProtocol(t *testing.T) 
 	}
 }
 
+func TestMySQLBillingGroupCompositionsMigrationPreservesLegacyBillingData(t *testing.T) {
+	database := openMigrationIntegrationDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	migrations, err := readMigrations(VersionedSQL)
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	var compositionMigration migrationFile
+	for _, migration := range migrations {
+		if migration.Version == "0016_billing_group_compositions" {
+			compositionMigration = migration
+			break
+		}
+		if _, err := database.ExecContext(ctx, migration.SQL); err != nil {
+			t.Fatalf("apply pre-composition migration %s: %v", migration.Version, err)
+		}
+	}
+	if compositionMigration.Version == "" {
+		t.Fatal("billing group compositions migration not found")
+	}
+
+	const (
+		groupID    = "b1600000-0000-0000-0000-000000000001"
+		userID     = "b1600000-0000-0000-0000-000000000002"
+		apiKeyID   = "b1600000-0000-0000-0000-000000000003"
+		providerID = "b1600000-0000-0000-0000-000000000004"
+		modelID    = "b1600000-0000-0000-0000-000000000005"
+		routeID    = "b1600000-0000-0000-0000-000000000006"
+		usageID    = "b1600000-0000-0000-0000-000000000007"
+		requestID  = "b1600000-0000-0000-0000-000000000008"
+	)
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO billing_groups (id, code, display_name, multiplier_bps, is_default, status, created_at, updated_at) VALUES (?, 'legacy-standard', 'Legacy Standard', 3500, FALSE, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{groupID}},
+		{`INSERT INTO users (id, invite_code, username, display_name, role, status, created_at, updated_at) VALUES (?, 'BILLING0016', 'billing-0016-user', 'Billing 0016 User', 'member', 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{userID}},
+		{`INSERT INTO api_keys (id, name, key_prefix, key_hash, status, created_at, billing_group_id, user_id) VALUES (?, 'Legacy Key', 'nvr_legacy', REPEAT('b', 64), 'active', UTC_TIMESTAMP(6), ?, ?)`, []any{apiKeyID, groupID, userID}},
+		{`INSERT INTO providers (id, code, display_name, protocol, protocols, base_url, model_list_path, encrypted_api_key, api_key_hint, status, created_at, updated_at) VALUES (?, 'legacy-provider', 'Legacy Provider', 'openai', JSON_ARRAY('openai'), 'https://legacy.example.com/v1', '', 'encrypted', 'pted', 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{providerID}},
+		{`INSERT INTO upstream_models (id, provider_name, upstream_name, display_name, input_price_micros, output_price_micros, pricing_configured, status, created_at, updated_at) VALUES (?, 'Legacy Catalog', 'legacy-upstream', 'Legacy Upstream', 2000000, 8000000, TRUE, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`, []any{modelID}},
+		{`INSERT INTO model_routes (id, public_name, display_name, upstream_name, input_price_micros, output_price_micros, status, created_at, updated_at, billing_group_id, provider_id, upstream_model_id) VALUES (?, 'legacy-chat', 'Legacy Chat', 'legacy-upstream', 2000000, 8000000, 'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?, ?)`, []any{routeID, groupID, providerID, modelID}},
+		{`INSERT INTO api_usages (id, request_id, endpoint, multiplier_bps, billing_group_code, billing_group_name, created_at, finished_at, api_key_id, billing_group_id, model_route_id, upstream_model_id, user_id) VALUES (?, ?, 'chat_completions', 3500, 'legacy-standard', 'Legacy Standard', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), ?, ?, ?, ?, ?)`, []any{usageID, requestID, apiKeyID, groupID, routeID, modelID, userID}},
+	}
+	for _, statement := range statements {
+		if _, err := database.ExecContext(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed legacy billing data: %v", err)
+		}
+	}
+
+	if _, err := database.ExecContext(ctx, compositionMigration.SQL); err != nil {
+		t.Fatalf("apply billing group compositions migration: %v", err)
+	}
+	var kind string
+	var multiplier int64
+	if err := database.QueryRowContext(ctx, `SELECT kind, multiplier_bps FROM billing_groups WHERE id = ?`, groupID).Scan(&kind, &multiplier); err != nil {
+		t.Fatalf("read migrated billing group: %v", err)
+	}
+	if kind != "standard" || multiplier != 3_500 {
+		t.Fatalf("migrated billing group kind=%s multiplier=%d", kind, multiplier)
+	}
+	for _, reference := range []struct {
+		name  string
+		query string
+		id    string
+	}{
+		{name: "API key", query: `SELECT billing_group_id FROM api_keys WHERE id = ?`, id: apiKeyID},
+		{name: "model route", query: `SELECT billing_group_id FROM model_routes WHERE id = ?`, id: routeID},
+		{name: "usage", query: `SELECT billing_group_id FROM api_usages WHERE id = ?`, id: usageID},
+	} {
+		var storedGroupID string
+		if err := database.QueryRowContext(ctx, reference.query, reference.id).Scan(&storedGroupID); err != nil {
+			t.Fatalf("read migrated %s reference: %v", reference.name, err)
+		}
+		if storedGroupID != groupID {
+			t.Fatalf("%s billing group=%s, want %s", reference.name, storedGroupID, groupID)
+		}
+	}
+	var usageMultiplier int64
+	var usageCode, usageName string
+	if err := database.QueryRowContext(ctx, `SELECT multiplier_bps, billing_group_code, billing_group_name FROM api_usages WHERE id = ?`, usageID).Scan(&usageMultiplier, &usageCode, &usageName); err != nil {
+		t.Fatalf("read migrated usage snapshot: %v", err)
+	}
+	if usageMultiplier != 3_500 || usageCode != "legacy-standard" || usageName != "Legacy Standard" {
+		t.Fatalf("usage snapshot changed: multiplier=%d code=%s name=%s", usageMultiplier, usageCode, usageName)
+	}
+	var compositionCount int
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM billing_group_compositions`).Scan(&compositionCount); err != nil {
+		t.Fatalf("read empty composition table: %v", err)
+	}
+	if compositionCount != 0 {
+		t.Fatalf("legacy upgrade created unexpected compositions: %d", compositionCount)
+	}
+}
+
 /**
  * TestMySQLModelRouteBillingGroupMigrationMovesExistingAssignments 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。

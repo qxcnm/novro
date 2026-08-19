@@ -3,11 +3,13 @@ package modelroute
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/ent"
 	entbillinggroup "github.com/novro-gateway/novro/ent/billinggroup"
+	entbillinggroupcomposition "github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	entmodelroute "github.com/novro-gateway/novro/ent/modelroute"
 	entprovider "github.com/novro-gateway/novro/ent/provider"
 	entupstreammodel "github.com/novro-gateway/novro/ent/upstreammodel"
@@ -34,18 +36,23 @@ func NewEntStore(client *ent.Client) *EntStore { return &EntStore{client: client
  * @date 2026-08-13
  */
 func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error) {
-	if _, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(input.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin model route creation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(input.BillingGroupID), entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrGroupUnavailable
 	} else if err != nil {
 		return Record{}, fmt.Errorf("read model route billing group: %w", err)
 	}
-	upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(input.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
+	upstream, err := tx.UpstreamModel.Query().Where(entupstreammodel.IDEQ(input.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrInvalidInput
 	} else if err != nil {
 		return Record{}, fmt.Errorf("read upstream model: %w", err)
 	}
-	if _, err := s.client.Provider.Query().Where(entprovider.IDEQ(input.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+	if _, err := tx.Provider.Query().Where(entprovider.IDEQ(input.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
 		return Record{}, ErrInvalidInput
 	} else if err != nil {
 		return Record{}, fmt.Errorf("read provider: %w", err)
@@ -54,7 +61,7 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 	if upstream.Status != entupstreammodel.StatusActive || !upstream.PricingConfigured {
 		status = entmodelroute.StatusDisabled
 	}
-	created, err := s.client.ModelRoute.Create().
+	created, err := tx.ModelRoute.Create().
 		SetProviderID(input.ProviderID).SetUpstreamModelID(upstream.ID).SetBillingGroupID(input.BillingGroupID).SetPublicName(input.PublicName).SetDisplayName(input.DisplayName).
 		SetUpstreamName(upstream.UpstreamName).SetInputPriceMicros(upstream.InputPriceMicros).
 		SetOutputPriceMicros(upstream.OutputPriceMicros).SetStatus(status).Save(ctx)
@@ -63,6 +70,9 @@ func (s *EntStore) Create(ctx context.Context, input CreateInput) (Record, error
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("create model route: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit model route creation: %w", err)
 	}
 	return s.get(ctx, created.ID)
 }
@@ -102,9 +112,28 @@ func (s *EntStore) List(ctx context.Context, filter ListFilter) ([]Record, error
  * @date 2026-08-13
  */
 func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (Record, error) {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return Record{}, fmt.Errorf("begin model route update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	current, err := tx.ModelRoute.Query().Where(entmodelroute.IDEQ(id), entmodelroute.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	if ent.IsNotFound(err) {
+		return Record{}, ErrNotFound
+	}
+	if err != nil {
+		return Record{}, fmt.Errorf("read model route before update: %w", err)
+	}
+	groupIDs := []uuid.UUID{current.BillingGroupID}
+	if params.BillingGroupID != nil {
+		groupIDs = append(groupIDs, *params.BillingGroupID)
+	}
+	if err := lockRouteGroups(ctx, tx, groupIDs); err != nil {
+		return Record{}, err
+	}
 	disableForUpstream := false
 	if params.UpstreamModelID != nil {
-		upstream, err := s.client.UpstreamModel.Query().Where(entupstreammodel.IDEQ(*params.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
+		upstream, err := tx.UpstreamModel.Query().Where(entupstreammodel.IDEQ(*params.UpstreamModelID), entupstreammodel.DeletedAtIsNil()).Only(ctx)
 		if ent.IsNotFound(err) {
 			return Record{}, ErrInvalidInput
 		}
@@ -119,20 +148,20 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 		}
 	}
 	if params.ProviderID != nil {
-		if _, err := s.client.Provider.Query().Where(entprovider.IDEQ(*params.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+		if _, err := tx.Provider.Query().Where(entprovider.IDEQ(*params.ProviderID), entprovider.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
 			return Record{}, ErrInvalidInput
 		} else if err != nil {
 			return Record{}, fmt.Errorf("read model provider: %w", err)
 		}
 	}
 	if params.BillingGroupID != nil {
-		if _, err := s.client.BillingGroup.Query().Where(entbillinggroup.IDEQ(*params.BillingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
+		if _, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(*params.BillingGroupID), entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).Only(ctx); ent.IsNotFound(err) {
 			return Record{}, ErrGroupUnavailable
 		} else if err != nil {
 			return Record{}, fmt.Errorf("read model route billing group: %w", err)
 		}
 	}
-	update := s.client.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil())
+	update := tx.ModelRoute.UpdateOneID(id).Where(entmodelroute.DeletedAtIsNil())
 	if params.UpstreamModelID != nil {
 		update.SetUpstreamModelID(*params.UpstreamModelID)
 	}
@@ -161,6 +190,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 		return Record{}, ErrNotFound
 	} else if err != nil {
 		return Record{}, fmt.Errorf("update model route: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, fmt.Errorf("commit model route update: %w", err)
 	}
 	return s.get(ctx, id)
 }
@@ -192,7 +224,7 @@ func (s *EntStore) SetStatus(ctx context.Context, id uuid.UUID, status Status) (
 			}
 		}
 		group, groupErr := route.Edges.BillingGroupOrErr()
-		if groupErr != nil || group.Status != entbillinggroup.StatusActive || group.DeletedAt != nil {
+		if groupErr != nil || group.Kind != entbillinggroup.KindStandard || group.Status != entbillinggroup.StatusActive || group.DeletedAt != nil {
 			return Record{}, ErrGroupUnavailable
 		}
 	}
@@ -232,7 +264,14 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
  * @date 2026-08-13
  */
 func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, billingGroupID uuid.UUID) ([]Resolution, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.BillingGroupIDEQ(billingGroupID), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	groupIDs, err := s.resolveRouteGroupIDs(ctx, billingGroupID)
+	if err != nil {
+		return nil, err
+	}
+	if len(groupIDs) == 0 {
+		return nil, ErrNotFound
+	}
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.PublicNameEQ(publicName), entmodelroute.BillingGroupIDIn(groupIDs...), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve model routes: %w", err)
 	}
@@ -258,11 +297,79 @@ func (s *EntStore) ResolveCandidates(ctx context.Context, publicName string, bil
  * @date 2026-08-13
  */
 func (s *EntStore) ListActive(ctx context.Context, billingGroupID uuid.UUID) ([]Record, error) {
-	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.BillingGroupIDEQ(billingGroupID), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
+	groupIDs, err := s.resolveRouteGroupIDs(ctx, billingGroupID)
+	if err != nil {
+		return nil, err
+	}
+	if len(groupIDs) == 0 {
+		return []Record{}, nil
+	}
+	entities, err := s.client.ModelRoute.Query().Where(entmodelroute.BillingGroupIDIn(groupIDs...), entmodelroute.StatusEQ(entmodelroute.StatusActive), entmodelroute.DeletedAtIsNil(), entmodelroute.HasBillingGroupWith(entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()), entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()), entmodelroute.HasUpstreamModelWith(entupstreammodel.StatusEQ(entupstreammodel.StatusActive), entupstreammodel.PricingConfiguredEQ(true), entupstreammodel.DeletedAtIsNil())).WithProvider().WithUpstreamModel().WithBillingGroup().Order(ent.Asc(entmodelroute.FieldPublicName), ent.Asc(entmodelroute.FieldCreatedAt), ent.Asc(entmodelroute.FieldID)).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active model routes: %w", err)
 	}
 	return fromEntList(entities), nil
+}
+
+func (s *EntStore) resolveRouteGroupIDs(ctx context.Context, billingGroupID uuid.UUID) ([]uuid.UUID, error) {
+	group, err := s.client.BillingGroup.Query().Where(
+		entbillinggroup.IDEQ(billingGroupID),
+		entbillinggroup.StatusEQ(entbillinggroup.StatusActive),
+		entbillinggroup.DeletedAtIsNil(),
+	).Only(ctx)
+	if ent.IsNotFound(err) {
+		return nil, ErrGroupUnavailable
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve route billing group: %w", err)
+	}
+	if group.Kind != entbillinggroup.KindComposite {
+		return []uuid.UUID{group.ID}, nil
+	}
+	compositions, err := s.client.BillingGroupComposition.Query().Where(
+		entbillinggroupcomposition.CompositeGroupIDEQ(group.ID),
+		entbillinggroupcomposition.HasMemberGroupWith(
+			entbillinggroup.KindEQ(entbillinggroup.KindStandard),
+			entbillinggroup.StatusEQ(entbillinggroup.StatusActive),
+			entbillinggroup.DeletedAtIsNil(),
+		),
+	).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve composite billing group members: %w", err)
+	}
+	ids := make([]uuid.UUID, 0, len(compositions))
+	for _, composition := range compositions {
+		ids = append(ids, composition.MemberGroupID)
+	}
+	return ids, nil
+}
+
+// lockRouteGroups serializes route writes with billing-group kind changes. A
+// composite group must never become committed while a route write can still
+// attach a route to it, so both the current and target groups are locked in a
+// deterministic order before the route mutation runs.
+func lockRouteGroups(ctx context.Context, tx *ent.Tx, ids []uuid.UUID) error {
+	unique := make(map[uuid.UUID]struct{}, len(ids))
+	ordered := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if id == uuid.Nil {
+			return ErrGroupUnavailable
+		}
+		if _, exists := unique[id]; exists {
+			continue
+		}
+		unique[id] = struct{}{}
+		ordered = append(ordered, id)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].String() < ordered[j].String() })
+	for _, id := range ordered {
+		if _, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(id), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx); ent.IsNotFound(err) {
+			return ErrGroupUnavailable
+		} else if err != nil {
+			return fmt.Errorf("lock model route billing group: %w", err)
+		}
+	}
+	return nil
 }
 
 /**
@@ -316,7 +423,7 @@ func fromEnt(entity *ent.ModelRoute) Record {
 	}
 	groupSummary := billinggroup.Summary{}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
-		groupSummary = billinggroup.NewSummary(group.ID, group.Code, group.DisplayName, group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt)
+		groupSummary = billinggroup.NewSummaryWithKind(group.ID, group.Code, group.DisplayName, billinggroup.Kind(group.Kind), group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt, nil)
 	}
 	var upstreamRecord *upstreammodel.Record
 	upstreamName, inputPrice, outputPrice := entity.UpstreamName, entity.InputPriceMicros, entity.OutputPriceMicros

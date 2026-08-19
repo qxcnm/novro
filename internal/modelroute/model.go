@@ -88,12 +88,13 @@ type ListFilter struct {
  */
 type Resolved struct {
 	Record
-	BaseURL            string
-	APIKey             string
-	ResolvedPrices     *upstreammodel.Prices
-	PricingPlanID      *uuid.UUID
-	PricingWindowID    *uuid.UUID
-	PricingWindowLabel string
+	BaseURL             string
+	APIKey              string
+	ResolvedPrices      *upstreammodel.Prices
+	PricingPlanID       *uuid.UUID
+	PricingWindowID     *uuid.UUID
+	PricingWindowLabel  string
+	PinnedMultiplierBPS int64
 }
 
 type Resolution struct {

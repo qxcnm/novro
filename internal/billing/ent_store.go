@@ -102,7 +102,10 @@ func (s *EntStore) GetSummary(ctx context.Context, userID uuid.UUID, filter Entr
  * @date 2026-08-13
  */
 func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter UsageFilter) (UsagePage, error) {
-	query := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID))
+	query := s.client.APIUsage.Query()
+	if userID != uuid.Nil {
+		query.Where(entapiusage.UserIDEQ(userID))
+	}
 	if filter.APIKeyID != uuid.Nil {
 		query.Where(entapiusage.APIKeyIDEQ(filter.APIKeyID))
 	}
@@ -145,12 +148,19 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter Usage
 	).Scan(ctx, &aggregates); err != nil {
 		return UsagePage{}, fmt.Errorf("summarize API usage: %w", err)
 	}
-	entities, err := query.Clone().WithModelRoute().WithAPIKey().Order(ent.Desc(entapiusage.FieldCreatedAt), ent.Desc(entapiusage.FieldID)).Offset(filter.Offset).Limit(filter.Limit).All(ctx)
+	entities, err := query.Clone().WithUser().WithModelRoute().WithAPIKey().Order(ent.Desc(entapiusage.FieldCreatedAt), ent.Desc(entapiusage.FieldID)).Offset(filter.Offset).Limit(filter.Limit).All(ctx)
 	if err != nil {
 		return UsagePage{}, fmt.Errorf("list API usage: %w", err)
 	}
 	items := make([]Usage, 0, len(entities))
 	for _, entity := range entities {
+		owner, _ := entity.Edges.UserOrErr()
+		username := ""
+		userDisplayName := ""
+		if owner != nil {
+			username = owner.Username
+			userDisplayName = owner.DisplayName
+		}
 		model, _ := entity.Edges.ModelRouteOrErr()
 		modelName := ""
 		if model != nil {
@@ -164,7 +174,7 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter Usage
 		if entity.ModelName != "" {
 			modelName = entity.ModelName
 		}
-		items = append(items, Usage{ID: entity.ID, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), StatusCode: entity.StatusCode, ErrorCode: entity.ErrorCode, ErrorMessage: entity.ErrorMessage, InputTokens: entity.InputTokens,
+		items = append(items, Usage{ID: entity.ID, UserID: entity.UserID, Username: username, UserDisplayName: userDisplayName, RequestID: entity.RequestID, APIKeyID: entity.APIKeyID, APIKeyName: apiKeyName, ModelName: modelName, Endpoint: string(entity.Endpoint), StatusCode: entity.StatusCode, ErrorCode: entity.ErrorCode, ErrorMessage: entity.ErrorMessage, InputTokens: entity.InputTokens,
 			UncachedInputTokens: entity.UncachedInputTokens, CacheReadInputTokens: entity.CacheReadInputTokens, CacheWriteInputTokens: entity.CacheWriteInputTokens, CacheWrite1hInputTokens: entity.CacheWrite1hInputTokens, OutputTokens: entity.OutputTokens,
 			Rates:          RateCard{InputMicros: entity.InputPriceMicros, OutputMicros: entity.OutputPriceMicros, CacheReadMicros: entity.CacheReadPriceMicros, CacheWriteMicros: entity.CacheWritePriceMicros, CacheWrite1hMicros: entity.CacheWrite1hPriceMicros, RequestMicros: entity.RequestPriceMicros},
 			BaseCostMicros: entity.BaseCostMicros, MultiplierBPS: entity.MultiplierBps, CostMicros: entity.CostMicros, ReservedMicros: entity.ReservedMicros, BillingGroupCode: entity.BillingGroupCode, BillingGroupName: entity.BillingGroupName, UpstreamModelName: entity.UpstreamModelName, CalculationVersion: entity.CalculationVersion,
@@ -173,7 +183,10 @@ func (s *EntStore) ListUsage(ctx context.Context, userID uuid.UUID, filter Usage
 	var modelRows []struct {
 		Model string `json:"model_name"`
 	}
-	modelQuery := s.client.APIUsage.Query().Where(entapiusage.UserIDEQ(userID), entapiusage.ModelNameNEQ(""))
+	modelQuery := s.client.APIUsage.Query().Where(entapiusage.ModelNameNEQ(""))
+	if userID != uuid.Nil {
+		modelQuery.Where(entapiusage.UserIDEQ(userID))
+	}
 	if err := modelQuery.GroupBy(entapiusage.FieldModelName).Scan(ctx, &modelRows); err != nil {
 		return UsagePage{}, fmt.Errorf("list API usage models: %w", err)
 	}

@@ -98,6 +98,9 @@ type UsageRate struct {
 
 type Usage struct {
 	ID                      uuid.UUID `json:"id"`
+	UserID                  uuid.UUID `json:"user_id"`
+	Username                string    `json:"username"`
+	UserDisplayName         string    `json:"user_display_name"`
 	RequestID               uuid.UUID `json:"request_id"`
 	StatusCode              int       `json:"status_code"`
 	ErrorCode               string    `json:"error_code,omitempty"`

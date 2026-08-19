@@ -35,7 +35,7 @@ func (s *EntStore) AuthenticateHash(ctx context.Context, hash string, now time.T
 			entapikey.HasUserWith(entuser.StatusEQ(entuser.StatusActive)),
 			entapikey.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()),
 		).
-		WithUser().WithBillingGroup().Only(ctx)
+		WithUser().WithBillingGroup(func(query *ent.BillingGroupQuery) { query.WithCompositions() }).Only(ctx)
 	if ent.IsNotFound(err) {
 		return Actor{}, ErrUnauthenticated
 	}
@@ -102,12 +102,15 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 	} else if err != nil {
 		return Record{}, fmt.Errorf("lock API key owner: %w", err)
 	}
-	group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(billingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).ForUpdate().Only(ctx)
+	group, err := tx.BillingGroup.Query().Where(entbillinggroup.IDEQ(billingGroupID), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()).WithCompositions().ForUpdate().Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrGroupUnavailable
 	}
 	if err != nil {
 		return Record{}, fmt.Errorf("lock API key billing group: %w", err)
+	}
+	if group.Kind == entbillinggroup.KindComposite && len(group.Edges.Compositions) == 0 {
+		return Record{}, ErrGroupUnavailable
 	}
 	if group.IsHidden && owner.Role != entuser.RoleAdmin {
 		authorized, err := group.QueryAuthorizedUsers().Where(entuser.IDEQ(owner.ID)).Exist(ctx)
@@ -154,7 +157,7 @@ func (s *EntStore) Create(ctx context.Context, userID, billingGroupID uuid.UUID,
 func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, error) {
 	entities, err := s.client.APIKey.Query().
 		Where(entapikey.UserIDEQ(userID), accessibleBillingGroup(userID)).
-		WithBillingGroup().
+		WithBillingGroup(func(query *ent.BillingGroupQuery) { query.WithCompositions() }).
 		Order(ent.Desc(entapikey.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
@@ -178,7 +181,7 @@ func (s *EntStore) ListByUser(ctx context.Context, userID uuid.UUID) ([]Record, 
 func (s *EntStore) GetByUser(ctx context.Context, userID, id uuid.UUID) (Record, error) {
 	entity, err := s.client.APIKey.Query().
 		Where(entapikey.IDEQ(id), entapikey.UserIDEQ(userID), entapikey.StatusEQ(entapikey.StatusActive), accessibleBillingGroup(userID)).
-		WithBillingGroup().
+		WithBillingGroup(func(query *ent.BillingGroupQuery) { query.WithCompositions() }).
 		Only(ctx)
 	if ent.IsNotFound(err) {
 		return Record{}, ErrNotFound
@@ -235,7 +238,7 @@ func (s *EntStore) ListAll(ctx context.Context, filter ListFilter) (Page, error)
 	if err != nil {
 		return Page{}, fmt.Errorf("count API keys: %w", err)
 	}
-	entities, err := query.WithUser().WithBillingGroup().
+	entities, err := query.WithUser().WithBillingGroup(func(query *ent.BillingGroupQuery) { query.WithCompositions() }).
 		Order(ent.Desc(entapikey.FieldCreatedAt)).
 		Offset(filter.Offset).
 		Limit(filter.Limit).
@@ -315,7 +318,11 @@ func fromEnt(entity *ent.APIKey) Record {
 		KeySecretCiphertext: entity.KeySecretCiphertext,
 	}
 	if group, err := entity.Edges.BillingGroupOrErr(); err == nil {
-		record.BillingGroup = billinggroup.NewSummary(group.ID, group.Code, group.DisplayName, group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt)
+		memberIDs := make([]uuid.UUID, 0, len(group.Edges.Compositions))
+		for _, composition := range group.Edges.Compositions {
+			memberIDs = append(memberIDs, composition.MemberGroupID)
+		}
+		record.BillingGroup = billinggroup.NewSummaryWithKind(group.ID, group.Code, group.DisplayName, billinggroup.Kind(group.Kind), group.MultiplierBps, group.DiscountName, group.DiscountMultiplierBps, group.DiscountStartsAt, group.DiscountEndsAt, memberIDs)
 	}
 	return record
 }

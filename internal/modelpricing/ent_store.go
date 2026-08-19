@@ -348,7 +348,7 @@ func activatePricedModelTx(tx *ent.Tx, ctx context.Context, modelID uuid.UUID, r
 		entmodelroute.UpstreamModelIDEQ(modelID),
 		entmodelroute.DeletedAtIsNil(),
 		entmodelroute.HasProviderWith(entprovider.StatusEQ(entprovider.StatusActive), entprovider.DeletedAtIsNil()),
-		entmodelroute.HasBillingGroupWith(entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()),
+		entmodelroute.HasBillingGroupWith(entbillinggroup.KindEQ(entbillinggroup.KindStandard), entbillinggroup.StatusEQ(entbillinggroup.StatusActive), entbillinggroup.DeletedAtIsNil()),
 	).SetInputPriceMicros(rates.InputMicros).
 		SetOutputPriceMicros(rates.OutputMicros).
 		SetStatus(entmodelroute.StatusActive).

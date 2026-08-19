@@ -224,6 +224,28 @@ func (h *Handler) multiplierAt(actor apikey.Actor, at time.Time) int64 {
 	return actor.APIKey.BillingGroup.MultiplierAt(at)
 }
 
+// routeMultiplierAt selects the billing snapshot belonging to the concrete
+// route that will be called. Composite keys intentionally do not have a
+// multiplier of their own.
+func (h *Handler) routeMultiplierAt(actor apikey.Actor, route modelroute.Resolved, at time.Time) int64 {
+	if route.PinnedMultiplierBPS > 0 {
+		return route.PinnedMultiplierBPS
+	}
+	if actor.PinnedMultiplierBPS > 0 && (route.BillingGroupID == uuid.Nil || route.BillingGroupID == actor.APIKey.BillingGroupID) {
+		return actor.PinnedMultiplierBPS
+	}
+	// A resolved route always belongs to a standard member group. Treat an
+	// omitted kind as standard for compatibility with older adapters and test
+	// doubles; only an explicit composite kind falls back to the API key group.
+	if route.BillingGroup.ID != uuid.Nil && route.BillingGroup.Kind != billinggroup.KindComposite {
+		if h.discounts != nil {
+			return h.discounts.MultiplierAt(route.BillingGroup, at)
+		}
+		return route.BillingGroup.MultiplierAt(at)
+	}
+	return h.multiplierAt(actor, at)
+}
+
 /**
  * ServeHTTP 执行该名称对应的业务处理逻辑。
  * @param w 本次操作需要使用的输入参数。
@@ -371,7 +393,9 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	// Pin the shared discount snapshot once per request so an administrator
 	// update during a long upstream call cannot change the final multiplier
 	// after the reservation was calculated.
-	actor.PinnedMultiplierBPS = h.multiplierAt(actor, startedAt)
+	if actor.APIKey.BillingGroup.Kind != billinggroup.KindComposite {
+		actor.PinnedMultiplierBPS = h.multiplierAt(actor, startedAt)
+	}
 	stream, _ := payload["stream"].(bool)
 	requestSettings := gatewaysettings.DefaultConfig()
 	if h.settings != nil {
@@ -428,6 +452,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	// 先按请求开始时间解析并固定每条候选路由的费率；后续预扣、重试和结算
 	// 都只读取 route.ResolvedPrices，避免请求执行期间跨窗口或发布新版本造成价格不一致。
 	for _, route := range compatible {
+		route.PinnedMultiplierBPS = h.routeMultiplierAt(actor, route, startedAt)
 		if h.pricing != nil {
 			resolution, err := h.pricing.Resolve(r.Context(), *route.UpstreamModelID, startedAt)
 			if err != nil {
@@ -451,7 +476,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		}
 		inputEstimate := estimateInputTokens(upstreamBody)
 		// 输入和输出分别被上限截断，防止超大请求或 max_tokens 使一次预占无限增长。
-		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), h.multiplierAt(actor, startedAt))
+		reservation, err := billing.EstimateReservation(min(inputEstimate, reservationInputCap), min(maximum, reservationOutputCap), rateCardFor(route), route.PinnedMultiplierBPS)
 		if err != nil {
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
@@ -738,7 +763,7 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 	usage := parseUsage(body, usageSemanticsFor(endpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.routeMultiplierAt(actor, route, startedAt))
 	if err != nil {
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -887,7 +912,7 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 	usage := parseUsage(body, usageSemanticsFor(endpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
-	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.multiplierAt(actor, startedAt))
+	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.routeMultiplierAt(actor, route, startedAt))
 	if err != nil {
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
 		writeError(w, http.StatusInternalServerError, "billing_error", "调用已完成但计费记录失败")
@@ -1316,7 +1341,7 @@ streamLoop:
 		return
 	}
 	usage = applyUsageFallback(usage, inputEstimate, outputMaximum, rateCardFor(route))
-	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), h.multiplierAt(actor, startedAt))
+	quote, err := billing.CalculateCost(usage.breakdown(), rateCardFor(route), h.routeMultiplierAt(actor, route, startedAt))
 	if err != nil {
 		h.logger.Error("calculate streamed usage", "request_id", requestID, "error", err)
 		h.markOperationPendingUnknown(requestID, "billing_calculation_error")
@@ -1381,10 +1406,15 @@ func (h *Handler) settle(ctx context.Context, actor apikey.Actor, route modelrou
  * @date 2026-08-13
  */
 func (h *Handler) usageInput(actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, quote billing.Quote, usage tokenUsage, startedAt time.Time) billing.UsageInput {
-	billingGroupID := actor.APIKey.BillingGroupID
+	billingGroupID := route.BillingGroupID
+	billingGroup := route.BillingGroup
+	if billingGroupID == uuid.Nil {
+		billingGroupID = actor.APIKey.BillingGroupID
+		billingGroup = actor.APIKey.BillingGroup
+	}
 	return billing.UsageInput{UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID, RequestID: requestID, Endpoint: endpoint,
-		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: h.multiplierAt(actor, startedAt), CostMicros: quote.CostMicros, ReservedMicros: reserved,
-		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
+		StatusCode: http.StatusOK, InputTokens: usage.Input, Tokens: usage.breakdown(), OutputTokens: usage.Output, Rates: rateCardFor(route), BaseCostMicros: quote.BaseCostMicros, MultiplierBPS: h.routeMultiplierAt(actor, route, startedAt), CostMicros: quote.CostMicros, ReservedMicros: reserved,
+		Estimated: usage.Estimated, UpstreamRequestID: usage.UpstreamID, ModelName: route.PublicName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: billingGroup.Code, BillingGroupName: billingGroup.DisplayName, CalculationVersion: billing.CalculationVersion, CreatedAt: startedAt, FinishedAt: h.now()}
 }
 
 /**
@@ -1473,10 +1503,15 @@ func (h *Handler) recordFailure(actor apikey.Actor, route modelroute.Resolved, r
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(context.Background()), 10*time.Second)
 	defer cancel()
 	billingGroupID := actor.APIKey.BillingGroupID
+	billingGroup := actor.APIKey.BillingGroup
+	if route.BillingGroupID != uuid.Nil {
+		billingGroupID = route.BillingGroupID
+		billingGroup = route.BillingGroup
+	}
 	input := billing.FailureInput{
 		UserID: actor.User.ID, APIKeyID: actor.APIKey.ID, ModelRouteID: route.ID, UpstreamModelID: route.UpstreamModelID, BillingGroupID: &billingGroupID,
 		RequestID: requestID, Endpoint: endpoint, StatusCode: statusCode, ErrorCode: errorCode, ErrorMessage: errorMessage,
-		MultiplierBPS: h.multiplierAt(actor, startedAt), ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: actor.APIKey.BillingGroup.Code, BillingGroupName: actor.APIKey.BillingGroup.DisplayName,
+		MultiplierBPS: h.routeMultiplierAt(actor, route, startedAt), ModelName: modelName, UpstreamModelName: route.UpstreamModel.UpstreamName, BillingGroupCode: billingGroup.Code, BillingGroupName: billingGroup.DisplayName,
 		CreatedAt: startedAt, FinishedAt: finishedAt, DurationMS: duration.Milliseconds(),
 	}
 	if err := h.billing.RecordFailure(ctx, input); err != nil {

@@ -20,6 +20,8 @@ const (
 	FieldCode = "code"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
+	// FieldKind holds the string denoting the kind field in the database.
+	FieldKind = "kind"
 	// FieldMultiplierBps holds the string denoting the multiplier_bps field in the database.
 	FieldMultiplierBps = "multiplier_bps"
 	// FieldDiscountName holds the string denoting the discount_name field in the database.
@@ -48,6 +50,10 @@ const (
 	EdgeModelRoutes = "model_routes"
 	// EdgeAPIUsages holds the string denoting the api_usages edge name in mutations.
 	EdgeAPIUsages = "api_usages"
+	// EdgeCompositions holds the string denoting the compositions edge name in mutations.
+	EdgeCompositions = "compositions"
+	// EdgeMemberCompositions holds the string denoting the member_compositions edge name in mutations.
+	EdgeMemberCompositions = "member_compositions"
 	// EdgeAuthorizedUsers holds the string denoting the authorized_users edge name in mutations.
 	EdgeAuthorizedUsers = "authorized_users"
 	// Table holds the table name of the billinggroup in the database.
@@ -73,6 +79,20 @@ const (
 	APIUsagesInverseTable = "api_usages"
 	// APIUsagesColumn is the table column denoting the api_usages relation/edge.
 	APIUsagesColumn = "billing_group_id"
+	// CompositionsTable is the table that holds the compositions relation/edge.
+	CompositionsTable = "billing_group_compositions"
+	// CompositionsInverseTable is the table name for the BillingGroupComposition entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroupcomposition" package.
+	CompositionsInverseTable = "billing_group_compositions"
+	// CompositionsColumn is the table column denoting the compositions relation/edge.
+	CompositionsColumn = "composite_group_id"
+	// MemberCompositionsTable is the table that holds the member_compositions relation/edge.
+	MemberCompositionsTable = "billing_group_compositions"
+	// MemberCompositionsInverseTable is the table name for the BillingGroupComposition entity.
+	// It exists in this package in order to avoid circular dependency with the "billinggroupcomposition" package.
+	MemberCompositionsInverseTable = "billing_group_compositions"
+	// MemberCompositionsColumn is the table column denoting the member_compositions relation/edge.
+	MemberCompositionsColumn = "member_group_id"
 	// AuthorizedUsersTable is the table that holds the authorized_users relation/edge. The primary key declared below.
 	AuthorizedUsersTable = "billing_group_authorized_users"
 	// AuthorizedUsersInverseTable is the table name for the User entity.
@@ -85,6 +105,7 @@ var Columns = []string{
 	FieldID,
 	FieldCode,
 	FieldDisplayName,
+	FieldKind,
 	FieldMultiplierBps,
 	FieldDiscountName,
 	FieldDiscountMultiplierBps,
@@ -145,6 +166,32 @@ var (
 	DefaultID func() uuid.UUID
 )
 
+// Kind defines the type for the "kind" enum field.
+type Kind string
+
+// KindStandard is the default value of the Kind enum.
+const DefaultKind = KindStandard
+
+// Kind values.
+const (
+	KindStandard  Kind = "standard"
+	KindComposite Kind = "composite"
+)
+
+func (k Kind) String() string {
+	return string(k)
+}
+
+// KindValidator is a validator for the "kind" field enum values. It is called by the builders before save.
+func KindValidator(k Kind) error {
+	switch k {
+	case KindStandard, KindComposite:
+		return nil
+	default:
+		return fmt.Errorf("billinggroup: invalid enum value for kind field: %q", k)
+	}
+}
+
 // Status defines the type for the "status" enum field.
 type Status string
 
@@ -187,6 +234,11 @@ func ByCode(opts ...sql.OrderTermOption) OrderOption {
 // ByDisplayName orders the results by the display_name field.
 func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDisplayName, opts...).ToFunc()
+}
+
+// ByKind orders the results by the kind field.
+func ByKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKind, opts...).ToFunc()
 }
 
 // ByMultiplierBps orders the results by the multiplier_bps field.
@@ -286,6 +338,34 @@ func ByAPIUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByCompositionsCount orders the results by compositions count.
+func ByCompositionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCompositionsStep(), opts...)
+	}
+}
+
+// ByCompositions orders the results by compositions terms.
+func ByCompositions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCompositionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByMemberCompositionsCount orders the results by member_compositions count.
+func ByMemberCompositionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newMemberCompositionsStep(), opts...)
+	}
+}
+
+// ByMemberCompositions orders the results by member_compositions terms.
+func ByMemberCompositions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newMemberCompositionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByAuthorizedUsersCount orders the results by authorized_users count.
 func ByAuthorizedUsersCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -318,6 +398,20 @@ func newAPIUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(APIUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, APIUsagesTable, APIUsagesColumn),
+	)
+}
+func newCompositionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CompositionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CompositionsTable, CompositionsColumn),
+	)
+}
+func newMemberCompositionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(MemberCompositionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, MemberCompositionsTable, MemberCompositionsColumn),
 	)
 }
 func newAuthorizedUsersStep() *sqlgraph.Step {

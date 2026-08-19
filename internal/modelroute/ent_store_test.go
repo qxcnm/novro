@@ -260,6 +260,91 @@ func TestEntStoreFiltersActiveRoutesByBillingGroup(t *testing.T) {
 	}
 }
 
+func TestEntStoreResolvesCompositeCandidatePoolAndExcludesDisabledMembers(t *testing.T) {
+	client := openModelRouteIntegrationClient(t)
+	ctx := context.Background()
+	memberA, err := client.BillingGroup.Create().SetCode("composite-member-a").SetDisplayName("Member A").SetMultiplierBps(3_000).Save(ctx)
+	if err != nil {
+		t.Fatalf("create member A: %v", err)
+	}
+	memberB, err := client.BillingGroup.Create().SetCode("composite-member-b").SetDisplayName("Member B").SetMultiplierBps(7_000).Save(ctx)
+	if err != nil {
+		t.Fatalf("create member B: %v", err)
+	}
+	groupStore := billinggroup.NewEntStore(client)
+	composite, err := groupStore.Create(ctx, billinggroup.CreateInput{
+		Code: "composite-route-pool", DisplayName: "Composite Route Pool", Kind: billinggroup.KindComposite,
+		MultiplierBPS: billinggroup.DefaultMultiplierBPS, MemberGroupIDs: []uuid.UUID{memberA.ID, memberB.ID},
+	})
+	if err != nil {
+		t.Fatalf("create composite group: %v", err)
+	}
+	providerA, err := client.Provider.Create().SetCode("composite-provider-a").SetDisplayName("Composite Provider A").SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://a.example.com").SetEncryptedAPIKey("a-encrypted").SetAPIKeyHint("pted").SetWeight(20).Save(ctx)
+	if err != nil {
+		t.Fatalf("create provider A: %v", err)
+	}
+	providerB, err := client.Provider.Create().SetCode("composite-provider-b").SetDisplayName("Composite Provider B").SetProtocol(entprovider.ProtocolOpenai).SetBaseURL("https://b.example.com").SetEncryptedAPIKey("b-encrypted").SetAPIKeyHint("pted").SetWeight(10).Save(ctx)
+	if err != nil {
+		t.Fatalf("create provider B: %v", err)
+	}
+	model, err := client.UpstreamModel.Create().SetProviderName("Composite Catalog").SetUpstreamName("composite-shared-upstream").SetDisplayName("Composite Shared").SetInputPriceMicros(2_000_000).SetOutputPriceMicros(8_000_000).SetPricingConfigured(true).SetStatus(entupstreammodel.StatusActive).Save(ctx)
+	if err != nil {
+		t.Fatalf("create composite upstream model: %v", err)
+	}
+	createdRoutes := make([]*ent.ModelRoute, 0, 2)
+	for _, candidate := range []struct {
+		providerID uuid.UUID
+		groupID    uuid.UUID
+	}{
+		{providerID: providerA.ID, groupID: memberA.ID},
+		{providerID: providerB.ID, groupID: memberB.ID},
+	} {
+		route, createErr := client.ModelRoute.Create().SetProviderID(candidate.providerID).SetUpstreamModelID(model.ID).SetBillingGroupID(candidate.groupID).SetPublicName("composite-shared").SetDisplayName("Composite Shared").SetUpstreamName(model.UpstreamName).SetInputPriceMicros(model.InputPriceMicros).SetOutputPriceMicros(model.OutputPriceMicros).Save(ctx)
+		if createErr != nil {
+			t.Fatalf("create composite candidate: %v", createErr)
+		}
+		createdRoutes = append(createdRoutes, route)
+	}
+
+	store := NewEntStore(client)
+	resolved, err := store.ResolveCandidates(ctx, "composite-shared", composite.ID)
+	if err != nil {
+		t.Fatalf("resolve composite candidates: %v", err)
+	}
+	if len(resolved) != 2 {
+		t.Fatalf("composite candidates=%d, want 2: %+v", len(resolved), resolved)
+	}
+	groups := map[uuid.UUID]billinggroup.Summary{}
+	for _, resolution := range resolved {
+		groups[resolution.Record.BillingGroupID] = resolution.Record.BillingGroup
+	}
+	if groups[memberA.ID].MultiplierBPS != 3_000 || groups[memberB.ID].MultiplierBPS != 7_000 {
+		t.Fatalf("candidate billing snapshots were not preserved: %+v", groups)
+	}
+	listed, err := store.ListActive(ctx, composite.ID)
+	if err != nil || len(listed) != 2 || listed[0].PublicName != "composite-shared" || listed[1].PublicName != "composite-shared" {
+		t.Fatalf("composite active routes=%+v err=%v", listed, err)
+	}
+	if _, err := store.Create(ctx, CreateInput{ProviderID: providerA.ID, UpstreamModelID: model.ID, BillingGroupID: composite.ID, PublicName: "invalid-composite-route", DisplayName: "Invalid Composite Route"}); !errors.Is(err, ErrGroupUnavailable) {
+		t.Fatalf("create route directly on composite error=%v", err)
+	}
+	if _, err := store.Update(ctx, createdRoutes[0].ID, UpdateInput{BillingGroupID: &composite.ID}); !errors.Is(err, ErrGroupUnavailable) {
+		t.Fatalf("move route directly to composite error=%v", err)
+	}
+
+	if _, err := groupStore.SetStatus(ctx, memberB.ID, billinggroup.StatusDisabled); err != nil {
+		t.Fatalf("disable member B: %v", err)
+	}
+	resolved, err = store.ResolveCandidates(ctx, "composite-shared", composite.ID)
+	if err != nil || len(resolved) != 1 || resolved[0].Record.BillingGroupID != memberA.ID {
+		t.Fatalf("disabled member remained in candidate pool: %+v err=%v", resolved, err)
+	}
+	listed, err = store.ListActive(ctx, composite.ID)
+	if err != nil || len(listed) != 1 || listed[0].BillingGroupID != memberA.ID {
+		t.Fatalf("disabled member remained in model union: %+v err=%v", listed, err)
+	}
+}
+
 /**
  * TestEntStoreRequiresCatalogPricingForActiveRoute 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。

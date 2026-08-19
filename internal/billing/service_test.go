@@ -353,6 +353,16 @@ func TestUsageRateRejectsMissingUser(t *testing.T) {
 	}
 }
 
+func TestUsageRejectsMissingUserButAdminUsageAllowsAllUsers(t *testing.T) {
+	service := NewService(&fakeStore{})
+	if _, err := service.Usage(context.Background(), uuid.Nil, UsageFilter{}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("regular usage err=%v", err)
+	}
+	if _, err := service.AdminUsage(context.Background(), uuid.Nil, UsageFilter{}); err != nil {
+		t.Fatalf("admin usage all-users err=%v", err)
+	}
+}
+
 /**
  * TestRecordFailureRequiresSafeAuditableFields 验证对应功能在指定场景下的行为。
  * @param t 本次操作需要使用的输入参数。

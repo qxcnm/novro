@@ -22,6 +22,8 @@ type BillingGroup struct {
 	Code string `json:"code,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
 	DisplayName string `json:"display_name,omitempty"`
+	// Kind holds the value of the "kind" field.
+	Kind billinggroup.Kind `json:"kind,omitempty"`
 	// MultiplierBps holds the value of the "multiplier_bps" field.
 	MultiplierBps int64 `json:"multiplier_bps,omitempty"`
 	// DiscountName holds the value of the "discount_name" field.
@@ -58,11 +60,15 @@ type BillingGroupEdges struct {
 	ModelRoutes []*ModelRoute `json:"model_routes,omitempty"`
 	// APIUsages holds the value of the api_usages edge.
 	APIUsages []*APIUsage `json:"api_usages,omitempty"`
+	// Compositions holds the value of the compositions edge.
+	Compositions []*BillingGroupComposition `json:"compositions,omitempty"`
+	// MemberCompositions holds the value of the member_compositions edge.
+	MemberCompositions []*BillingGroupComposition `json:"member_compositions,omitempty"`
 	// AuthorizedUsers holds the value of the authorized_users edge.
 	AuthorizedUsers []*User `json:"authorized_users,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [6]bool
 }
 
 // APIKeysOrErr returns the APIKeys value or an error if the edge
@@ -92,10 +98,28 @@ func (e BillingGroupEdges) APIUsagesOrErr() ([]*APIUsage, error) {
 	return nil, &NotLoadedError{edge: "api_usages"}
 }
 
+// CompositionsOrErr returns the Compositions value or an error if the edge
+// was not loaded in eager-loading.
+func (e BillingGroupEdges) CompositionsOrErr() ([]*BillingGroupComposition, error) {
+	if e.loadedTypes[3] {
+		return e.Compositions, nil
+	}
+	return nil, &NotLoadedError{edge: "compositions"}
+}
+
+// MemberCompositionsOrErr returns the MemberCompositions value or an error if the edge
+// was not loaded in eager-loading.
+func (e BillingGroupEdges) MemberCompositionsOrErr() ([]*BillingGroupComposition, error) {
+	if e.loadedTypes[4] {
+		return e.MemberCompositions, nil
+	}
+	return nil, &NotLoadedError{edge: "member_compositions"}
+}
+
 // AuthorizedUsersOrErr returns the AuthorizedUsers value or an error if the edge
 // was not loaded in eager-loading.
 func (e BillingGroupEdges) AuthorizedUsersOrErr() ([]*User, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[5] {
 		return e.AuthorizedUsers, nil
 	}
 	return nil, &NotLoadedError{edge: "authorized_users"}
@@ -110,7 +134,7 @@ func (*BillingGroup) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case billinggroup.FieldMultiplierBps, billinggroup.FieldDiscountMultiplierBps:
 			values[i] = new(sql.NullInt64)
-		case billinggroup.FieldCode, billinggroup.FieldDisplayName, billinggroup.FieldDiscountName, billinggroup.FieldStatus:
+		case billinggroup.FieldCode, billinggroup.FieldDisplayName, billinggroup.FieldKind, billinggroup.FieldDiscountName, billinggroup.FieldStatus:
 			values[i] = new(sql.NullString)
 		case billinggroup.FieldDiscountStartsAt, billinggroup.FieldDiscountEndsAt, billinggroup.FieldCreatedAt, billinggroup.FieldUpdatedAt, billinggroup.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -148,6 +172,12 @@ func (_m *BillingGroup) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field display_name", values[i])
 			} else if value.Valid {
 				_m.DisplayName = value.String
+			}
+		case billinggroup.FieldKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field kind", values[i])
+			} else if value.Valid {
+				_m.Kind = billinggroup.Kind(value.String)
 			}
 		case billinggroup.FieldMultiplierBps:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -246,6 +276,16 @@ func (_m *BillingGroup) QueryAPIUsages() *APIUsageQuery {
 	return NewBillingGroupClient(_m.config).QueryAPIUsages(_m)
 }
 
+// QueryCompositions queries the "compositions" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryCompositions() *BillingGroupCompositionQuery {
+	return NewBillingGroupClient(_m.config).QueryCompositions(_m)
+}
+
+// QueryMemberCompositions queries the "member_compositions" edge of the BillingGroup entity.
+func (_m *BillingGroup) QueryMemberCompositions() *BillingGroupCompositionQuery {
+	return NewBillingGroupClient(_m.config).QueryMemberCompositions(_m)
+}
+
 // QueryAuthorizedUsers queries the "authorized_users" edge of the BillingGroup entity.
 func (_m *BillingGroup) QueryAuthorizedUsers() *UserQuery {
 	return NewBillingGroupClient(_m.config).QueryAuthorizedUsers(_m)
@@ -279,6 +319,9 @@ func (_m *BillingGroup) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("display_name=")
 	builder.WriteString(_m.DisplayName)
+	builder.WriteString(", ")
+	builder.WriteString("kind=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Kind))
 	builder.WriteString(", ")
 	builder.WriteString("multiplier_bps=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MultiplierBps))

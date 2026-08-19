@@ -9,6 +9,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/emailsmtpconfig"
 	"github.com/novro-gateway/novro/ent/emailverificationcode"
 	"github.com/novro-gateway/novro/ent/gatewayoperation"
@@ -315,37 +316,37 @@ func init() {
 		}
 	}()
 	// billinggroupDescMultiplierBps is the schema descriptor for multiplier_bps field.
-	billinggroupDescMultiplierBps := billinggroupFields[3].Descriptor()
+	billinggroupDescMultiplierBps := billinggroupFields[4].Descriptor()
 	// billinggroup.DefaultMultiplierBps holds the default value on creation for the multiplier_bps field.
 	billinggroup.DefaultMultiplierBps = billinggroupDescMultiplierBps.Default.(int64)
 	// billinggroup.MultiplierBpsValidator is a validator for the "multiplier_bps" field. It is called by the builders before save.
 	billinggroup.MultiplierBpsValidator = billinggroupDescMultiplierBps.Validators[0].(func(int64) error)
 	// billinggroupDescDiscountName is the schema descriptor for discount_name field.
-	billinggroupDescDiscountName := billinggroupFields[4].Descriptor()
+	billinggroupDescDiscountName := billinggroupFields[5].Descriptor()
 	// billinggroup.DefaultDiscountName holds the default value on creation for the discount_name field.
 	billinggroup.DefaultDiscountName = billinggroupDescDiscountName.Default.(string)
 	// billinggroup.DiscountNameValidator is a validator for the "discount_name" field. It is called by the builders before save.
 	billinggroup.DiscountNameValidator = billinggroupDescDiscountName.Validators[0].(func(string) error)
 	// billinggroupDescDiscountMultiplierBps is the schema descriptor for discount_multiplier_bps field.
-	billinggroupDescDiscountMultiplierBps := billinggroupFields[5].Descriptor()
+	billinggroupDescDiscountMultiplierBps := billinggroupFields[6].Descriptor()
 	// billinggroup.DefaultDiscountMultiplierBps holds the default value on creation for the discount_multiplier_bps field.
 	billinggroup.DefaultDiscountMultiplierBps = billinggroupDescDiscountMultiplierBps.Default.(int64)
 	// billinggroup.DiscountMultiplierBpsValidator is a validator for the "discount_multiplier_bps" field. It is called by the builders before save.
 	billinggroup.DiscountMultiplierBpsValidator = billinggroupDescDiscountMultiplierBps.Validators[0].(func(int64) error)
 	// billinggroupDescIsDefault is the schema descriptor for is_default field.
-	billinggroupDescIsDefault := billinggroupFields[8].Descriptor()
+	billinggroupDescIsDefault := billinggroupFields[9].Descriptor()
 	// billinggroup.DefaultIsDefault holds the default value on creation for the is_default field.
 	billinggroup.DefaultIsDefault = billinggroupDescIsDefault.Default.(bool)
 	// billinggroupDescIsHidden is the schema descriptor for is_hidden field.
-	billinggroupDescIsHidden := billinggroupFields[9].Descriptor()
+	billinggroupDescIsHidden := billinggroupFields[10].Descriptor()
 	// billinggroup.DefaultIsHidden holds the default value on creation for the is_hidden field.
 	billinggroup.DefaultIsHidden = billinggroupDescIsHidden.Default.(bool)
 	// billinggroupDescCreatedAt is the schema descriptor for created_at field.
-	billinggroupDescCreatedAt := billinggroupFields[11].Descriptor()
+	billinggroupDescCreatedAt := billinggroupFields[12].Descriptor()
 	// billinggroup.DefaultCreatedAt holds the default value on creation for the created_at field.
 	billinggroup.DefaultCreatedAt = billinggroupDescCreatedAt.Default.(func() time.Time)
 	// billinggroupDescUpdatedAt is the schema descriptor for updated_at field.
-	billinggroupDescUpdatedAt := billinggroupFields[12].Descriptor()
+	billinggroupDescUpdatedAt := billinggroupFields[13].Descriptor()
 	// billinggroup.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	billinggroup.DefaultUpdatedAt = billinggroupDescUpdatedAt.Default.(func() time.Time)
 	// billinggroup.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -354,6 +355,16 @@ func init() {
 	billinggroupDescID := billinggroupFields[0].Descriptor()
 	// billinggroup.DefaultID holds the default value on creation for the id field.
 	billinggroup.DefaultID = billinggroupDescID.Default.(func() uuid.UUID)
+	billinggroupcompositionFields := schema.BillingGroupComposition{}.Fields()
+	_ = billinggroupcompositionFields
+	// billinggroupcompositionDescCreatedAt is the schema descriptor for created_at field.
+	billinggroupcompositionDescCreatedAt := billinggroupcompositionFields[3].Descriptor()
+	// billinggroupcomposition.DefaultCreatedAt holds the default value on creation for the created_at field.
+	billinggroupcomposition.DefaultCreatedAt = billinggroupcompositionDescCreatedAt.Default.(func() time.Time)
+	// billinggroupcompositionDescID is the schema descriptor for id field.
+	billinggroupcompositionDescID := billinggroupcompositionFields[0].Descriptor()
+	// billinggroupcomposition.DefaultID holds the default value on creation for the id field.
+	billinggroupcomposition.DefaultID = billinggroupcompositionDescID.Default.(func() uuid.UUID)
 	emailsmtpconfigFields := schema.EmailSMTPConfig{}.Fields()
 	_ = emailsmtpconfigFields
 	// emailsmtpconfigDescEnabled is the schema descriptor for enabled field.

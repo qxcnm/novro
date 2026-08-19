@@ -14,6 +14,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/user"
 )
@@ -34,6 +35,20 @@ func (_c *BillingGroupCreate) SetCode(v string) *BillingGroupCreate {
 // SetDisplayName sets the "display_name" field.
 func (_c *BillingGroupCreate) SetDisplayName(v string) *BillingGroupCreate {
 	_c.mutation.SetDisplayName(v)
+	return _c
+}
+
+// SetKind sets the "kind" field.
+func (_c *BillingGroupCreate) SetKind(v billinggroup.Kind) *BillingGroupCreate {
+	_c.mutation.SetKind(v)
+	return _c
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_c *BillingGroupCreate) SetNillableKind(v *billinggroup.Kind) *BillingGroupCreate {
+	if v != nil {
+		_c.SetKind(*v)
+	}
 	return _c
 }
 
@@ -250,6 +265,36 @@ func (_c *BillingGroupCreate) AddAPIUsages(v ...*APIUsage) *BillingGroupCreate {
 	return _c.AddAPIUsageIDs(ids...)
 }
 
+// AddCompositionIDs adds the "compositions" edge to the BillingGroupComposition entity by IDs.
+func (_c *BillingGroupCreate) AddCompositionIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddCompositionIDs(ids...)
+	return _c
+}
+
+// AddCompositions adds the "compositions" edges to the BillingGroupComposition entity.
+func (_c *BillingGroupCreate) AddCompositions(v ...*BillingGroupComposition) *BillingGroupCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddCompositionIDs(ids...)
+}
+
+// AddMemberCompositionIDs adds the "member_compositions" edge to the BillingGroupComposition entity by IDs.
+func (_c *BillingGroupCreate) AddMemberCompositionIDs(ids ...uuid.UUID) *BillingGroupCreate {
+	_c.mutation.AddMemberCompositionIDs(ids...)
+	return _c
+}
+
+// AddMemberCompositions adds the "member_compositions" edges to the BillingGroupComposition entity.
+func (_c *BillingGroupCreate) AddMemberCompositions(v ...*BillingGroupComposition) *BillingGroupCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddMemberCompositionIDs(ids...)
+}
+
 // AddAuthorizedUserIDs adds the "authorized_users" edge to the User entity by IDs.
 func (_c *BillingGroupCreate) AddAuthorizedUserIDs(ids ...uuid.UUID) *BillingGroupCreate {
 	_c.mutation.AddAuthorizedUserIDs(ids...)
@@ -300,6 +345,10 @@ func (_c *BillingGroupCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *BillingGroupCreate) defaults() {
+	if _, ok := _c.mutation.Kind(); !ok {
+		v := billinggroup.DefaultKind
+		_c.mutation.SetKind(v)
+	}
 	if _, ok := _c.mutation.MultiplierBps(); !ok {
 		v := billinggroup.DefaultMultiplierBps
 		_c.mutation.SetMultiplierBps(v)
@@ -354,6 +403,14 @@ func (_c *BillingGroupCreate) check() error {
 	if v, ok := _c.mutation.DisplayName(); ok {
 		if err := billinggroup.DisplayNameValidator(v); err != nil {
 			return &ValidationError{Name: "display_name", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.display_name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "BillingGroup.kind"`)}
+	}
+	if v, ok := _c.mutation.Kind(); ok {
+		if err := billinggroup.KindValidator(v); err != nil {
+			return &ValidationError{Name: "kind", err: fmt.Errorf(`ent: validator failed for field "BillingGroup.kind": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.MultiplierBps(); !ok {
@@ -443,6 +500,10 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 		_spec.SetField(billinggroup.FieldDisplayName, field.TypeString, value)
 		_node.DisplayName = value
 	}
+	if value, ok := _c.mutation.Kind(); ok {
+		_spec.SetField(billinggroup.FieldKind, field.TypeEnum, value)
+		_node.Kind = value
+	}
 	if value, ok := _c.mutation.MultiplierBps(); ok {
 		_spec.SetField(billinggroup.FieldMultiplierBps, field.TypeInt64, value)
 		_node.MultiplierBps = value
@@ -528,6 +589,38 @@ func (_c *BillingGroupCreate) createSpec() (*BillingGroup, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(apiusage.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.CompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.CompositionsTable,
+			Columns: []string{billinggroup.CompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.MemberCompositionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   billinggroup.MemberCompositionsTable,
+			Columns: []string{billinggroup.MemberCompositionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(billinggroupcomposition.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

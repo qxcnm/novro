@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BulkActionDialog, ListBulkActions } from "@/components/list-bulk-actions";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
 import { useListSelection } from "@/lib/use-list-selection";
@@ -45,8 +45,9 @@ type CatalogModel = {
 };
 
 type BillingGroup = {
-  id: string;
-  display_name: string;
+	id: string;
+	display_name: string;
+	kind: "standard" | "composite";
   multiplier_bps: number;
   effective_multiplier_bps?: number;
   status: "active" | "disabled";
@@ -168,7 +169,8 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
     });
   }, [activeProvider, query, routes]);
   const selection = useListSelection(filtered.map((route) => route.id));
-  const activeBillingGroups = billingGroups.filter((group) => group.status === "active");
+  const activeBillingGroups = billingGroups.filter((group) => group.status === "active" && group.kind !== "composite");
+  const selectableBillingGroups = billingGroups.filter((group) => group.kind !== "composite" && (group.status === "active" || group.id === form.billing_group_id));
 
   /**
    * beginCreate 封装该名称对应的业务处理逻辑。
@@ -376,9 +378,9 @@ export default function ModelRoutesClient({ refreshKey = 0 }: { refreshKey?: num
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? "编辑关联模型路由" : "新增关联模型路由"}</DialogTitle><DialogDescription>路由将一个对外模型名称绑定到计费分组、提供商配置和模型目录记录。</DialogDescription></DialogHeader>
           <form className="space-y-4" id="model-route-form" onSubmit={submit}>
-            <div className="space-y-2"><Label htmlFor="route-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger className="w-full" id="route-billing-group"><SelectValue placeholder="选择计费分组" /></SelectTrigger><SelectContent>{billingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×{group.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="route-provider">提供商配置</Label><Select onValueChange={(provider_id) => setForm({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id="route-provider"><SelectValue placeholder="选择提供商配置" /></SelectTrigger><SelectContent>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name}{provider.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="route-catalog-model">目录模型</Label><Select onValueChange={(upstream_model_id) => setForm({ ...form, upstream_model_id })} value={form.upstream_model_id}><SelectTrigger className="w-full" id="route-catalog-model"><SelectValue placeholder="选择目录模型" /></SelectTrigger><SelectContent>{catalog.map((model) => <SelectItem key={model.id} value={model.id}>{model.provider_name} · {model.display_name}{!model.pricing_configured ? "（待定价）" : model.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-billing-group">计费分组</Label><Select onValueChange={(billing_group_id) => setForm({ ...form, billing_group_id })} value={form.billing_group_id}><SelectTrigger className="w-full" id="route-billing-group"><SelectValue placeholder="选择普通计费分组" /></SelectTrigger><SelectContent><SelectGroup>{selectableBillingGroups.map((group) => <SelectItem key={group.id} value={group.id}>{group.display_name} · {((group.effective_multiplier_bps ?? group.multiplier_bps) / 10_000).toFixed(4)}×{group.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-provider">提供商配置</Label><Select onValueChange={(provider_id) => setForm({ ...form, provider_id })} value={form.provider_id}><SelectTrigger className="w-full" id="route-provider"><SelectValue placeholder="选择提供商配置" /></SelectTrigger><SelectContent><SelectGroup>{providers.map((provider) => <SelectItem key={provider.id} value={provider.id}>{provider.display_name}{provider.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="route-catalog-model">目录模型</Label><Select onValueChange={(upstream_model_id) => setForm({ ...form, upstream_model_id })} value={form.upstream_model_id}><SelectTrigger className="w-full" id="route-catalog-model"><SelectValue placeholder="选择目录模型" /></SelectTrigger><SelectContent><SelectGroup>{catalog.map((model) => <SelectItem key={model.id} value={model.id}>{model.provider_name} · {model.display_name}{!model.pricing_configured ? "（待定价）" : model.status === "disabled" ? "（已停用）" : ""}</SelectItem>)}</SelectGroup></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="route-public-name">对外模型名称</Label><Input disabled={editing !== null} id="route-public-name" maxLength={256} minLength={2} onChange={(event) => setForm({ ...form, public_name: event.target.value })} pattern="[A-Za-z0-9][A-Za-z0-9._:/-]{1,255}" placeholder="例如 deepseek-chat" required title="对外模型名称需为 2 到 256 位，以字母或数字开头，只能使用字母、数字、点号、下划线、冒号、斜杠和连字符，不能包含空格或中文" value={form.public_name} /><p className="text-xs text-muted-foreground">2 到 256 位；以字母或数字开头，允许点号、下划线、冒号、斜杠和连字符，不允许空格或中文。</p></div>
             <div className="space-y-2"><Label htmlFor="route-display-name">显示名称</Label><Input id="route-display-name" maxLength={128} onChange={(event) => setForm({ ...form, display_name: event.target.value })} placeholder="例如 DeepSeek Chat" required value={form.display_name} /></div>
           </form>

@@ -103,6 +103,49 @@ func TestUpdateRejectsInvalidAuthorizedUserIDs(t *testing.T) {
 	}
 }
 
+func TestCreateValidatesCompositeMembersAndPricing(t *testing.T) {
+	memberID := uuid.New()
+	store := &fakeStore{}
+	service := NewService(store)
+	valid := CreateInput{
+		Code: "all-models", DisplayName: "全模型主分组", Kind: KindComposite,
+		MemberGroupIDs: []uuid.UUID{memberID},
+	}
+	if _, err := service.Create(context.Background(), valid); err != nil {
+		t.Fatalf("create composite group: %v", err)
+	}
+	if store.createInput.Kind != KindComposite || store.createInput.MultiplierBPS != DefaultMultiplierBPS || len(store.createInput.MemberGroupIDs) != 1 || store.createInput.MemberGroupIDs[0] != memberID {
+		t.Fatalf("unexpected normalized composite input: %+v", store.createInput)
+	}
+
+	tests := []struct {
+		name  string
+		input CreateInput
+	}{
+		{name: "missing members", input: CreateInput{Code: "missing-members", DisplayName: "Missing", Kind: KindComposite}},
+		{name: "duplicate member", input: CreateInput{Code: "duplicate-members", DisplayName: "Duplicate", Kind: KindComposite, MemberGroupIDs: []uuid.UUID{memberID, memberID}}},
+		{name: "standard with members", input: CreateInput{Code: "standard-members", DisplayName: "Standard", Kind: KindStandard, MultiplierBPS: DefaultMultiplierBPS, MemberGroupIDs: []uuid.UUID{memberID}}},
+		{name: "composite multiplier", input: CreateInput{Code: "composite-rate", DisplayName: "Rate", Kind: KindComposite, MultiplierBPS: 5_000, MemberGroupIDs: []uuid.UUID{memberID}}},
+		{name: "composite discount", input: CreateInput{Code: "composite-sale", DisplayName: "Sale", Kind: KindComposite, MemberGroupIDs: []uuid.UUID{memberID}, Discount: &DiscountInput{Name: "Sale", MultiplierBPS: 8_000, StartsAt: time.Now().UTC(), EndsAt: time.Now().UTC().Add(time.Hour)}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := service.Create(context.Background(), test.input); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("expected invalid composite input, got %v", err)
+			}
+		})
+	}
+}
+
+func TestUpdateRejectsDuplicateCompositeMembers(t *testing.T) {
+	service := NewService(&fakeStore{})
+	memberID := uuid.New()
+	members := []uuid.UUID{memberID, memberID}
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{MemberGroupIDs: &members}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected duplicate member rejection, got %v", err)
+	}
+}
+
 func TestDiscountValidationAndScheduledMultiplier(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store)

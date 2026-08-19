@@ -28,7 +28,8 @@
 | `GET` | `/api/account/announcement` | 登录 | 读取当前启用的系统公告；没有公告时返回 `available: false` |
 | `GET` | `/api/admin/announcement` | 管理员 | 读取系统公告内容、启用状态和最近更新时间 |
 | `PUT` | `/api/admin/announcement` | 管理员 | 保存纯文本系统公告及启用状态 |
-| `GET` | `/api/admin/users` | 管理员 | 分页、搜索和状态筛选 |
+| `GET` | `/api/admin/users` | 管理员 | 分页、搜索和状态筛选，并在每条用户记录中返回当前 `balance_micros` |
+| `GET` | `/api/admin/usage` | 管理员 | 查询全部用户的调用日志；可用 `user_id`、模型、状态、时间、请求 ID 和分页参数筛选 |
 | `POST` | `/api/admin/users` | 管理员 | 创建管理员或成员 |
 | `PATCH` | `/api/admin/users/{id}` | 管理员 | 修改显示名称或角色 |
 | `PATCH` | `/api/admin/users/{id}/status` | 管理员 | 启用或停用用户 |
@@ -52,7 +53,7 @@
 | `GET` | `/api/admin/top-ups` | 管理员 | 分页查询全部用户的充值订单 |
 | `GET` | `/api/admin/api-keys` | 管理员 | 分页审计所有用户的 Key 元数据 |
 | `POST` | `/api/admin/api-keys/{id}/revoke` | 管理员 | 撤销任意用户的 Key |
-| `GET` | `/api/admin/users/{id}/balance` | 管理员 | 查看用户余额和流水 |
+| `GET` | `/api/admin/users/{id}/balance` | 管理员 | 查看用户余额和流水；支持 `offset`、`limit` 分页参数 |
 | `POST` | `/api/admin/users/{id}/balance-adjustments` | 管理员 | 原子调整余额并写入流水 |
 | `GET` | `/api/admin/providers` | 管理员 | 搜索和筛选提供商 |
 | `POST` | `/api/admin/providers` | 管理员 | 创建加密凭据配置；代码命中软删除记录时复用主记录并覆盖配置 |
@@ -93,6 +94,12 @@
 隐藏计费分组的创建请求可提交 `authorized_user_ids` UUID 数组；修改请求可用同名字段整体替换
 授权名单。名单只能包含普通成员，不能包含管理员或未知用户；公开分组不能携带授权名单。
 管理员自动拥有全部隐藏组权限。管理列表中的每个分组返回 `authorized_users` 摘要，供控制台回显。
+
+计费分组的 `kind` 为 `standard` 或 `composite`。普通分组保留倍率、定时优惠和模型路由；主分组通过
+`member_group_ids` 显式组合多个普通分组，只能组合一层且不能重复或嵌套。主分组自身不参与定价，
+其 Key 调用时会合并所有启用成员的路由，并按最终命中的成员分组倍率结算。停用主分组会立即使其 Key
+认证失败，停用成员只会从主分组候选池移除该成员路由。主分组响应中的 `member_group_count` 和
+`member_groups` 用于控制台展示；其倍率字段仅为兼容保留，不代表固定 `1.0000×`。
 
 `POST /api/admin/providers/{id}/models` 使用结构化绑定请求，不再接收旧的 `model_ids`：
 
@@ -165,7 +172,8 @@ GET /v1/models
 
 兼容别名：`GET /v1/model`。两个路径返回相同结果。
 
-返回当前 API Key 所属计费分组可以使用的启用模型。模型名称是管理员配置的 `public_name`；
+返回当前 API Key 所属计费分组可以使用的启用模型。普通 Key 只查询本组路由，主分组 Key 查询所有启用成员的
+路由并去重。模型名称是管理员配置的 `public_name`；
 自动关联时它等于全局目录的精确 `upstream_name`，并按目录的 `provider_name` 返回厂商标签。
 同步只是发现上游模型，只有管理员在目录定价并选择关联后才会出现在这里。同步聚合渠道时不会
 把渠道代码写入公开模型名，管理员手工别名保持不变。同名的多条启用路由只返回一个模型项，
@@ -247,6 +255,10 @@ POST /v1/messages
   一致的模型路由。用户可用模型页按所选分组、对外模型名称聚合渠道，展示所有可用协议，并按候选
   渠道的各维度最高单价展示，
   避免实际结算高于页面价格。
+- 主分组下同名模型会返回 `billing_groups` 候选成员及有效倍率，并通过 `price_range.minimum`/
+  `price_range.maximum` 展示跨成员的价格范围；原有 `prices` 仍表示保守的最高可能价格。
+- 预占金额取全部候选渠道在各自成员倍率下的最高估算值；最终 `api_usages.billing_group_id`、分组代码、
+  分组名称、倍率和优惠快照均记录实际命中的普通成员，即使故障切换跨到另一个成员也不记录主分组。
 - 供应商调用成功后，只根据上游明确返回的 usage 扣减用户余额。usage 缺少输入或输出维度时，
   缺失维度按 0 结算并释放对应预占，不使用请求字节数或最大输出 token 猜测最终费用。
 - 余额不足时拒绝请求，不向供应商发起调用。
@@ -270,6 +282,7 @@ POST /v1/messages
 - `GET /api/account/usage` 支持 `offset`、`limit`、`api_key_id`、`model`、`status`、`search`
   和 `from`；返回匹配历史的总条数、Token 与费用汇总。`GET /api/account/balance` 支持
   `offset` 和 `limit`，并返回流水总数和当前尚未结算的调用预占。
+- `GET /api/admin/usage` 仅管理员可用；未传 `user_id` 时查询全部用户，传入 `user_id` 时只返回该用户的日志，响应中的每条记录包含安全的用户名和显示名称。普通用户的 `/api/account/usage` 始终只返回当前登录账号的数据。
 - `GET /api/account/usage/rate` 使用最近 60 秒滚动窗口统计已写入的调用记录。RPM 包含成功和失败
   请求；TPM 为上游已确认的输入与输出 Token 之和，usage 不完整的请求只计入已确认部分。
 

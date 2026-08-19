@@ -17,6 +17,7 @@ import (
 	"github.com/novro-gateway/novro/ent/apikey"
 	"github.com/novro-gateway/novro/ent/apiusage"
 	"github.com/novro-gateway/novro/ent/billinggroup"
+	"github.com/novro-gateway/novro/ent/billinggroupcomposition"
 	"github.com/novro-gateway/novro/ent/modelroute"
 	"github.com/novro-gateway/novro/ent/predicate"
 	"github.com/novro-gateway/novro/ent/user"
@@ -25,15 +26,17 @@ import (
 // BillingGroupQuery is the builder for querying BillingGroup entities.
 type BillingGroupQuery struct {
 	config
-	ctx                 *QueryContext
-	order               []billinggroup.OrderOption
-	inters              []Interceptor
-	predicates          []predicate.BillingGroup
-	withAPIKeys         *APIKeyQuery
-	withModelRoutes     *ModelRouteQuery
-	withAPIUsages       *APIUsageQuery
-	withAuthorizedUsers *UserQuery
-	modifiers           []func(*sql.Selector)
+	ctx                    *QueryContext
+	order                  []billinggroup.OrderOption
+	inters                 []Interceptor
+	predicates             []predicate.BillingGroup
+	withAPIKeys            *APIKeyQuery
+	withModelRoutes        *ModelRouteQuery
+	withAPIUsages          *APIUsageQuery
+	withCompositions       *BillingGroupCompositionQuery
+	withMemberCompositions *BillingGroupCompositionQuery
+	withAuthorizedUsers    *UserQuery
+	modifiers              []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -129,6 +132,50 @@ func (_q *BillingGroupQuery) QueryAPIUsages() *APIUsageQuery {
 			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
 			sqlgraph.To(apiusage.Table, apiusage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.APIUsagesTable, billinggroup.APIUsagesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryCompositions chains the current query on the "compositions" edge.
+func (_q *BillingGroupQuery) QueryCompositions() *BillingGroupCompositionQuery {
+	query := (&BillingGroupCompositionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
+			sqlgraph.To(billinggroupcomposition.Table, billinggroupcomposition.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.CompositionsTable, billinggroup.CompositionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryMemberCompositions chains the current query on the "member_compositions" edge.
+func (_q *BillingGroupQuery) QueryMemberCompositions() *BillingGroupCompositionQuery {
+	query := (&BillingGroupCompositionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(billinggroup.Table, billinggroup.FieldID, selector),
+			sqlgraph.To(billinggroupcomposition.Table, billinggroupcomposition.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, billinggroup.MemberCompositionsTable, billinggroup.MemberCompositionsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -345,15 +392,17 @@ func (_q *BillingGroupQuery) Clone() *BillingGroupQuery {
 		return nil
 	}
 	return &BillingGroupQuery{
-		config:              _q.config,
-		ctx:                 _q.ctx.Clone(),
-		order:               append([]billinggroup.OrderOption{}, _q.order...),
-		inters:              append([]Interceptor{}, _q.inters...),
-		predicates:          append([]predicate.BillingGroup{}, _q.predicates...),
-		withAPIKeys:         _q.withAPIKeys.Clone(),
-		withModelRoutes:     _q.withModelRoutes.Clone(),
-		withAPIUsages:       _q.withAPIUsages.Clone(),
-		withAuthorizedUsers: _q.withAuthorizedUsers.Clone(),
+		config:                 _q.config,
+		ctx:                    _q.ctx.Clone(),
+		order:                  append([]billinggroup.OrderOption{}, _q.order...),
+		inters:                 append([]Interceptor{}, _q.inters...),
+		predicates:             append([]predicate.BillingGroup{}, _q.predicates...),
+		withAPIKeys:            _q.withAPIKeys.Clone(),
+		withModelRoutes:        _q.withModelRoutes.Clone(),
+		withAPIUsages:          _q.withAPIUsages.Clone(),
+		withCompositions:       _q.withCompositions.Clone(),
+		withMemberCompositions: _q.withMemberCompositions.Clone(),
+		withAuthorizedUsers:    _q.withAuthorizedUsers.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -390,6 +439,28 @@ func (_q *BillingGroupQuery) WithAPIUsages(opts ...func(*APIUsageQuery)) *Billin
 		opt(query)
 	}
 	_q.withAPIUsages = query
+	return _q
+}
+
+// WithCompositions tells the query-builder to eager-load the nodes that are connected to
+// the "compositions" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BillingGroupQuery) WithCompositions(opts ...func(*BillingGroupCompositionQuery)) *BillingGroupQuery {
+	query := (&BillingGroupCompositionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withCompositions = query
+	return _q
+}
+
+// WithMemberCompositions tells the query-builder to eager-load the nodes that are connected to
+// the "member_compositions" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BillingGroupQuery) WithMemberCompositions(opts ...func(*BillingGroupCompositionQuery)) *BillingGroupQuery {
+	query := (&BillingGroupCompositionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withMemberCompositions = query
 	return _q
 }
 
@@ -482,10 +553,12 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*BillingGroup{}
 		_spec       = _q.querySpec()
-		loadedTypes = [4]bool{
+		loadedTypes = [6]bool{
 			_q.withAPIKeys != nil,
 			_q.withModelRoutes != nil,
 			_q.withAPIUsages != nil,
+			_q.withCompositions != nil,
+			_q.withMemberCompositions != nil,
 			_q.withAuthorizedUsers != nil,
 		}
 	)
@@ -528,6 +601,24 @@ func (_q *BillingGroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		if err := _q.loadAPIUsages(ctx, query, nodes,
 			func(n *BillingGroup) { n.Edges.APIUsages = []*APIUsage{} },
 			func(n *BillingGroup, e *APIUsage) { n.Edges.APIUsages = append(n.Edges.APIUsages, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withCompositions; query != nil {
+		if err := _q.loadCompositions(ctx, query, nodes,
+			func(n *BillingGroup) { n.Edges.Compositions = []*BillingGroupComposition{} },
+			func(n *BillingGroup, e *BillingGroupComposition) {
+				n.Edges.Compositions = append(n.Edges.Compositions, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withMemberCompositions; query != nil {
+		if err := _q.loadMemberCompositions(ctx, query, nodes,
+			func(n *BillingGroup) { n.Edges.MemberCompositions = []*BillingGroupComposition{} },
+			func(n *BillingGroup, e *BillingGroupComposition) {
+				n.Edges.MemberCompositions = append(n.Edges.MemberCompositions, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -629,6 +720,66 @@ func (_q *BillingGroupQuery) loadAPIUsages(ctx context.Context, query *APIUsageQ
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "billing_group_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *BillingGroupQuery) loadCompositions(ctx context.Context, query *BillingGroupCompositionQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *BillingGroupComposition)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*BillingGroup)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(billinggroupcomposition.FieldCompositeGroupID)
+	}
+	query.Where(predicate.BillingGroupComposition(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(billinggroup.CompositionsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.CompositeGroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "composite_group_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *BillingGroupQuery) loadMemberCompositions(ctx context.Context, query *BillingGroupCompositionQuery, nodes []*BillingGroup, init func(*BillingGroup), assign func(*BillingGroup, *BillingGroupComposition)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*BillingGroup)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(billinggroupcomposition.FieldMemberGroupID)
+	}
+	query.Where(predicate.BillingGroupComposition(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(billinggroup.MemberCompositionsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.MemberGroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "member_group_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

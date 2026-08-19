@@ -45,6 +45,11 @@ type Record struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+type AdminRecord struct {
+	Record
+	BalanceMicros int64 `json:"balance_micros"`
+}
+
 type CreateInput struct {
 	Username    string `json:"username"`
 	Email       string `json:"email"`
@@ -74,8 +79,8 @@ type ListFilter struct {
 }
 
 type Page struct {
-	Users  []Record `json:"users"`
-	Total  int      `json:"total"`
-	Offset int      `json:"offset"`
-	Limit  int      `json:"limit"`
+	Users  []AdminRecord `json:"users"`
+	Total  int           `json:"total"`
+	Offset int           `json:"offset"`
+	Limit  int           `json:"limit"`
 }

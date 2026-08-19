@@ -179,6 +179,7 @@ var (
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "code", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "display_name", Type: field.TypeString, Size: 128},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"standard", "composite"}, Default: "standard"},
 		{Name: "multiplier_bps", Type: field.TypeInt64, Default: 10000},
 		{Name: "discount_name", Type: field.TypeString, Size: 64, Default: ""},
 		{Name: "discount_multiplier_bps", Type: field.TypeInt64, Default: 10000},
@@ -200,22 +201,61 @@ var (
 			{
 				Name:    "billinggroup_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[10], BillingGroupsColumns[11]},
+				Columns: []*schema.Column{BillingGroupsColumns[11], BillingGroupsColumns[12]},
 			},
 			{
 				Name:    "billinggroup_is_default",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[8]},
+				Columns: []*schema.Column{BillingGroupsColumns[9]},
 			},
 			{
 				Name:    "billinggroup_discount_starts_at_discount_ends_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[6], BillingGroupsColumns[7]},
+				Columns: []*schema.Column{BillingGroupsColumns[7], BillingGroupsColumns[8]},
 			},
 			{
 				Name:    "billinggroup_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{BillingGroupsColumns[13]},
+				Columns: []*schema.Column{BillingGroupsColumns[14]},
+			},
+		},
+	}
+	// BillingGroupCompositionsColumns holds the columns for the "billing_group_compositions" table.
+	BillingGroupCompositionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "composite_group_id", Type: field.TypeUUID},
+		{Name: "member_group_id", Type: field.TypeUUID},
+	}
+	// BillingGroupCompositionsTable holds the schema information for the "billing_group_compositions" table.
+	BillingGroupCompositionsTable = &schema.Table{
+		Name:       "billing_group_compositions",
+		Columns:    BillingGroupCompositionsColumns,
+		PrimaryKey: []*schema.Column{BillingGroupCompositionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "billing_group_compositions_billing_groups_compositions",
+				Columns:    []*schema.Column{BillingGroupCompositionsColumns[2]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "billing_group_compositions_billing_groups_member_compositions",
+				Columns:    []*schema.Column{BillingGroupCompositionsColumns[3]},
+				RefColumns: []*schema.Column{BillingGroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "billinggroupcomposition_composite_group_id_member_group_id",
+				Unique:  true,
+				Columns: []*schema.Column{BillingGroupCompositionsColumns[2], BillingGroupCompositionsColumns[3]},
+			},
+			{
+				Name:    "billinggroupcomposition_member_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{BillingGroupCompositionsColumns[3]},
 			},
 		},
 	}
@@ -839,6 +879,7 @@ var (
 		APIKeysTable,
 		APIUsagesTable,
 		BillingGroupsTable,
+		BillingGroupCompositionsTable,
 		EmailSMTPConfigsTable,
 		EmailVerificationCodesTable,
 		GatewayOperationsTable,
@@ -867,6 +908,8 @@ func init() {
 	APIUsagesTable.ForeignKeys[2].RefTable = ModelRoutesTable
 	APIUsagesTable.ForeignKeys[3].RefTable = UpstreamModelsTable
 	APIUsagesTable.ForeignKeys[4].RefTable = UsersTable
+	BillingGroupCompositionsTable.ForeignKeys[0].RefTable = BillingGroupsTable
+	BillingGroupCompositionsTable.ForeignKeys[1].RefTable = BillingGroupsTable
 	GatewayOperationsTable.ForeignKeys[0].RefTable = APIKeysTable
 	GatewayOperationsTable.ForeignKeys[1].RefTable = UsersTable
 	ModelPricePlansTable.ForeignKeys[0].RefTable = UpstreamModelsTable
