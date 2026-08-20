@@ -901,6 +901,104 @@ func TestBufferedMessagesOutputOrderMatchesResponsesLifecycleAndTerminal(t *test
 	}
 }
 
+func TestProtocolStreamAdapterTextToolTextCreatesValidResponsesItems(t *testing.T) {
+	t.Parallel()
+
+	adapter := newProtocolStreamAdapter("chat_completions", "responses")
+	inputs := [][]byte{
+		streamJSONEvent(t, "", chatStreamChunk(map[string]any{"content": "before"}, nil)).data,
+		streamJSONEvent(t, "", chatStreamChunk(map[string]any{"tool_calls": []any{map[string]any{
+			"index": 0, "id": "call_middle", "type": "function", "function": map[string]any{"name": "lookup", "arguments": `{}`},
+		}}}, nil)).data,
+		streamJSONEvent(t, "", chatStreamChunk(map[string]any{"content": "after"}, nil)).data,
+		streamJSONEvent(t, "", chatStreamChunk(map[string]any{}, "tool_calls")).data,
+		[]byte("[DONE]"),
+	}
+	var raw bytes.Buffer
+	for _, input := range inputs {
+		converted, err := adapter.Translate("", input)
+		if err != nil {
+			t.Fatalf("translate Chat stream: %v", err)
+		}
+		raw.Write(converted)
+	}
+
+	events := parseStreamAdapterOutput(t, raw.Bytes())
+	added := make([]map[string]any, 0, 3)
+	doneAt := map[string]int{}
+	var terminal map[string]any
+	for eventIndex, event := range events {
+		itemID := stringValue(event.root["item_id"])
+		if itemID != "" {
+			if doneIndex, closed := doneAt[itemID]; closed {
+				t.Fatalf("event %q at %d targets completed item %q closed at %d", event.name, eventIndex, itemID, doneIndex)
+			}
+		}
+		switch event.name {
+		case "response.output_item.added":
+			added = append(added, mapValue(event.root["item"]))
+		case "response.output_item.done":
+			doneAt[stringValue(mapValue(event.root["item"])["id"])] = eventIndex
+		case "response.completed":
+			terminal = mapValue(event.root["response"])
+		}
+	}
+	if got := responseContentTypes(anyMapsToSlice(added)); !reflect.DeepEqual(got, []string{"message", "function_call", "message"}) {
+		t.Fatalf("Responses added item order = %v\n%s", got, raw.Bytes())
+	}
+	if terminal == nil || !reflect.DeepEqual(responseContentTypes(sliceValue(terminal["output"])), []string{"message", "function_call", "message"}) {
+		t.Fatalf("terminal output = %#v", terminal)
+	}
+	output := sliceValue(terminal["output"])
+	if text := stringValue(mapValue(sliceValue(mapValue(output[0])["content"])[0])["text"]); text != "before" {
+		t.Fatalf("first terminal message text = %q", text)
+	}
+	if text := stringValue(mapValue(sliceValue(mapValue(output[2])["content"])[0])["text"]); text != "after" {
+		t.Fatalf("second terminal message text = %q", text)
+	}
+}
+
+func TestProtocolStreamAdapterRepeatedAnnotationEmitsOnce(t *testing.T) {
+	t.Parallel()
+
+	annotation := map[string]any{"type": "url_citation", "url": "https://example.test/source", "title": "Source", "start_index": 0, "end_index": 4}
+	adapter := newProtocolStreamAdapter("responses", "chat_completions")
+	inputs := []streamAdapterInputEvent{
+		streamJSONEvent(t, "response.created", map[string]any{"type": "response.created", "response": map[string]any{"id": "resp_annotation", "model": "source"}}),
+		streamJSONEvent(t, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": "msg_annotation", "output_index": 0, "content_index": 0, "delta": "text"}),
+		streamJSONEvent(t, "response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": "msg_annotation", "output_index": 0, "content_index": 0, "annotation_index": 0, "annotation": annotation}),
+		streamJSONEvent(t, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": "msg_annotation", "output_index": 0, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "text", "annotations": []any{annotation}}}),
+		streamJSONEvent(t, "response.completed", map[string]any{"type": "response.completed", "response": map[string]any{"id": "resp_annotation", "status": "completed", "model": "source"}}),
+	}
+	var raw bytes.Buffer
+	for _, input := range inputs {
+		converted, err := adapter.Translate(input.name, input.data)
+		if err != nil {
+			t.Fatalf("translate Responses annotation: %v", err)
+		}
+		raw.Write(converted)
+	}
+	annotationChunks := 0
+	for _, event := range parseStreamAdapterOutput(t, raw.Bytes()) {
+		choices := sliceValue(event.root["choices"])
+		if len(choices) == 0 {
+			continue
+		}
+		annotationChunks += len(sliceValue(mapValue(mapValue(choices[0])["delta"])["annotations"]))
+	}
+	if annotationChunks != 1 {
+		t.Fatalf("Chat annotation chunks = %d, want 1\n%s", annotationChunks, raw.Bytes())
+	}
+}
+
+func anyMapsToSlice(values []map[string]any) []any {
+	result := make([]any, len(values))
+	for index := range values {
+		result[index] = values[index]
+	}
+	return result
+}
+
 func TestProtocolStreamAdapterDoesNotExposeLateReasoningAsResponseText(t *testing.T) {
 	t.Parallel()
 
