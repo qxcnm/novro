@@ -185,6 +185,8 @@ GET /v1/models
 只命中支持 OpenAI 的提供商，Messages 只命中支持 Anthropic 的提供商，请求和响应保持透传。配置出口格式后，Novro 会在
 Chat Completions、Responses 和 Messages 之间转换请求、非流响应及 SSE 事件，并请求所选格式对应的上游路径。
 转换层覆盖文本、URL/Data URI 图片、函数工具及结果、reasoning/thinking、JSON Schema 结构化输出，以及 usage、缓存和推理 Token 明细。
+非流式响应按上游内容部件顺序编码；Responses 的 message 边界、函数调用结果和引用会尽量保留，展平到 Chat 时引用索引按合并后的正文重算并去重。
+Chat 返回多个 `choices` 时跨协议转换只选择第一个候选，其余候选计入转换损失；OpenAI 上游提供的 `total_tokens` 作为权威值保留，不以输入与输出之和覆盖。
 目标协议无法表示的服务端内置工具会单独省略，其他可转换的函数工具和请求内容仍会继续转发，不会因为一个不可移植工具而拒绝整个请求。
 发生跨协议转换且存在不能表示的字段时，响应头 `X-Conversion-Lost-Fields` 会返回被省略字段的
 数量；它不包含字段名、提示词、工具参数、URL、文件数据或其他请求/响应值。服务端会另外用

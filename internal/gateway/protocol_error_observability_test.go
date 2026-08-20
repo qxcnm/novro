@@ -199,3 +199,29 @@ func TestConversionLostFieldsOmitsPortableRichFeatures(t *testing.T) {
 		t.Fatalf("Chat -> Responses refusal/annotations reported as lost: %v", fields)
 	}
 }
+
+func TestResponseConversionLostFieldsReportsUnrepresentableResponseData(t *testing.T) {
+	chat := []byte(`{"choices":[{"message":{"role":"assistant","content":"first"}},{"message":{"role":"assistant","content":"second"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":17,"completion_tokens_details":{"audio_tokens":2,"accepted_prediction_tokens":1}}}`)
+	chatFields := strings.Join(responseConversionLostFields(chat, "chat_completions", "messages"), ",")
+	for _, want := range []string{"choices[]", "usage.total_tokens", "usage.completion_tokens_details.audio_tokens", "usage.completion_tokens_details.accepted_prediction_tokens"} {
+		if !strings.Contains(chatFields, want) {
+			t.Errorf("Chat response losses %q do not contain %q", chatFields, want)
+		}
+	}
+
+	responses := []byte(`{"output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"summary"}]},{"type":"function_call_output","call_id":"call_1","output":"done"}]}`)
+	responsesFields := strings.Join(responseConversionLostFields(responses, "responses", "messages"), ",")
+	for _, want := range []string{"output[].reasoning", "output[].function_call_output"} {
+		if !strings.Contains(responsesFields, want) {
+			t.Errorf("Responses response losses %q do not contain %q", responsesFields, want)
+		}
+	}
+
+	messages := []byte(`{"content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1hZ2U="}},{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"cGRm"}},{"type":"thinking","thinking":"summary","signature":"opaque"}],"usage":{"input_tokens":1,"output_tokens":2,"server_tool_use_tokens":3}}`)
+	messagesFields := strings.Join(responseConversionLostFields(messages, "messages", "responses"), ",")
+	for _, want := range []string{"content[].image", "content[].document", "content[].thinking.signature", "usage.server_tool_use_tokens"} {
+		if !strings.Contains(messagesFields, want) {
+			t.Errorf("Messages response losses %q do not contain %q", messagesFields, want)
+		}
+	}
+}

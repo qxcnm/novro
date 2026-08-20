@@ -636,6 +636,117 @@ func TestExtendedProtocolContractRequestFieldsAndStopSemantics(t *testing.T) {
 	})
 }
 
+func TestExtendedProtocolContractOrderedResponseParts(t *testing.T) {
+	t.Run("responses items keep their order in messages", func(t *testing.T) {
+		got := contractAdaptResponse(t, map[string]any{
+			"id": "resp_order", "object": "response", "created_at": 1700000000, "model": "source", "status": "completed",
+			"output": []any{
+				map[string]any{"id": "ws_1", "type": "web_search_call", "status": "completed", "action": map[string]any{"type": "search", "query": "novro"}},
+				map[string]any{"id": "msg_1", "type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]any{"type": "output_text", "text": "found", "annotations": []any{}}}},
+				map[string]any{"id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "save", "arguments": `{"value":"found"}`, "status": "completed"},
+			},
+		}, "responses", "messages")
+
+		content := contractSlice(t, got["content"], "content")
+		want := []string{"server_tool_use", "web_search_tool_result", "text", "tool_use"}
+		if len(content) != len(want) {
+			t.Fatalf("ordered Messages content length = %d, want %d; body=%s", len(content), len(want), contractJSON(got))
+		}
+		for index, typeName := range want {
+			if gotType := stringValue(contractMap(t, content[index], "content item")["type"]); gotType != typeName {
+				t.Fatalf("content[%d].type = %q, want %q; body=%s", index, gotType, typeName, contractJSON(got))
+			}
+		}
+	})
+
+	t.Run("messages tool result becomes responses function output", func(t *testing.T) {
+		got := contractAdaptResponse(t, map[string]any{
+			"id": "msg_tool_result", "type": "message", "role": "assistant", "model": "source",
+			"content":     []any{map[string]any{"type": "tool_result", "tool_use_id": "call_1", "content": "saved"}},
+			"stop_reason": "end_turn", "stop_sequence": nil,
+		}, "messages", "responses")
+
+		item := contractFindItem(t, contractSlice(t, got["output"], "output"), "type", "function_call_output")
+		if item["call_id"] != "call_1" || item["output"] != "saved" {
+			t.Fatalf("function_call_output = %#v; body=%s", item, contractJSON(got))
+		}
+	})
+
+	t.Run("responses function output is retained in the response IR", func(t *testing.T) {
+		body := contractMustMarshal(t, map[string]any{
+			"id": "resp_tool_result", "object": "response", "created_at": 1700000000, "model": "source", "status": "completed",
+			"output": []any{map[string]any{"id": "fco_1", "type": "function_call_output", "call_id": "call_1", "output": "saved", "status": "completed"}},
+		})
+		decoded, err := decodeAdapterResponse(body, "responses")
+		if err != nil {
+			t.Fatalf("decode Responses function output: %v", err)
+		}
+		if len(decoded.Parts) != 1 || decoded.Parts[0].Type != "tool_result" || decoded.Parts[0].ID != "call_1" || decoded.Parts[0].Text != "saved" {
+			t.Fatalf("decoded function output = %#v", decoded.Parts)
+		}
+	})
+}
+
+func TestExtendedProtocolContractCitationUnionAndUsageTotals(t *testing.T) {
+	t.Run("chat top level and content citations are merged once", func(t *testing.T) {
+		got := contractAdaptResponse(t, map[string]any{
+			"id": "chat_citations", "object": "chat.completion", "created": 1700000000, "model": "source",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "message": map[string]any{
+				"role":        "assistant",
+				"content":     []any{map[string]any{"type": "text", "text": "AB", "annotations": []any{map[string]any{"type": "url_citation", "url": "https://part.test", "start_index": 0, "end_index": 1}}}},
+				"annotations": []any{map[string]any{"type": "url_citation", "url": "https://top.test", "start_index": 1, "end_index": 2}},
+			}}},
+		}, "chat_completions", "responses")
+
+		message := contractFindItem(t, contractSlice(t, got["output"], "output"), "type", "message")
+		text := contractFindItem(t, contractSlice(t, message["content"], "message.content"), "type", "output_text")
+		annotations := contractSlice(t, text["annotations"], "annotations")
+		if len(annotations) != 2 {
+			t.Fatalf("merged annotations = %#v, want two unique citations; body=%s", annotations, contractJSON(got))
+		}
+	})
+
+	t.Run("responses block local citation indexes are rebased for chat", func(t *testing.T) {
+		got := contractAdaptResponse(t, map[string]any{
+			"id": "resp_citations", "object": "response", "created_at": 1700000000, "model": "source", "status": "completed",
+			"output": []any{
+				map[string]any{
+					"id": "msg_1", "type": "message", "role": "assistant",
+					"content": []any{map[string]any{
+						"type": "output_text", "text": "AB",
+						"annotations": []any{map[string]any{"type": "url_citation", "url": "https://one.test", "start_index": 0, "end_index": 1}},
+					}},
+				},
+				map[string]any{
+					"id": "msg_2", "type": "message", "role": "assistant",
+					"content": []any{map[string]any{
+						"type": "output_text", "text": "CD",
+						"annotations": []any{map[string]any{"type": "url_citation", "url": "https://two.test", "start_index": 0, "end_index": 1}},
+					}},
+				},
+			},
+		}, "responses", "chat_completions")
+
+		choice := contractMap(t, contractSlice(t, got["choices"], "choices")[0], "choice")
+		message := contractMap(t, choice["message"], "message")
+		annotations := contractSlice(t, message["annotations"], "annotations")
+		if len(annotations) != 2 || intValue(contractMap(t, annotations[1], "annotations[1]")["start_index"]) != 2 {
+			t.Fatalf("rebased annotations = %#v; body=%s", annotations, contractJSON(got))
+		}
+	})
+
+	t.Run("chat authoritative total tokens is preserved", func(t *testing.T) {
+		got := contractAdaptResponse(t, map[string]any{
+			"id": "chat_usage", "object": "chat.completion", "created": 1700000000, "model": "source",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 17},
+		}, "chat_completions", "responses")
+		if total := intValue(contractMap(t, got["usage"], "usage")["total_tokens"]); total != 17 {
+			t.Fatalf("Responses total_tokens = %d, want authoritative 17; body=%s", total, contractJSON(got))
+		}
+	})
+}
+
 func contractAdaptRequest(t *testing.T, payload map[string]any, source, target string) map[string]any {
 	t.Helper()
 	body, err := adaptProtocolRequest(payload, source, target, "target-model", false)

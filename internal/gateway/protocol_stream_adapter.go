@@ -40,6 +40,7 @@ type adapterStreamWebSearchState struct {
 	Key             string
 	SourceIndex     int
 	OutputIndex     int
+	PartIndex       int
 	ID              string
 	Name            string
 	Arguments       string
@@ -87,6 +88,12 @@ type protocolStreamAdapter struct {
 	responsesNextContentIndex    int
 	responsesReasoningStarted    bool
 	responsesReasoningDone       bool
+	responsesReasoningItemID     string
+	responsesMessageID           string
+	responsesMessageOrdinal      int
+	responsesCurrentText         string
+	responsesCurrentRefusal      string
+	responsesCurrentAnnotations  []any
 	toolIndex                    map[string]int
 	toolArgs                     map[string]string
 	sourceTools                  map[int]adapterSourceTool
@@ -94,6 +101,8 @@ type protocolStreamAdapter struct {
 	responsesToolIndex           map[string]int
 	responsesToolItemID          map[string]string
 	responsesToolKeys            []string
+	responsesToolDone            map[string]bool
+	responsesToolPartIndex       map[string]int
 	responsesSequence            int
 	responsesNextOutputIndex     int
 	responsesReasoningIndex      int
@@ -125,6 +134,8 @@ func newProtocolStreamAdapter(source, target string) *protocolStreamAdapter {
 		sourceItems:                  map[string]int{},
 		responsesToolIndex:           map[string]int{},
 		responsesToolItemID:          map[string]string{},
+		responsesToolDone:            map[string]bool{},
+		responsesToolPartIndex:       map[string]int{},
 		webSearches:                  map[string]*adapterStreamWebSearchState{},
 		sourceWebSearch:              map[int]string{},
 		webSearchKeyByID:             map[string]string{},
@@ -214,61 +225,177 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 	if response.ID == "" {
 		response.ID = a.response.ID
 	}
+	response.ToolCalls = normalizeAdapterToolCalls(response.ID, response.ToolCalls)
 	a.response = response
 	a.annotations = uniqueStreamAnnotations(response.Annotations, response.Citations)
 	if a.target == "messages" && duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature) {
-		response.Text = ""
 		a.response.Text = ""
+	}
+	if strings.TrimSpace(a.response.Refusal) != "" {
+		a.response.StopReason = "refusal"
+	}
+	if a.response.StopReason == "" {
+		a.response.StopReason = "stop"
+	}
+	if len(a.response.ToolCalls) > 0 && (a.response.StopReason == "stop" || a.response.StopReason == "end_turn") {
+		a.response.StopReason = "tool_use"
 	}
 	var output bytes.Buffer
 	a.writeStart(&output)
 	a.started = true
-	if response.Reasoning != "" {
-		a.writeContentDelta(&output, "reasoning", response.Reasoning)
+	if a.target == "responses" {
+		a.writeBufferedResponsesLifecycle(&output)
+		a.finished = true
+		return output.Bytes(), nil
 	}
-	if response.Text != "" {
-		a.writeContentDelta(&output, "text", response.Text)
-	}
-	if response.Refusal != "" {
-		a.writeContentDelta(&output, "refusal", response.Refusal)
-	}
-	for _, annotation := range a.annotations {
-		a.writeAnnotationDelta(&output, annotation)
-	}
-	for _, call := range response.ToolCalls {
-		arguments, _ := json.Marshal(nonNilObject(call.Arguments))
-		tool := adapterStreamToolDelta{Key: call.ID, ID: call.ID, Name: call.Name, Arguments: string(arguments), Started: true}
-		a.mergeTool(tool)
-		a.writeToolDelta(&output, tool)
-	}
-	for _, part := range response.SpecialParts {
-		if part.Type != "server_tool_use" {
-			continue
+
+	parts := orderedAdapterResponseParts(a.response)
+	useGlobalAnnotations := !responsePartsHaveCitations(parts)
+	globalAnnotationsUsed := false
+	toolIndex := 0
+	for _, part := range parts {
+		switch part.Type {
+		case "reasoning":
+			a.writeContentDelta(&output, "reasoning", part.Text)
+		case "text":
+			if a.target != "messages" || !duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature) {
+				a.writeContentDelta(&output, "text", part.Text)
+			}
+			annotations := responsePartOpenAIAnnotations(part)
+			if len(annotations) == 0 && useGlobalAnnotations && !globalAnnotationsUsed {
+				annotations = a.annotations
+				globalAnnotationsUsed = true
+			}
+			for _, annotation := range annotations {
+				a.writeAnnotationDelta(&output, annotation)
+			}
+		case "refusal":
+			a.writeContentDelta(&output, "refusal", part.Refusal)
+		case "tool_call":
+			if toolIndex >= len(a.response.ToolCalls) {
+				continue
+			}
+			call := a.response.ToolCalls[toolIndex]
+			arguments, _ := json.Marshal(nonNilObject(call.Arguments))
+			key := firstNonEmptyString(call.ID, fmt.Sprintf("buffered-tool:%d", toolIndex))
+			a.toolIndex[key] = toolIndex
+			a.toolArgs[key] = string(arguments)
+			a.writeToolDelta(&output, adapterStreamToolDelta{Key: key, Index: toolIndex, ID: call.ID, ItemID: call.ItemID, Name: call.Name, Arguments: string(arguments), Started: true})
+			toolIndex++
+		case "server_tool_use":
+			if part.Name != "" && part.Name != "web_search" {
+				continue
+			}
+			resultPart := findPartByTypeAndID(parts, "web_search_tool_result", part.ID)
+			arguments := ""
+			if value := mapValue(part.Arguments); value != nil {
+				encoded, _ := json.Marshal(value)
+				arguments = string(encoded)
+			}
+			status := firstNonEmptyString(part.Status, resultPart.Status)
+			if resultPart.IsError {
+				status = "failed"
+			}
+			a.writeWebSearchEvent(&output, adapterStreamWebSearchEvent{
+				Key:       "buffered-web-search:" + firstNonEmptyString(part.ID, fmt.Sprintf("%d", len(a.webSearches))),
+				ID:        part.ID,
+				Name:      firstNonEmptyString(part.Name, "web_search"),
+				Arguments: arguments,
+				Action:    cloneMap(part.Extra),
+				Result:    bufferedWebSearchResult(resultPart),
+				Status:    status,
+				Stage:     "done",
+			})
 		}
-		resultPart := findPartByTypeAndID(response.SpecialParts, "web_search_tool_result", part.ID)
-		arguments := ""
-		if value := mapValue(part.Arguments); value != nil {
-			encoded, _ := json.Marshal(value)
-			arguments = string(encoded)
-		}
-		status := firstNonEmptyString(part.Status, resultPart.Status)
-		if resultPart.IsError {
-			status = "failed"
-		}
-		a.writeWebSearchEvent(&output, adapterStreamWebSearchEvent{
-			Key:       "buffered-web-search:" + firstNonEmptyString(part.ID, fmt.Sprintf("%d", len(a.webSearches))),
-			ID:        part.ID,
-			Name:      firstNonEmptyString(part.Name, "web_search"),
-			Arguments: arguments,
-			Action:    cloneMap(part.Extra),
-			Result:    bufferedWebSearchResult(resultPart),
-			Status:    status,
-			Stage:     "done",
-		})
 	}
 	a.writeDone(&output)
 	a.finished = true
 	return output.Bytes(), nil
+}
+
+func (a *protocolStreamAdapter) writeBufferedResponsesLifecycle(output *bytes.Buffer) {
+	terminal := encodeAdapterResponse(a.response, "responses")
+	for outputIndex, rawItem := range sliceValue(terminal["output"]) {
+		item := mapValue(rawItem)
+		if item == nil {
+			continue
+		}
+		itemID := stringValue(item["id"])
+		switch stringValue(item["type"]) {
+		case "reasoning":
+			added := map[string]any{"id": itemID, "type": "reasoning", "status": "in_progress", "summary": []any{}}
+			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": added})
+			for summaryIndex, rawSummary := range sliceValue(item["summary"]) {
+				summary := mapValue(rawSummary)
+				text := stringValue(summary["text"])
+				a.writeResponsesSSE(output, "response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": itemID, "output_index": outputIndex, "summary_index": summaryIndex, "part": map[string]any{"type": "summary_text", "text": ""}})
+				if text != "" {
+					a.writeResponsesSSE(output, "response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": itemID, "output_index": outputIndex, "summary_index": summaryIndex, "delta": text})
+				}
+				a.writeResponsesSSE(output, "response.reasoning_summary_text.done", map[string]any{"type": "response.reasoning_summary_text.done", "item_id": itemID, "output_index": outputIndex, "summary_index": summaryIndex, "text": text})
+				a.writeResponsesSSE(output, "response.reasoning_summary_part.done", map[string]any{"type": "response.reasoning_summary_part.done", "item_id": itemID, "output_index": outputIndex, "summary_index": summaryIndex, "part": summary})
+			}
+			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": item})
+		case "message":
+			added := map[string]any{"id": itemID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}
+			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": added})
+			for contentIndex, rawContent := range sliceValue(item["content"]) {
+				content := mapValue(rawContent)
+				switch stringValue(content["type"]) {
+				case "output_text":
+					text := stringValue(content["text"])
+					a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
+					if text != "" {
+						a.writeResponsesSSE(output, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "delta": text})
+					}
+					for annotationIndex, annotation := range sliceValue(content["annotations"]) {
+						a.writeResponsesSSE(output, "response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "annotation_index": annotationIndex, "annotation": annotation})
+					}
+					a.writeResponsesSSE(output, "response.output_text.done", map[string]any{"type": "response.output_text.done", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "text": text})
+					a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "part": content})
+				case "refusal":
+					refusal := stringValue(content["refusal"])
+					a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "part": map[string]any{"type": "refusal", "refusal": ""}})
+					if refusal != "" {
+						a.writeResponsesSSE(output, "response.refusal.delta", map[string]any{"type": "response.refusal.delta", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "delta": refusal})
+					}
+					a.writeResponsesSSE(output, "response.refusal.done", map[string]any{"type": "response.refusal.done", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "refusal": refusal})
+					a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": outputIndex, "content_index": contentIndex, "part": content})
+				}
+			}
+			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": item})
+		case "function_call":
+			arguments := stringValue(item["arguments"])
+			added := cloneMap(item)
+			added["arguments"] = ""
+			added["status"] = "in_progress"
+			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": added})
+			if arguments != "" {
+				a.writeResponsesSSE(output, "response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "item_id": itemID, "output_index": outputIndex, "delta": arguments})
+			}
+			a.writeResponsesSSE(output, "response.function_call_arguments.done", map[string]any{"type": "response.function_call_arguments.done", "item_id": itemID, "output_index": outputIndex, "name": item["name"], "arguments": arguments})
+			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": item})
+		case "web_search_call":
+			added := map[string]any{"id": itemID, "type": "web_search_call", "status": "in_progress"}
+			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": added})
+			a.writeResponsesSSE(output, "response.web_search_call.in_progress", map[string]any{"type": "response.web_search_call.in_progress", "output_index": outputIndex, "item_id": itemID})
+			a.writeResponsesSSE(output, "response.web_search_call.searching", map[string]any{"type": "response.web_search_call.searching", "output_index": outputIndex, "item_id": itemID})
+			a.writeResponsesSSE(output, "response.web_search_call.completed", map[string]any{"type": "response.web_search_call.completed", "output_index": outputIndex, "item_id": itemID})
+			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": item})
+		default:
+			added := cloneMap(item)
+			if _, exists := added["status"]; exists {
+				added["status"] = "in_progress"
+			}
+			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": added})
+			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": item})
+		}
+	}
+	eventName := "response.completed"
+	if stringValue(terminal["status"]) == "incomplete" {
+		eventName = "response.incomplete"
+	}
+	a.writeResponsesSSE(output, eventName, map[string]any{"type": eventName, "response": terminal})
 }
 
 func bufferedWebSearchResult(part adapterPart) any {
@@ -352,6 +479,13 @@ func (a *protocolStreamAdapter) merge(delta adapterStreamDelta) {
 	if len(delta.Usage) > 0 {
 		for key, value := range delta.Usage {
 			a.response.Usage[key] = value
+		}
+		if a.source == "messages" {
+			_, hasInput := a.response.Usage["input_tokens"]
+			_, hasOutput := a.response.Usage["output_tokens"]
+			if hasInput && hasOutput {
+				a.response.Usage["total_tokens"] = intValue(a.response.Usage["input_tokens"]) + intValue(a.response.Usage["output_tokens"])
+			}
 		}
 	}
 }
@@ -653,7 +787,7 @@ func (a *protocolStreamAdapter) ensureWebSearchState(event adapterStreamWebSearc
 	}
 	state := a.webSearches[key]
 	if state == nil {
-		state = &adapterStreamWebSearchState{Key: key, SourceIndex: event.Index, OutputIndex: -1, Status: "in_progress"}
+		state = &adapterStreamWebSearchState{Key: key, SourceIndex: event.Index, OutputIndex: -1, PartIndex: -1, Status: "in_progress"}
 		a.webSearches[key] = state
 	}
 	if event.ID != "" {

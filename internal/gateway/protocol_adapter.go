@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var errUnsupportedProtocolConversion = errors.New("unsupported protocol conversion")
 
 type adapterPart struct {
 	Type      string
+	ItemID    string
 	Text      string
 	Refusal   string
 	ID        string
@@ -789,15 +791,31 @@ func decodeAdapterResponse(body []byte, source string) (adapterResponse, error) 
 		if len(choices) > 0 {
 			choice := mapValue(choices[0])
 			message := mapValue(choice["message"])
-			result.Parts = decodeCommonContent(message["content"])
-			result.Text = textFromParts(result.Parts)
+			contentParts := decodeCommonContent(message["content"])
+			result.Text = textFromParts(contentParts)
 			result.Refusal = stringValue(message["refusal"])
 			result.Reasoning = firstNonEmptyString(message["reasoning_content"], message["reasoning"], message["reasoning_text"])
 			result.StopReason = stringValue(choice["finish_reason"])
 			result.ToolCalls = decodeChatToolCalls(sliceValue(message["tool_calls"]))
 			result.Annotations = sliceValue(message["annotations"])
 			result.Citations = decodeAdapterCitations(result.Annotations)
-			for _, part := range result.Parts {
+			if len(result.Citations) > 0 {
+				for index := range contentParts {
+					if contentParts[index].Type == "text" {
+						contentParts[index].Citations = mergeAdapterCitations(contentParts[index].Citations, result.Citations)
+						break
+					}
+				}
+			}
+			if result.Reasoning != "" {
+				result.Parts = append(result.Parts, adapterPart{Type: "reasoning", Text: result.Reasoning})
+			}
+			result.Parts = append(result.Parts, contentParts...)
+			if result.Refusal != "" {
+				result.Parts = append(result.Parts, adapterPart{Type: "refusal", Refusal: result.Refusal})
+			}
+			result.Parts = append(result.Parts, result.ToolCalls...)
+			for _, part := range contentParts {
 				if len(part.Citations) > 0 {
 					result.Citations = append(result.Citations, part.Citations...)
 				}
@@ -810,20 +828,20 @@ func decodeAdapterResponse(body []byte, source string) (adapterResponse, error) 
 		}
 		for _, raw := range sliceValue(root["output"]) {
 			item := mapValue(raw)
+			itemID := stringValue(item["id"])
 			switch stringValue(item["type"]) {
 			case "message":
 				for _, rawPart := range sliceValue(item["content"]) {
 					part := mapValue(rawPart)
 					switch stringValue(part["type"]) {
 					case "output_text":
-						decoded := adapterPart{Type: "text", Text: stringValue(part["text"]), Citations: decodeAdapterCitations(part["annotations"])}
+						decoded := adapterPart{Type: "text", ItemID: itemID, Text: stringValue(part["text"]), Citations: decodeAdapterCitations(part["annotations"])}
 						result.Parts = append(result.Parts, decoded)
 						result.Text += decoded.Text
 						result.Citations = append(result.Citations, decoded.Citations...)
-						result.Annotations = append(result.Annotations, sliceValue(part["annotations"])...)
 					case "refusal":
 						result.Refusal += stringValue(part["refusal"])
-						result.Parts = append(result.Parts, adapterPart{Type: "refusal", Refusal: stringValue(part["refusal"])})
+						result.Parts = append(result.Parts, adapterPart{Type: "refusal", ItemID: itemID, Refusal: stringValue(part["refusal"])})
 					}
 				}
 			case "reasoning":
@@ -834,12 +852,15 @@ func decodeAdapterResponse(body []byte, source string) (adapterResponse, error) 
 					summary.WriteString(text)
 				}
 				if summary.Len() > 0 {
-					result.Parts = append(result.Parts, adapterPart{Type: "reasoning", Text: summary.String()})
+					result.Parts = append(result.Parts, adapterPart{Type: "reasoning", ItemID: itemID, Text: summary.String()})
 				}
 			case "function_call":
-				call := adapterPart{Type: "tool_call", ID: stringValue(item["call_id"]), Name: stringValue(item["name"]), Arguments: decodeJSONValue(item["arguments"])}
+				call := adapterPart{Type: "tool_call", ItemID: itemID, ID: stringValue(item["call_id"]), Name: stringValue(item["name"]), Arguments: decodeJSONValue(item["arguments"])}
 				result.ToolCalls = append(result.ToolCalls, call)
 				result.Parts = append(result.Parts, call)
+			case "function_call_output":
+				content := decodeCommonContent(item["output"])
+				result.Parts = append(result.Parts, adapterPart{Type: "tool_result", ItemID: itemID, ID: stringValue(item["call_id"]), Text: textFromParts(content), Content: content})
 			case "web_search_call":
 				parts := responsesWebSearchParts(item)
 				result.SpecialParts = append(result.SpecialParts, parts...)
@@ -870,6 +891,13 @@ func decodeAdapterResponse(body []byte, source string) (adapterResponse, error) 
 		}
 		if result.StopReason == "refusal" && result.Refusal == "" && result.Text != "" {
 			result.Refusal, result.Text = result.Text, ""
+			for index := range result.Parts {
+				if result.Parts[index].Type == "text" {
+					result.Parts[index].Type = "refusal"
+					result.Parts[index].Refusal = result.Parts[index].Text
+					result.Parts[index].Text = ""
+				}
+			}
 		}
 	default:
 		return adapterResponse{}, fmt.Errorf("%w: unknown response source %q", errUnsupportedProtocolConversion, source)
@@ -882,6 +910,7 @@ func decodeAdapterResponse(body []byte, source string) (adapterResponse, error) 
 
 func encodeAdapterResponse(response adapterResponse, target string) map[string]any {
 	response.ToolCalls = normalizeAdapterToolCalls(response.ID, response.ToolCalls)
+	parts := orderedAdapterResponseParts(response)
 	switch target {
 	case "chat_completions":
 		message := map[string]any{"role": "assistant", "content": nil}
@@ -914,31 +943,7 @@ func encodeAdapterResponse(response adapterResponse, target string) map[string]a
 		setAdapterUsage(result, response.Usage, target)
 		return result
 	case "responses":
-		output := make([]any, 0, 3)
-		if response.Reasoning != "" {
-			output = append(output, map[string]any{"id": "rs_" + safeID(response.ID), "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": response.Reasoning}}})
-		}
-		messageContent := make([]any, 0, 2)
-		if response.Text != "" {
-			messageContent = append(messageContent, map[string]any{"type": "output_text", "text": response.Text, "annotations": responseOpenAIAnnotations(response)})
-		}
-		if response.Refusal != "" {
-			messageContent = append(messageContent, map[string]any{"type": "refusal", "refusal": response.Refusal})
-		}
-		if len(messageContent) > 0 {
-			output = append(output, map[string]any{"id": "msg_" + safeID(response.ID), "type": "message", "status": "completed", "role": "assistant", "content": messageContent})
-		}
-		for _, part := range response.SpecialParts {
-			if part.Type != "server_tool_use" {
-				continue
-			}
-			resultPart := findPartByTypeAndID(response.SpecialParts, "web_search_tool_result", part.ID)
-			output = append(output, encodeResponsesWebSearchHistory(part, resultPart))
-		}
-		for _, call := range response.ToolCalls {
-			arguments, _ := json.Marshal(nonNilObject(call.Arguments))
-			output = append(output, map[string]any{"id": responsesFunctionItemID(call.ID), "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": string(arguments), "status": "completed"})
-		}
+		output := encodeOrderedResponsesOutput(response, parts)
 		status := "completed"
 		result := map[string]any{"id": response.ID, "object": "response", "created_at": response.Created, "status": status, "model": response.Model, "output": output}
 		switch chatStopReason(response.StopReason) {
@@ -962,25 +967,37 @@ func encodeAdapterResponse(response adapterResponse, target string) map[string]a
 		setAdapterUsage(result, response.Usage, target)
 		return result
 	case "messages":
-		content := make([]any, 0, 3)
-		if response.Reasoning != "" && response.ReasoningSignature != "" {
-			content = append(content, map[string]any{"type": "thinking", "thinking": response.Reasoning, "signature": response.ReasoningSignature})
-		}
-		if response.Text != "" && !duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature) {
-			block := map[string]any{"type": "text", "text": response.Text}
-			if citations := encodeAnthropicCitations(response.Citations); len(citations) > 0 {
-				block["citations"] = citations
-			}
-			content = append(content, block)
-		}
-		if response.Refusal != "" {
-			content = append(content, map[string]any{"type": "text", "text": response.Refusal})
-		}
-		for _, call := range response.ToolCalls {
-			content = append(content, map[string]any{"type": "tool_use", "id": call.ID, "name": call.Name, "input": nonNilObject(call.Arguments)})
-		}
-		for _, part := range response.SpecialParts {
+		content := make([]any, 0, len(parts))
+		suppressUnsignedReasoningText := duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature)
+		useGlobalCitations := !responsePartsHaveCitations(parts)
+		globalCitationsUsed := false
+		for _, part := range parts {
 			switch part.Type {
+			case "reasoning":
+				signature := firstNonEmptyString(part.Signature, response.ReasoningSignature)
+				if part.Text != "" && signature != "" {
+					content = append(content, map[string]any{"type": "thinking", "thinking": part.Text, "signature": signature})
+				}
+			case "text":
+				if part.Text == "" || suppressUnsignedReasoningText {
+					continue
+				}
+				block := map[string]any{"type": "text", "text": part.Text}
+				citations := part.Citations
+				if len(citations) == 0 && useGlobalCitations && !globalCitationsUsed {
+					citations = response.Citations
+					globalCitationsUsed = true
+				}
+				if encoded := encodeAnthropicCitations(citations); len(encoded) > 0 {
+					block["citations"] = encoded
+				}
+				content = append(content, block)
+			case "refusal":
+				if part.Refusal != "" {
+					content = append(content, map[string]any{"type": "text", "text": part.Refusal})
+				}
+			case "tool_call":
+				content = append(content, map[string]any{"type": "tool_use", "id": part.ID, "name": part.Name, "input": nonNilObject(part.Arguments)})
 			case "server_tool_use":
 				content = append(content, map[string]any{"type": "server_tool_use", "id": part.ID, "name": firstNonEmptyString(part.Name, "web_search"), "input": nonNilObject(part.Arguments)})
 			case "web_search_tool_result":
@@ -996,6 +1013,145 @@ func encodeAdapterResponse(response adapterResponse, target string) map[string]a
 		return result
 	}
 	return map[string]any{}
+}
+
+func orderedAdapterResponseParts(response adapterResponse) []adapterPart {
+	if len(response.Parts) == 0 {
+		parts := make([]adapterPart, 0, 3+len(response.ToolCalls)+len(response.SpecialParts))
+		if response.Reasoning != "" {
+			parts = append(parts, adapterPart{Type: "reasoning", Text: response.Reasoning, Signature: response.ReasoningSignature})
+		}
+		if response.Text != "" {
+			parts = append(parts, adapterPart{Type: "text", Text: response.Text, Citations: append([]adapterCitation(nil), response.Citations...)})
+		}
+		if response.Refusal != "" {
+			parts = append(parts, adapterPart{Type: "refusal", Refusal: response.Refusal})
+		}
+		parts = append(parts, response.ToolCalls...)
+		parts = append(parts, response.SpecialParts...)
+		return parts
+	}
+
+	parts := append([]adapterPart(nil), response.Parts...)
+	toolIndex := 0
+	for index := range parts {
+		if parts[index].Type != "tool_call" || toolIndex >= len(response.ToolCalls) {
+			continue
+		}
+		itemID := parts[index].ItemID
+		parts[index] = response.ToolCalls[toolIndex]
+		if parts[index].ItemID == "" {
+			parts[index].ItemID = itemID
+		}
+		toolIndex++
+	}
+	return parts
+}
+
+func encodeOrderedResponsesOutput(response adapterResponse, parts []adapterPart) []any {
+	output := make([]any, 0, len(parts))
+	seenItemIDs := make(map[string]struct{}, len(parts))
+	messageContent := make([]any, 0, 2)
+	messageItemID := ""
+	useGlobalAnnotations := !responsePartsHaveCitations(parts)
+	globalAnnotationsUsed := false
+
+	flushMessage := func() {
+		if len(messageContent) == 0 {
+			return
+		}
+		itemID := uniqueResponseOutputItemID(messageItemID, "msg_", response.ID, seenItemIDs)
+		output = append(output, map[string]any{"id": itemID, "type": "message", "status": "completed", "role": "assistant", "content": messageContent})
+		messageContent = nil
+		messageItemID = ""
+	}
+
+	for _, part := range parts {
+		if part.Type == "text" || part.Type == "refusal" {
+			if len(messageContent) > 0 && part.ItemID != "" && part.ItemID != messageItemID {
+				flushMessage()
+			}
+			if len(messageContent) == 0 {
+				messageItemID = part.ItemID
+			}
+			if part.Type == "text" && part.Text != "" {
+				annotations := responsePartOpenAIAnnotations(part)
+				if len(annotations) == 0 && useGlobalAnnotations && !globalAnnotationsUsed {
+					annotations = responseOpenAIAnnotations(response)
+					globalAnnotationsUsed = true
+				}
+				messageContent = append(messageContent, map[string]any{"type": "output_text", "text": part.Text, "annotations": annotations})
+			} else if part.Type == "refusal" && part.Refusal != "" {
+				messageContent = append(messageContent, map[string]any{"type": "refusal", "refusal": part.Refusal})
+			}
+			continue
+		}
+
+		flushMessage()
+		switch part.Type {
+		case "reasoning":
+			if part.Text == "" {
+				continue
+			}
+			itemID := uniqueResponseOutputItemID(part.ItemID, "rs_", response.ID, seenItemIDs)
+			output = append(output, map[string]any{"id": itemID, "type": "reasoning", "status": "completed", "summary": []any{map[string]any{"type": "summary_text", "text": part.Text}}})
+		case "tool_call":
+			arguments, _ := json.Marshal(nonNilObject(part.Arguments))
+			preferredID := part.ItemID
+			if preferredID == "" {
+				preferredID = responsesFunctionItemID(part.ID)
+			}
+			itemID := uniqueResponseOutputItemID(preferredID, "fc_", response.ID, seenItemIDs)
+			output = append(output, map[string]any{"id": itemID, "type": "function_call", "call_id": part.ID, "name": part.Name, "arguments": string(arguments), "status": "completed"})
+		case "tool_result":
+			itemID := uniqueResponseOutputItemID(part.ItemID, "fco_", response.ID, seenItemIDs)
+			output = append(output, map[string]any{"id": itemID, "type": "function_call_output", "call_id": part.ID, "output": toolResultText(part), "status": "completed"})
+		case "server_tool_use":
+			if part.Name != "" && part.Name != "web_search" {
+				continue
+			}
+			resultPart := findPartByTypeAndID(parts, "web_search_tool_result", part.ID)
+			serverPart := part
+			serverPart.ID = uniqueResponseOutputItemID(part.ID, "ws_", response.ID, seenItemIDs)
+			if resultPart.ID == part.ID {
+				resultPart.ID = serverPart.ID
+			}
+			output = append(output, encodeResponsesWebSearchHistory(serverPart, resultPart))
+		}
+	}
+	flushMessage()
+	return output
+}
+
+func uniqueResponseOutputItemID(preferred, prefix, responseID string, seen map[string]struct{}) string {
+	base := strings.TrimSpace(preferred)
+	if base == "" {
+		base = prefix + safeID(responseID)
+	}
+	candidate := base
+	for suffix := 1; ; suffix++ {
+		if _, exists := seen[candidate]; !exists {
+			seen[candidate] = struct{}{}
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s_%d", base, suffix)
+	}
+}
+
+func responsePartsHaveCitations(parts []adapterPart) bool {
+	for _, part := range parts {
+		if len(part.Citations) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func responsePartOpenAIAnnotations(part adapterPart) []any {
+	if len(part.Citations) == 0 {
+		return nil
+	}
+	return responseOpenAIAnnotations(adapterResponse{Citations: part.Citations})
 }
 
 func duplicatesUnsignedReasoning(text, reasoning, signature string) bool {
@@ -1086,6 +1242,13 @@ func normalizeUsageMap(usage map[string]any, source string) map[string]any {
 	if source == "messages" && hasInput {
 		input += cached + created
 	}
+	total, hasTotal := 0, false
+	if source != "messages" {
+		total, hasTotal = usageInt(usage, "total_tokens")
+	}
+	if !hasTotal && hasInput && hasOutput {
+		total, hasTotal = input+output, true
+	}
 	result := map[string]any{}
 	if hasInput {
 		result["input_tokens"] = input
@@ -1093,8 +1256,8 @@ func normalizeUsageMap(usage map[string]any, source string) map[string]any {
 	if hasOutput {
 		result["output_tokens"] = output
 	}
-	if hasInput && hasOutput {
-		result["total_tokens"] = input + output
+	if hasTotal {
+		result["total_tokens"] = total
 	}
 	if hasCached {
 		result["cached_tokens"] = cached
@@ -1113,11 +1276,24 @@ func usageForTarget(usage map[string]any, target string) map[string]any {
 		return nil
 	}
 	input, output := intValue(usage["input_tokens"]), intValue(usage["output_tokens"])
+	total := intValue(usage["total_tokens"])
+	_, hasInput := usage["input_tokens"]
+	_, hasOutput := usage["output_tokens"]
+	_, hasTotal := usage["total_tokens"]
 	cached, created := intValue(usage["cached_tokens"]), intValue(usage["cache_creation_tokens"])
 	reasoning := intValue(usage["reasoning_tokens"])
 	switch target {
 	case "chat_completions":
-		result := map[string]any{"prompt_tokens": input, "completion_tokens": output, "total_tokens": input + output}
+		result := map[string]any{}
+		if hasInput {
+			result["prompt_tokens"] = input
+		}
+		if hasOutput {
+			result["completion_tokens"] = output
+		}
+		if hasTotal {
+			result["total_tokens"] = total
+		}
 		if _, exists := usage["cached_tokens"]; exists {
 			result["prompt_tokens_details"] = map[string]any{"cached_tokens": cached}
 		}
@@ -1126,7 +1302,16 @@ func usageForTarget(usage map[string]any, target string) map[string]any {
 		}
 		return result
 	case "responses":
-		result := map[string]any{"input_tokens": input, "output_tokens": output, "total_tokens": input + output}
+		result := map[string]any{}
+		if hasInput {
+			result["input_tokens"] = input
+		}
+		if hasOutput {
+			result["output_tokens"] = output
+		}
+		if hasTotal {
+			result["total_tokens"] = total
+		}
 		if _, exists := usage["cached_tokens"]; exists {
 			result["input_tokens_details"] = map[string]any{"cached_tokens": cached}
 		}
@@ -1139,7 +1324,13 @@ func usageForTarget(usage map[string]any, target string) map[string]any {
 		if uncached < 0 {
 			uncached = 0
 		}
-		result := map[string]any{"input_tokens": uncached, "output_tokens": output}
+		result := map[string]any{}
+		if hasInput {
+			result["input_tokens"] = uncached
+		}
+		if hasOutput {
+			result["output_tokens"] = output
+		}
 		if _, exists := usage["cached_tokens"]; exists {
 			result["cache_read_input_tokens"] = cached
 		}
@@ -1575,17 +1766,65 @@ func decodeAdapterCitations(raw any) []adapterCitation {
 
 func responseOpenAIAnnotations(response adapterResponse) []any {
 	result := make([]any, 0, len(response.Annotations)+len(response.Citations))
-	if len(response.Annotations) > 0 {
-		for _, raw := range response.Annotations {
-			if annotation := openAIAnnotation(raw); annotation != nil {
-				result = append(result, annotation)
-			}
+	seen := make(map[string]struct{}, cap(result))
+	appendUnique := func(raw any) {
+		annotation := openAIAnnotation(raw)
+		if annotation == nil {
+			return
 		}
-		return result
+		encoded, _ := json.Marshal(annotation)
+		key := string(encoded)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		result = append(result, annotation)
 	}
-	for _, citation := range response.Citations {
-		if annotation := openAIAnnotation(citation); annotation != nil {
-			result = append(result, annotation)
+	for _, raw := range response.Annotations {
+		appendUnique(raw)
+	}
+	partsHaveCitations := false
+	textOffset := 0
+	for _, part := range response.Parts {
+		if part.Type != "text" {
+			continue
+		}
+		for _, citation := range part.Citations {
+			partsHaveCitations = true
+			rebased := citation
+			if rebased.Start != nil {
+				value := *rebased.Start + textOffset
+				rebased.Start = &value
+			}
+			if rebased.End != nil {
+				value := *rebased.End + textOffset
+				rebased.End = &value
+			}
+			appendUnique(rebased)
+		}
+		textOffset += utf8.RuneCountInString(part.Text)
+	}
+	if !partsHaveCitations {
+		for _, citation := range response.Citations {
+			appendUnique(citation)
+		}
+	}
+	return result
+}
+
+func mergeAdapterCitations(groups ...[]adapterCitation) []adapterCitation {
+	result := make([]adapterCitation, 0)
+	seen := make(map[string]struct{})
+	for _, citations := range groups {
+		for _, citation := range citations {
+			annotation := openAIAnnotation(citation)
+			encoded, _ := json.Marshal(annotation)
+			key := string(encoded)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, citation)
 		}
 	}
 	return result

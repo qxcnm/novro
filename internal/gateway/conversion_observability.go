@@ -289,13 +289,31 @@ func responseConversionLostFields(body []byte, source, target string) []string {
 		if payload["system_fingerprint"] != nil {
 			report.add("system_fingerprint")
 		}
-		for _, rawChoice := range sliceValue(payload["choices"]) {
+		choices := sliceValue(payload["choices"])
+		if len(choices) > 1 {
+			report.add("choices[]")
+		}
+		for _, rawChoice := range choices {
 			choice := mapValue(rawChoice)
+			if choice["logprobs"] != nil {
+				report.add("choices[].logprobs")
+			}
 			message := mapValue(choice["message"])
 			if value, exists := message["audio"]; exists && value != nil {
 				report.add("choices[].message.audio")
 			}
+			if target == "messages" && firstNonEmptyString(message["reasoning_content"], message["reasoning"], message["reasoning_text"]) != "" {
+				report.add("choices[].message.reasoning")
+			}
+			for _, rawPart := range sliceValue(message["content"]) {
+				part := mapValue(rawPart)
+				typeName := stringValue(part["type"])
+				if typeName != "" && typeName != "text" && typeName != "output_text" && typeName != "refusal" {
+					report.add("choices[].message.content[]." + typeName)
+				}
+			}
 		}
+		inspectOpenAIUsageForLosses(report, mapValue(payload["usage"]), "prompt_tokens", "completion_tokens", target)
 	case "responses":
 		if target == "chat_completions" {
 			if details := mapValue(payload["incomplete_details"]); details != nil {
@@ -315,6 +333,13 @@ func responseConversionLostFields(body []byte, source, target string) []string {
 		for _, rawItem := range sliceValue(payload["output"]) {
 			item := mapValue(rawItem)
 			typeName := stringValue(item["type"])
+			if typeName == "function_call_output" {
+				report.add("output[].function_call_output")
+				continue
+			}
+			if target == "messages" && typeName == "reasoning" {
+				report.add("output[].reasoning")
+			}
 			if target == "chat_completions" && typeName != "message" && typeName != "reasoning" && typeName != "function_call" && typeName != "" {
 				switch typeName {
 				case "web_search_call", "file_search_call", "computer_call", "code_interpreter_call", "local_shell_call", "mcp_call":
@@ -323,7 +348,17 @@ func responseConversionLostFields(body []byte, source, target string) []string {
 					report.add("output[].type")
 				}
 			}
+			if typeName == "message" {
+				for _, rawPart := range sliceValue(item["content"]) {
+					part := mapValue(rawPart)
+					contentType := stringValue(part["type"])
+					if contentType != "" && contentType != "output_text" && contentType != "text" && contentType != "refusal" {
+						report.add("output[].message.content[]." + contentType)
+					}
+				}
+			}
 		}
+		inspectOpenAIUsageForLosses(report, mapValue(payload["usage"]), "input_tokens", "output_tokens", target)
 	case "messages":
 		if target == "chat_completions" && payload["metadata"] != nil {
 			report.add("metadata")
@@ -333,8 +368,8 @@ func responseConversionLostFields(body []byte, source, target string) []string {
 		}
 		inspectAnthropicResponseContentForLosses(report, payload["content"], "content[]", target)
 		usage := mapValue(payload["usage"])
-		if value, exists := usage["server_tool_use"]; exists && value != nil {
-			report.add("usage.server_tool_use")
+		if value, exists := usage["server_tool_use_tokens"]; exists && value != nil {
+			report.add("usage.server_tool_use_tokens")
 		}
 	}
 	return report.fields()
@@ -347,13 +382,49 @@ func inspectAnthropicResponseContentForLosses(report *conversionLossReport, cont
 			continue
 		}
 		switch typeName := stringValue(part["type"]); typeName {
-		case "document":
-			report.add(prefix + ".document")
+		case "image", "audio", "document":
+			report.add(prefix + "." + typeName)
+		case "thinking":
+			if part["signature"] != nil {
+				report.add(prefix + ".thinking.signature")
+			}
+		case "tool_result":
+			if target == "chat_completions" {
+				report.add(prefix + ".tool_result")
+			}
 		case "redacted_thinking":
 			report.add(prefix + ".redacted_thinking")
 		case "server_tool_use", "web_search_tool_result":
 			if target == "chat_completions" {
 				report.add(prefix + "." + typeName)
+			}
+		}
+	}
+}
+
+func inspectOpenAIUsageForLosses(report *conversionLossReport, usage map[string]any, inputKey, outputKey, target string) {
+	if usage == nil {
+		return
+	}
+	if target == "messages" {
+		total, hasTotal := usageInt(usage, "total_tokens")
+		input, hasInput := usageInt(usage, inputKey)
+		output, hasOutput := usageInt(usage, outputKey)
+		if hasTotal && (!hasInput || !hasOutput || total != input+output) {
+			report.add("usage.total_tokens")
+		}
+	}
+	for _, detailsKey := range []string{"prompt_tokens_details", "input_tokens_details"} {
+		for key, value := range mapValue(usage[detailsKey]) {
+			if key != "cached_tokens" && value != nil {
+				report.add("usage." + detailsKey + "." + key)
+			}
+		}
+	}
+	for _, detailsKey := range []string{"completion_tokens_details", "output_tokens_details"} {
+		for key, value := range mapValue(usage[detailsKey]) {
+			if key != "reasoning_tokens" && key != "thinking_tokens" && value != nil {
+				report.add("usage." + detailsKey + "." + key)
 			}
 		}
 	}
