@@ -96,7 +96,7 @@ var lossyRequestFields = map[string]map[string][]string{
 	"chat_completions": {
 		"responses": {
 			"audio", "frequency_penalty", "logit_bias", "logprobs", "modalities", "n",
-			"prediction", "presence_penalty", "seed", "top_logprobs", "web_search_options",
+			"prediction", "presence_penalty", "seed", "stop", "top_logprobs", "web_search_options",
 		},
 		"messages": {
 			"audio", "frequency_penalty", "logit_bias", "logprobs", "modalities", "n",
@@ -118,7 +118,7 @@ var lossyRequestFields = map[string]map[string][]string{
 			"container", "context_management", "mcp_servers", "top_k",
 		},
 		"responses": {
-			"container", "context_management", "mcp_servers", "top_k",
+			"container", "context_management", "mcp_servers", "stop_sequences", "top_k",
 		},
 	},
 }
@@ -148,7 +148,7 @@ func inspectChatMessagesForLosses(report *conversionLossReport, messages []any, 
 				}
 			case "file":
 				file := mapValue(part["file"])
-				if file == nil || stringValue(file["file_data"]) == "" {
+				if file == nil || (stringValue(file["file_data"]) == "" && stringValue(file["file_id"]) == "" && stringValue(file["file_url"]) == "") {
 					report.add("messages[].content[].file")
 				}
 			case "image_url":
@@ -183,7 +183,7 @@ func inspectResponsesInputForLosses(report *conversionLossReport, input any, tar
 			switch typeName {
 			case "input_file":
 				if target == "chat_completions" {
-					if stringValue(part["file_data"]) == "" {
+					if stringValue(part["file_data"]) == "" && stringValue(part["file_id"]) == "" {
 						report.add("input[].content[].input_file")
 					}
 				} else if target == "messages" && stringValue(part["file_id"]) != "" {

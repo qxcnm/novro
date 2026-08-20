@@ -123,7 +123,7 @@ func TestConversionLostFieldsReportsPathsWithoutValues(t *testing.T) {
 
 	fields := requestConversionLostFields(payload, "responses", "chat_completions")
 	joinedFields := strings.Join(fields, ",")
-	for _, want := range []string{"input[].content[].input_file", "input[].item_reference", "prompt_cache_key"} {
+	for _, want := range []string{"input[].item_reference", "prompt_cache_key"} {
 		if !strings.Contains(joinedFields, want) {
 			t.Errorf("fields %q do not contain %q", joinedFields, want)
 		}
@@ -137,8 +137,19 @@ func TestConversionLostFieldsReportsPathsWithoutValues(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	setConversionLostFieldsHeader(response, fields)
-	if got := response.Header().Get(ConversionLostFieldsHeader); got != "4" {
-		t.Fatalf("observable header = %q, want 4", got)
+	if got := response.Header().Get(ConversionLostFieldsHeader); got != "3" {
+		t.Fatalf("observable header = %q, want 3", got)
+	}
+}
+
+func TestRequestConversionLossReportsUnsupportedResponsesStop(t *testing.T) {
+	chat := map[string]any{"stop": "END", "messages": []any{map[string]any{"role": "user", "content": "hello"}}}
+	if fields := requestConversionLostFields(chat, "chat_completions", "responses"); !strings.Contains(strings.Join(fields, ","), "stop") {
+		t.Fatalf("Chat -> Responses stop loss not reported: %v", fields)
+	}
+	messages := map[string]any{"stop_sequences": []any{"END"}, "messages": []any{map[string]any{"role": "user", "content": "hello"}}}
+	if fields := requestConversionLostFields(messages, "messages", "responses"); !strings.Contains(strings.Join(fields, ","), "stop_sequences") {
+		t.Fatalf("Messages -> Responses stop loss not reported: %v", fields)
 	}
 }
 

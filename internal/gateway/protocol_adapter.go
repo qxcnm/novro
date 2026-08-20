@@ -494,13 +494,20 @@ func decodePortableContent(raw any, source string) []adapterPart {
 			}
 			parts = append(parts, adapterPart{Type: "audio", Data: stringValue(audio["data"]), MediaType: firstNonEmptyString(audio["format"], audio["media_type"])})
 		case "file":
-			// OpenAI Chat represents inline files as a nested file object. Keep
-			// them in the portable document shape for the other two protocols.
+			// OpenAI Chat represents files as a nested file object. Keep every
+			// portable source form so Responses file references and inline data can
+			// make a round trip through Chat-compatible providers.
 			file := mapValue(part["file"])
 			if file == nil {
 				file = part
 			}
-			parts = append(parts, adapterPart{Type: "document", Data: stringValue(file["file_data"]), Filename: firstNonEmptyString(file["filename"], file["file_name"])})
+			parts = append(parts, adapterPart{
+				Type:     "document",
+				FileID:   stringValue(file["file_id"]),
+				FileURL:  stringValue(file["file_url"]),
+				Data:     stringValue(file["file_data"]),
+				Filename: firstNonEmptyString(file["filename"], file["file_name"]),
+			})
 		case "input_file":
 			document := adapterPart{Type: "document", FileID: stringValue(part["file_id"]), FileURL: stringValue(part["file_url"]), Data: stringValue(part["file_data"]), Filename: stringValue(part["filename"])}
 			if strings.HasPrefix(strings.ToLower(document.Data), "data:") {
@@ -1329,40 +1336,10 @@ func convertToolChoice(raw any, target string) any {
 	}
 	typeName, name := stringValue(choice["type"]), stringValue(choice["name"])
 	if typeName == "allowed_tools" {
-		mode := firstNonEmptyString(choice["mode"], "auto")
-		selectors := sliceValue(choice["tools"])
-		names := make([]string, 0, len(selectors))
-		for _, rawSelector := range selectors {
-			selector := mapValue(rawSelector)
-			selectorType := normalizePortableToolType(stringValue(selector["type"]), "responses")
-			selectorName := stringValue(selector["name"])
-			if selectorName == "" && selectorType != "function" {
-				selectorName = selectorType
-			}
-			if selectorName != "" {
-				names = append(names, selectorName)
-			}
-		}
-		switch target {
-		case "messages":
-			if len(names) == 1 {
-				return map[string]any{"type": "tool", "name": names[0]}
-			}
-			if mode == "required" {
-				return map[string]any{"type": "any"}
-			}
-			return map[string]any{"type": "auto"}
-		case "chat_completions":
-			if len(names) == 1 {
-				return map[string]any{"type": "function", "function": map[string]any{"name": names[0]}}
-			}
-			if mode == "required" {
-				return "required"
-			}
-			return "auto"
-		case "responses":
-			return cloneMap(choice)
-		}
+		// Filtering must happen after tools are converted because target
+		// protocols drop different built-ins. Preserve the selector set here;
+		// sanitizeConvertedToolChoice will filter and degrade it for the target.
+		return cloneMap(choice)
 	}
 	if function := mapValue(choice["function"]); function != nil {
 		name = stringValue(function["name"])
@@ -1427,11 +1404,6 @@ func copyOptionalSampling(payload map[string]any, request adapterRequest, target
 				payload["stop_sequences"] = request.Stop
 			}
 		case "chat_completions":
-			payload["stop"] = request.Stop
-		case "responses":
-			// Responses accepts the same stop sequence value under `stop`;
-			// preserve it when importing Chat `stop` or Messages
-			// `stop_sequences` instead of silently dropping the constraint.
 			payload["stop"] = request.Stop
 		}
 	}
@@ -1993,12 +1965,16 @@ func sanitizeConvertedToolChoice(choice any, tools []any, target string) any {
 			}
 			name := stringValue(selector["name"])
 			typeName := normalizePortableToolType(stringValue(selector["type"]), target)
-			if name == "" && typeName != "function" {
-				name = typeName
+			keep := false
+			if typeName == "function" {
+				// A function selector without a name is invalid and must not be
+				// retained merely because some other function tool survived.
+				_, keep = names[name]
+				keep = name != "" && keep
+			} else if typeName != "" {
+				_, keep = types[typeName]
 			}
-			_, nameExists := names[name]
-			_, typeExists := types[typeName]
-			if (name != "" && nameExists) || (typeName != "" && typeExists) {
+			if keep {
 				filtered = append(filtered, cloneMap(selector))
 			}
 		}
@@ -2008,9 +1984,37 @@ func sanitizeConvertedToolChoice(choice any, tools []any, target string) any {
 			}
 			return "auto"
 		}
-		result := cloneMap(choiceMap)
-		result["tools"] = filtered
-		return result
+		mode := firstNonEmptyString(choiceMap["mode"], "auto")
+		switch target {
+		case "responses":
+			result := cloneMap(choiceMap)
+			result["tools"] = filtered
+			return result
+		case "messages":
+			if len(filtered) == 1 {
+				selector := mapValue(filtered[0])
+				name := stringValue(selector["name"])
+				if name == "" {
+					name = normalizePortableToolType(stringValue(selector["type"]), target)
+				}
+				return map[string]any{"type": "tool", "name": name}
+			}
+			if mode == "required" {
+				return map[string]any{"type": "any"}
+			}
+			return map[string]any{"type": "auto"}
+		case "chat_completions":
+			if len(filtered) == 1 {
+				selector := mapValue(filtered[0])
+				if normalizePortableToolType(stringValue(selector["type"]), target) == "function" {
+					return map[string]any{"type": "function", "function": map[string]any{"name": stringValue(selector["name"])}}
+				}
+			}
+			if mode == "required" {
+				return "required"
+			}
+			return "auto"
+		}
 	}
 	name := stringValue(choiceMap["name"])
 	if function := mapValue(choiceMap["function"]); function != nil {
@@ -2093,11 +2097,14 @@ func encodeChatContent(parts []adapterPart) any {
 				content = append(content, map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": part.Data, "format": part.MediaType}})
 			}
 		case "document":
-			// Chat's file content contract accepts inline file data. A remote
-			// URL or provider file id has no equivalent portable Chat field and
-			// is intentionally omitted rather than emitting an invalid shape.
-			if part.Data != "" {
-				file := map[string]any{"file_data": part.Data}
+			file := map[string]any{}
+			switch {
+			case part.FileID != "":
+				file["file_id"] = part.FileID
+			case part.Data != "":
+				file["file_data"] = part.Data
+			}
+			if len(file) > 0 {
 				if part.Filename != "" {
 					file["filename"] = part.Filename
 				}

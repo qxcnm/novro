@@ -604,8 +604,8 @@ func assertConvertedRequest(t *testing.T, target string, got map[string]any) {
 		if intValue(got["max_output_tokens"]) != testMaxTokens {
 			t.Errorf("max_output_tokens = %#v, want %d", got["max_output_tokens"], testMaxTokens)
 		}
-		if !reflect.DeepEqual(sliceValue(got["stop"]), []any{testStop}) {
-			t.Errorf("Responses stop = %#v, want [%q]", got["stop"], testStop)
+		if _, exists := got["stop"]; exists {
+			t.Errorf("Responses request contains unsupported stop: %#v", got["stop"])
 		}
 		assertResponsesRequestWire(t, got)
 		if stringValue(mapValue(got["reasoning"])["effort"]) != "high" {

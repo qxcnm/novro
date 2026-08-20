@@ -54,7 +54,7 @@ func TestExtendedProtocolContractDocumentsAndAudio(t *testing.T) {
 		}
 	})
 
-	t.Run("unrepresentable responses file is omitted without dropping text", func(t *testing.T) {
+	t.Run("responses file id becomes chat file", func(t *testing.T) {
 		got := contractAdaptRequest(t, map[string]any{
 			"model": "source", "max_output_tokens": 64,
 			"input": []any{map[string]any{"type": "message", "role": "user", "content": []any{
@@ -67,8 +67,42 @@ func TestExtendedProtocolContractDocumentsAndAudio(t *testing.T) {
 		if !strings.Contains(contractJSON(messages), "continue safely") {
 			t.Fatalf("representable text was dropped with the file; body=%s", contractJSON(got))
 		}
-		if strings.Contains(contractJSON(messages), "file_123") {
-			t.Fatalf("unrepresentable file_id leaked into Chat prompt; body=%s", contractJSON(got))
+		message := contractMap(t, messages[0], "messages[0]")
+		filePart := contractFindItem(t, contractSlice(t, message["content"], "messages[0].content"), "type", "file")
+		file := contractMap(t, filePart["file"], "file part")
+		if file["file_id"] != "file_123" {
+			t.Fatalf("Chat file_id = %#v, want file_123; body=%s", file["file_id"], contractJSON(got))
+		}
+	})
+
+	t.Run("chat inline file becomes responses input file", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_tokens": 64,
+			"messages": []any{map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "file", "file": map[string]any{"file_data": "ZmFrZQ==", "filename": "note.txt"}},
+			}}},
+		}, "chat_completions", "responses")
+
+		message := contractFindItem(t, contractSlice(t, got["input"], "input"), "type", "message")
+		file := contractFindItem(t, contractSlice(t, message["content"], "input content"), "type", "input_file")
+		if file["file_data"] != "ZmFrZQ==" || file["filename"] != "note.txt" {
+			t.Fatalf("Responses inline file = %#v", file)
+		}
+	})
+
+	t.Run("chat file id becomes messages document losslessly when possible", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_tokens": 64,
+			"messages": []any{map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "file", "file": map[string]any{"file_data": "ZmFrZQ==", "filename": "note.txt"}},
+			}}},
+		}, "chat_completions", "messages")
+
+		message := contractMap(t, contractSlice(t, got["messages"], "messages")[0], "messages[0]")
+		document := contractFindItem(t, contractSlice(t, message["content"], "messages content"), "type", "document")
+		source := contractMap(t, document["source"], "document.source")
+		if source["type"] != "base64" || source["data"] != "ZmFrZQ==" {
+			t.Fatalf("Messages document = %#v", document)
 		}
 	})
 
@@ -87,6 +121,20 @@ func TestExtendedProtocolContractDocumentsAndAudio(t *testing.T) {
 		}
 		if strings.Contains(encoded, "UklGRg==") {
 			t.Fatalf("audio bytes were emitted in a target block that cannot express audio; body=%s", encoded)
+		}
+	})
+
+	t.Run("chat audio becomes responses input file", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_tokens": 64,
+			"messages": []any{map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": "UklGRg==", "format": "wav"}},
+			}}},
+		}, "chat_completions", "responses")
+		message := contractFindItem(t, contractSlice(t, got["input"], "input"), "type", "message")
+		file := contractFindItem(t, contractSlice(t, message["content"], "input content"), "type", "input_file")
+		if file["file_data"] != "UklGRg==" {
+			t.Fatalf("Responses audio file = %#v", file)
 		}
 	})
 }
@@ -369,6 +417,42 @@ func TestExtendedProtocolContractToolDefinitionsAndChoice(t *testing.T) {
 			t.Fatalf("messages allowed-tool degradation = %#v, want named lookup choice", choice)
 		}
 	})
+
+	t.Run("allowed tools drops unnamed function selector", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_output_tokens": 64, "input": "search",
+			"tools": []any{map[string]any{"type": "function", "name": "lookup", "parameters": functionSchema}},
+			"tool_choice": map[string]any{
+				"type": "allowed_tools", "mode": "required",
+				"tools": []any{map[string]any{"type": "function"}},
+			},
+		}, "responses", "chat_completions")
+		if got["tool_choice"] != "auto" {
+			t.Fatalf("invalid empty allowlist choice = %#v, want auto; body=%s", got["tool_choice"], contractJSON(got))
+		}
+	})
+
+	t.Run("allowed tools filters dropped builtins before degrading", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_output_tokens": 64, "input": "search",
+			"tools": []any{
+				map[string]any{"type": "web_search"},
+				map[string]any{"type": "function", "name": "lookup", "parameters": functionSchema},
+			},
+			"tool_choice": map[string]any{
+				"type": "allowed_tools", "mode": "required",
+				"tools": []any{
+					map[string]any{"type": "web_search"},
+					map[string]any{"type": "function", "name": "lookup"},
+				},
+			},
+		}, "responses", "chat_completions")
+		choice := contractMap(t, got["tool_choice"], "tool_choice")
+		function := contractMap(t, choice["function"], "tool_choice.function")
+		if choice["type"] != "function" || function["name"] != "lookup" {
+			t.Fatalf("filtered Chat choice = %#v, want lookup; body=%s", choice, contractJSON(got))
+		}
+	})
 }
 
 func TestExtendedProtocolContractWebSearch(t *testing.T) {
@@ -458,6 +542,25 @@ func TestExtendedProtocolContractWebSearch(t *testing.T) {
 }
 
 func TestExtendedProtocolContractRequestFieldsAndStopSemantics(t *testing.T) {
+	t.Run("messages stop sequences are omitted for responses", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_tokens": 64, "stop_sequences": []any{"END"},
+			"messages": []any{map[string]any{"role": "user", "content": "hello"}},
+		}, "messages", "responses")
+		if _, exists := got["stop"]; exists {
+			t.Fatalf("Responses request contains unsupported stop: %s", contractJSON(got))
+		}
+	})
+
+	t.Run("chat stop is omitted for responses", func(t *testing.T) {
+		got := contractAdaptRequest(t, map[string]any{
+			"model": "source", "max_tokens": 64, "stop": "END",
+			"messages": []any{map[string]any{"role": "user", "content": "hello"}},
+		}, "chat_completions", "responses")
+		if _, exists := got["stop"]; exists {
+			t.Fatalf("Responses request contains unsupported stop: %s", contractJSON(got))
+		}
+	})
 	t.Run("messages stop sequence maps to chat", func(t *testing.T) {
 		got := contractAdaptRequest(t, map[string]any{
 			"model": "source", "max_tokens": 64, "stop_sequences": []any{"END", "DONE"},
