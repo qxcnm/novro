@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -813,6 +814,90 @@ func TestProtocolStreamAdapterPreservesSignedThinkingFromBufferedMessages(t *tes
 	}
 	if thinking != "check it" || signature != "opaque-signature" || text != "done" || events[len(events)-1].name != "message_stop" {
 		t.Fatalf("buffered Messages stream thinking=%q signature=%q text=%q last=%q", thinking, signature, text, events[len(events)-1].name)
+	}
+}
+
+func TestBufferedResponsesWebSearchBeforeMessagePreservesMessagesSSEOrder(t *testing.T) {
+	t.Parallel()
+
+	body := mustTestJSON(t, map[string]any{
+		"id": "resp-buffered-order", "object": "response", "status": "completed", "model": "source",
+		"output": []any{
+			map[string]any{"id": "ws_first", "type": "web_search_call", "status": "completed", "action": map[string]any{
+				"type": "search", "query": "Novro", "sources": []any{map[string]any{"type": "url", "url": "https://example.test/source", "title": "Source"}},
+			}},
+			map[string]any{"id": "msg_after", "type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "after search"}}},
+		},
+	})
+	adapter := newProtocolStreamAdapter("responses", "messages")
+	stream, err := adapter.FromBufferedResponse(body)
+	if err != nil {
+		t.Fatalf("convert buffered Responses response: %v", err)
+	}
+	starts := make([]string, 0, 3)
+	for _, event := range parseStreamAdapterOutput(t, stream) {
+		if event.name == "content_block_start" {
+			starts = append(starts, stringValue(mapValue(event.root["content_block"])["type"]))
+		}
+	}
+	if want := []string{"server_tool_use", "web_search_tool_result", "text"}; !reflect.DeepEqual(starts, want) {
+		t.Fatalf("Messages buffered block order = %v, want %v\n%s", starts, want, stream)
+	}
+}
+
+func TestBufferedMessagesOutputOrderMatchesResponsesLifecycleAndTerminal(t *testing.T) {
+	t.Parallel()
+
+	body := mustTestJSON(t, map[string]any{
+		"id": "msg-buffered-order", "type": "message", "role": "assistant", "model": "source", "stop_reason": "tool_use",
+		"content": []any{
+			map[string]any{"type": "thinking", "thinking": "plan", "signature": "signed-plan"},
+			map[string]any{"type": "server_tool_use", "id": "ws_first", "name": "web_search", "input": map[string]any{"query": "Novro"}},
+			map[string]any{"type": "web_search_tool_result", "tool_use_id": "ws_first", "content": []any{map[string]any{"type": "web_search_result", "url": "https://example.test/source", "title": "Source"}}},
+			map[string]any{"type": "text", "text": "after search"},
+			map[string]any{"type": "tool_use", "id": "call_after", "name": "finish", "input": map[string]any{}},
+		},
+	})
+	adapter := newProtocolStreamAdapter("messages", "responses")
+	stream, err := adapter.FromBufferedResponse(body)
+	if err != nil {
+		t.Fatalf("convert buffered Messages response: %v", err)
+	}
+	events := parseStreamAdapterOutput(t, stream)
+	addedTypes := make([]string, 0, 4)
+	doneByIndex := map[int]map[string]any{}
+	var terminal map[string]any
+	for _, event := range events {
+		switch event.name {
+		case "response.output_item.added":
+			index := intValue(event.root["output_index"])
+			if index != len(addedTypes) {
+				t.Fatalf("added output_index = %d, want %d", index, len(addedTypes))
+			}
+			addedTypes = append(addedTypes, stringValue(mapValue(event.root["item"])["type"]))
+		case "response.output_item.done":
+			doneByIndex[intValue(event.root["output_index"])] = mapValue(event.root["item"])
+		case "response.completed":
+			terminal = mapValue(event.root["response"])
+		}
+	}
+	wantTypes := []string{"reasoning", "web_search_call", "message", "function_call"}
+	if !reflect.DeepEqual(addedTypes, wantTypes) {
+		t.Fatalf("Responses added order = %v, want %v\n%s", addedTypes, wantTypes, stream)
+	}
+	if terminal == nil {
+		t.Fatal("buffered Responses stream has no response.completed event")
+	}
+	terminalOutput := sliceValue(terminal["output"])
+	if got := responseContentTypes(terminalOutput); !reflect.DeepEqual(got, wantTypes) {
+		t.Fatalf("terminal output order = %v, want %v", got, wantTypes)
+	}
+	for index, rawItem := range terminalOutput {
+		item := mapValue(rawItem)
+		done := doneByIndex[index]
+		if done == nil || stringValue(done["id"]) != stringValue(item["id"]) || stringValue(done["type"]) != stringValue(item["type"]) {
+			t.Fatalf("output %d lifecycle/terminal mismatch: done=%#v terminal=%#v", index, done, item)
+		}
 	}
 }
 

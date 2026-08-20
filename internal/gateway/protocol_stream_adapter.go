@@ -178,7 +178,9 @@ func (a *protocolStreamAdapter) Translate(eventName string, data []byte) ([]byte
 	if !a.started && delta.empty() {
 		return nil, nil
 	}
+	annotationCount := len(a.annotations)
 	a.merge(delta)
+	newAnnotations := append([]any(nil), a.annotations[annotationCount:]...)
 	var output bytes.Buffer
 	if !a.started {
 		a.writeStart(&output)
@@ -197,7 +199,7 @@ func (a *protocolStreamAdapter) Translate(eventName string, data []byte) ([]byte
 	if delta.Refusal != "" {
 		a.writeContentDelta(&output, "refusal", delta.Refusal)
 	}
-	for _, annotation := range delta.Annotations {
+	for _, annotation := range newAnnotations {
 		a.writeAnnotationDelta(&output, annotation)
 	}
 	for _, tool := range delta.Tools {
@@ -651,13 +653,15 @@ func (a *protocolStreamAdapter) writeContentDelta(output *bytes.Buffer, kind, te
 	case "responses":
 		if kind == "reasoning" {
 			a.ensureResponsesReasoning(output)
-			a.writeResponsesSSE(output, "response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": "rs_" + safeID(a.response.ID), "output_index": a.responsesReasoningIndex, "summary_index": 0, "delta": text})
+			a.writeResponsesSSE(output, "response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": a.responsesReasoningItemID, "output_index": a.responsesReasoningIndex, "summary_index": 0, "delta": text})
 		} else if kind == "refusal" {
 			a.ensureResponsesRefusal(output)
-			a.writeResponsesSSE(output, "response.refusal.delta", map[string]any{"type": "response.refusal.delta", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "delta": text})
+			a.responsesCurrentRefusal += text
+			a.writeResponsesSSE(output, "response.refusal.delta", map[string]any{"type": "response.refusal.delta", "item_id": a.responsesMessageID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "delta": text})
 		} else {
 			a.ensureResponsesText(output)
-			a.writeResponsesSSE(output, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "delta": text})
+			a.responsesCurrentText += text
+			a.writeResponsesSSE(output, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": a.responsesMessageID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "delta": text})
 		}
 	}
 }
@@ -676,7 +680,8 @@ func (a *protocolStreamAdapter) writeAnnotationDelta(output *bytes.Buffer, annot
 		writeAdapterSSE(output, "content_block_delta", map[string]any{"type": "content_block_delta", "index": a.targetBlockIndex, "delta": map[string]any{"type": "citations_delta", "citation": anthropicStreamCitation(annotation, a.response.Text)}})
 	case "responses":
 		a.ensureResponsesText(output)
-		a.writeResponsesSSE(output, "response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "annotation_index": annotationIndex, "annotation": openAIStreamAnnotation(annotation)})
+		a.responsesCurrentAnnotations = append(a.responsesCurrentAnnotations, annotation)
+		a.writeResponsesSSE(output, "response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": a.responsesMessageID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "annotation_index": annotationIndex, "annotation": openAIStreamAnnotation(annotation)})
 	}
 }
 
@@ -742,6 +747,10 @@ func (a *protocolStreamAdapter) writeToolDelta(output *bytes.Buffer, delta adapt
 				itemID = responsesFunctionItemID(call.ID)
 			}
 			a.responsesToolItemID[key] = itemID
+			call.ItemID = itemID
+			a.response.ToolCalls[index].ItemID = itemID
+			a.responsesToolPartIndex[key] = len(a.response.Parts)
+			a.response.Parts = append(a.response.Parts, call)
 			a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": outputIndex, "item": map[string]any{"id": itemID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": "", "status": "in_progress"}})
 		}
 		if delta.Arguments != "" {
@@ -828,12 +837,18 @@ func (a *protocolStreamAdapter) writeResponsesWebSearch(output *bytes.Buffer, st
 	if !state.Added {
 		a.closeResponsesReasoning(output)
 		a.closeResponsesMessage(output)
+		a.closeResponsesTools(output)
 		if state.ID == "" {
 			state.ID = fmt.Sprintf("ws_novro_%s_%d", safeID(a.response.ID), len(a.responsesWebSearchKeys))
 		}
 		state.OutputIndex = a.nextResponsesOutputIndex()
 		state.Added = true
 		a.responsesWebSearchKeys = append(a.responsesWebSearchKeys, state.Key)
+		state.PartIndex = len(a.response.Parts)
+		a.response.Parts = append(a.response.Parts,
+			adapterPart{Type: "server_tool_use", ItemID: state.ID, ID: state.ID, Name: state.Name, Arguments: webSearchArguments(state)},
+			adapterPart{Type: "web_search_tool_result", ItemID: state.ID, ID: state.ID, Status: state.Status},
+		)
 		a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": state.OutputIndex, "item": map[string]any{"id": state.ID, "type": "web_search_call", "status": "in_progress"}})
 		a.writeResponsesSSE(output, "response.web_search_call.in_progress", map[string]any{"type": "response.web_search_call.in_progress", "output_index": state.OutputIndex, "item_id": state.ID})
 	}
@@ -872,10 +887,13 @@ func (a *protocolStreamAdapter) recordWebSearchSpecialParts(state *adapterStream
 		return
 	}
 	args := webSearchArguments(state)
-	a.response.SpecialParts = append(a.response.SpecialParts,
-		adapterPart{Type: "server_tool_use", ID: state.ID, Name: state.Name, Arguments: args},
-		adapterPart{Type: "web_search_tool_result", ID: state.ID, Content: webSearchResultParts(state), IsError: state.Status == "failed", ErrorCode: webSearchErrorCode(state)},
-	)
+	serverPart := adapterPart{Type: "server_tool_use", ItemID: state.ID, ID: state.ID, Name: state.Name, Arguments: args, Status: state.Status, Extra: cloneMap(state.Action)}
+	resultPart := adapterPart{Type: "web_search_tool_result", ItemID: state.ID, ID: state.ID, Content: webSearchResultParts(state), IsError: state.Status == "failed", ErrorCode: webSearchErrorCode(state), Status: state.Status}
+	a.response.SpecialParts = append(a.response.SpecialParts, serverPart, resultPart)
+	if a.target == "responses" && state.PartIndex >= 0 && state.PartIndex+1 < len(a.response.Parts) {
+		a.response.Parts[state.PartIndex] = serverPart
+		a.response.Parts[state.PartIndex+1] = resultPart
+	}
 	state.SpecialRecorded = true
 }
 
@@ -971,15 +989,36 @@ func firstStringValue(value any) string {
 }
 
 func (a *protocolStreamAdapter) ensureResponsesMessage(output *bytes.Buffer) {
-	if a.responsesMessageStarted {
+	if a.responsesMessageStarted && !a.responsesMessageDone {
 		return
 	}
+	if a.responsesMessageDone {
+		a.closeResponsesTools(output)
+		a.responsesMessageOrdinal++
+		a.responsesMessageStarted = false
+		a.responsesMessageDone = false
+		a.responsesTextStarted = false
+		a.responsesTextDone = false
+		a.responsesRefusalStarted = false
+		a.responsesRefusalDone = false
+		a.responsesTextContentIndex = -1
+		a.responsesRefusalContentIndex = -1
+		a.responsesCurrentText = ""
+		a.responsesCurrentRefusal = ""
+		a.responsesCurrentAnnotations = nil
+		a.annotationsEmitted = 0
+	}
 	a.closeResponsesReasoning(output)
+	a.closeResponsesTools(output)
 	a.responsesMessageStarted = true
 	a.responsesTextOutputIndex = a.nextResponsesOutputIndex()
 	a.responsesNextContentIndex = 0
-	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": a.responsesTextOutputIndex, "item": map[string]any{"id": itemID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}})
+	baseID := "msg_" + safeID(a.response.ID)
+	a.responsesMessageID = baseID
+	if a.responsesMessageOrdinal > 0 {
+		a.responsesMessageID = fmt.Sprintf("%s_%d", baseID, a.responsesMessageOrdinal)
+	}
+	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": a.responsesTextOutputIndex, "item": map[string]any{"id": a.responsesMessageID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}})
 }
 
 func (a *protocolStreamAdapter) ensureStreamingToolIdentity(key string, index int, delta adapterStreamToolDelta) adapterPart {
@@ -1008,6 +1047,37 @@ func (a *protocolStreamAdapter) ensureStreamingToolIdentity(key string, index in
 	a.toolIdentityCommitted[key] = true
 	a.committedToolIDs[callID] = struct{}{}
 	return *call
+}
+
+func (a *protocolStreamAdapter) closeResponsesTools(output *bytes.Buffer) {
+	for _, key := range a.responsesToolKeys {
+		if a.responsesToolDone[key] {
+			continue
+		}
+		callIndex, exists := a.toolIndex[key]
+		if !exists || callIndex < 0 || callIndex >= len(a.response.ToolCalls) {
+			continue
+		}
+		outputIndex := a.responsesToolIndex[key]
+		call := a.response.ToolCalls[callIndex]
+		itemID := a.responsesToolItemID[key]
+		if itemID == "" {
+			itemID = responsesFunctionItemID(call.ID)
+			a.responsesToolItemID[key] = itemID
+		}
+		call.ItemID = itemID
+		a.response.ToolCalls[callIndex] = call
+		if partIndex, exists := a.responsesToolPartIndex[key]; exists && partIndex >= 0 && partIndex < len(a.response.Parts) {
+			a.response.Parts[partIndex] = call
+		}
+		arguments, _ := json.Marshal(nonNilObject(call.Arguments))
+		if a.toolArgs[key] == "" {
+			a.writeResponsesSSE(output, "response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "item_id": itemID, "output_index": outputIndex, "delta": string(arguments)})
+		}
+		a.writeResponsesSSE(output, "response.function_call_arguments.done", map[string]any{"type": "response.function_call_arguments.done", "item_id": itemID, "output_index": outputIndex, "name": call.Name, "arguments": string(arguments)})
+		a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": map[string]any{"id": itemID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": string(arguments), "status": "completed"}})
+		a.responsesToolDone[key] = true
+	}
 }
 
 func (a *protocolStreamAdapter) writeDone(output *bytes.Buffer) {
@@ -1043,25 +1113,7 @@ func (a *protocolStreamAdapter) writeDone(output *bytes.Buffer) {
 	case "responses":
 		a.closeResponsesReasoning(output)
 		a.closeResponsesMessage(output)
-		for _, key := range a.responsesToolKeys {
-			callIndex, exists := a.toolIndex[key]
-			if !exists || callIndex < 0 || callIndex >= len(a.response.ToolCalls) {
-				continue
-			}
-			outputIndex := a.responsesToolIndex[key]
-			call := a.response.ToolCalls[callIndex]
-			itemID := a.responsesToolItemID[key]
-			if itemID == "" {
-				itemID = responsesFunctionItemID(call.ID)
-				a.responsesToolItemID[key] = itemID
-			}
-			arguments, _ := json.Marshal(nonNilObject(call.Arguments))
-			if a.toolArgs[key] == "" {
-				a.writeResponsesSSE(output, "response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "item_id": itemID, "output_index": outputIndex, "delta": string(arguments)})
-			}
-			a.writeResponsesSSE(output, "response.function_call_arguments.done", map[string]any{"type": "response.function_call_arguments.done", "item_id": itemID, "output_index": outputIndex, "name": call.Name, "arguments": string(arguments)})
-			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": map[string]any{"id": itemID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": string(arguments), "status": "completed"}})
-		}
+		a.closeResponsesTools(output)
 		for _, key := range a.responsesWebSearchKeys {
 			state := a.webSearches[key]
 			if state != nil && !state.Completed {
@@ -1135,43 +1187,43 @@ func (a *protocolStreamAdapter) ensureResponsesReasoning(output *bytes.Buffer) {
 	}
 	a.responsesReasoningStarted = true
 	a.responsesReasoningIndex = a.nextResponsesOutputIndex()
-	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": a.responsesReasoningIndex, "item": map[string]any{"id": "rs_" + safeID(a.response.ID), "type": "reasoning", "summary": []any{}}})
-	a.writeResponsesSSE(output, "response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": "rs_" + safeID(a.response.ID), "output_index": a.responsesReasoningIndex, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}})
+	a.responsesReasoningItemID = "rs_" + safeID(a.response.ID)
+	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": a.responsesReasoningIndex, "item": map[string]any{"id": a.responsesReasoningItemID, "type": "reasoning", "summary": []any{}}})
+	a.writeResponsesSSE(output, "response.reasoning_summary_part.added", map[string]any{"type": "response.reasoning_summary_part.added", "item_id": a.responsesReasoningItemID, "output_index": a.responsesReasoningIndex, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": ""}})
 }
 
 func (a *protocolStreamAdapter) ensureResponsesText(output *bytes.Buffer) {
+	a.ensureResponsesMessage(output)
 	if a.responsesTextStarted {
 		return
 	}
-	a.ensureResponsesMessage(output)
 	a.responsesTextStarted = true
 	a.responsesTextContentIndex = a.responsesNextContentIndex
 	a.responsesNextContentIndex++
 	index := a.responsesTextIndex()
-	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": index, "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
+	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": a.responsesMessageID, "output_index": index, "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
 }
 
 func (a *protocolStreamAdapter) ensureResponsesRefusal(output *bytes.Buffer) {
+	a.ensureResponsesMessage(output)
 	if a.responsesRefusalStarted {
 		return
 	}
-	a.ensureResponsesMessage(output)
 	a.responsesRefusalStarted = true
 	a.responsesRefusalContentIndex = a.responsesNextContentIndex
 	a.responsesNextContentIndex++
-	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": ""}})
+	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": a.responsesMessageID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": ""}})
 }
 
 func (a *protocolStreamAdapter) closeResponsesReasoning(output *bytes.Buffer) {
 	if !a.responsesReasoningStarted || a.responsesReasoningDone {
 		return
 	}
-	itemID := "rs_" + safeID(a.response.ID)
+	itemID := a.responsesReasoningItemID
 	a.writeResponsesSSE(output, "response.reasoning_summary_text.done", map[string]any{"type": "response.reasoning_summary_text.done", "item_id": itemID, "output_index": a.responsesReasoningIndex, "summary_index": 0, "text": a.response.Reasoning})
 	a.writeResponsesSSE(output, "response.reasoning_summary_part.done", map[string]any{"type": "response.reasoning_summary_part.done", "item_id": itemID, "output_index": a.responsesReasoningIndex, "summary_index": 0, "part": map[string]any{"type": "summary_text", "text": a.response.Reasoning}})
 	a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": a.responsesReasoningIndex, "item": map[string]any{"id": itemID, "type": "reasoning", "summary": []any{map[string]any{"type": "summary_text", "text": a.response.Reasoning}}}})
+	a.response.Parts = append(a.response.Parts, adapterPart{Type: "reasoning", ItemID: itemID, Text: a.response.Reasoning})
 	a.responsesReasoningDone = true
 }
 
@@ -1179,9 +1231,9 @@ func (a *protocolStreamAdapter) closeResponsesText(output *bytes.Buffer) {
 	if !a.responsesTextStarted || a.responsesTextDone {
 		return
 	}
-	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.output_text.done", map[string]any{"type": "response.output_text.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "text": a.response.Text})
-	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": a.response.Text, "annotations": openAIStreamAnnotations(a.annotations)}})
+	itemID := a.responsesMessageID
+	a.writeResponsesSSE(output, "response.output_text.done", map[string]any{"type": "response.output_text.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "text": a.responsesCurrentText})
+	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": a.responsesCurrentText, "annotations": openAIStreamAnnotations(a.responsesCurrentAnnotations)}})
 	a.responsesTextDone = true
 }
 
@@ -1189,9 +1241,9 @@ func (a *protocolStreamAdapter) closeResponsesRefusal(output *bytes.Buffer) {
 	if !a.responsesRefusalStarted || a.responsesRefusalDone {
 		return
 	}
-	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.refusal.done", map[string]any{"type": "response.refusal.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "refusal": a.response.Refusal})
-	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": a.response.Refusal}})
+	itemID := a.responsesMessageID
+	a.writeResponsesSSE(output, "response.refusal.done", map[string]any{"type": "response.refusal.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "refusal": a.responsesCurrentRefusal})
+	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": a.responsesCurrentRefusal}})
 	a.responsesRefusalDone = true
 }
 
@@ -1201,16 +1253,23 @@ func (a *protocolStreamAdapter) closeResponsesMessage(output *bytes.Buffer) {
 	}
 	a.closeResponsesText(output)
 	a.closeResponsesRefusal(output)
-	itemID := "msg_" + safeID(a.response.ID)
+	itemID := a.responsesMessageID
 	content := make([]any, 0, 2)
-	if a.responsesTextStarted {
-		content = append(content, map[string]any{"type": "output_text", "text": a.response.Text, "annotations": openAIStreamAnnotations(a.annotations)})
-	}
-	if a.responsesRefusalStarted {
-		content = append(content, map[string]any{"type": "refusal", "refusal": a.response.Refusal})
+	parts := make([]adapterPart, 0, 2)
+	for contentIndex := 0; contentIndex < a.responsesNextContentIndex; contentIndex++ {
+		switch {
+		case a.responsesTextStarted && a.responsesTextContentIndex == contentIndex:
+			annotations := openAIStreamAnnotations(a.responsesCurrentAnnotations)
+			content = append(content, map[string]any{"type": "output_text", "text": a.responsesCurrentText, "annotations": annotations})
+			parts = append(parts, adapterPart{Type: "text", ItemID: itemID, Text: a.responsesCurrentText, Citations: decodeAdapterCitations(annotations)})
+		case a.responsesRefusalStarted && a.responsesRefusalContentIndex == contentIndex:
+			content = append(content, map[string]any{"type": "refusal", "refusal": a.responsesCurrentRefusal})
+			parts = append(parts, adapterPart{Type: "refusal", ItemID: itemID, Refusal: a.responsesCurrentRefusal})
+		}
 	}
 	item := map[string]any{"id": itemID, "type": "message", "status": "completed", "role": "assistant", "content": content}
 	a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": a.responsesTextIndex(), "item": item})
+	a.response.Parts = append(a.response.Parts, parts...)
 	a.responsesMessageDone = true
 }
 
