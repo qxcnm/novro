@@ -71,6 +71,20 @@ func (_u *ProviderUpdate) AppendProtocols(v []string) *ProviderUpdate {
 	return _u
 }
 
+// SetOutboundFormat sets the "outbound_format" field.
+func (_u *ProviderUpdate) SetOutboundFormat(v string) *ProviderUpdate {
+	_u.mutation.SetOutboundFormat(v)
+	return _u
+}
+
+// SetNillableOutboundFormat sets the "outbound_format" field if the given value is not nil.
+func (_u *ProviderUpdate) SetNillableOutboundFormat(v *string) *ProviderUpdate {
+	if v != nil {
+		_u.SetOutboundFormat(*v)
+	}
+	return _u
+}
+
 // SetBaseURL sets the "base_url" field.
 func (_u *ProviderUpdate) SetBaseURL(v string) *ProviderUpdate {
 	_u.mutation.SetBaseURL(v)
@@ -277,6 +291,11 @@ func (_u *ProviderUpdate) check() error {
 			return &ValidationError{Name: "protocol", err: fmt.Errorf(`ent: validator failed for field "Provider.protocol": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OutboundFormat(); ok {
+		if err := provider.OutboundFormatValidator(v); err != nil {
+			return &ValidationError{Name: "outbound_format", err: fmt.Errorf(`ent: validator failed for field "Provider.outbound_format": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.BaseURL(); ok {
 		if err := provider.BaseURLValidator(v); err != nil {
 			return &ValidationError{Name: "base_url", err: fmt.Errorf(`ent: validator failed for field "Provider.base_url": %w`, err)}
@@ -335,6 +354,9 @@ func (_u *ProviderUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, provider.FieldProtocols, value)
 		})
+	}
+	if value, ok := _u.mutation.OutboundFormat(); ok {
+		_spec.SetField(provider.FieldOutboundFormat, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)
@@ -468,6 +490,20 @@ func (_u *ProviderUpdateOne) SetProtocols(v []string) *ProviderUpdateOne {
 // AppendProtocols appends value to the "protocols" field.
 func (_u *ProviderUpdateOne) AppendProtocols(v []string) *ProviderUpdateOne {
 	_u.mutation.AppendProtocols(v)
+	return _u
+}
+
+// SetOutboundFormat sets the "outbound_format" field.
+func (_u *ProviderUpdateOne) SetOutboundFormat(v string) *ProviderUpdateOne {
+	_u.mutation.SetOutboundFormat(v)
+	return _u
+}
+
+// SetNillableOutboundFormat sets the "outbound_format" field if the given value is not nil.
+func (_u *ProviderUpdateOne) SetNillableOutboundFormat(v *string) *ProviderUpdateOne {
+	if v != nil {
+		_u.SetOutboundFormat(*v)
+	}
 	return _u
 }
 
@@ -690,6 +726,11 @@ func (_u *ProviderUpdateOne) check() error {
 			return &ValidationError{Name: "protocol", err: fmt.Errorf(`ent: validator failed for field "Provider.protocol": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OutboundFormat(); ok {
+		if err := provider.OutboundFormatValidator(v); err != nil {
+			return &ValidationError{Name: "outbound_format", err: fmt.Errorf(`ent: validator failed for field "Provider.outbound_format": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.BaseURL(); ok {
 		if err := provider.BaseURLValidator(v); err != nil {
 			return &ValidationError{Name: "base_url", err: fmt.Errorf(`ent: validator failed for field "Provider.base_url": %w`, err)}
@@ -765,6 +806,9 @@ func (_u *ProviderUpdateOne) sqlSave(ctx context.Context) (_node *Provider, err 
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, provider.FieldProtocols, value)
 		})
+	}
+	if value, ok := _u.mutation.OutboundFormat(); ok {
+		_spec.SetField(provider.FieldOutboundFormat, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)

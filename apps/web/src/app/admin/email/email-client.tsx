@@ -125,6 +125,7 @@ export default function EmailClient() {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [testRecipientError, setTestRecipientError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,20 +195,29 @@ export default function EmailClient() {
    * @date 2026-08-13
    */
   async function sendTest() {
+    const recipient = testRecipient.trim();
+    const recipientInput = document.getElementById("smtp-test-recipient") as HTMLInputElement | null;
+    if (recipientInput && !recipientInput.checkValidity()) {
+      setTestRecipientError("请输入有效的测试收件地址。");
+      recipientInput.reportValidity();
+      recipientInput.focus();
+      return;
+    }
+    setTestRecipientError("");
     setTesting(true);
     setMessage("");
     setError("");
     const response = await fetch("/api/admin/email/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient: testRecipient.trim() }),
+      body: JSON.stringify({ recipient }),
     });
     if (!response.ok) {
       setError(await readError(response));
       setTesting(false);
       return;
     }
-    setMessage(`测试邮件已发送到 ${testRecipient.trim()}，请检查收件箱。`);
+    setMessage(`测试邮件已发送到 ${recipient}，请检查收件箱。`);
     setTesting(false);
   }
 
@@ -262,7 +272,7 @@ export default function EmailClient() {
 
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Send className="size-4 text-muted-foreground" />发送测试邮件</CardTitle><CardDescription>使用最近保存并启用的配置验证连接和发件身份。</CardDescription></CardHeader>
-            <CardContent className="space-y-3"><div className="space-y-2"><Label htmlFor="smtp-test-recipient">测试收件地址</Label><Input id="smtp-test-recipient" onChange={(event) => setTestRecipient(event.target.value)} placeholder="admin@example.com" type="email" value={testRecipient} /></div><Button className="w-full" disabled={!form.enabled || !config.configured || testing || !testRecipient.trim()} onClick={() => void sendTest()} type="button" variant="outline"><Send />{testing ? "发送中..." : "发送测试邮件"}</Button>{!config.configured ? <p className="text-xs text-muted-foreground">先保存完整的 SMTP 配置后才能测试。</p> : !form.enabled ? <p className="text-xs text-muted-foreground">启用并保存邮件发送后才能测试。</p> : null}</CardContent>
+            <CardContent className="space-y-3"><div className="space-y-2"><Label htmlFor="smtp-test-recipient">测试收件地址</Label><Input aria-describedby={testRecipientError ? "smtp-test-recipient-help smtp-test-recipient-error" : "smtp-test-recipient-help"} aria-invalid={testRecipientError ? true : undefined} autoComplete="email" id="smtp-test-recipient" onChange={(event) => { setTestRecipient(event.target.value); setTestRecipientError(""); }} placeholder="例如：admin@example.com" type="email" value={testRecipient} /><p className="text-xs text-muted-foreground" id="smtp-test-recipient-help">请输入要接收测试邮件的完整邮箱地址；内部地址可使用 admin@localhost。</p>{testRecipientError ? <p className="text-sm text-destructive" id="smtp-test-recipient-error" role="alert">{testRecipientError}</p> : null}</div><Button className="w-full" disabled={!form.enabled || !config.configured || testing || !testRecipient.trim()} onClick={() => void sendTest()} type="button" variant="outline"><Send />{testing ? "发送中..." : "发送测试邮件"}</Button>{!config.configured ? <p className="text-xs text-muted-foreground">先保存完整的 SMTP 配置后才能测试。</p> : !form.enabled ? <p className="text-xs text-muted-foreground">启用并保存邮件发送后才能测试。</p> : null}</CardContent>
           </Card>
         </div>
       </div>

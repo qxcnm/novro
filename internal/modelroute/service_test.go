@@ -111,18 +111,21 @@ func TestCreateNormalizesAndValidatesModelRoute(t *testing.T) {
 	if store.created.PublicName != "deepseek-chat" || store.created.DisplayName != "DeepSeek Chat" || store.created.ProviderID != providerID || store.created.UpstreamModelID != upstreamModelID {
 		t.Fatalf("not normalized: %+v", store.created)
 	}
-	for _, name := range []string{"", "bad model", "/starts-wrong"} {
-		_, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, PublicName: name, DisplayName: "name"})
-		if !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("name=%q err=%v", name, err)
+	for _, name := range []string{"GPT-5.6 Luna", "bad model", "/starts-wrong", "中文 模型（测试）", "x"} {
+		if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: name, DisplayName: "name"}); err != nil {
+			t.Fatalf("model name=%q should be accepted: %v", name, err)
 		}
 	}
-	longName := "m" + strings.Repeat("-segment", 30)
-	if len(longName) <= 128 || len(longName) > 256 {
-		t.Fatalf("invalid long-name test fixture length %d", len(longName))
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: "   ", DisplayName: "name"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("blank model name error=%v", err)
 	}
-	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: longName, DisplayName: "Long Model"}); err != nil {
-		t.Fatalf("256-character model IDs should be accepted: %v", err)
+	maxName := strings.Repeat("m", 256)
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: maxName, DisplayName: "Max Model"}); err != nil {
+		t.Fatalf("256-rune model ID should be accepted: %v", err)
+	}
+	longName := strings.Repeat("m", 257)
+	if _, err := service.Create(context.Background(), CreateInput{ProviderID: providerID, UpstreamModelID: upstreamModelID, BillingGroupID: billingGroupID, PublicName: longName, DisplayName: "Long Model"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("overlong model name error=%v", err)
 	}
 }
 

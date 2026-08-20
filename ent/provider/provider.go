@@ -24,6 +24,8 @@ const (
 	FieldProtocol = "protocol"
 	// FieldProtocols holds the string denoting the protocols field in the database.
 	FieldProtocols = "protocols"
+	// FieldOutboundFormat holds the string denoting the outbound_format field in the database.
+	FieldOutboundFormat = "outbound_format"
 	// FieldBaseURL holds the string denoting the base_url field in the database.
 	FieldBaseURL = "base_url"
 	// FieldModelListPath holds the string denoting the model_list_path field in the database.
@@ -62,6 +64,7 @@ var Columns = []string{
 	FieldDisplayName,
 	FieldProtocol,
 	FieldProtocols,
+	FieldOutboundFormat,
 	FieldBaseURL,
 	FieldModelListPath,
 	FieldWeight,
@@ -90,6 +93,10 @@ var (
 	DisplayNameValidator func(string) error
 	// DefaultProtocols holds the default value on creation for the "protocols" field.
 	DefaultProtocols []string
+	// DefaultOutboundFormat holds the default value on creation for the "outbound_format" field.
+	DefaultOutboundFormat string
+	// OutboundFormatValidator is a validator for the "outbound_format" field. It is called by the builders before save.
+	OutboundFormatValidator func(string) error
 	// BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	BaseURLValidator func(string) error
 	// DefaultModelListPath holds the default value on creation for the "model_list_path" field.
@@ -184,6 +191,11 @@ func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 // ByProtocol orders the results by the protocol field.
 func ByProtocol(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProtocol, opts...).ToFunc()
+}
+
+// ByOutboundFormat orders the results by the outbound_format field.
+func ByOutboundFormat(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutboundFormat, opts...).ToFunc()
 }
 
 // ByBaseURL orders the results by the base_url field.

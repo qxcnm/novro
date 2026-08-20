@@ -543,6 +543,7 @@ var (
 		{Name: "display_name", Type: field.TypeString, Size: 128},
 		{Name: "protocol", Type: field.TypeEnum, Enums: []string{"openai", "anthropic"}},
 		{Name: "protocols", Type: field.TypeJSON},
+		{Name: "outbound_format", Type: field.TypeString, Size: 32, Default: ""},
 		{Name: "base_url", Type: field.TypeString, Size: 512},
 		{Name: "model_list_path", Type: field.TypeString, Size: 512, Default: ""},
 		{Name: "weight", Type: field.TypeInt, Default: 100},
@@ -562,12 +563,12 @@ var (
 			{
 				Name:    "provider_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[10], ProvidersColumns[11]},
+				Columns: []*schema.Column{ProvidersColumns[11], ProvidersColumns[12]},
 			},
 			{
 				Name:    "provider_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProvidersColumns[13]},
+				Columns: []*schema.Column{ProvidersColumns[14]},
 			},
 		},
 	}

@@ -66,6 +66,11 @@ func DisplayName(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldDisplayName, v))
 }
 
+// OutboundFormat applies equality check predicate on the "outbound_format" field. It's identical to OutboundFormatEQ.
+func OutboundFormat(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldOutboundFormat, v))
+}
+
 // BaseURL applies equality check predicate on the "base_url" field. It's identical to BaseURLEQ.
 func BaseURL(v string) predicate.Provider {
 	return predicate.Provider(sql.FieldEQ(FieldBaseURL, v))
@@ -254,6 +259,71 @@ func ProtocolIn(vs ...Protocol) predicate.Provider {
 // ProtocolNotIn applies the NotIn predicate on the "protocol" field.
 func ProtocolNotIn(vs ...Protocol) predicate.Provider {
 	return predicate.Provider(sql.FieldNotIn(FieldProtocol, vs...))
+}
+
+// OutboundFormatEQ applies the EQ predicate on the "outbound_format" field.
+func OutboundFormatEQ(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEQ(FieldOutboundFormat, v))
+}
+
+// OutboundFormatNEQ applies the NEQ predicate on the "outbound_format" field.
+func OutboundFormatNEQ(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldNEQ(FieldOutboundFormat, v))
+}
+
+// OutboundFormatIn applies the In predicate on the "outbound_format" field.
+func OutboundFormatIn(vs ...string) predicate.Provider {
+	return predicate.Provider(sql.FieldIn(FieldOutboundFormat, vs...))
+}
+
+// OutboundFormatNotIn applies the NotIn predicate on the "outbound_format" field.
+func OutboundFormatNotIn(vs ...string) predicate.Provider {
+	return predicate.Provider(sql.FieldNotIn(FieldOutboundFormat, vs...))
+}
+
+// OutboundFormatGT applies the GT predicate on the "outbound_format" field.
+func OutboundFormatGT(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldGT(FieldOutboundFormat, v))
+}
+
+// OutboundFormatGTE applies the GTE predicate on the "outbound_format" field.
+func OutboundFormatGTE(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldGTE(FieldOutboundFormat, v))
+}
+
+// OutboundFormatLT applies the LT predicate on the "outbound_format" field.
+func OutboundFormatLT(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldLT(FieldOutboundFormat, v))
+}
+
+// OutboundFormatLTE applies the LTE predicate on the "outbound_format" field.
+func OutboundFormatLTE(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldLTE(FieldOutboundFormat, v))
+}
+
+// OutboundFormatContains applies the Contains predicate on the "outbound_format" field.
+func OutboundFormatContains(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldContains(FieldOutboundFormat, v))
+}
+
+// OutboundFormatHasPrefix applies the HasPrefix predicate on the "outbound_format" field.
+func OutboundFormatHasPrefix(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldHasPrefix(FieldOutboundFormat, v))
+}
+
+// OutboundFormatHasSuffix applies the HasSuffix predicate on the "outbound_format" field.
+func OutboundFormatHasSuffix(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldHasSuffix(FieldOutboundFormat, v))
+}
+
+// OutboundFormatEqualFold applies the EqualFold predicate on the "outbound_format" field.
+func OutboundFormatEqualFold(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldEqualFold(FieldOutboundFormat, v))
+}
+
+// OutboundFormatContainsFold applies the ContainsFold predicate on the "outbound_format" field.
+func OutboundFormatContainsFold(v string) predicate.Provider {
+	return predicate.Provider(sql.FieldContainsFold(FieldOutboundFormat, v))
 }
 
 // BaseURLEQ applies the EQ predicate on the "base_url" field.

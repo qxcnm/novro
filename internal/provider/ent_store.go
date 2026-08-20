@@ -47,6 +47,7 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 			SetDisplayName(params.DisplayName).
 			SetProtocol(entprovider.Protocol(params.PrimaryProtocol)).
 			SetProtocols(protocolStrings(params.Protocols)).
+			SetOutboundFormat(string(params.OutboundFormat)).
 			SetBaseURL(params.BaseURL).
 			SetModelListPath(params.ModelListPath).
 			SetWeight(params.Weight).
@@ -71,6 +72,7 @@ func (s *EntStore) Create(ctx context.Context, params CreateParams) (Record, err
 		SetDisplayName(params.DisplayName).
 		SetProtocol(entprovider.Protocol(params.PrimaryProtocol)).
 		SetProtocols(protocolStrings(params.Protocols)).
+		SetOutboundFormat(string(params.OutboundFormat)).
 		SetBaseURL(params.BaseURL).
 		SetModelListPath(params.ModelListPath).
 		SetWeight(params.Weight).
@@ -140,6 +142,9 @@ func (s *EntStore) Update(ctx context.Context, id uuid.UUID, params UpdateParams
 	}
 	if params.Protocols != nil && params.PrimaryProtocol != nil {
 		update.SetProtocol(entprovider.Protocol(*params.PrimaryProtocol)).SetProtocols(protocolStrings(*params.Protocols))
+	}
+	if params.OutboundFormat != nil {
+		update.SetOutboundFormat(string(*params.OutboundFormat))
 	}
 	if params.BaseURL != nil {
 		update.SetBaseURL(*params.BaseURL)
@@ -231,7 +236,7 @@ func (s *EntStore) Delete(ctx context.Context, id uuid.UUID) error {
 func fromEnt(entity *ent.Provider) Record {
 	record := Record{
 		ID: entity.ID, Code: entity.Code, DisplayName: entity.DisplayName,
-		Protocols: ProtocolsFromStrings(entity.Protocols, Protocol(entity.Protocol)), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
+		Protocols: ProtocolsFromStrings(entity.Protocols, Protocol(entity.Protocol)), OutboundFormat: OutboundFormat(entity.OutboundFormat), BaseURL: entity.BaseURL, ModelListPath: entity.ModelListPath,
 		Weight:     entity.Weight,
 		APIKeyHint: entity.APIKeyHint, HasAPIKey: entity.EncryptedAPIKey != "",
 		Status: Status(entity.Status), CreatedAt: entity.CreatedAt, UpdatedAt: entity.UpdatedAt,

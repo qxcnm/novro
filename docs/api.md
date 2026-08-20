@@ -84,6 +84,8 @@
 | `PATCH` | `/api/admin/billing-groups/{id}/status` | 管理员 | 启用或停用非默认分组 |
 | `DELETE` | `/api/admin/billing-groups/{id}` | 管理员 | 软删除未使用的非默认分组 |
 
+提供商创建和修改接口的 `outbound_format` 可设为 `chat_completions`、`responses` 或 `messages`；空字符串表示不启用出口适配，保持原有透传行为。管理查询会返回同名字段供控制台回显。
+
 控制台 `/api/*` 的写请求（除 `GET`、`HEAD` 和 `OPTIONS` 外）必须携带
 `Origin`，并且必须匹配 `NOVRO_ALLOWED_ORIGINS` 中配置的完整来源；缺失或不匹配时
 返回 `403 invalid_origin`。易支付异步通知路径是唯一例外，它不依赖浏览器来源，而是
@@ -123,7 +125,7 @@
 修改用户角色和停用用户都受最后启用管理员保护。系统会在数据库事务内锁定启用的
 管理员集合，不能通过角色降级或状态变更移除最后一个可用管理员。
 
-本地注册、首次管理员初始化和管理员创建用户都要求 `username`、`email` 与 `password`；公开注册使用规范化后的 `username` 作为 `display_name`。密码必须为 8 到 72 字节，并同时包含至少一个英文字符和一个数字。公开注册还需先调用 `/api/auth/register/send-code`，该请求会先检查邮箱是否已注册，已注册时返回 `email_taken`，未注册才发送验证码，再在注册请求中提交 `verification_code`。验证码有效期 10 分钟、单次使用，同一邮箱 60 秒内只能发送一次。通过邀请链接注册时可额外提交 `referral_code`；邀请码只在创建账号时绑定，注册后不能更换邀请人。
+本地注册、首次管理员初始化和管理员创建用户都要求 `username`、`email` 与 `password`；`username` 统一转为小写后校验为 3 到 64 位，只允许小写字母、数字、点号、下划线和连字符，且必须以字母或数字开头，不能填写邮箱地址。公开注册使用规范化后的 `username` 作为 `display_name`。密码必须为 8 到 72 字节，并同时包含至少一个英文字符和一个数字。公开注册还需先调用 `/api/auth/register/send-code`，该请求会先检查邮箱是否已注册，已注册时返回 `email_taken`，未注册才发送验证码，再在注册请求中提交 `verification_code`。注册接口会先校验用户名、邮箱、密码和邀请码等字段格式，再验证并消费邮箱验证码；格式错误不会消耗验证码。验证码有效期 10 分钟、单次使用，同一邮箱 60 秒内只能发送一次。通过邀请链接注册时可额外提交 `referral_code`；邀请码只在创建账号时绑定，注册后不能更换邀请人。
 邮箱会转为小写并保持唯一。登录请求继续使用兼容字段 `username`，该字段可以填写用户名
 或邮箱。登录、注册和初始化响应设置 Cookie 后，控制台会再调用 `/api/auth/me` 确认会话；
 只有明确的 `401` 会被视为退出登录，临时网络错误或服务端错误不会清除前端登录状态。
@@ -179,10 +181,27 @@ GET /v1/models
 把渠道代码写入公开模型名，管理员手工别名保持不变。同名的多条启用路由只返回一个模型项，
 响应不会暴露上游 API Key 或加密配置。
 
-同一 `public_name`、支持当前 API 协议的启用路由组成渠道池。一个提供商可以同时声明支持 OpenAI 和
-Anthropic；Chat Completions 与 Responses 只命中支持 OpenAI 的提供商，Messages 只命中支持
-Anthropic 的提供商。Novro 不在两种协议之间转换请求或响应。网关按照提供商的 `weight` 从高到低请求，
-权重相同时保持稳定的路由顺序。只有 DNS、拨号或 TLS 等发生在取得连接前的明确连接失败，才会
+同一 `public_name`、支持当前出口协议的启用路由组成渠道池。提供商未配置 `outbound_format` 时，Chat Completions 与 Responses
+只命中支持 OpenAI 的提供商，Messages 只命中支持 Anthropic 的提供商，请求和响应保持透传。配置出口格式后，Novro 会在
+Chat Completions、Responses 和 Messages 之间转换请求、非流响应及 SSE 事件，并请求所选格式对应的上游路径。
+转换层覆盖文本、URL/Data URI 图片、函数工具及结果、reasoning/thinking、JSON Schema 结构化输出，以及 usage、缓存和推理 Token 明细。
+目标协议无法表示的服务端内置工具会单独省略，其他可转换的函数工具和请求内容仍会继续转发，不会因为一个不可移植工具而拒绝整个请求。
+SSE 会按目标协议生成完整生命周期和终止事件；正文和函数工具参数都按上游事件逐段转换并立即刷新，不等待完整生成结束，
+并行工具调用通过目标协议各自的 block/item 索引保持独立。Chat 上游在 `finish_reason` 后仍继续读取 usage 与 `[DONE]`。
+若传输在 usage 或真正终止事件前异常中断，不会合成成功终止或把缺失 usage 当作已确认的零 Token 结算。
+Anthropic thinking 的 `signature` 是上游生成的不可伪造字段；从 Chat 或 Responses 转到 Messages 时，
+没有真实签名的 reasoning 会被省略，既不会伪造 thinking 块，也不会作为可见文本泄漏。Responses 请求转换到
+Chat 或 Messages 上游时，网关会缓存已完成 Responses 轮次的原始 `input + output`；后续请求携带
+`previous_response_id` 后，网关按链展开历史、追加当前 `input`、删除该字段，再交给目标协议转换器。历史按 API Key
+隔离，只保存在当前进程内，最长保留 24 小时；缓存最多 4096 个响应、合计 64 MiB、单响应 8 MiB，单次最多展开
+64 轮。进程重启、条目过期或淘汰、ID 未知、跨 API Key 引用时返回 `previous_response_not_found`。请求直接发往
+Responses 上游时仍原样传递 `previous_response_id`，由该上游解释其服务端状态。
+Responses 输入中的 `item_reference` 等仅用于引用上游历史的非标准 item，在转换到 Chat 或 Messages 时单独省略；
+已展开的具体消息、函数调用和工具结果仍会保留，避免一个不可移植引用阻断整轮请求。
+若兼容供应商把同一段无签名推理同时复制到 reasoning 与正文，Messages 目标会抑制完全相同的正文副本，但保留不同的真实回答。
+Responses 历史中的相邻多个函数调用会合并为一条 Chat assistant 消息；Messages 目标也会合并相邻 `tool_use` 和 `tool_result`，
+以保持多工具回传顺序合法。
+网关按照提供商的 `weight` 从高到低请求，权重相同时保持稳定的路由顺序。只有 DNS、拨号或 TLS 等发生在取得连接前的明确连接失败，才会
 在当前渠道有限重试并继续下一候选渠道。一旦取得连接、收到任意 HTTP 响应，或无法证明请求未被
 上游接收，就不会自动重放 POST。明确的非 `2xx`、重定向或失败事件直接结束本次 operation；已取得
 连接后的网络错误、`2xx` 响应体读取失败以及没有明确终态的流进入 `pending_unknown`，保留预占供

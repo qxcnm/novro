@@ -921,8 +921,14 @@ func init() {
 	providerDescProtocols := providerFields[4].Descriptor()
 	// provider.DefaultProtocols holds the default value on creation for the protocols field.
 	provider.DefaultProtocols = providerDescProtocols.Default.([]string)
+	// providerDescOutboundFormat is the schema descriptor for outbound_format field.
+	providerDescOutboundFormat := providerFields[5].Descriptor()
+	// provider.DefaultOutboundFormat holds the default value on creation for the outbound_format field.
+	provider.DefaultOutboundFormat = providerDescOutboundFormat.Default.(string)
+	// provider.OutboundFormatValidator is a validator for the "outbound_format" field. It is called by the builders before save.
+	provider.OutboundFormatValidator = providerDescOutboundFormat.Validators[0].(func(string) error)
 	// providerDescBaseURL is the schema descriptor for base_url field.
-	providerDescBaseURL := providerFields[5].Descriptor()
+	providerDescBaseURL := providerFields[6].Descriptor()
 	// provider.BaseURLValidator is a validator for the "base_url" field. It is called by the builders before save.
 	provider.BaseURLValidator = func() func(string) error {
 		validators := providerDescBaseURL.Validators
@@ -940,13 +946,13 @@ func init() {
 		}
 	}()
 	// providerDescModelListPath is the schema descriptor for model_list_path field.
-	providerDescModelListPath := providerFields[6].Descriptor()
+	providerDescModelListPath := providerFields[7].Descriptor()
 	// provider.DefaultModelListPath holds the default value on creation for the model_list_path field.
 	provider.DefaultModelListPath = providerDescModelListPath.Default.(string)
 	// provider.ModelListPathValidator is a validator for the "model_list_path" field. It is called by the builders before save.
 	provider.ModelListPathValidator = providerDescModelListPath.Validators[0].(func(string) error)
 	// providerDescWeight is the schema descriptor for weight field.
-	providerDescWeight := providerFields[7].Descriptor()
+	providerDescWeight := providerFields[8].Descriptor()
 	// provider.DefaultWeight holds the default value on creation for the weight field.
 	provider.DefaultWeight = providerDescWeight.Default.(int)
 	// provider.WeightValidator is a validator for the "weight" field. It is called by the builders before save.
@@ -966,7 +972,7 @@ func init() {
 		}
 	}()
 	// providerDescEncryptedAPIKey is the schema descriptor for encrypted_api_key field.
-	providerDescEncryptedAPIKey := providerFields[8].Descriptor()
+	providerDescEncryptedAPIKey := providerFields[9].Descriptor()
 	// provider.EncryptedAPIKeyValidator is a validator for the "encrypted_api_key" field. It is called by the builders before save.
 	provider.EncryptedAPIKeyValidator = func() func(string) error {
 		validators := providerDescEncryptedAPIKey.Validators
@@ -984,7 +990,7 @@ func init() {
 		}
 	}()
 	// providerDescAPIKeyHint is the schema descriptor for api_key_hint field.
-	providerDescAPIKeyHint := providerFields[9].Descriptor()
+	providerDescAPIKeyHint := providerFields[10].Descriptor()
 	// provider.APIKeyHintValidator is a validator for the "api_key_hint" field. It is called by the builders before save.
 	provider.APIKeyHintValidator = func() func(string) error {
 		validators := providerDescAPIKeyHint.Validators
@@ -1002,11 +1008,11 @@ func init() {
 		}
 	}()
 	// providerDescCreatedAt is the schema descriptor for created_at field.
-	providerDescCreatedAt := providerFields[11].Descriptor()
+	providerDescCreatedAt := providerFields[12].Descriptor()
 	// provider.DefaultCreatedAt holds the default value on creation for the created_at field.
 	provider.DefaultCreatedAt = providerDescCreatedAt.Default.(func() time.Time)
 	// providerDescUpdatedAt is the schema descriptor for updated_at field.
-	providerDescUpdatedAt := providerFields[12].Descriptor()
+	providerDescUpdatedAt := providerFields[13].Descriptor()
 	// provider.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	provider.DefaultUpdatedAt = providerDescUpdatedAt.Default.(func() time.Time)
 	// provider.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

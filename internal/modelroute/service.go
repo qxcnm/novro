@@ -2,15 +2,12 @@ package modelroute
 
 import (
 	"context"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/novro-gateway/novro/internal/provider"
 )
-
-var publicNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{1,255}$`)
 
 type Store interface {
 
@@ -108,7 +105,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	input.PublicName = strings.TrimSpace(input.PublicName)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.UpstreamName = strings.TrimSpace(input.UpstreamName)
-	if input.UpstreamModelID == uuid.Nil || input.ProviderID == uuid.Nil || input.BillingGroupID == uuid.Nil || !publicNamePattern.MatchString(input.PublicName) || !validText(input.DisplayName, 128) {
+	if input.UpstreamModelID == uuid.Nil || input.ProviderID == uuid.Nil || input.BillingGroupID == uuid.Nil || !validText(input.PublicName, 256) || !validText(input.DisplayName, 128) {
 		return Record{}, ErrInvalidInput
 	}
 	return s.store.Create(ctx, input)

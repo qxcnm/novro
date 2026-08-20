@@ -37,6 +37,7 @@ import (
 const (
 	maxGatewayBodyBytes          int64 = 0
 	maxUpstreamBodyBytes         int64 = 0
+	maxUpstreamErrorBodyBytes    int64 = 64 << 10
 	defaultMaxOutputTokens             = 4096
 	streamSettlementDrainTimeout       = 30 * time.Second
 )
@@ -187,6 +188,7 @@ type Handler struct {
 	discounts             MultiplierResolver
 	client                *http.Client
 	logger                *slog.Logger
+	responseHistories     *responseHistoryStore
 	now                   func() time.Time
 	settlementRetryDelays []time.Duration
 	upstreamRetryDelays   []time.Duration
@@ -209,7 +211,8 @@ func New(deps Dependencies) *Handler {
 	}
 	return &Handler{
 		apiKeys: deps.APIKeys, routes: deps.Routes, billing: deps.Billing, settings: deps.Settings, pricing: deps.Pricing, discounts: deps.Discounts, client: client, logger: logger,
-		now: func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
+		responseHistories: newResponseHistoryStore(),
+		now:               func() time.Time { return time.Now().UTC() }, settlementRetryDelays: []time.Duration{100 * time.Millisecond, 300 * time.Millisecond},
 		upstreamRetryDelays: []time.Duration{250 * time.Millisecond, 500 * time.Millisecond},
 	}
 }
@@ -374,7 +377,6 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		return
 	}
 	publicModel := strings.TrimSpace(model)
-	requestProtocol := protocolForEndpoint(endpoint)
 	routes, err := h.routes.ResolveCandidates(r.Context(), publicModel, actor.APIKey.BillingGroupID)
 	if err != nil {
 		if errors.Is(err, modelroute.ErrNotFound) {
@@ -414,7 +416,8 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	compatible := make([]modelroute.Resolved, 0, len(routes))
 	invalidBillingRoute := false
 	for _, route := range routes {
-		if !protocolSupports(route.Provider.Protocols, requestProtocol) {
+		upstreamEndpoint := outboundEndpointForRoute(route, endpoint)
+		if !protocolSupports(route.Provider.Protocols, protocolForEndpoint(upstreamEndpoint)) {
 			continue
 		}
 		if route.UpstreamModel == nil || route.UpstreamModelID == nil {
@@ -440,6 +443,13 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		inputEstimate int
 	}
 	attempts := make([]upstreamAttempt, 0, len(compatible))
+	unsupportedConversion := false
+	previousResponseUnavailable := false
+	expandedPayload := payload
+	var expandPreviousResponseErr error
+	if endpoint == "responses" && strings.TrimSpace(stringValue(payload["previous_response_id"])) != "" {
+		expandedPayload, expandPreviousResponseErr = h.responseHistories.expand(actor.APIKey.ID, payload, startedAt)
+	}
 	reserved := int64(0)
 	reservationInputCap := requestSettings.ReservationInputTokenCap
 	if reservationInputCap <= 0 {
@@ -452,6 +462,15 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	// 先按请求开始时间解析并固定每条候选路由的费率；后续预扣、重试和结算
 	// 都只读取 route.ResolvedPrices，避免请求执行期间跨窗口或发布新版本造成价格不一致。
 	for _, route := range compatible {
+		upstreamEndpoint := outboundEndpointForRoute(route, endpoint)
+		routePayload := payload
+		if endpoint == "responses" && upstreamEndpoint != "responses" && strings.TrimSpace(stringValue(payload["previous_response_id"])) != "" {
+			if expandPreviousResponseErr != nil {
+				previousResponseUnavailable = true
+				continue
+			}
+			routePayload = expandedPayload
+		}
 		route.PinnedMultiplierBPS = h.routeMultiplierAt(actor, route, startedAt)
 		if h.pricing != nil {
 			resolution, err := h.pricing.Resolve(r.Context(), *route.UpstreamModelID, startedAt)
@@ -469,8 +488,11 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			route.PricingWindowID = resolution.WindowID
 			route.PricingWindowLabel = resolution.WindowLabel
 		}
-		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, stream)
+		upstreamBody, err := buildAdaptedUpstreamBody(routePayload, route, endpoint, upstreamEndpoint, stream)
 		if err != nil {
+			if errors.Is(err, errUnsupportedProtocolConversion) {
+				unsupportedConversion = true
+			}
 			h.logger.Error("build gateway upstream payload", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
 		}
@@ -487,6 +509,14 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		reserved = max(reserved, reservation.CostMicros)
 	}
 	if len(attempts) == 0 {
+		if previousResponseUnavailable {
+			writeError(w, http.StatusBadRequest, "previous_response_not_found", "previous_response_id 无效、已过期或不属于当前 API Key")
+			return
+		}
+		if unsupportedConversion {
+			writeError(w, http.StatusBadRequest, "unsupported_protocol_conversion", "请求包含目标协议无法表达的内容")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "billing_configuration_error", "模型计费配置暂时不可用")
 		return
 	}
@@ -540,14 +570,20 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	for index, attempt := range attempts {
 		route := attempt.route
 		lastRoute = route
+		upstreamEndpoint := outboundEndpointForRoute(route, endpoint)
+		routePayload := payload
+		if endpoint == "responses" && upstreamEndpoint != "responses" && strings.TrimSpace(stringValue(payload["previous_response_id"])) != "" {
+			routePayload = expandedPayload
+		}
+		upstreamProtocol := protocolForEndpoint(upstreamEndpoint)
 		upstreamStream := stream && !bufferedUpstreamStream(route)
-		upstreamBody, err := buildUpstreamBody(payload, route, endpoint, upstreamStream)
+		upstreamBody, err := buildAdaptedUpstreamBody(routePayload, route, endpoint, upstreamEndpoint, upstreamStream)
 		if err != nil {
 			failureCode, failureMessage = "upstream_payload_error", "上游请求内容构建失败"
 			h.logger.Warn("build gateway upstream request body", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
-		upstreamURL, err := buildUpstreamURL(route.BaseURL, requestProtocol, endpoint)
+		upstreamURL, err := buildUpstreamURL(route.BaseURL, upstreamProtocol, upstreamEndpoint)
 		if err != nil {
 			failureCode, failureMessage = "upstream_configuration_error", "上游地址配置无效"
 			h.logger.Warn("gateway route has invalid upstream URL", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
@@ -565,7 +601,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
 			continue
 		}
-		setUpstreamHeaders(upstreamRequest, r, route, requestProtocol)
+		setUpstreamHeaders(upstreamRequest, r, route, upstreamProtocol)
 		setUpstreamIdempotencyKey(upstreamRequest, requestID)
 		retryDelays := h.upstreamRetryDelays
 		if stream && upstreamStream {
@@ -574,17 +610,17 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			retryDelays = nil
 		}
 		response, err, requestWritten := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
-		streamRetry := stream && upstreamStream && endpoint == "chat_completions" && err != nil
+		streamRetry := stream && upstreamStream && upstreamEndpoint == "chat_completions" && err != nil
 		if streamRetry && !requestWritten {
 			if response != nil {
 				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 				_ = response.Body.Close()
 			}
-			fallbackBody, fallbackErr := buildUpstreamBody(payload, route, endpoint, false)
+			fallbackBody, fallbackErr := buildAdaptedUpstreamBody(routePayload, route, endpoint, upstreamEndpoint, false)
 			if fallbackErr == nil {
 				fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
 				if requestErr == nil {
-					setUpstreamHeaders(fallbackRequest, r, route, requestProtocol)
+					setUpstreamHeaders(fallbackRequest, r, route, upstreamProtocol)
 					setUpstreamIdempotencyKey(fallbackRequest, requestID)
 					fallbackRetryDelays := h.upstreamRetryDelays
 					if len(fallbackRetryDelays) > 0 {
@@ -619,10 +655,14 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			failureCode = "upstream_http_error"
 			failureMessage = fmt.Sprintf("上游返回 HTTP %d", response.StatusCode)
-			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+			errorBody, errorBodyErr := readLimited(response.Body, maxUpstreamErrorBodyBytes)
 			_ = response.Body.Close()
+			upstreamError := summarizeUpstreamError(errorBody)
+			if upstreamError != "" {
+				failureMessage += "：" + upstreamError
+			}
 			cancelAttempt()
-			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
+			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts), "upstream_error", upstreamError, "error_body_read_failed", errorBodyErr != nil)
 			h.failOperation(requestID, failureCode)
 			h.recordFailure(actor, route, requestID, endpoint, failureStatus, failureCode, failureMessage, publicModel, startedAt)
 			writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("上游渠道返回失败：%s（%s）", failureMessage, failureCode))
@@ -643,11 +683,11 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
 				return
 			}
-			h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
+			h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
 			return
 		}
 		if stream || strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
-			h.streamResponse(w, r, response, attemptContext, cancelAttempt, requestSettings, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
+			h.streamResponse(w, r, response, attemptContext, cancelAttempt, requestSettings, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
 			_ = response.Body.Close()
 			return
 		}
@@ -665,7 +705,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
 			return
 		}
-		h.bufferedResponse(w, r, response, responseBody, actor, route, requestID, endpoint, reserved, attempt.inputEstimate, maximum, startedAt)
+		h.bufferedResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
 		return
 	}
 	h.failOperation(requestID, failureCode)
@@ -756,11 +796,27 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
-	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
+func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time, payload map[string]any) {
+	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, upstreamEndpoint, body, startedAt) {
 		return
 	}
-	usage := parseUsage(body, usageSemanticsFor(endpoint))
+	var synthesizedStream []byte
+	var streamAdapter *protocolStreamAdapter
+	synthesizeProtocolStream := endpoint != upstreamEndpoint || endpoint != "chat_completions"
+	if synthesizeProtocolStream {
+		streamAdapter = newProtocolStreamAdapter(upstreamEndpoint, endpoint)
+		streamAdapter.setFallbackResponseID("resp_novro_" + requestID.String())
+		converted, convertErr := streamAdapter.FromBufferedResponse(body)
+		if convertErr != nil {
+			h.logger.Error("convert buffered upstream stream", "request_id", requestID, "source", upstreamEndpoint, "target", endpoint, "error", convertErr)
+			h.failOperation(requestID, "upstream_conversion_error")
+			h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败", route.PublicName, startedAt)
+			writeError(w, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败")
+			return
+		}
+		synthesizedStream = converted
+	}
+	usage := parseUsage(body, usageSemanticsFor(upstreamEndpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.routeMultiplierAt(actor, route, startedAt))
@@ -777,14 +833,23 @@ func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
+	if endpoint == "responses" && streamAdapter != nil {
+		h.rememberResponsesHistory(actor.APIKey.ID, payload, streamAdapter.responsesResult(), h.now())
+	}
 	copyResponseHeaders(w.Header(), response.Header)
+	w.Header().Del("Content-Encoding")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
 	flusher, _ := w.(http.Flusher)
-	if endpoint == "chat_completions" {
+	if synthesizeProtocolStream {
+		_, _ = w.Write(synthesizedStream)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	} else if endpoint == "chat_completions" {
 		h.writeBufferedChatEvents(w, body, flusher)
 	} else {
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", bytes.TrimSpace(body))
@@ -905,11 +970,23 @@ func retryableUpstreamStatus(status int) bool {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
-	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, body, startedAt) {
+func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time, payload map[string]any) {
+	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, upstreamEndpoint, body, startedAt) {
 		return
 	}
-	usage := parseUsage(body, usageSemanticsFor(endpoint))
+	clientBody := body
+	if endpoint != upstreamEndpoint {
+		converted, convertErr := adaptProtocolResponse(body, upstreamEndpoint, endpoint)
+		if convertErr != nil {
+			h.logger.Error("convert upstream response", "request_id", requestID, "source", upstreamEndpoint, "target", endpoint, "error", convertErr)
+			h.failOperation(requestID, "upstream_conversion_error")
+			h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败", route.PublicName, startedAt)
+			writeError(w, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败")
+			return
+		}
+		clientBody = converted
+	}
+	usage := parseUsage(body, usageSemanticsFor(upstreamEndpoint))
 	rates := rateCardFor(route)
 	usage = applyUsageFallback(usage, inputEstimate, min(len(body)+128, outputMaximum), rates)
 	quote, err := billing.CalculateCost(usage.breakdown(), rates, h.routeMultiplierAt(actor, route, startedAt))
@@ -928,10 +1005,21 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
 			return
 		}
 	}
+	if endpoint == "responses" {
+		if responsesResult, parseErr := responsesResultFromJSON(clientBody); parseErr != nil {
+			h.logger.Warn("parse Responses result for history", "request_id", requestID, "error", parseErr)
+		} else {
+			h.rememberResponsesHistory(actor.APIKey.ID, payload, responsesResult, h.now())
+		}
+	}
 	copyResponseHeaders(w.Header(), response.Header)
+	if endpoint != upstreamEndpoint {
+		w.Header().Del("Content-Encoding")
+		w.Header().Set("Content-Type", "application/json")
+	}
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
 	w.WriteHeader(response.StatusCode)
-	_, _ = w.Write(body)
+	_, _ = w.Write(clientBody)
 }
 
 /**
@@ -946,8 +1034,8 @@ func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, respo
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (h *Handler) acceptBufferedOutcome(w http.ResponseWriter, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, body []byte, startedAt time.Time) bool {
-	switch classifyBufferedOutcome(endpoint, body) {
+func (h *Handler) acceptBufferedOutcome(w http.ResponseWriter, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, body []byte, startedAt time.Time) bool {
+	switch classifyBufferedOutcome(upstreamEndpoint, body) {
 	case streamOutcomeBillable:
 		return true
 	case streamOutcomeFailed:
@@ -1000,25 +1088,11 @@ func classifyBufferedOutcome(endpoint string, body []byte) streamOutcome {
  * @date 2026-08-13
  */
 func buildUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoint string, stream bool) ([]byte, error) {
-	upstreamPayload := make(map[string]any, len(payload)+1)
-	for key, value := range payload {
-		upstreamPayload[key] = value
-	}
-	upstreamPayload["model"] = route.UpstreamName
-	if _, exists := payload["stream"]; exists {
-		upstreamPayload["stream"] = stream
-	}
-	if endpoint == "chat_completions" && stream {
-		options := make(map[string]any)
-		if current, ok := payload["stream_options"].(map[string]any); ok {
-			for key, value := range current {
-				options[key] = value
-			}
-		}
-		options["include_usage"] = true
-		upstreamPayload["stream_options"] = options
-	}
-	return json.Marshal(upstreamPayload)
+	return buildAdaptedUpstreamBody(payload, route, endpoint, endpoint, stream)
+}
+
+func buildAdaptedUpstreamBody(payload map[string]any, route modelroute.Resolved, endpoint, upstreamEndpoint string, stream bool) ([]byte, error) {
+	return adaptProtocolRequest(payload, endpoint, upstreamEndpoint, route.UpstreamName, stream)
 }
 
 // The Reasonix/Kimi gateway can take a long time before producing its first
@@ -1132,14 +1206,22 @@ func (r streamActivityReader) Read(target []byte) (int, error) {
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, upstreamContext context.Context, cancelUpstream context.CancelFunc, settings gatewaysettings.Config, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time) {
+func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, upstreamContext context.Context, cancelUpstream context.CancelFunc, settings gatewaysettings.Config, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time, payload map[string]any) {
 	defer cancelUpstream()
+	conversionEnabled := endpoint != upstreamEndpoint
 	copyResponseHeaders(w.Header(), response.Header)
+	if conversionEnabled {
+		w.Header().Del("Content-Encoding")
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Novro-Request-ID", requestID.String())
-	w.WriteHeader(response.StatusCode)
+	headersWritten := false
+	if !conversionEnabled {
+		w.WriteHeader(response.StatusCode)
+		headersWritten = true
+	}
 	flusher, _ := w.(http.Flusher)
 	usage := tokenUsage{}
 	outcome := streamOutcomeOpen
@@ -1147,7 +1229,17 @@ func (h *Handler) streamResponse(w http.ResponseWriter, r *http.Request, respons
 	line := make([]byte, 0, 64<<10)
 	lineTooLarge := false
 	atEventBoundary := true
+	currentEventName := ""
+	eventData := make([]byte, 0, 64<<10)
+	var streamAdapter *protocolStreamAdapter
+	if conversionEnabled {
+		streamAdapter = newProtocolStreamAdapter(upstreamEndpoint, endpoint)
+		streamAdapter.setFallbackResponseID("resp_novro_" + requestID.String())
+	}
+	responseHistoryRemembered := false
 	var relayErr error
+	upstreamEOF := false
+	sawProtocolTerminal := false
 	clientConnected := true
 	clientDone := r.Context().Done()
 	var drainTimer *time.Timer
@@ -1225,7 +1317,7 @@ streamLoop:
 			resetIdleTimer()
 			continue
 		case <-heartbeatC:
-			if clientConnected && atEventBoundary && len(line) == 0 && !lineTooLarge {
+			if clientConnected && (!conversionEnabled || headersWritten) && atEventBoundary && len(line) == 0 && !lineTooLarge {
 				if _, writeErr := io.WriteString(w, ": novro-keepalive\n\n"); writeErr != nil {
 					relayErr = writeErr
 					clientConnected = false
@@ -1253,9 +1345,12 @@ streamLoop:
 			break streamLoop
 		}
 		fragment, isPrefix, readErr := result.fragment, result.isPrefix, result.readErr
-		if len(fragment) == 0 && readErr != nil && len(line) == 0 && !lineTooLarge {
+		finalBufferedEvent := len(fragment) == 0 && readErr != nil && len(line) == 0 && !lineTooLarge && len(eventData) > 0
+		if len(fragment) == 0 && readErr != nil && len(line) == 0 && !lineTooLarge && !finalBufferedEvent {
 			if readErr != io.EOF {
 				relayErr = readErr
+			} else {
+				upstreamEOF = true
 			}
 			break
 		}
@@ -1270,9 +1365,32 @@ streamLoop:
 				lineTooLarge = true
 			}
 		}
+		if conversionEnabled && !isPrefix && lineTooLarge {
+			relayErr = fmt.Errorf("upstream SSE line exceeds %d bytes", maxUpstreamBodyBytes)
+			break streamLoop
+		}
+		if !isPrefix && !lineTooLarge && bytes.HasPrefix(line, []byte("event:")) {
+			currentEventName = strings.TrimSpace(string(bytes.TrimPrefix(line, []byte("event:"))))
+		}
 		if !isPrefix && !lineTooLarge && bytes.HasPrefix(line, []byte("data:")) {
-			data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-			eventOutcome, eventCode, eventMessage := classifyStreamEvent(endpoint, data)
+			dataLine := bytes.TrimPrefix(line, []byte("data:"))
+			if len(dataLine) > 0 && dataLine[0] == ' ' {
+				dataLine = dataLine[1:]
+			}
+			if len(eventData) > 0 {
+				eventData = append(eventData, '\n')
+			}
+			eventData = append(eventData, dataLine...)
+		}
+		var convertedFrame []byte
+		eventBoundary := !isPrefix && len(line) == 0
+		finalUnterminatedEvent := finalBufferedEvent || (!isPrefix && readErr != nil && len(line) > 0)
+		if (eventBoundary || finalUnterminatedEvent) && len(eventData) > 0 {
+			data := bytes.TrimSpace(eventData)
+			if isProtocolStreamTerminal(upstreamEndpoint, data) {
+				sawProtocolTerminal = true
+			}
+			eventOutcome, eventCode, eventMessage := classifyStreamEvent(upstreamEndpoint, data)
 			if eventOutcome == streamOutcomeFailed || (eventOutcome != streamOutcomeOpen && outcome == streamOutcomeOpen) {
 				outcome = eventOutcome
 			}
@@ -1280,10 +1398,44 @@ streamLoop:
 				failureCode, failureMessage = eventCode, eventMessage
 			}
 			if !bytes.Equal(data, []byte("[DONE]")) {
-				usage.merge(parseUsage(data, usageSemanticsFor(endpoint)))
+				usage.merge(parseUsage(data, usageSemanticsFor(upstreamEndpoint)))
+			}
+			if conversionEnabled {
+				convertedFrame, relayErr = streamAdapter.Translate(currentEventName, data)
+				if relayErr != nil {
+					break streamLoop
+				}
+			}
+			if endpoint == "responses" && !responseHistoryRemembered {
+				if conversionEnabled && streamAdapter.finished {
+					responseHistoryRemembered = h.rememberResponsesHistory(actor.APIKey.ID, payload, streamAdapter.responsesResult(), h.now())
+				} else if !conversionEnabled {
+					if responsesResult, parseErr := responsesResultFromJSON(data); parseErr == nil {
+						responseHistoryRemembered = h.rememberResponsesHistory(actor.APIKey.ID, payload, responsesResult, h.now())
+					}
+				}
 			}
 		}
-		if clientConnected && len(fragment) > 0 {
+		if conversionEnabled && clientConnected && len(convertedFrame) > 0 {
+			if !headersWritten {
+				w.WriteHeader(response.StatusCode)
+				headersWritten = true
+			}
+			written, writeErr := w.Write(convertedFrame)
+			if writeErr == nil && written != len(convertedFrame) {
+				writeErr = io.ErrShortWrite
+			}
+			if writeErr != nil {
+				relayErr = writeErr
+				clientConnected = false
+				clientDone = nil
+				if drainTimer == nil {
+					drainTimer = time.NewTimer(streamSettlementDrainTimeout)
+					drainC = drainTimer.C
+				}
+			}
+		}
+		if !conversionEnabled && clientConnected && len(fragment) > 0 {
 			written, writeErr := w.Write(fragment)
 			if writeErr == nil && written != len(fragment) {
 				writeErr = io.ErrShortWrite
@@ -1299,7 +1451,7 @@ streamLoop:
 			}
 		}
 		if !isPrefix {
-			if clientConnected {
+			if !conversionEnabled && clientConnected {
 				_, writeErr := w.Write([]byte{'\n'})
 				if writeErr != nil {
 					relayErr = writeErr
@@ -1311,18 +1463,47 @@ streamLoop:
 					}
 				}
 			}
-			atEventBoundary = len(line) == 0
+			atEventBoundary = eventBoundary
+			if eventBoundary || finalUnterminatedEvent {
+				currentEventName = ""
+				eventData = eventData[:0]
+			}
 			line = line[:0]
 			lineTooLarge = false
 		}
-		if clientConnected && flusher != nil {
+		if clientConnected && flusher != nil && (!conversionEnabled || headersWritten) {
 			flusher.Flush()
 		}
 		if readErr != nil {
 			if readErr != io.EOF {
 				relayErr = readErr
+			} else {
+				upstreamEOF = true
 			}
 			break
+		}
+	}
+	if conversionEnabled && upstreamEOF && outcome == streamOutcomeBillable && !streamAdapter.finished {
+		finalFrame := streamAdapter.Finalize()
+		if endpoint == "responses" && !responseHistoryRemembered {
+			responseHistoryRemembered = h.rememberResponsesHistory(actor.APIKey.ID, payload, streamAdapter.responsesResult(), h.now())
+		}
+		if clientConnected && len(finalFrame) > 0 {
+			if !headersWritten {
+				w.WriteHeader(response.StatusCode)
+				headersWritten = true
+			}
+			written, writeErr := w.Write(finalFrame)
+			if writeErr == nil && written != len(finalFrame) {
+				writeErr = io.ErrShortWrite
+			}
+			if writeErr != nil {
+				relayErr = writeErr
+				clientConnected = false
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}
 	}
 	if relayErr != nil {
@@ -1334,9 +1515,31 @@ streamLoop:
 			failureCode, failureMessage = "upstream_stream_failed", "上游流式调用失败"
 		}
 		h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, failureCode, failureMessage, route.PublicName, startedAt)
+		if conversionEnabled && !headersWritten {
+			writeError(w, http.StatusBadGateway, failureCode, failureMessage)
+		}
+		return
+	}
+	if conversionEnabled && !headersWritten && relayErr != nil {
+		h.markOperationPendingUnknown(requestID, "upstream_conversion_incomplete")
+		h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败", route.PublicName, startedAt)
+		writeError(w, http.StatusBadGateway, "upstream_conversion_error", "上游响应格式转换失败")
 		return
 	}
 	if outcome != streamOutcomeBillable {
+		h.markOperationPendingUnknown(requestID, "upstream_stream_incomplete")
+		if conversionEnabled && !headersWritten {
+			h.recordFailure(actor, route, requestID, endpoint, http.StatusBadGateway, "upstream_stream_incomplete", "上游流式响应不完整", route.PublicName, startedAt)
+			writeError(w, http.StatusBadGateway, "upstream_stream_incomplete", "上游流式响应不完整")
+		}
+		return
+	}
+	if !upstreamEOF && !sawProtocolTerminal {
+		// A finish_reason alone says generation stopped, but Chat providers can
+		// still send the authoritative usage frame and [DONE] afterwards. If
+		// the transport failed before either a clean EOF or the protocol's real
+		// terminal event, keep the reservation for reconciliation instead of
+		// settling a misleading zero-token usage row.
 		h.markOperationPendingUnknown(requestID, "upstream_stream_incomplete")
 		return
 	}
@@ -1429,8 +1632,11 @@ func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, s
 		return streamOutcomeBillable, "", ""
 	}
 	var event struct {
-		Type     string `json:"type"`
-		Error    any    `json:"error"`
+		Type    string `json:"type"`
+		Error   any    `json:"error"`
+		Choices []struct {
+			FinishReason string `json:"finish_reason"`
+		} `json:"choices"`
 		Response struct {
 			Status string `json:"status"`
 		} `json:"response"`
@@ -1439,6 +1645,15 @@ func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, s
 		return streamOutcomeOpen, "", ""
 	}
 	switch endpoint {
+	case "chat_completions":
+		if event.Error != nil {
+			return streamOutcomeFailed, "upstream_stream_failed", "上游流式调用失败"
+		}
+		for _, choice := range event.Choices {
+			if strings.TrimSpace(choice.FinishReason) != "" {
+				return streamOutcomeBillable, "", ""
+			}
+		}
 	case "responses":
 		switch event.Type {
 		case "response.completed", "response.incomplete":
@@ -1458,6 +1673,26 @@ func classifyStreamEvent(endpoint string, data []byte) (streamOutcome, string, s
 		}
 	}
 	return streamOutcomeOpen, "", ""
+}
+
+func isProtocolStreamTerminal(endpoint string, data []byte) bool {
+	if endpoint == "chat_completions" {
+		return bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]"))
+	}
+	var event struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(data, &event) != nil {
+		return false
+	}
+	switch endpoint {
+	case "responses":
+		return event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed"
+	case "messages":
+		return event.Type == "message_stop" || event.Type == "error"
+	default:
+		return false
+	}
 }
 
 /**
@@ -2080,6 +2315,13 @@ func protocolForEndpoint(endpoint string) provider.Protocol {
 	return provider.ProtocolOpenAI
 }
 
+func outboundEndpointForRoute(route modelroute.Resolved, inboundEndpoint string) string {
+	if provider.ValidOutboundFormat(route.Provider.OutboundFormat) && route.Provider.OutboundFormat != provider.OutboundFormatNone {
+		return string(route.Provider.OutboundFormat)
+	}
+	return inboundEndpoint
+}
+
 /**
  * buildUpstreamURL 执行该名称对应的业务处理逻辑。
  * @param base 本次操作需要使用的输入参数。
@@ -2171,6 +2413,82 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 	return body, nil
 }
 
+func summarizeUpstreamError(body []byte) string {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return ""
+	}
+	var decoded any
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&decoded); err == nil {
+		if message := findUpstreamErrorMessage(decoded, 0); message != "" {
+			return sanitizeUpstreamErrorMessage(message)
+		}
+		return ""
+	}
+	return sanitizeUpstreamErrorMessage(string(trimmed))
+}
+
+func findUpstreamErrorMessage(value any, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	switch current := value.(type) {
+	case string:
+		return current
+	case map[string]any:
+		for _, key := range []string{"message", "detail", "error_description", "msg", "reason", "error"} {
+			if nested, exists := current[key]; exists {
+				if message := findUpstreamErrorMessage(nested, depth+1); message != "" {
+					return message
+				}
+			}
+		}
+	case []any:
+		for _, nested := range current {
+			if message := findUpstreamErrorMessage(nested, depth+1); message != "" {
+				return message
+			}
+		}
+	}
+	return ""
+}
+
+func sanitizeUpstreamErrorMessage(message string) string {
+	message = strings.ToValidUTF8(message, "")
+	fields := strings.Fields(message)
+	if len(fields) == 0 {
+		return ""
+	}
+	for index, field := range fields {
+		if looksLikeSecretToken(field) {
+			fields[index] = "[redacted]"
+		}
+	}
+	message = strings.Join(fields, " ")
+	runes := []rune(message)
+	const maxErrorRunes = 300
+	if len(runes) > maxErrorRunes {
+		message = string(runes[:maxErrorRunes]) + "…"
+	}
+	return message
+}
+
+func looksLikeSecretToken(value string) bool {
+	value = strings.Trim(value, "'\"`,.;:(){}[]<>")
+	if len(value) < 24 {
+		return false
+	}
+	tokenRunes := 0
+	for _, current := range value {
+		if (current >= 'a' && current <= 'z') || (current >= 'A' && current <= 'Z') || (current >= '0' && current <= '9') || current == '-' || current == '_' {
+			tokenRunes++
+		}
+	}
+	return tokenRunes*10 >= len([]rune(value))*9
+}
+
 /**
  * copyResponseHeaders 执行该名称对应的业务处理逻辑。
  * @param target 本次操作需要使用的输入参数。
@@ -2239,6 +2557,35 @@ func intField(values map[string]any, key string) (int, bool) {
  * @date 2026-08-13
  */
 func parseIntValue(value any) (int, bool) {
+	switch number := value.(type) {
+	case int:
+		if number < 0 {
+			return 0, false
+		}
+		return number, true
+	case int64:
+		if number < 0 || uint64(number) > uint64(maxInt()) {
+			return 0, false
+		}
+		return int(number), true
+	case int32:
+		if number < 0 {
+			return 0, false
+		}
+		return int(number), true
+	case uint:
+		if uint64(number) > uint64(maxInt()) {
+			return 0, false
+		}
+		return int(number), true
+	case uint64:
+		if number > uint64(maxInt()) {
+			return 0, false
+		}
+		return int(number), true
+	case uint32:
+		return int(number), true
+	}
 	if encoded, ok := value.(json.Number); ok {
 		if integer, err := strconv.ParseInt(encoded.String(), 10, 0); err == nil {
 			if integer < 0 {

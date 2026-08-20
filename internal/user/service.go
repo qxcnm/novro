@@ -100,6 +100,7 @@ type PasswordHasher interface {
 	 * @date 2026-08-13
 	 */
 	Hash(string) (string, error)
+	Validate(string) error
 }
 
 type CreateParams struct {
@@ -152,9 +153,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Register(ctx context.Context, input RegisterInput) (Record, error) {
-	referralCode := strings.ToUpper(strings.TrimSpace(input.ReferralCode))
-	if referralCode != "" && !referralCodePattern.MatchString(referralCode) {
-		return Record{}, ErrInvalidReferralCode
+	referralCode, err := normalizeReferralCode(input.ReferralCode)
+	if err != nil {
+		return Record{}, err
 	}
 	return s.create(ctx, CreateInput{
 		Username: input.Username, Email: input.Email, DisplayName: input.Username, Password: input.Password, Role: RoleMember,
@@ -162,6 +163,16 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (Record, er
 		params.ReferralCode = referralCode
 		return s.store.Create(ctx, params)
 	})
+}
+
+func (s *Service) ValidateRegistration(input RegisterInput) error {
+	if _, err := normalizeReferralCode(input.ReferralCode); err != nil {
+		return err
+	}
+	_, err := s.validateCreateInput(CreateInput{
+		Username: input.Username, Email: input.Email, DisplayName: input.Username, Password: input.Password, Role: RoleMember,
+	})
+	return err
 }
 
 /**
@@ -187,7 +198,7 @@ func (s *Service) InitializeAdmin(ctx context.Context, input RegisterInput) (Rec
 func (s *Service) EmailAvailable(ctx context.Context, rawEmail string) (bool, error) {
 	email, ok := NormalizeEmail(rawEmail)
 	if !ok {
-		return false, ErrInvalidInput
+		return false, invalidField(ValidationFieldEmail)
 	}
 	exists, err := s.store.EmailExists(ctx, email)
 	if err != nil {
@@ -219,30 +230,55 @@ func (s *Service) SetupRequired(ctx context.Context) (bool, error) {
  * @date 2026-08-13
  */
 func (s *Service) create(ctx context.Context, input CreateInput, save func(context.Context, CreateParams) (Record, error)) (Record, error) {
-	username := strings.ToLower(strings.TrimSpace(input.Username))
-	email, emailOK := NormalizeEmail(input.Email)
-	displayName := strings.TrimSpace(input.DisplayName)
-	if !usernamePattern.MatchString(username) || !emailOK || len([]rune(displayName)) > 128 {
-		return Record{}, ErrInvalidInput
-	}
-	role := input.Role
-	if role == "" {
-		role = RoleMember
-	}
-	if role != RoleAdmin && role != RoleMember {
-		return Record{}, ErrInvalidInput
-	}
-	passwordHash, err := s.hasher.Hash(input.Password)
+	normalized, err := s.validateCreateInput(input)
 	if err != nil {
-		return Record{}, fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
+		return Record{}, err
+	}
+	passwordHash, err := s.hasher.Hash(normalized.Password)
+	if err != nil {
+		return Record{}, fmt.Errorf("%w: %v", invalidField(ValidationFieldPassword), err)
 	}
 	return save(ctx, CreateParams{
-		Username:     username,
-		Email:        email,
-		DisplayName:  displayName,
+		Username:     normalized.Username,
+		Email:        normalized.Email,
+		DisplayName:  normalized.DisplayName,
 		PasswordHash: passwordHash,
-		Role:         role,
+		Role:         normalized.Role,
 	})
+}
+
+func (s *Service) validateCreateInput(input CreateInput) (CreateInput, error) {
+	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
+	if !usernamePattern.MatchString(input.Username) {
+		return CreateInput{}, invalidField(ValidationFieldUsername)
+	}
+	email, ok := NormalizeEmail(input.Email)
+	if !ok {
+		return CreateInput{}, invalidField(ValidationFieldEmail)
+	}
+	input.Email = email
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	if len([]rune(input.DisplayName)) > 128 {
+		return CreateInput{}, invalidField(ValidationFieldDisplayName)
+	}
+	if input.Role == "" {
+		input.Role = RoleMember
+	}
+	if input.Role != RoleAdmin && input.Role != RoleMember {
+		return CreateInput{}, invalidField(ValidationFieldRole)
+	}
+	if err := s.hasher.Validate(input.Password); err != nil {
+		return CreateInput{}, fmt.Errorf("%w: %v", invalidField(ValidationFieldPassword), err)
+	}
+	return input, nil
+}
+
+func normalizeReferralCode(value string) (string, error) {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value != "" && !referralCodePattern.MatchString(value) {
+		return "", ErrInvalidReferralCode
+	}
+	return value, nil
 }
 
 /**
@@ -296,12 +332,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 	if input.DisplayName != nil {
 		displayName := strings.TrimSpace(*input.DisplayName)
 		if len([]rune(displayName)) > 128 {
-			return Record{}, ErrInvalidInput
+			return Record{}, invalidField(ValidationFieldDisplayName)
 		}
 		params.DisplayName = &displayName
 	}
 	if input.Role != nil && *input.Role != RoleAdmin && *input.Role != RoleMember {
-		return Record{}, ErrInvalidInput
+		return Record{}, invalidField(ValidationFieldRole)
 	}
 	return s.store.Update(ctx, id, params)
 }
@@ -335,7 +371,7 @@ func (s *Service) ResetPassword(ctx context.Context, id uuid.UUID, plainText str
 	}
 	passwordHash, err := s.hasher.Hash(plainText)
 	if err != nil {
-		return fmt.Errorf("%w: password: %v", ErrInvalidInput, err)
+		return fmt.Errorf("%w: %v", invalidField(ValidationFieldPassword), err)
 	}
 	return s.store.ResetPassword(ctx, id, passwordHash)
 }

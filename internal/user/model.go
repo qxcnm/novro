@@ -15,10 +15,18 @@ const (
 )
 
 type Status string
+type ValidationField string
 
 const (
 	StatusActive   Status = "active"
 	StatusDisabled Status = "disabled"
+
+	ValidationFieldUsername     ValidationField = "username"
+	ValidationFieldEmail        ValidationField = "email"
+	ValidationFieldDisplayName  ValidationField = "display_name"
+	ValidationFieldPassword     ValidationField = "password"
+	ValidationFieldRole         ValidationField = "role"
+	ValidationFieldReferralCode ValidationField = "referral_code"
 )
 
 var (
@@ -31,6 +39,22 @@ var (
 	ErrProtectedAdmin      = errors.New("cannot modify the system administrator role or status")
 	ErrAlreadyInitialized  = errors.New("administrator already initialized")
 )
+
+type ValidationError struct {
+	Field ValidationField
+}
+
+func (e *ValidationError) Error() string {
+	return ErrInvalidInput.Error() + ": " + string(e.Field)
+}
+
+func (e *ValidationError) Unwrap() error {
+	return ErrInvalidInput
+}
+
+func invalidField(field ValidationField) error {
+	return &ValidationError{Field: field}
+}
 
 type Record struct {
 	ID            uuid.UUID  `json:"id"`

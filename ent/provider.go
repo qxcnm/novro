@@ -27,6 +27,8 @@ type Provider struct {
 	Protocol provider.Protocol `json:"protocol,omitempty"`
 	// Protocols holds the value of the "protocols" field.
 	Protocols []string `json:"protocols,omitempty"`
+	// OutboundFormat holds the value of the "outbound_format" field.
+	OutboundFormat string `json:"outbound_format,omitempty"`
 	// BaseURL holds the value of the "base_url" field.
 	BaseURL string `json:"base_url,omitempty"`
 	// ModelListPath holds the value of the "model_list_path" field.
@@ -78,7 +80,7 @@ func (*Provider) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case provider.FieldWeight:
 			values[i] = new(sql.NullInt64)
-		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldBaseURL, provider.FieldModelListPath, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
+		case provider.FieldCode, provider.FieldDisplayName, provider.FieldProtocol, provider.FieldOutboundFormat, provider.FieldBaseURL, provider.FieldModelListPath, provider.FieldEncryptedAPIKey, provider.FieldAPIKeyHint, provider.FieldStatus:
 			values[i] = new(sql.NullString)
 		case provider.FieldCreatedAt, provider.FieldUpdatedAt, provider.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -130,6 +132,12 @@ func (_m *Provider) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Protocols); err != nil {
 					return fmt.Errorf("unmarshal field protocols: %w", err)
 				}
+			}
+		case provider.FieldOutboundFormat:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field outbound_format", values[i])
+			} else if value.Valid {
+				_m.OutboundFormat = value.String
 			}
 		case provider.FieldBaseURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -238,6 +246,9 @@ func (_m *Provider) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("protocols=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Protocols))
+	builder.WriteString(", ")
+	builder.WriteString("outbound_format=")
+	builder.WriteString(_m.OutboundFormat)
 	builder.WriteString(", ")
 	builder.WriteString("base_url=")
 	builder.WriteString(_m.BaseURL)

@@ -13970,6 +13970,7 @@ type ProviderMutation struct {
 	protocol            *provider.Protocol
 	protocols           *[]string
 	appendprotocols     []string
+	outbound_format     *string
 	base_url            *string
 	model_list_path     *string
 	weight              *int
@@ -14250,6 +14251,42 @@ func (m *ProviderMutation) AppendedProtocols() ([]string, bool) {
 func (m *ProviderMutation) ResetProtocols() {
 	m.protocols = nil
 	m.appendprotocols = nil
+}
+
+// SetOutboundFormat sets the "outbound_format" field.
+func (m *ProviderMutation) SetOutboundFormat(s string) {
+	m.outbound_format = &s
+}
+
+// OutboundFormat returns the value of the "outbound_format" field in the mutation.
+func (m *ProviderMutation) OutboundFormat() (r string, exists bool) {
+	v := m.outbound_format
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutboundFormat returns the old "outbound_format" field's value of the Provider entity.
+// If the Provider object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProviderMutation) OldOutboundFormat(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutboundFormat is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutboundFormat requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutboundFormat: %w", err)
+	}
+	return oldValue.OutboundFormat, nil
+}
+
+// ResetOutboundFormat resets all changes to the "outbound_format" field.
+func (m *ProviderMutation) ResetOutboundFormat() {
+	m.outbound_format = nil
 }
 
 // SetBaseURL sets the "base_url" field.
@@ -14697,7 +14734,7 @@ func (m *ProviderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProviderMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.code != nil {
 		fields = append(fields, provider.FieldCode)
 	}
@@ -14709,6 +14746,9 @@ func (m *ProviderMutation) Fields() []string {
 	}
 	if m.protocols != nil {
 		fields = append(fields, provider.FieldProtocols)
+	}
+	if m.outbound_format != nil {
+		fields = append(fields, provider.FieldOutboundFormat)
 	}
 	if m.base_url != nil {
 		fields = append(fields, provider.FieldBaseURL)
@@ -14753,6 +14793,8 @@ func (m *ProviderMutation) Field(name string) (ent.Value, bool) {
 		return m.Protocol()
 	case provider.FieldProtocols:
 		return m.Protocols()
+	case provider.FieldOutboundFormat:
+		return m.OutboundFormat()
 	case provider.FieldBaseURL:
 		return m.BaseURL()
 	case provider.FieldModelListPath:
@@ -14788,6 +14830,8 @@ func (m *ProviderMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldProtocol(ctx)
 	case provider.FieldProtocols:
 		return m.OldProtocols(ctx)
+	case provider.FieldOutboundFormat:
+		return m.OldOutboundFormat(ctx)
 	case provider.FieldBaseURL:
 		return m.OldBaseURL(ctx)
 	case provider.FieldModelListPath:
@@ -14842,6 +14886,13 @@ func (m *ProviderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetProtocols(v)
+		return nil
+	case provider.FieldOutboundFormat:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutboundFormat(v)
 		return nil
 	case provider.FieldBaseURL:
 		v, ok := value.(string)
@@ -14990,6 +15041,9 @@ func (m *ProviderMutation) ResetField(name string) error {
 		return nil
 	case provider.FieldProtocols:
 		m.ResetProtocols()
+		return nil
+	case provider.FieldOutboundFormat:
+		m.ResetOutboundFormat()
 		return nil
 	case provider.FieldBaseURL:
 		m.ResetBaseURL()

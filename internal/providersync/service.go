@@ -358,9 +358,6 @@ func (s *Service) Link(ctx context.Context, providerID uuid.UUID, bindings []Mod
 			}
 			continue
 		}
-		if !validAutomaticPublicName(model.UpstreamName) {
-			return LinkResult{}, ErrInvalidInput
-		}
 		publicName := model.UpstreamName
 		status := entmodelroute.StatusActive
 		if model.Status != entupstreammodel.StatusActive || !model.PricingConfigured {
@@ -613,23 +610,4 @@ func uniqueIDs(values []uuid.UUID) []uuid.UUID {
 		result = append(result, value)
 	}
 	return result
-}
-
-/**
- * validAutomaticPublicName 封装该名称对应的业务处理逻辑。
- * @param value 需要处理的输入值。
- * @author Gao Hongshun
- * @date 2026-08-13
- */
-func validAutomaticPublicName(value string) bool {
-	if len(value) < 2 || len(value) > 256 {
-		return false
-	}
-	for index, char := range value {
-		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || (index > 0 && strings.ContainsRune("._:/-", char)) {
-			continue
-		}
-		return false
-	}
-	return true
 }

@@ -83,7 +83,7 @@ function formatDate(value: string) {
  */
 export default function ProfilePage() {
   const user = useCurrentUser();
-  const [displayName, setDisplayName] = useState(user.display_name || user.username);
+  const [displayName, setDisplayName] = useState(user.display_name);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveSucceeded, setSaveSucceeded] = useState(false);
@@ -177,14 +177,15 @@ export default function ProfilePage() {
               <Input className="w-full min-w-0" disabled id="profile-email" value={user.email || "未设置邮箱"} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profile-display-name">显示名称</Label>
-              <Input className="w-full min-w-0" id="profile-display-name" maxLength={80} onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
+              <Label htmlFor="profile-display-name">显示名称（选填）</Label>
+              <Input aria-describedby="profile-display-name-hint" className="w-full min-w-0" id="profile-display-name" maxLength={128} onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
+              <p className="text-xs text-muted-foreground" id="profile-display-name-hint">留空时使用用户名展示。</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="secondary">{user.role === "admin" ? "管理员" : "普通成员"}</Badge>
-              <Button disabled={saving || !displayName.trim()} type="submit"><Save />{saving ? "保存中..." : "保存资料"}</Button>
+              <Button disabled={saving} type="submit"><Save />{saving ? "保存中..." : "保存资料"}</Button>
               {saveMessage ? (
-                <span className={saveSucceeded ? "flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-destructive"} role="status">
+                <span className={saveSucceeded ? "flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-destructive"} role={saveSucceeded ? "status" : "alert"}>
                   {saveSucceeded ? <Check aria-hidden="true" className="size-4" /> : null}{saveMessage}
                 </span>
               ) : null}

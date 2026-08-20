@@ -98,12 +98,12 @@ func TestCreateEncryptsCredentialAndNormalizesProvider(t *testing.T) {
 	service := testService(t, store)
 	record, err := service.Create(context.Background(), CreateInput{
 		Code: " DeepSeek ", DisplayName: " DeepSeek ", Protocols: []Protocol{ProtocolAnthropic, ProtocolOpenAI, ProtocolAnthropic},
-		BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234",
+		OutboundFormat: OutboundFormatMessages, BaseURL: "https://api.deepseek.com/", ModelListPath: " /api/models/ ", Weight: 250, APIKey: "provider-secret-1234",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if record.Code != "deepseek" || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.Weight != 250 || store.createParams.APIKeyHint != "1234" || store.createParams.PrimaryProtocol != ProtocolOpenAI || len(store.createParams.Protocols) != 2 || store.createParams.Protocols[0] != ProtocolOpenAI || store.createParams.Protocols[1] != ProtocolAnthropic {
+	if record.Code != "DeepSeek" || store.createParams.Code != "DeepSeek" || store.createParams.OutboundFormat != OutboundFormatMessages || store.createParams.BaseURL != "https://api.deepseek.com" || store.createParams.ModelListPath != "/api/models" || store.createParams.Weight != 250 || store.createParams.APIKeyHint != "1234" || store.createParams.PrimaryProtocol != ProtocolOpenAI || len(store.createParams.Protocols) != 2 || store.createParams.Protocols[0] != ProtocolOpenAI || store.createParams.Protocols[1] != ProtocolAnthropic {
 		t.Fatalf("unexpected provider: record=%+v params=%+v", record, store.createParams)
 	}
 	if store.createParams.EncryptedAPIKey == "provider-secret-1234" || strings.Contains(store.createParams.EncryptedAPIKey, "provider-secret") {
@@ -123,10 +123,12 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 		input CreateInput
 		field ValidationField
 	}{
-		{input: CreateInput{Code: "x", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldCode},
+		{input: CreateInput{Code: "   ", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldCode},
+		{input: CreateInput{Code: strings.Repeat("a", 65), DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldCode},
 		{input: CreateInput{Code: "valid-code", DisplayName: "", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldDisplayName},
 		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: nil, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldProtocols},
 		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{Protocol("other")}, BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldProtocols},
+		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, OutboundFormat: OutboundFormat("completions"), BaseURL: "https://api.example.com", APIKey: "secret"}, field: ValidationFieldOutboundFormat},
 		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "api.example.com", APIKey: "secret"}, field: ValidationFieldBaseURL},
 		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", ModelListPath: "models", APIKey: "secret"}, field: ValidationFieldModelListPath},
 		{input: CreateInput{Code: "valid-code", DisplayName: "X", Protocols: []Protocol{ProtocolOpenAI}, BaseURL: "https://api.example.com", Weight: -1, APIKey: "secret"}, field: ValidationFieldWeight},
@@ -142,23 +144,35 @@ func TestProviderValidationRejectsInsecureOrInvalidInput(t *testing.T) {
 }
 
 /**
- * TestProviderValidationAcceptsDottedProviderCode 验证对应功能在指定场景下的行为。
+ * TestProviderValidationAcceptsFlexibleProviderCode 验证提供商代码只做首尾空白清理并保留上游命名。
  * @param t 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func TestProviderValidationAcceptsDottedProviderCode(t *testing.T) {
-	store := &fakeStore{}
-	service := testService(t, store)
-	_, err := service.Create(context.Background(), CreateInput{
-		Code: "kimi-0.2", DisplayName: "Kimi", Protocols: []Protocol{ProtocolOpenAI},
-		BaseURL: "https://api.example.com/v1", APIKey: "secret",
-	})
-	if err != nil {
-		t.Fatalf("expected dotted provider code to be accepted: %v", err)
-	}
-	if store.createParams.Code != "kimi-0.2" {
-		t.Fatalf("code=%q", store.createParams.Code)
+func TestProviderValidationAcceptsFlexibleProviderCode(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "spaces Chinese and underscore", code: "  3DP TokenHub_国内  ", want: "3DP TokenHub_国内"},
+		{name: "uppercase and punctuation", code: "Z.CODE v2/兼容", want: "Z.CODE v2/兼容"},
+		{name: "single character", code: "x", want: "x"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := &fakeStore{}
+			service := testService(t, store)
+			_, err := service.Create(context.Background(), CreateInput{
+				Code: test.code, DisplayName: "Vendor", Protocols: []Protocol{ProtocolOpenAI},
+				BaseURL: "https://api.example.com/v1", APIKey: "secret",
+			})
+			if err != nil {
+				t.Fatalf("expected provider code %q to be accepted: %v", test.code, err)
+			}
+			if store.createParams.Code != test.want {
+				t.Fatalf("code=%q want %q", store.createParams.Code, test.want)
+			}
+		})
 	}
 }
 
@@ -212,6 +226,26 @@ func TestUpdateReencryptsOnlyWhenCredentialProvided(t *testing.T) {
 	}
 	if store.updateParams.Protocols == nil || len(*store.updateParams.Protocols) != 2 || store.updateParams.PrimaryProtocol == nil || *store.updateParams.PrimaryProtocol != ProtocolOpenAI {
 		t.Fatalf("protocol update was not normalized: %+v", store.updateParams)
+	}
+	outboundFormat := OutboundFormatResponses
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{OutboundFormat: &outboundFormat}); err != nil {
+		t.Fatalf("update outbound format: %v", err)
+	}
+	if store.updateParams.OutboundFormat == nil || *store.updateParams.OutboundFormat != OutboundFormatResponses {
+		t.Fatalf("outbound format update was not stored: %+v", store.updateParams)
+	}
+	outboundFormat = OutboundFormatNone
+	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{OutboundFormat: &outboundFormat}); err != nil {
+		t.Fatalf("clear outbound format: %v", err)
+	}
+	if store.updateParams.OutboundFormat == nil || *store.updateParams.OutboundFormat != OutboundFormatNone {
+		t.Fatalf("outbound format clear was not stored: %+v", store.updateParams)
+	}
+	outboundFormat = OutboundFormat("completions")
+	_, err := service.Update(context.Background(), uuid.New(), UpdateInput{OutboundFormat: &outboundFormat})
+	var validationError *ValidationError
+	if !errors.Is(err, ErrInvalidInput) || !errors.As(err, &validationError) || validationError.Field != ValidationFieldOutboundFormat {
+		t.Fatalf("invalid outbound format error=%v", err)
 	}
 	emptyProtocols := []Protocol{}
 	if _, err := service.Update(context.Background(), uuid.New(), UpdateInput{Protocols: &emptyProtocols}); !errors.Is(err, ErrInvalidInput) {

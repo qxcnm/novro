@@ -220,25 +220,48 @@ func TestCatalogProviderNameFollowsAggregatedModelVendor(t *testing.T) {
 }
 
 /**
- * TestUniqueIDsAndAutomaticPublicNames 验证对应功能在指定场景下的行为。
+ * TestUniqueIDsSkipsNilAndDuplicates 验证唯一 ID 过滤保留顺序。
  * @param t 本次操作需要使用的输入参数。
  * @author Gao Hongshun
  * @date 2026-08-13
  */
-func TestUniqueIDsAndAutomaticPublicNames(t *testing.T) {
+func TestUniqueIDsSkipsNilAndDuplicates(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	ids := uniqueIDs([]uuid.UUID{first, uuid.Nil, first, second})
 	if len(ids) != 2 || ids[0] != first || ids[1] != second {
 		t.Fatalf("unexpected unique IDs: %v", ids)
 	}
-	for _, name := range []string{"kimi-k3", "vendor/model:latest", "A_very.long-model"} {
-		if !validAutomaticPublicName(name) {
-			t.Fatalf("expected valid automatic model ID %q", name)
-		}
+}
+
+/**
+ * TestDiscoverPreservesFlexibleUpstreamModelNames 验证发现阶段保留上游模型名称，不施加字符白名单。
+ * @param t 本次操作需要使用的输入参数。
+ * @author Gao Hongshun
+ * @date 2026-08-13
+ */
+func TestDiscoverPreservesFlexibleUpstreamModelNames(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"GPT-5.6 Luna"},{"id":"中文 模型（测试）"},{"id":"/starts-wrong"},{"id":"x"}]}`))
+	}))
+	defer server.Close()
+
+	service := NewService(nil, nil, server.Client())
+	models, err := service.discover(context.Background(), &ent.Provider{
+		DisplayName: "Flexible Provider",
+		Protocol:    entprovider.ProtocolOpenai,
+		BaseURL:     server.URL + "/v1",
+	}, "provider-secret")
+	if err != nil {
+		t.Fatalf("discover models: %v", err)
 	}
-	for _, name := range []string{"", "x", "bad model", "/starts-wrong", "中文模型"} {
-		if validAutomaticPublicName(name) {
-			t.Fatalf("expected invalid automatic model ID %q", name)
+	if len(models) != 4 {
+		t.Fatalf("discovered %d models, want 4: %+v", len(models), models)
+	}
+	want := []string{"GPT-5.6 Luna", "中文 模型（测试）", "/starts-wrong", "x"}
+	for index, name := range want {
+		if models[index].UpstreamName != name || models[index].DisplayName != name {
+			t.Fatalf("model[%d]=%+v, want upstream/display name %q", index, models[index], name)
 		}
 	}
 }

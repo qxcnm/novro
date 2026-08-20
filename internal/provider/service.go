@@ -3,14 +3,11 @@ package provider
 import (
 	"context"
 	"net/url"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
-
-var providerCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$`)
 
 type Store interface {
 	/**
@@ -62,6 +59,7 @@ type CreateParams struct {
 	DisplayName     string
 	Protocols       []Protocol
 	PrimaryProtocol Protocol
+	OutboundFormat  OutboundFormat
 	BaseURL         string
 	ModelListPath   string
 	Weight          int
@@ -93,17 +91,18 @@ func NewService(store Store, cipher *Cipher) *Service {
  * @date 2026-08-13
  */
 func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error) {
-	code := strings.ToLower(strings.TrimSpace(input.Code))
+	code := strings.TrimSpace(input.Code)
 	displayName := strings.TrimSpace(input.DisplayName)
 	baseURL, ok := normalizeBaseURL(input.BaseURL)
 	modelListPath, pathOK := normalizeModelListPath(input.ModelListPath)
 	apiKey := strings.TrimSpace(input.APIKey)
 	weight := input.Weight
 	protocols, protocolsOK := NormalizeProtocols(input.Protocols)
+	outboundFormat := input.OutboundFormat
 	if weight == 0 {
 		weight = DefaultWeight
 	}
-	if !providerCodePattern.MatchString(code) {
+	if code == "" || utf8.RuneCountInString(code) > 64 {
 		return Record{}, invalidField(ValidationFieldCode)
 	}
 	if displayName == "" || utf8.RuneCountInString(displayName) > 128 {
@@ -111,6 +110,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 	}
 	if !protocolsOK {
 		return Record{}, invalidField(ValidationFieldProtocols)
+	}
+	if !ValidOutboundFormat(outboundFormat) {
+		return Record{}, invalidField(ValidationFieldOutboundFormat)
 	}
 	if !ok {
 		return Record{}, invalidField(ValidationFieldBaseURL)
@@ -129,7 +131,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Record, error)
 		return Record{}, err
 	}
 	return s.store.Create(ctx, CreateParams{
-		Code: code, DisplayName: displayName, Protocols: protocols, PrimaryProtocol: PrimaryProtocol(protocols), BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
+		Code: code, DisplayName: displayName, Protocols: protocols, PrimaryProtocol: PrimaryProtocol(protocols), OutboundFormat: outboundFormat, BaseURL: baseURL, ModelListPath: modelListPath, Weight: weight,
 		EncryptedAPIKey: encrypted, APIKeyHint: secretHint(apiKey),
 	})
 }
@@ -158,7 +160,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
  * @date 2026-08-13
  */
 func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (Record, error) {
-	if id == uuid.Nil || (input.DisplayName == nil && input.Protocols == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil) {
+	if id == uuid.Nil || (input.DisplayName == nil && input.Protocols == nil && input.OutboundFormat == nil && input.BaseURL == nil && input.ModelListPath == nil && input.Weight == nil && input.APIKey == nil) {
 		return Record{}, ErrInvalidInput
 	}
 	params := UpdateParams{}
@@ -177,6 +179,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, input UpdateInput) (
 		primary := PrimaryProtocol(protocols)
 		params.Protocols = &protocols
 		params.PrimaryProtocol = &primary
+	}
+	if input.OutboundFormat != nil {
+		if !ValidOutboundFormat(*input.OutboundFormat) {
+			return Record{}, invalidField(ValidationFieldOutboundFormat)
+		}
+		params.OutboundFormat = input.OutboundFormat
 	}
 	if input.BaseURL != nil {
 		value, ok := normalizeBaseURL(*input.BaseURL)

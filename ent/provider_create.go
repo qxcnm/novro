@@ -46,6 +46,20 @@ func (_c *ProviderCreate) SetProtocols(v []string) *ProviderCreate {
 	return _c
 }
 
+// SetOutboundFormat sets the "outbound_format" field.
+func (_c *ProviderCreate) SetOutboundFormat(v string) *ProviderCreate {
+	_c.mutation.SetOutboundFormat(v)
+	return _c
+}
+
+// SetNillableOutboundFormat sets the "outbound_format" field if the given value is not nil.
+func (_c *ProviderCreate) SetNillableOutboundFormat(v *string) *ProviderCreate {
+	if v != nil {
+		_c.SetOutboundFormat(*v)
+	}
+	return _c
+}
+
 // SetBaseURL sets the "base_url" field.
 func (_c *ProviderCreate) SetBaseURL(v string) *ProviderCreate {
 	_c.mutation.SetBaseURL(v)
@@ -216,6 +230,10 @@ func (_c *ProviderCreate) defaults() {
 		v := provider.DefaultProtocols
 		_c.mutation.SetProtocols(v)
 	}
+	if _, ok := _c.mutation.OutboundFormat(); !ok {
+		v := provider.DefaultOutboundFormat
+		_c.mutation.SetOutboundFormat(v)
+	}
 	if _, ok := _c.mutation.ModelListPath(); !ok {
 		v := provider.DefaultModelListPath
 		_c.mutation.SetModelListPath(v)
@@ -270,6 +288,14 @@ func (_c *ProviderCreate) check() error {
 	}
 	if _, ok := _c.mutation.Protocols(); !ok {
 		return &ValidationError{Name: "protocols", err: errors.New(`ent: missing required field "Provider.protocols"`)}
+	}
+	if _, ok := _c.mutation.OutboundFormat(); !ok {
+		return &ValidationError{Name: "outbound_format", err: errors.New(`ent: missing required field "Provider.outbound_format"`)}
+	}
+	if v, ok := _c.mutation.OutboundFormat(); ok {
+		if err := provider.OutboundFormatValidator(v); err != nil {
+			return &ValidationError{Name: "outbound_format", err: fmt.Errorf(`ent: validator failed for field "Provider.outbound_format": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.BaseURL(); !ok {
 		return &ValidationError{Name: "base_url", err: errors.New(`ent: missing required field "Provider.base_url"`)}
@@ -375,6 +401,10 @@ func (_c *ProviderCreate) createSpec() (*Provider, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Protocols(); ok {
 		_spec.SetField(provider.FieldProtocols, field.TypeJSON, value)
 		_node.Protocols = value
+	}
+	if value, ok := _c.mutation.OutboundFormat(); ok {
+		_spec.SetField(provider.FieldOutboundFormat, field.TypeString, value)
+		_node.OutboundFormat = value
 	}
 	if value, ok := _c.mutation.BaseURL(); ok {
 		_spec.SetField(provider.FieldBaseURL, field.TypeString, value)

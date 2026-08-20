@@ -34,6 +34,7 @@ import (
 func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	client := openProviderSyncIntegrationClient(t)
 	ctx := context.Background()
+	const upstreamModelName = "GPT-5.6 Luna"
 	cipher, err := provider.NewCipher("01234567890123456789012345678901")
 	if err != nil {
 		t.Fatalf("create provider cipher: %v", err)
@@ -44,7 +45,7 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":[{"id":"shared-kimi-test","display_name":"Shared Kimi Test","pricing":{"unit":"rmb_per_million_tokens","input":1,"output":2}}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"GPT-5.6 Luna","display_name":"Shared Kimi Test","pricing":{"unit":"rmb_per_million_tokens","input":1,"output":2}}]}`))
 	}))
 	defer server.Close()
 	group, err := client.BillingGroup.Query().Where(entbillinggroup.IsDefaultEQ(true)).Only(ctx)
@@ -89,7 +90,7 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 	if err != nil || len(secondSync) != 1 || secondSync[0].Added || secondSync[0].ID != modelID || !secondSync[0].PricingConfigured || secondSync[0].Status != string(entupstreammodel.StatusActive) {
 		t.Fatalf("second sync=%+v err=%v", secondSync, err)
 	}
-	models, err := client.UpstreamModel.Query().Where(entupstreammodel.UpstreamNameEqualFold("shared-kimi-test")).All(ctx)
+	models, err := client.UpstreamModel.Query().Where(entupstreammodel.UpstreamNameEqualFold(upstreamModelName)).All(ctx)
 	if err != nil || len(models) != 1 || models[0].InputPriceMicros != 20_000_000 || models[0].OutputPriceMicros != 100_000_000 {
 		t.Fatalf("global models=%+v err=%v", models, err)
 	}
@@ -102,7 +103,7 @@ func TestSyncAndLinkReuseOneGlobalModelAcrossProviders(t *testing.T) {
 		}
 	}
 	routes, err := client.ModelRoute.Query().Where(
-		entmodelroute.PublicNameEQ("shared-kimi-test"),
+		entmodelroute.PublicNameEQ(upstreamModelName),
 		entmodelroute.UpstreamModelIDEQ(modelID),
 		entmodelroute.StatusEQ(entmodelroute.StatusActive),
 		entmodelroute.DeletedAtIsNil(),

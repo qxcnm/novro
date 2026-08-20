@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -125,6 +126,13 @@ func (f *fakeStore) FindByUsername(context.Context, string) (Record, error) {
 
 type fakeHasher struct{}
 
+func (fakeHasher) Validate(value string) error {
+	if value == "invalid" {
+		return errors.New("invalid password")
+	}
+	return nil
+}
+
 /**
  * Hash 用于对敏感数据执行安全转换。
  * @param value 需要处理的输入值。
@@ -201,6 +209,58 @@ func TestRegisterRejectsMalformedReferralCode(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidReferralCode) {
 		t.Fatalf("expected invalid referral code, got %v", err)
+	}
+}
+
+func TestValidateRegistrationIdentifiesInvalidField(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeHasher{})
+	tests := []struct {
+		name  string
+		input RegisterInput
+		field ValidationField
+	}{
+		{
+			name:  "email used as username",
+			input: RegisterInput{Username: "yuuang4099@gmail.com", Email: "yuuang4099@gmail.com", Password: "test-password"},
+			field: ValidationFieldUsername,
+		},
+		{
+			name:  "invalid email",
+			input: RegisterInput{Username: "valid.user", Email: "not-an-email", Password: "test-password"},
+			field: ValidationFieldEmail,
+		},
+		{
+			name:  "invalid password",
+			input: RegisterInput{Username: "valid.user", Email: "valid@example.com", Password: "invalid"},
+			field: ValidationFieldPassword,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := service.ValidateRegistration(test.input)
+			var validationError *ValidationError
+			if !errors.As(err, &validationError) || validationError.Field != test.field || !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("field=%s err=%v", test.field, err)
+			}
+		})
+	}
+}
+
+func TestValidateRegistrationEnforcesUsernameBoundaries(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeHasher{})
+	valid := []string{"a.b", "Alice.Admin", "a" + strings.Repeat("b", 63)}
+	for _, username := range valid {
+		if err := service.ValidateRegistration(RegisterInput{Username: username, Email: "valid@example.com", Password: "test-password"}); err != nil {
+			t.Fatalf("valid username %q: %v", username, err)
+		}
+	}
+	invalid := []string{"ab", "-alice", "alice@example.com", "alice+tag", "a" + strings.Repeat("b", 64)}
+	for _, username := range invalid {
+		err := service.ValidateRegistration(RegisterInput{Username: username, Email: "valid@example.com", Password: "test-password"})
+		var validationError *ValidationError
+		if !errors.As(err, &validationError) || validationError.Field != ValidationFieldUsername {
+			t.Fatalf("invalid username %q: %v", username, err)
+		}
 	}
 }
 

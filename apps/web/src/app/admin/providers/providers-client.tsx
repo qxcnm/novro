@@ -23,11 +23,13 @@ import { bulkResultMessage, runBulkAction } from "@/lib/bulk-action";
 import { useListSelection } from "@/lib/use-list-selection";
 
 type Protocol = "openai" | "anthropic";
+type OutboundFormat = "" | "chat_completions" | "responses" | "messages";
 type ProviderRecord = {
   id: string;
   code: string;
   display_name: string;
   protocols: Protocol[];
+  outbound_format: OutboundFormat;
   base_url: string;
   model_list_path: string;
   weight: number;
@@ -55,17 +57,18 @@ type RouteRecord = {
   billing_group_id: string;
 };
 
-type ProviderField = "code" | "display_name" | "protocols" | "base_url" | "model_list_path" | "weight" | "api_key";
+type ProviderField = "code" | "display_name" | "protocols" | "outbound_format" | "base_url" | "model_list_path" | "weight" | "api_key";
 type ProviderFormError = { field?: ProviderField; message: string };
 type ErrorResponse = { error?: { field?: string; message?: string } };
 type BillingGroup = { id: string; display_name: string; kind: "standard" | "composite"; multiplier_bps: number; effective_multiplier_bps?: number; is_default: boolean; status: "active" | "disabled" };
-type CreateForm = { code: string; display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
-type EditForm = { display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key: string };
+type CreateForm = { code: string; display_name: string; protocols: Protocol[]; outbound_format: OutboundFormat; base_url: string; model_list_path: string; weight: number; api_key: string };
+type EditForm = { display_name: string; protocols: Protocol[]; outbound_format: OutboundFormat; base_url: string; model_list_path: string; weight: number; api_key: string };
 
 const INITIAL_CREATE: CreateForm = {
   code: "",
   display_name: "",
   protocols: ["openai"],
+  outbound_format: "",
   base_url: "https://api.openai.com/v1",
   model_list_path: "",
   weight: 100,
@@ -73,8 +76,7 @@ const INITIAL_CREATE: CreateForm = {
 };
 
 const MODEL_SYNC_TIMEOUT_MS = 35_000;
-const PROVIDER_CODE_PATTERN = /^[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]$/;
-const PROVIDER_FIELDS = new Set<ProviderField>(["code", "display_name", "protocols", "base_url", "model_list_path", "weight", "api_key"]);
+const PROVIDER_FIELDS = new Set<ProviderField>(["code", "display_name", "protocols", "outbound_format", "base_url", "model_list_path", "weight", "api_key"]);
 
 /**
  * fetchWithTimeout 封装该名称对应的业务处理逻辑。
@@ -121,8 +123,11 @@ async function readProviderError(response: Response): Promise<ProviderFormError>
 }
 
 function validateProviderForm(form: CreateForm | EditForm, requireAPIKey: boolean): ProviderFormError | null {
-  if ("code" in form && !PROVIDER_CODE_PATTERN.test(form.code.trim())) {
-    return { field: "code", message: "提供商代码必须为 3 到 64 位，只能使用小写字母、数字、点号和连字符" };
+  if ("code" in form) {
+    const code = form.code.trim();
+    if (!code || [...code].length > 64) {
+      return { field: "code", message: "提供商代码不能为空且不能超过 64 个字符" };
+    }
   }
   const displayName = form.display_name.trim();
   if (!displayName || [...displayName].length > 128) {
@@ -159,6 +164,7 @@ function providerFieldElementID(field: ProviderField, editing: boolean) {
     code: "code",
     display_name: "name",
     protocols: "protocol-openai",
+    outbound_format: "outbound-format",
     base_url: "base-url",
     model_list_path: "model-list-path",
     weight: "weight",
@@ -190,6 +196,15 @@ function formatDate(value: string) {
  */
 function protocolLabel(protocol: Protocol) {
   return protocol === "openai" ? "OpenAI 兼容" : "Anthropic";
+}
+
+function outboundFormatLabel(format: OutboundFormat) {
+  switch (format) {
+    case "chat_completions": return "Chat Completions";
+    case "responses": return "OpenAI Responses";
+    case "messages": return "Anthropic Messages";
+    default: return "原样透传";
+  }
 }
 
 /**
@@ -233,7 +248,7 @@ export default function ProvidersClient() {
   const [bulkSyncOpen, setBulkSyncOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(INITIAL_CREATE);
-  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocols: ["openai"], base_url: "", model_list_path: "", weight: 100, api_key: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ display_name: "", protocols: ["openai"], outbound_format: "", base_url: "", model_list_path: "", weight: 100, api_key: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerProvider, setPickerProvider] = useState<ProviderRecord | null>(null);
   const [pickerModels, setPickerModels] = useState<PickerModel[]>([]);
@@ -302,7 +317,7 @@ export default function ProvidersClient() {
    */
   function openEditor(record: ProviderRecord) {
     setEditingProvider(record);
-    setEditForm({ display_name: record.display_name, protocols: record.protocols, base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "" });
+    setEditForm({ display_name: record.display_name, protocols: record.protocols, outbound_format: record.outbound_format ?? "", base_url: record.base_url, model_list_path: record.model_list_path, weight: record.weight, api_key: "" });
     setFormError(null);
   }
 
@@ -468,9 +483,10 @@ export default function ProvidersClient() {
       return;
     }
     setBusy(true);
-    const payload: { display_name: string; protocols: Protocol[]; base_url: string; model_list_path: string; weight: number; api_key?: string } = {
+    const payload: { display_name: string; protocols: Protocol[]; outbound_format: OutboundFormat; base_url: string; model_list_path: string; weight: number; api_key?: string } = {
       display_name: editForm.display_name,
       protocols: editForm.protocols,
+      outbound_format: editForm.outbound_format,
       base_url: editForm.base_url,
       model_list_path: editForm.model_list_path,
       weight: editForm.weight,
@@ -744,16 +760,17 @@ export default function ProvidersClient() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>权重</TableHead><TableHead>协议</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择所有提供商" checked={selection.checkboxState} disabled={loading || providers.length === 0} onCheckedChange={(checked) => selection.toggleAll(checked === true)} /></TableHead><TableHead className="min-w-48">提供商</TableHead><TableHead>权重</TableHead><TableHead>支持协议</TableHead><TableHead>出口格式</TableHead><TableHead className="min-w-64">基础地址</TableHead><TableHead>凭据</TableHead><TableHead>状态</TableHead><TableHead className="min-w-40">更新时间</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={9}>加载中...</TableCell></TableRow> : null}
-                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={9}>没有匹配的提供商</TableCell></TableRow> : null}
+                  {loading ? <TableRow><TableCell className="h-28 text-center" colSpan={10}>加载中...</TableCell></TableRow> : null}
+                  {!loading && providers.length === 0 ? <TableRow><TableCell className="h-28 text-center text-muted-foreground" colSpan={10}>没有匹配的提供商</TableCell></TableRow> : null}
                   {!loading ? providers.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell><Checkbox aria-label={`选择提供商 ${item.display_name}`} checked={selection.isSelected(item.id)} onCheckedChange={(checked) => selection.toggleOne(item.id, checked === true)} /></TableCell>
                       <TableCell><p className="font-medium">{item.display_name}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.code}</p></TableCell>
                       <TableCell className="font-mono tabular-nums">{item.weight}</TableCell>
                       <TableCell><div className="flex flex-wrap gap-1">{item.protocols.map((protocol) => <Badge key={protocol} variant="secondary">{protocolLabel(protocol)}</Badge>)}</div></TableCell>
+                      <TableCell><Badge variant={item.outbound_format ? "outline" : "secondary"}>{outboundFormatLabel(item.outbound_format)}</Badge></TableCell>
                       <TableCell><p className="max-w-72 truncate font-mono text-xs" title={item.base_url}>{item.base_url}</p></TableCell>
                       <TableCell className="font-mono text-xs">{item.has_api_key ? `••••${item.api_key_hint}` : "未配置"}</TableCell>
                       <TableCell><Badge variant={item.status === "active" ? "outline" : "secondary"}>{item.status === "active" ? "启用" : "停用"}</Badge></TableCell>
@@ -775,9 +792,10 @@ export default function ProvidersClient() {
           <DialogHeader><DialogTitle>添加提供商</DialogTitle><DialogDescription>提供商代码创建后不可修改，凭据会加密保存。</DialogDescription></DialogHeader>
           <form className="flex flex-col gap-4" id="create-provider-form" onSubmit={createProvider}>
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={formError?.field === "code"}><FieldLabel htmlFor="provider-code">提供商代码</FieldLabel><Input aria-invalid={formError?.field === "code"} autoComplete="off" id="provider-code" maxLength={64} minLength={3} onChange={(event) => { clearFormFieldError("code"); setCreateForm({ ...createForm, code: event.target.value.toLowerCase() }); }} pattern="[a-z0-9][a-z0-9.-]{1,62}[a-z0-9]" placeholder="例如 kimi-0.2" required title="提供商代码需为 3 到 64 位，只能使用小写字母、数字、点号和连字符，不能包含下划线或空格，且必须以字母或数字开头和结尾" value={createForm.code} /><FieldDescription className="text-xs">3 到 64 位；允许小写字母、数字、点号和连字符，不允许下划线或空格。</FieldDescription><FieldError>{formError?.field === "code" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "code"}><FieldLabel htmlFor="provider-code">提供商代码</FieldLabel><Input aria-invalid={formError?.field === "code"} autoComplete="off" id="provider-code" maxLength={64} onChange={(event) => { clearFormFieldError("code"); setCreateForm({ ...createForm, code: event.target.value }); }} placeholder="例如 kimi-0.2 或 3DP TokenHub" required title="提供商代码不能为空，最多 64 个字符；首尾空白会被去除" value={createForm.code} /><FieldDescription className="text-xs">内部标识；允许大小写、空格、下划线、中文等字符，最多 64 个字符，首尾空白会被去除。</FieldDescription><FieldError>{formError?.field === "code" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "display_name"}><FieldLabel htmlFor="provider-name">显示名称</FieldLabel><Input aria-invalid={formError?.field === "display_name"} id="provider-name" maxLength={128} onChange={(event) => { clearFormFieldError("display_name"); setCreateForm({ ...createForm, display_name: event.target.value }); }} placeholder="例如 DeepSeek 主账号" required value={createForm.display_name} /><FieldError>{formError?.field === "display_name" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "protocols"}><FieldLabel id="provider-protocols-label">支持协议</FieldLabel><ToggleGroup aria-invalid={formError?.field === "protocols"} aria-labelledby="provider-protocols-label" className="w-full" onValueChange={(values) => { if (values.length === 0) return; clearFormFieldError("protocols"); const protocols = values as Protocol[]; setCreateForm({ ...createForm, protocols, base_url: createForm.base_url === defaultBaseURL(createForm.protocols) ? defaultBaseURL(protocols) : createForm.base_url }); }} type="multiple" value={createForm.protocols} variant="outline"><ToggleGroupItem className="flex-1" id="provider-protocol-openai" value="openai">OpenAI 兼容</ToggleGroupItem><ToggleGroupItem className="flex-1" value="anthropic">Anthropic</ToggleGroupItem></ToggleGroup><FieldError>{formError?.field === "protocols" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "outbound_format"}><FieldLabel htmlFor="provider-outbound-format">出口格式</FieldLabel><Select onValueChange={(value) => { clearFormFieldError("outbound_format"); setCreateForm({ ...createForm, outbound_format: value === "passthrough" ? "" : value as OutboundFormat }); }} value={createForm.outbound_format || "passthrough"}><SelectTrigger aria-invalid={formError?.field === "outbound_format"} className="w-full" id="provider-outbound-format"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="passthrough">原样透传（默认）</SelectItem><SelectItem value="chat_completions">Chat Completions</SelectItem><SelectItem value="responses">OpenAI Responses</SelectItem><SelectItem value="messages">Anthropic Messages</SelectItem></SelectGroup></SelectContent></Select><FieldDescription className="text-xs">留空时保持原有 URL、请求和响应；指定格式后会在入口协议与该出口协议之间转换。</FieldDescription><FieldError>{formError?.field === "outbound_format" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "base_url"}><FieldLabel htmlFor="provider-base-url">基础地址</FieldLabel><Input aria-invalid={formError?.field === "base_url"} id="provider-base-url" onChange={(event) => { clearFormFieldError("base_url"); setCreateForm({ ...createForm, base_url: event.target.value }); }} placeholder="https://api.example.com/v1" required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={createForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription><FieldError>{formError?.field === "base_url" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "model_list_path"}><FieldLabel htmlFor="provider-model-list-path">模型获取路径</FieldLabel><Input aria-invalid={formError?.field === "model_list_path"} id="provider-model-list-path" onChange={(event) => { clearFormFieldError("model_list_path"); setCreateForm({ ...createForm, model_list_path: event.target.value }); }} placeholder="留空默认使用 /v1/models，例如 /api/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={createForm.model_list_path} /><FieldDescription className="text-xs">填写站点路径，必须以 / 开头；不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription><FieldError>{formError?.field === "model_list_path" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "weight"}><FieldLabel htmlFor="provider-weight">请求权重</FieldLabel><Input aria-invalid={formError?.field === "weight"} id="provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => { clearFormFieldError("weight"); setCreateForm({ ...createForm, weight: Number(event.target.value) }); }} required type="number" value={createForm.weight} /><FieldDescription className="text-xs">同一分组和模型有多个提供商时，权重越大越优先请求；单个提供商失败后会重试两次再切换。</FieldDescription><FieldError>{formError?.field === "weight" ? formError.message : undefined}</FieldError></Field>
@@ -797,6 +815,7 @@ export default function ProvidersClient() {
             <FieldGroup className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={formError?.field === "display_name"}><FieldLabel htmlFor="edit-provider-name">显示名称</FieldLabel><Input aria-invalid={formError?.field === "display_name"} id="edit-provider-name" maxLength={128} onChange={(event) => { clearFormFieldError("display_name"); setEditForm({ ...editForm, display_name: event.target.value }); }} required value={editForm.display_name} /><FieldError>{formError?.field === "display_name" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "protocols"}><FieldLabel id="edit-provider-protocols-label">支持协议</FieldLabel><ToggleGroup aria-invalid={formError?.field === "protocols"} aria-labelledby="edit-provider-protocols-label" className="w-full" onValueChange={(values) => { if (values.length > 0) { clearFormFieldError("protocols"); setEditForm({ ...editForm, protocols: values as Protocol[] }); } }} type="multiple" value={editForm.protocols} variant="outline"><ToggleGroupItem className="flex-1" id="edit-provider-protocol-openai" value="openai">OpenAI 兼容</ToggleGroupItem><ToggleGroupItem className="flex-1" value="anthropic">Anthropic</ToggleGroupItem></ToggleGroup><FieldError>{formError?.field === "protocols" ? formError.message : undefined}</FieldError></Field>
+              <Field data-invalid={formError?.field === "outbound_format"}><FieldLabel htmlFor="edit-provider-outbound-format">出口格式</FieldLabel><Select onValueChange={(value) => { clearFormFieldError("outbound_format"); setEditForm({ ...editForm, outbound_format: value === "passthrough" ? "" : value as OutboundFormat }); }} value={editForm.outbound_format || "passthrough"}><SelectTrigger aria-invalid={formError?.field === "outbound_format"} className="w-full" id="edit-provider-outbound-format"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="passthrough">原样透传（默认）</SelectItem><SelectItem value="chat_completions">Chat Completions</SelectItem><SelectItem value="responses">OpenAI Responses</SelectItem><SelectItem value="messages">Anthropic Messages</SelectItem></SelectGroup></SelectContent></Select><FieldDescription className="text-xs">留空时保持原有 URL、请求和响应；指定格式后会在入口协议与该出口协议之间转换。</FieldDescription><FieldError>{formError?.field === "outbound_format" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "base_url"}><FieldLabel htmlFor="edit-provider-base-url">基础地址</FieldLabel><Input aria-invalid={formError?.field === "base_url"} id="edit-provider-base-url" onChange={(event) => { clearFormFieldError("base_url"); setEditForm({ ...editForm, base_url: event.target.value }); }} required title="基础地址必须是 http 或 https 地址，不能包含用户名、密码、查询参数或片段" type="url" value={editForm.base_url} /><FieldDescription className="text-xs">只填写 http/https 基础地址，不包含用户名、密码、查询参数或 # 片段。</FieldDescription><FieldError>{formError?.field === "base_url" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "model_list_path"}><FieldLabel htmlFor="edit-provider-model-list-path">模型获取路径</FieldLabel><Input aria-invalid={formError?.field === "model_list_path"} id="edit-provider-model-list-path" onChange={(event) => { clearFormFieldError("model_list_path"); setEditForm({ ...editForm, model_list_path: event.target.value }); }} placeholder="留空默认使用 /v1/models" title="模型获取路径必须以 / 开头，不能包含 ? 或 #，最长 512 个字符" value={editForm.model_list_path} /><FieldDescription className="text-xs">例如 /api/models；必须以 / 开头，不能包含 ? 或 #。留空时使用基础地址 + /v1/models。</FieldDescription><FieldError>{formError?.field === "model_list_path" ? formError.message : undefined}</FieldError></Field>
               <Field data-invalid={formError?.field === "weight"}><FieldLabel htmlFor="edit-provider-weight">请求权重</FieldLabel><Input aria-invalid={formError?.field === "weight"} id="edit-provider-weight" inputMode="numeric" max={1000000} min={1} onChange={(event) => { clearFormFieldError("weight"); setEditForm({ ...editForm, weight: Number(event.target.value) }); }} required type="number" value={editForm.weight} /><FieldDescription className="text-xs">权重越大越优先请求，失败后会在当前提供商重试两次。</FieldDescription><FieldError>{formError?.field === "weight" ? formError.message : undefined}</FieldError></Field>

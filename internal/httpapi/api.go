@@ -97,6 +97,7 @@ type UserService interface {
 	 * @date 2026-08-13
 	 */
 	Register(context.Context, user.RegisterInput) (user.Record, error)
+	ValidateRegistration(user.RegisterInput) error
 	/**
 	 * InitializeAdmin 声明该接口方法需要提供的业务能力。
 	 * @param arg1 类型为 context.Context 的接口输入参数。
@@ -965,7 +966,6 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "setup_required", "请先初始化管理员账号")
 		return
 	}
-	var input user.RegisterInput
 	var request struct {
 		Username         string `json:"username"`
 		Email            string `json:"email"`
@@ -982,13 +982,17 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "email_unavailable", "邮箱验证服务暂不可用")
 		return
 	}
+	input := user.RegisterInput{
+		Username: request.Username, Email: request.Email, DisplayName: request.DisplayName,
+		Password: request.Password, ReferralCode: request.ReferralCode,
+	}
+	if err := h.users.ValidateRegistration(input); err != nil {
+		h.writeUserError(w, "validate registration", err)
+		return
+	}
 	if err := h.emailVerification.Verify(r.Context(), request.Email, request.VerificationCode); err != nil {
 		h.writeVerificationError(w, err)
 		return
-	}
-	input = user.RegisterInput{
-		Username: request.Username, Email: request.Email, DisplayName: request.DisplayName,
-		Password: request.Password, ReferralCode: request.ReferralCode,
 	}
 	created, err := h.users.Register(r.Context(), input)
 	if err != nil {
@@ -3565,17 +3569,20 @@ func (h *apiHandler) clearOIDCFlowCookie(w http.ResponseWriter) {
  * @date 2026-08-13
  */
 func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err error) {
+	var validationError *user.ValidationError
 	switch {
+	case errors.As(err, &validationError):
+		writeFieldError(w, http.StatusBadRequest, "invalid_request", string(validationError.Field), userValidationMessage(validationError.Field))
 	case errors.Is(err, user.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "invalid_request", "用户信息无效")
+		writeError(w, http.StatusBadRequest, "invalid_request", "用户信息格式不正确，请检查后重试")
 	case errors.Is(err, user.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "用户不存在")
 	case errors.Is(err, user.ErrUsernameTaken):
-		writeError(w, http.StatusConflict, "username_taken", "用户名已存在")
+		writeFieldError(w, http.StatusConflict, "username_taken", string(user.ValidationFieldUsername), "用户名已存在")
 	case errors.Is(err, user.ErrEmailTaken):
-		writeError(w, http.StatusConflict, "email_taken", "邮箱已被使用")
+		writeFieldError(w, http.StatusConflict, "email_taken", string(user.ValidationFieldEmail), "邮箱已被使用")
 	case errors.Is(err, user.ErrInvalidReferralCode):
-		writeError(w, http.StatusBadRequest, "invalid_referral_code", "邀请码无效或邀请账号不可用")
+		writeFieldError(w, http.StatusBadRequest, "invalid_referral_code", string(user.ValidationFieldReferralCode), "邀请码无效或邀请账号不可用")
 	case errors.Is(err, user.ErrLastActiveAdmin):
 		writeError(w, http.StatusConflict, "last_active_admin", "不能停用或降级最后一个启用的管理员")
 	case errors.Is(err, user.ErrProtectedAdmin):
@@ -3584,6 +3591,23 @@ func (h *apiHandler) writeUserError(w http.ResponseWriter, operation string, err
 		writeError(w, http.StatusConflict, "already_initialized", "管理员账号已经初始化")
 	default:
 		h.internalError(w, operation, err)
+	}
+}
+
+func userValidationMessage(field user.ValidationField) string {
+	switch field {
+	case user.ValidationFieldUsername:
+		return "用户名需为 3 到 64 位，只能使用小写字母、数字、点号、下划线和连字符，且必须以字母或数字开头"
+	case user.ValidationFieldEmail:
+		return "请输入有效的邮箱地址"
+	case user.ValidationFieldDisplayName:
+		return "显示名称不能超过 128 个字符"
+	case user.ValidationFieldPassword:
+		return "密码需为 8 到 72 字节，且必须同时包含英文和数字"
+	case user.ValidationFieldRole:
+		return "用户角色无效"
+	default:
+		return "用户信息格式不正确，请检查后重试"
 	}
 }
 
@@ -3730,11 +3754,13 @@ func (h *apiHandler) writeProviderError(w http.ResponseWriter, operation string,
 func providerValidationMessage(field provider.ValidationField) string {
 	switch field {
 	case provider.ValidationFieldCode:
-		return "提供商代码必须为 3 到 64 位，只能使用小写字母、数字、点号和连字符"
+		return "提供商代码不能为空且不能超过 64 个字符"
 	case provider.ValidationFieldDisplayName:
 		return "显示名称不能为空且不能超过 128 个字符"
 	case provider.ValidationFieldProtocols:
 		return "至少选择一个支持协议"
+	case provider.ValidationFieldOutboundFormat:
+		return "出口格式必须留空，或选择 Chat Completions、OpenAI Responses、Anthropic Messages"
 	case provider.ValidationFieldBaseURL:
 		return "基础地址必须是完整的 HTTP 或 HTTPS 地址，且不能包含凭据、查询参数或片段"
 	case provider.ValidationFieldModelListPath:

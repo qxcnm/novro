@@ -19,6 +19,10 @@ type Hasher struct {
 	Cost int
 }
 
+func (Hasher) Validate(plainText string) error {
+	return Validate(plainText)
+}
+
 /**
  * Hash 用于对敏感数据执行安全转换。
  * @param plainText 本次操作需要使用的输入参数。

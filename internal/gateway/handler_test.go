@@ -309,6 +309,14 @@ func (f *fakeBilling) RecordFailure(_ context.Context, input billing.FailureInpu
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
+func jsonHTTPResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
 /**
  * RoundTrip 封装该名称对应的业务处理逻辑。
  * @param request 当前请求数据。
@@ -1248,8 +1256,30 @@ func TestProxyReturnsFailureAndRefundsOnceAfterAllChannelsFail(t *testing.T) {
 	if !strings.Contains(response.Body.String(), "upstream_unavailable") {
 		t.Fatalf("unexpected error body: %s", response.Body.String())
 	}
-	if failure := biller.failures[0]; failure.StatusCode != http.StatusBadGateway || failure.ErrorCode != "upstream_http_error" || failure.ErrorMessage != "上游返回 HTTP 429" || failure.MultiplierBPS != 10_000 || failure.ModelName != "deepseek-chat" {
+	if failure := biller.failures[0]; failure.StatusCode != http.StatusBadGateway || failure.ErrorCode != "upstream_http_error" || failure.ErrorMessage != "上游返回 HTTP 429：limited" || failure.MultiplierBPS != 10_000 || failure.ModelName != "deepseek-chat" {
 		t.Fatalf("unexpected failure log: %+v", failure)
+	}
+}
+
+func TestSummarizeUpstreamErrorExtractsSafeValidationMessage(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "detail", body: `{"detail":"messages must be a non-empty array"}`, want: "messages must be a non-empty array"},
+		{name: "nested message", body: `{"error":{"message":"invalid top_p: only 0.95 is allowed for this model"}}`, want: "invalid top_p: only 0.95 is allowed for this model"},
+		{name: "plain text", body: "  invalid request\r\n  ", want: "invalid request"},
+		{name: "redacts token-like value", body: `{"message":"invalid key gp-abcdefghijklmnopqrstuvwxyz0123456789"}`, want: "invalid key [redacted]"},
+		{name: "ignores unrelated success JSON", body: `{"status":"failed","request":{"input":"private prompt"}}`, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := summarizeUpstreamError([]byte(tt.body)); got != tt.want {
+				t.Fatalf("summarizeUpstreamError()=%q want=%q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1749,6 +1779,1001 @@ func TestDualProtocolProviderRoutesResponsesAndAnthropicMessages(t *testing.T) {
 				t.Fatalf("unexpected usage %+v", biller.usage)
 			}
 		})
+	}
+}
+
+func TestProviderOutboundFormatConvertsRequestResponseAndUsage(t *testing.T) {
+	chatRoute := openAIRoute()
+	chatRoute.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	responsesRoute := openAIRoute()
+	responsesRoute.Provider.OutboundFormat = provider.OutboundFormatResponses
+	messagesRoute := anthropicRoute()
+	messagesRoute.Provider.OutboundFormat = provider.OutboundFormatMessages
+	passthroughRoute := openAIRoute()
+
+	tests := []struct {
+		name              string
+		path              string
+		body              string
+		route             modelroute.Resolved
+		wantURL           string
+		wantAuthorization string
+		wantAPIKey        string
+		wantEndpoint      string
+		upstreamBody      string
+		wantUpstreamID    string
+		wantClientFormat  string
+		wantClientText    string
+		wantClientInput   int
+		wantClientCache   int
+		wantInput         int
+		wantUncached      int
+		wantCacheRead     int
+		wantCacheWrite    int
+		wantOutput        int
+		passthrough       bool
+		assertUpstream    func(*testing.T, map[string]any)
+	}{
+		{
+			name:              "responses to configured chat completions",
+			path:              "/v1/responses",
+			body:              `{"model":"deepseek-chat","instructions":"be concise","input":"hello chat","max_output_tokens":32}`,
+			route:             chatRoute,
+			wantURL:           "https://api.example.com/v1/chat/completions",
+			wantAuthorization: "Bearer upstream-secret",
+			wantEndpoint:      "responses",
+			upstreamBody:      `{"id":"chat-up","object":"chat.completion","created":1,"model":"deepseek-v3","choices":[{"index":0,"message":{"role":"assistant","content":"chat answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":3}}}`,
+			wantUpstreamID:    "chat-up",
+			wantClientFormat:  "responses",
+			wantClientText:    "chat answer",
+			wantClientInput:   10,
+			wantClientCache:   3,
+			wantInput:         10,
+			wantUncached:      7,
+			wantCacheRead:     3,
+			wantOutput:        4,
+			assertUpstream: func(t *testing.T, payload map[string]any) {
+				t.Helper()
+				messages := sliceValue(payload["messages"])
+				if intValue(payload["max_tokens"]) != 32 || len(messages) != 2 || stringValue(mapValue(messages[0])["role"]) != "system" || textFromContent(mapValue(messages[0])["content"]) != "be concise" || stringValue(mapValue(messages[1])["role"]) != "user" || textFromContent(mapValue(messages[1])["content"]) != "hello chat" {
+					t.Fatalf("unexpected Chat Completions request: %+v", payload)
+				}
+			},
+		},
+		{
+			name:              "messages to configured responses",
+			path:              "/v1/messages",
+			body:              `{"model":"deepseek-chat","system":"answer clearly","messages":[{"role":"user","content":"hello responses"}],"max_tokens":48}`,
+			route:             responsesRoute,
+			wantURL:           "https://api.example.com/v1/responses",
+			wantAuthorization: "Bearer upstream-secret",
+			wantEndpoint:      "messages",
+			upstreamBody:      `{"id":"resp-up","object":"response","created_at":1,"status":"completed","model":"deepseek-v3","output":[{"id":"msg-up","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"responses answer","annotations":[]}]}],"usage":{"input_tokens":12,"output_tokens":5,"input_tokens_details":{"cached_tokens":5}}}`,
+			wantUpstreamID:    "resp-up",
+			wantClientFormat:  "messages",
+			wantClientText:    "responses answer",
+			wantClientInput:   7,
+			wantClientCache:   5,
+			wantInput:         12,
+			wantUncached:      7,
+			wantCacheRead:     5,
+			wantOutput:        5,
+			assertUpstream: func(t *testing.T, payload map[string]any) {
+				t.Helper()
+				input := sliceValue(payload["input"])
+				if len(input) != 1 {
+					t.Fatalf("unexpected Responses input: %+v", payload)
+				}
+				first := mapValue(input[0])
+				if intValue(payload["max_output_tokens"]) != 48 || stringValue(payload["instructions"]) != "answer clearly" || stringValue(first["type"]) != "message" || stringValue(first["role"]) != "user" || textFromContent(first["content"]) != "hello responses" {
+					t.Fatalf("unexpected Responses request: %+v", payload)
+				}
+			},
+		},
+		{
+			name:             "chat completions to configured messages",
+			path:             "/v1/chat/completions",
+			body:             `{"model":"kimi-k3","messages":[{"role":"system","content":"think first"},{"role":"user","content":"hello messages"}],"max_tokens":64}`,
+			route:            messagesRoute,
+			wantURL:          "https://api.anthropic.com/v1/messages",
+			wantAPIKey:       "anthropic-secret",
+			wantEndpoint:     "chat_completions",
+			upstreamBody:     `{"id":"msg-up","type":"message","role":"assistant","model":"kimi-k3-upstream","content":[{"type":"text","text":"messages answer"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"cache_read_input_tokens":3,"cache_creation_input_tokens":2,"output_tokens":6}}`,
+			wantUpstreamID:   "msg-up",
+			wantClientFormat: "chat_completions",
+			wantClientText:   "messages answer",
+			wantClientInput:  15,
+			wantClientCache:  3,
+			wantInput:        15,
+			wantUncached:     10,
+			wantCacheRead:    3,
+			wantCacheWrite:   2,
+			wantOutput:       6,
+			assertUpstream: func(t *testing.T, payload map[string]any) {
+				t.Helper()
+				messages := sliceValue(payload["messages"])
+				if len(messages) != 1 {
+					t.Fatalf("unexpected Anthropic Messages input: %+v", payload)
+				}
+				first := mapValue(messages[0])
+				if intValue(payload["max_tokens"]) != 64 || stringValue(payload["system"]) != "think first" || stringValue(first["role"]) != "user" || textFromContent(first["content"]) != "hello messages" {
+					t.Fatalf("unexpected Anthropic Messages request: %+v", payload)
+				}
+			},
+		},
+		{
+			name:              "unset outbound format preserves chat passthrough",
+			path:              "/v1/chat/completions",
+			body:              `{"model":"deepseek-chat","messages":[{"role":"user","content":"keep vendor fields"}],"max_tokens":16,"vendor_option":{"mode":"native"}}`,
+			route:             passthroughRoute,
+			wantURL:           "https://api.example.com/v1/chat/completions",
+			wantAuthorization: "Bearer upstream-secret",
+			wantEndpoint:      "chat_completions",
+			upstreamBody:      `{"id":"pass-up","object":"chat.completion","created":1,"model":"deepseek-v3","choices":[{"index":0,"message":{"role":"assistant","content":"native answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":2},"vendor_response":{"kept":true}}`,
+			wantUpstreamID:    "pass-up",
+			wantClientFormat:  "chat_completions",
+			wantClientText:    "native answer",
+			wantClientInput:   9,
+			wantInput:         9,
+			wantUncached:      9,
+			wantOutput:        2,
+			passthrough:       true,
+			assertUpstream: func(t *testing.T, payload map[string]any) {
+				t.Helper()
+				vendor := mapValue(payload["vendor_option"])
+				if stringValue(vendor["mode"]) != "native" {
+					t.Fatalf("same-protocol request lost vendor field: %+v", payload)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			biller := &fakeBilling{}
+			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				if request.URL.String() != tt.wantURL {
+					t.Fatalf("upstream URL=%s want=%s", request.URL, tt.wantURL)
+				}
+				if request.Header.Get("Authorization") != tt.wantAuthorization || request.Header.Get("X-API-Key") != tt.wantAPIKey {
+					t.Fatalf("unexpected upstream auth Authorization=%q X-API-Key=%q", request.Header.Get("Authorization"), request.Header.Get("X-API-Key"))
+				}
+				if tt.wantAPIKey != "" && request.Header.Get("Anthropic-Version") != "2023-06-01" {
+					t.Fatalf("Anthropic-Version=%q", request.Header.Get("Anthropic-Version"))
+				}
+				body, err := io.ReadAll(request.Body)
+				if err != nil {
+					t.Fatalf("read upstream request: %v", err)
+				}
+				var payload map[string]any
+				if err := json.Unmarshal(body, &payload); err != nil {
+					t.Fatalf("decode upstream request: %v body=%s", err, body)
+				}
+				if stringValue(payload["model"]) != tt.route.UpstreamName {
+					t.Fatalf("upstream model=%q want=%q body=%s", stringValue(payload["model"]), tt.route.UpstreamName, body)
+				}
+				tt.assertUpstream(t, payload)
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(tt.upstreamBody))}, nil
+			})}
+			handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: tt.route}, Billing: biller, Client: client})
+			request := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
+			request.Header.Set("Authorization", "Bearer nvr_test")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if biller.finalizeCalls != 1 || biller.usage.Estimated || biller.usage.Endpoint != tt.wantEndpoint || biller.usage.UpstreamRequestID != tt.wantUpstreamID || biller.usage.InputTokens != tt.wantInput || biller.usage.Tokens.UncachedInput != tt.wantUncached || biller.usage.Tokens.CacheRead != tt.wantCacheRead || biller.usage.Tokens.CacheWrite != tt.wantCacheWrite || biller.usage.OutputTokens != tt.wantOutput {
+				t.Fatalf("unexpected usage: %+v", biller.usage)
+			}
+			if tt.passthrough && response.Body.String() != tt.upstreamBody {
+				t.Fatalf("same-protocol response was not passed through: %s", response.Body.String())
+			}
+			var clientPayload map[string]any
+			if err := json.Unmarshal(response.Body.Bytes(), &clientPayload); err != nil {
+				t.Fatalf("decode client response: %v body=%s", err, response.Body.String())
+			}
+			switch tt.wantClientFormat {
+			case "messages":
+				usage := mapValue(clientPayload["usage"])
+				if stringValue(clientPayload["type"]) != "message" || textFromContent(clientPayload["content"]) != tt.wantClientText || intValue(usage["input_tokens"]) != tt.wantClientInput || intValue(usage["cache_read_input_tokens"]) != tt.wantClientCache || intValue(usage["output_tokens"]) != tt.wantOutput {
+					t.Fatalf("unexpected Messages client response: %+v", clientPayload)
+				}
+			case "responses":
+				output := sliceValue(clientPayload["output"])
+				usage := mapValue(clientPayload["usage"])
+				if stringValue(clientPayload["object"]) != "response" || len(output) != 1 || textFromContent(mapValue(output[0])["content"]) != tt.wantClientText || intValue(usage["input_tokens"]) != tt.wantClientInput || intValue(mapValue(usage["input_tokens_details"])["cached_tokens"]) != tt.wantClientCache || intValue(usage["output_tokens"]) != tt.wantOutput {
+					t.Fatalf("unexpected Responses client response: %+v", clientPayload)
+				}
+			case "chat_completions":
+				choices := sliceValue(clientPayload["choices"])
+				usage := mapValue(clientPayload["usage"])
+				if stringValue(clientPayload["object"]) != "chat.completion" || len(choices) != 1 || textFromContent(mapValue(mapValue(choices[0])["message"])["content"]) != tt.wantClientText || intValue(usage["prompt_tokens"]) != tt.wantClientInput || intValue(mapValue(usage["prompt_tokens_details"])["cached_tokens"]) != tt.wantClientCache || intValue(usage["completion_tokens"]) != tt.wantOutput {
+					t.Fatalf("unexpected Chat Completions client response: %+v", clientPayload)
+				}
+			default:
+				t.Fatalf("unsupported client format %q", tt.wantClientFormat)
+			}
+		})
+	}
+}
+
+func TestProviderOutboundFormatStreamsSSEThroughHTTPGateway(t *testing.T) {
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	upstreamSSE := strings.Join([]string{
+		`data: {"id":"chat-sse","object":"chat.completion.chunk",`,
+		`data: "created":1,"model":"deepseek-v3","choices":[{"index":0,"delta":{"role":"assistant","content":"hello over SSE"},"finish_reason":null}]}`,
+		``,
+		`data: {"id":"chat-sse","object":"chat.completion.chunk","created":1,"model":"deepseek-v3","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+		``,
+		`data: {"id":"chat-sse","object":"chat.completion.chunk","created":1,"model":"deepseek-v3","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2,"total_tokens":9}}`,
+	}, "\n")
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != "https://api.example.com/v1/chat/completions" {
+			t.Fatalf("upstream URL=%s", request.URL)
+		}
+		if request.Header.Get("Authorization") != "Bearer upstream-secret" || request.Header.Get("X-API-Key") != "" {
+			t.Fatalf("unexpected upstream auth Authorization=%q X-API-Key=%q", request.Header.Get("Authorization"), request.Header.Get("X-API-Key"))
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read upstream request: %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode upstream request: %v body=%s", err, body)
+		}
+		options := mapValue(payload["stream_options"])
+		if !boolValue(payload["stream"]) || !boolValue(options["include_usage"]) {
+			t.Fatalf("Chat stream request did not require final usage: %s", body)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","max_output_tokens":32,"stream":true}`))
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("status=%d content-type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{"event: response.output_text.delta", "hello over SSE", "event: response.completed"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("converted Responses SSE is missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "[DONE]") {
+		t.Fatalf("Responses SSE unexpectedly contains Chat sentinel:\n%s", body)
+	}
+	if biller.finalizeCalls != 1 || biller.usage.Estimated || biller.usage.UpstreamRequestID != "chat-sse" || biller.usage.InputTokens != 7 || biller.usage.OutputTokens != 2 {
+		t.Fatalf("unexpected streamed usage: %+v", biller.usage)
+	}
+}
+
+func TestProviderOutboundFormatStreamsSSEIncrementallyEndToEnd(t *testing.T) {
+	firstEventSent := make(chan struct{})
+	releaseUpstream := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseUpstream)
+		}
+	}()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("upstream path = %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			return
+		}
+		if !boolValue(payload["stream"]) || !boolValue(mapValue(payload["stream_options"])["include_usage"]) {
+			t.Errorf("upstream request did not enable streamed usage: %#v", payload)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("upstream response writer does not implement http.Flusher")
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello incrementally\"},\"finish_reason\":null}]}\n\n")
+		flusher.Flush()
+		close(firstEventSent)
+		select {
+		case <-releaseUpstream:
+		case <-r.Context().Done():
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v3\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v3\",\"choices\":[],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":3,\"total_tokens\":11}}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer upstream.Close()
+
+	route := openAIRoute()
+	route.BaseURL = upstream.URL + "/v1"
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: upstream.Client()})
+	gateway := httptest.NewServer(handler)
+	defer gateway.Close()
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","max_output_tokens":32,"stream":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	request.Host = "gateway.test"
+	client := gateway.Client()
+	client.Timeout = 5 * time.Second
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("call gateway SSE endpoint: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("status=%d content-type=%q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	select {
+	case <-firstEventSent:
+	default:
+		t.Fatal("gateway returned before the upstream flushed its first SSE event")
+	}
+
+	reader := bufio.NewReader(response.Body)
+	var firstFrame strings.Builder
+	for {
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read first converted SSE frame: %v", readErr)
+		}
+		firstFrame.WriteString(line)
+		if line == "\n" {
+			break
+		}
+	}
+	if !strings.Contains(firstFrame.String(), "event: response.created") {
+		t.Fatalf("first converted frame = %q, want response.created", firstFrame.String())
+	}
+	close(releaseUpstream)
+	released = true
+	rest, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read remaining converted SSE: %v", err)
+	}
+	fullStream := firstFrame.String() + string(rest)
+	for _, want := range []string{"hello incrementally", "event: response.output_text.delta", "event: response.completed"} {
+		if !strings.Contains(fullStream, want) {
+			t.Fatalf("converted SSE is missing %q:\n%s", want, fullStream)
+		}
+	}
+	if biller.finalizeCalls != 1 || biller.usage.Estimated || biller.usage.InputTokens != 8 || biller.usage.OutputTokens != 3 || biller.usage.UpstreamRequestID != "chat-e2e" {
+		t.Fatalf("unexpected end-to-end streamed usage: %+v", biller.usage)
+	}
+}
+
+func TestProviderOutboundFormatMessagesStreamsTextIncrementallyEndToEnd(t *testing.T) {
+	firstEventSent := make(chan struct{})
+	releaseUpstream := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseUpstream)
+		}
+	}()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("upstream path = %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			return
+		}
+		if !boolValue(payload["stream"]) || !boolValue(mapValue(payload["stream_options"])["include_usage"]) {
+			t.Errorf("upstream request did not enable streamed usage: %#v", payload)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("upstream response writer does not implement http.Flusher")
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello incrementally\"},\"finish_reason\":null}]}\n\n")
+		flusher.Flush()
+		close(firstEventSent)
+		select {
+		case <-releaseUpstream:
+		case <-r.Context().Done():
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":3,\"total_tokens\":11}}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer upstream.Close()
+
+	route := openAIRoute()
+	route.BaseURL = upstream.URL + "/v1"
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: upstream.Client()})
+	gateway := httptest.NewServer(handler)
+	defer gateway.Close()
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/v1/messages", strings.NewReader(`{"model":"kimi-k3","messages":[{"role":"user","content":"hello"}],"max_tokens":32,"stream":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-API-Key", "nvr_test")
+	request.Header.Set("Anthropic-Version", "2023-06-01")
+	request.Host = "gateway.test"
+	client := gateway.Client()
+	client.Timeout = 5 * time.Second
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("call gateway Messages SSE endpoint: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("status=%d content-type=%q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	select {
+	case <-firstEventSent:
+	default:
+		t.Fatal("gateway returned before the upstream flushed its first SSE event")
+	}
+
+	reader := bufio.NewReader(response.Body)
+	textFrame := make(chan string, 1)
+	readFailure := make(chan error, 1)
+	go func() {
+		var stream strings.Builder
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				readFailure <- readErr
+				return
+			}
+			stream.WriteString(line)
+			if strings.Contains(stream.String(), `"type":"text_delta"`) {
+				textFrame <- stream.String()
+				return
+			}
+		}
+	}()
+	select {
+	case frame := <-textFrame:
+		if !strings.Contains(frame, "hello incrementally") {
+			t.Fatalf("first Messages text frame = %q", frame)
+		}
+	case readErr := <-readFailure:
+		t.Fatalf("read first Messages text frame: %v", readErr)
+	case <-time.After(500 * time.Millisecond):
+		close(releaseUpstream)
+		released = true
+		_ = response.Body.Close()
+		t.Fatal("Messages text was buffered until the upstream stream finished")
+	}
+
+	close(releaseUpstream)
+	released = true
+	if _, err := io.ReadAll(reader); err != nil {
+		t.Fatalf("read remaining Messages stream: %v", err)
+	}
+	if biller.finalizeCalls != 1 || biller.usage.Estimated || biller.usage.InputTokens != 8 || biller.usage.OutputTokens != 3 || biller.usage.UpstreamRequestID != "chat-messages-e2e" {
+		t.Fatalf("unexpected end-to-end streamed usage: %+v", biller.usage)
+	}
+}
+
+func TestProviderOutboundFormatMessagesStreamsToolArgumentsIncrementallyEndToEnd(t *testing.T) {
+	firstToolDeltaSent := make(chan struct{})
+	releaseUpstream := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseUpstream)
+		}
+	}()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("upstream path = %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			return
+		}
+		if !boolValue(payload["stream"]) || !boolValue(mapValue(payload["stream_options"])["include_usage"]) {
+			t.Errorf("upstream request did not enable streamed usage: %#v", payload)
+		}
+		tools := sliceValue(payload["tools"])
+		if len(tools) != 1 || stringValue(mapValue(mapValue(tools[0])["function"])["name"]) != "lookup" {
+			t.Errorf("Messages function tool was not converted for Chat upstream: %#v", payload)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("upstream response writer does not implement http.Flusher")
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-tool-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_lookup\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"city\\\":\\\"\"}}]},\"finish_reason\":null}]}\n\n")
+		flusher.Flush()
+		close(firstToolDeltaSent)
+		select {
+		case <-releaseUpstream:
+		case <-r.Context().Done():
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-tool-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"Shanghai\\\"}\"}}]},\"finish_reason\":null}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-tool-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"id\":\"chat-messages-tool-e2e\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"kimi-k3\",\"choices\":[],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4,\"total_tokens\":16}}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer upstream.Close()
+
+	route := openAIRoute()
+	route.BaseURL = upstream.URL + "/v1"
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: upstream.Client()})
+	gateway := httptest.NewServer(handler)
+	defer gateway.Close()
+
+	requestBody := `{"model":"kimi-k3","messages":[{"role":"user","content":"look up Shanghai"}],"max_tokens":32,"stream":true,"tools":[{"name":"lookup","description":"look up a city","input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}]}`
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/v1/messages", strings.NewReader(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-API-Key", "nvr_test")
+	request.Header.Set("Anthropic-Version", "2023-06-01")
+	request.Host = "gateway.test"
+	client := gateway.Client()
+	client.Timeout = 5 * time.Second
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("call gateway Messages tool SSE endpoint: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("status=%d content-type=%q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	select {
+	case <-firstToolDeltaSent:
+	default:
+		t.Fatal("gateway returned before the upstream flushed its first tool SSE event")
+	}
+
+	reader := bufio.NewReader(response.Body)
+	toolFrame := make(chan string, 1)
+	readFailure := make(chan error, 1)
+	go func() {
+		var stream strings.Builder
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				readFailure <- readErr
+				return
+			}
+			stream.WriteString(line)
+			if strings.Contains(stream.String(), `"type":"input_json_delta"`) {
+				toolFrame <- stream.String()
+				return
+			}
+		}
+	}()
+	select {
+	case frame := <-toolFrame:
+		if !strings.Contains(frame, `"partial_json":"{\"city\":\""`) {
+			t.Fatalf("first Messages tool frame = %q", frame)
+		}
+	case readErr := <-readFailure:
+		t.Fatalf("read first Messages tool frame: %v", readErr)
+	case <-time.After(time.Second):
+		close(releaseUpstream)
+		released = true
+		_ = response.Body.Close()
+		t.Fatal("Messages tool arguments were buffered until the upstream stream finished")
+	}
+
+	close(releaseUpstream)
+	released = true
+	rest, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read remaining Messages tool stream: %v", err)
+	}
+	for _, want := range []string{"Shanghai", "event: content_block_stop", "event: message_stop"} {
+		if !strings.Contains(string(rest), want) {
+			t.Fatalf("remaining Messages tool stream is missing %q:\n%s", want, rest)
+		}
+	}
+	if biller.finalizeCalls != 1 || biller.usage.Estimated || biller.usage.InputTokens != 12 || biller.usage.OutputTokens != 4 || biller.usage.UpstreamRequestID != "chat-messages-tool-e2e" {
+		t.Fatalf("unexpected end-to-end tool streamed usage: %+v", biller.usage)
+	}
+}
+
+func TestProviderOutboundFormatRejectsMalformedFirstSSEEventBeforeCommittingHeaders(t *testing.T) {
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader("data: this-is-not-json\n\n")),
+		}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","stream":true}`))
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway || !strings.Contains(response.Body.String(), `"code":"upstream_conversion_error"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("malformed first event committed SSE headers: %q", response.Header().Get("Content-Type"))
+	}
+	if biller.finalizeCalls != 0 || biller.unknownCalls != 1 {
+		t.Fatalf("unexpected billing state finalize=%d unknown=%d", biller.finalizeCalls, biller.unknownCalls)
+	}
+}
+
+func TestProviderOutboundFormatDropsOnlyUnrepresentableBuiltInTool(t *testing.T) {
+	route := anthropicRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatMessages
+	called := false
+	client := &http.Client{Transport: roundTripFunc(func(upstream *http.Request) (*http.Response, error) {
+		called = true
+		var payload map[string]any
+		if err := json.NewDecoder(upstream.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		tools := sliceValue(payload["tools"])
+		if len(tools) != 1 || stringValue(mapValue(tools[0])["name"]) != "lookup" {
+			t.Fatalf("converted tools = %#v, want only portable lookup tool", tools)
+		}
+		return jsonHTTPResponse(http.StatusOK, `{"id":"msg-tools","type":"message","role":"assistant","model":"kimi-k3","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":1}}`), nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: &fakeBilling{}, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"kimi-k3","input":"search","tools":[{"type":"web_search"},{"type":"function","name":"lookup","description":"look up data","parameters":{"type":"object"}}]}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"status":"completed"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if !called {
+		t.Fatal("portable portion of mixed-tool request did not reach upstream")
+	}
+}
+
+func TestProviderOutboundFormatRejectsUnknownResponsesServerState(t *testing.T) {
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	called := false
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		called = true
+		return nil, errors.New("must not call upstream")
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: &fakeBilling{}, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"continue","previous_response_id":"resp_previous"}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code":"previous_response_not_found"`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if called {
+		t.Fatal("stateful Responses request reached a non-Responses upstream")
+	}
+}
+
+func TestProviderOutboundFormatExpandsPreviousResponseIDForChatUpstream(t *testing.T) {
+	actor := gatewayActor()
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	call := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		call++
+		var payload map[string]any
+		decoder := json.NewDecoder(request.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			t.Fatalf("decode upstream request %d: %v", call, err)
+		}
+		if _, exists := payload["previous_response_id"]; exists {
+			t.Fatalf("upstream request %d retained previous_response_id: %#v", call, payload)
+		}
+		messages := sliceValue(payload["messages"])
+		switch call {
+		case 1:
+			if len(messages) != 1 || textFromContent(mapValue(messages[0])["content"]) != "first turn" {
+				t.Fatalf("first upstream messages = %#v", messages)
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"chat-history-1","model":"deepseek-v3","choices":[{"index":0,"message":{"role":"assistant","content":"FIRST_OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`), nil
+		case 2:
+			if len(messages) != 3 {
+				t.Fatalf("second upstream messages count = %d, want 3: %#v", len(messages), messages)
+			}
+			wantRoles := []string{"user", "assistant", "user"}
+			wantText := []string{"first turn", "FIRST_OK", "second turn"}
+			for index := range messages {
+				message := mapValue(messages[index])
+				if stringValue(message["role"]) != wantRoles[index] || textFromContent(message["content"]) != wantText[index] {
+					t.Fatalf("second upstream message %d = %#v", index, message)
+				}
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"chat-history-2","model":"deepseek-v3","choices":[{"index":0,"message":{"role":"assistant","content":"SECOND_OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}`), nil
+		default:
+			t.Fatalf("unexpected upstream request %d", call)
+			return nil, nil
+		}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route}, Billing: &fakeBilling{}, Client: client})
+
+	firstRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"first turn"}`))
+	firstResponse := httptest.NewRecorder()
+	handler.ServeHTTP(firstResponse, firstRequest)
+	if firstResponse.Code != http.StatusOK {
+		t.Fatalf("first response status=%d body=%s", firstResponse.Code, firstResponse.Body.String())
+	}
+	firstResult := decodeTestObject(t, firstResponse.Body.Bytes())
+	if stringValue(firstResult["id"]) != "chat-history-1" || stringValue(firstResult["status"]) != "completed" {
+		t.Fatalf("first Responses result = %#v", firstResult)
+	}
+
+	secondRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"second turn","previous_response_id":"chat-history-1"}`))
+	secondResponse := httptest.NewRecorder()
+	handler.ServeHTTP(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusOK || !strings.Contains(secondResponse.Body.String(), "SECOND_OK") {
+		t.Fatalf("second response status=%d body=%s", secondResponse.Code, secondResponse.Body.String())
+	}
+	if call != 2 {
+		t.Fatalf("upstream calls = %d, want 2", call)
+	}
+}
+
+func TestProviderOutboundFormatExpandsPreviousResponseIDForMessagesUpstream(t *testing.T) {
+	actor := gatewayActor()
+	route := anthropicRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatMessages
+	call := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		call++
+		if request.URL.Path != "/v1/messages" {
+			t.Fatalf("upstream request %d path = %q, want /v1/messages", call, request.URL.Path)
+		}
+		var payload map[string]any
+		decoder := json.NewDecoder(request.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			t.Fatalf("decode upstream request %d: %v", call, err)
+		}
+		if _, exists := payload["previous_response_id"]; exists {
+			t.Fatalf("upstream request %d retained previous_response_id: %#v", call, payload)
+		}
+		messages := sliceValue(payload["messages"])
+		switch call {
+		case 1:
+			if len(messages) != 1 || stringValue(mapValue(messages[0])["role"]) != "user" || textFromContent(mapValue(messages[0])["content"]) != "first turn" {
+				t.Fatalf("first upstream Messages payload = %#v", messages)
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"msg-history-1","type":"message","role":"assistant","model":"kimi-k3-upstream","content":[{"type":"text","text":"FIRST_OK"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":2}}`), nil
+		case 2:
+			if len(messages) != 3 {
+				t.Fatalf("second upstream Messages count = %d, want 3: %#v", len(messages), messages)
+			}
+			wantRoles := []string{"user", "assistant", "user"}
+			wantText := []string{"first turn", "FIRST_OK", "second turn"}
+			for index := range messages {
+				message := mapValue(messages[index])
+				if stringValue(message["role"]) != wantRoles[index] || textFromContent(message["content"]) != wantText[index] {
+					t.Fatalf("second upstream Messages item %d = %#v", index, message)
+				}
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"msg-history-2","type":"message","role":"assistant","model":"kimi-k3-upstream","content":[{"type":"text","text":"SECOND_OK"}],"stop_reason":"end_turn","usage":{"input_tokens":9,"output_tokens":2}}`), nil
+		default:
+			t.Fatalf("unexpected upstream request %d", call)
+			return nil, nil
+		}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route}, Billing: &fakeBilling{}, Client: client})
+
+	firstRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"kimi-k3","input":"first turn"}`))
+	firstResponse := httptest.NewRecorder()
+	handler.ServeHTTP(firstResponse, firstRequest)
+	if firstResponse.Code != http.StatusOK {
+		t.Fatalf("first response status=%d body=%s", firstResponse.Code, firstResponse.Body.String())
+	}
+	firstResult := decodeTestObject(t, firstResponse.Body.Bytes())
+	if stringValue(firstResult["id"]) != "msg-history-1" || stringValue(firstResult["status"]) != "completed" {
+		t.Fatalf("first Responses result = %#v", firstResult)
+	}
+
+	secondRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"kimi-k3","input":"second turn","previous_response_id":"msg-history-1"}`))
+	secondResponse := httptest.NewRecorder()
+	handler.ServeHTTP(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusOK || !strings.Contains(secondResponse.Body.String(), "SECOND_OK") {
+		t.Fatalf("second response status=%d body=%s", secondResponse.Code, secondResponse.Body.String())
+	}
+	if call != 2 {
+		t.Fatalf("upstream calls = %d, want 2", call)
+	}
+}
+
+func TestProviderOutboundFormatExpandsStreamedToolHistoryAndCompletes(t *testing.T) {
+	actor := gatewayActor()
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	call := 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		call++
+		var payload map[string]any
+		decoder := json.NewDecoder(request.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			t.Fatalf("decode upstream request %d: %v", call, err)
+		}
+		if _, exists := payload["previous_response_id"]; exists {
+			t.Fatalf("upstream request %d retained previous_response_id", call)
+		}
+		switch call {
+		case 1:
+			upstreamSSE := strings.Join([]string{
+				`data: {"id":"chat-tool-history","object":"chat.completion.chunk","created":1,"model":"kimi-k3","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`,
+				``,
+				`data: {"id":"chat-tool-history","object":"chat.completion.chunk","created":1,"model":"kimi-k3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_write","type":"function","function":{"name":"bash","arguments":"{\"command\":\"write\"}"}}]},"finish_reason":null}]}`,
+				``,
+				`data: {"id":"chat-tool-history","object":"chat.completion.chunk","created":1,"model":"kimi-k3","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+				``,
+				`data: {"id":"chat-tool-history","object":"chat.completion.chunk","created":1,"model":"kimi-k3","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}`,
+				``,
+				`data: [DONE]`,
+				``,
+			}, "\n")
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(upstreamSSE))}, nil
+		case 2:
+			messages := sliceValue(payload["messages"])
+			if len(messages) != 3 {
+				t.Fatalf("tool follow-up messages count = %d, want 3: %#v", len(messages), messages)
+			}
+			first := mapValue(messages[0])
+			assistant := mapValue(messages[1])
+			toolResult := mapValue(messages[2])
+			if stringValue(first["role"]) != "user" || textFromContent(first["content"]) != "write the file" {
+				t.Fatalf("first history message = %#v", first)
+			}
+			calls := sliceValue(assistant["tool_calls"])
+			if stringValue(assistant["role"]) != "assistant" || len(calls) != 1 || stringValue(mapValue(calls[0])["id"]) != "call_write" {
+				t.Fatalf("assistant tool history = %#v", assistant)
+			}
+			if stringValue(toolResult["role"]) != "tool" || stringValue(toolResult["tool_call_id"]) != "call_write" || textFromContent(toolResult["content"]) != "123456" {
+				t.Fatalf("tool result history = %#v", toolResult)
+			}
+			return jsonHTTPResponse(http.StatusOK, `{"id":"chat-tool-final","model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"TOOL_DONE"},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":3,"total_tokens":18}}`), nil
+		default:
+			t.Fatalf("unexpected upstream request %d", call)
+			return nil, nil
+		}
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: actor}, Routes: fakeRoutes{route: route}, Billing: &fakeBilling{}, Client: client})
+	toolDefinition := `{"type":"function","name":"bash","description":"run a command","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}`
+
+	firstRequestBody := `{"model":"deepseek-chat","input":"write the file","stream":true,"tools":[` + toolDefinition + `]}`
+	firstRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(firstRequestBody))
+	firstResponse := httptest.NewRecorder()
+	handler.ServeHTTP(firstResponse, firstRequest)
+	if firstResponse.Code != http.StatusOK {
+		t.Fatalf("first tool response status=%d body=%s", firstResponse.Code, firstResponse.Body.String())
+	}
+	if !strings.Contains(firstResponse.Body.String(), `event: response.completed`) || strings.Contains(firstResponse.Body.String(), `event: response.incomplete`) {
+		t.Fatalf("tool response did not end in exactly completed state:\n%s", firstResponse.Body.String())
+	}
+	if !strings.Contains(firstResponse.Body.String(), `"id":"chat-tool-history"`) || !strings.Contains(firstResponse.Body.String(), `"call_id":"call_write"`) {
+		t.Fatalf("tool response lost response/call identity:\n%s", firstResponse.Body.String())
+	}
+
+	secondRequestBody := `{"model":"deepseek-chat","previous_response_id":"chat-tool-history","input":[{"type":"item_reference","id":"fc_reference"},{"type":"function_call_output","call_id":"call_write","output":"123456"}],"tools":[` + toolDefinition + `]}`
+	secondRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(secondRequestBody))
+	secondResponse := httptest.NewRecorder()
+	handler.ServeHTTP(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusOK || !strings.Contains(secondResponse.Body.String(), "TOOL_DONE") {
+		t.Fatalf("tool follow-up status=%d body=%s", secondResponse.Code, secondResponse.Body.String())
+	}
+	if call != 2 {
+		t.Fatalf("upstream calls = %d, want 2", call)
+	}
+}
+
+func TestProviderOutboundFormatDoesNotFinalizeTruncatedChatStreamAfterFinishReason(t *testing.T) {
+	route := openAIRoute()
+	route.Provider.OutboundFormat = provider.OutboundFormatChatCompletions
+	biller := &fakeBilling{}
+	upstreamSSE := strings.Join([]string{
+		`data: {"id":"chat-truncated","object":"chat.completion.chunk","created":1,"model":"deepseek-v3","choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}`,
+		``,
+		`data: {"id":"chat-truncated","object":"chat.completion.chunk","created":1,"model":"deepseek-v3","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+		``,
+	}, "\n")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body: io.NopCloser(&terminalErrorReader{
+				reader: strings.NewReader(upstreamSSE),
+				err:    errors.New("truncated before usage and done"),
+			}),
+		}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","stream":true}`))
+	request.Header.Set("Authorization", "Bearer nvr_test")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "partial") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "response.completed") {
+		t.Fatalf("truncated upstream was synthesized as completed:\n%s", response.Body.String())
+	}
+	if biller.finalizeCalls != 0 || biller.unknownCalls != 1 {
+		t.Fatalf("truncated stream billing finalize=%d unknown=%d", biller.finalizeCalls, biller.unknownCalls)
+	}
+}
+
+func TestBufferedResponsesUpstreamProducesResponsesSSELifecycle(t *testing.T) {
+	route := openAIRoute()
+	route.Provider.Code = "reasonix"
+	biller := &fakeBilling{}
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatalf("read upstream request: %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode upstream request: %v", err)
+		}
+		if boolValue(payload["stream"]) {
+			t.Fatalf("Reasonix upstream request remained streaming: %s", body)
+		}
+		response := `{"id":"resp-buffered","object":"response","created_at":1,"status":"completed","model":"deepseek-v3","output":[{"id":"msg-buffered","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"buffered responses ok","annotations":[]}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}`
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(response))}, nil
+	})}
+	handler := New(Dependencies{APIKeys: fakeKeys{actor: gatewayActor()}, Routes: fakeRoutes{route: route}, Billing: biller, Client: client})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"deepseek-chat","input":"hello","stream":true}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, want := range []string{"event: response.created", "event: response.output_text.delta", "buffered responses ok", "event: response.completed"} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("buffered Responses SSE is missing %q:\n%s", want, response.Body.String())
+		}
+	}
+	if biller.finalizeCalls != 1 || biller.usage.InputTokens != 5 || biller.usage.OutputTokens != 2 {
+		t.Fatalf("unexpected buffered Responses usage: %+v", biller.usage)
 	}
 }
 

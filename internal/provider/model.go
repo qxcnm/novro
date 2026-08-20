@@ -8,24 +8,30 @@ import (
 )
 
 type Protocol string
+type OutboundFormat string
 type Status string
 type ValidationField string
 
 const (
-	ProtocolOpenAI    Protocol = "openai"
-	ProtocolAnthropic Protocol = "anthropic"
-	StatusActive      Status   = "active"
-	StatusDisabled    Status   = "disabled"
-	DefaultWeight              = 100
-	MaxWeight                  = 1_000_000
+	ProtocolOpenAI                Protocol       = "openai"
+	ProtocolAnthropic             Protocol       = "anthropic"
+	OutboundFormatNone            OutboundFormat = ""
+	OutboundFormatChatCompletions OutboundFormat = "chat_completions"
+	OutboundFormatResponses       OutboundFormat = "responses"
+	OutboundFormatMessages        OutboundFormat = "messages"
+	StatusActive                  Status         = "active"
+	StatusDisabled                Status         = "disabled"
+	DefaultWeight                                = 100
+	MaxWeight                                    = 1_000_000
 
-	ValidationFieldCode          ValidationField = "code"
-	ValidationFieldDisplayName   ValidationField = "display_name"
-	ValidationFieldProtocols     ValidationField = "protocols"
-	ValidationFieldBaseURL       ValidationField = "base_url"
-	ValidationFieldModelListPath ValidationField = "model_list_path"
-	ValidationFieldWeight        ValidationField = "weight"
-	ValidationFieldAPIKey        ValidationField = "api_key"
+	ValidationFieldCode           ValidationField = "code"
+	ValidationFieldDisplayName    ValidationField = "display_name"
+	ValidationFieldProtocols      ValidationField = "protocols"
+	ValidationFieldOutboundFormat ValidationField = "outbound_format"
+	ValidationFieldBaseURL        ValidationField = "base_url"
+	ValidationFieldModelListPath  ValidationField = "model_list_path"
+	ValidationFieldWeight         ValidationField = "weight"
+	ValidationFieldAPIKey         ValidationField = "api_key"
 )
 
 var (
@@ -51,43 +57,47 @@ func invalidField(field ValidationField) error {
 }
 
 type Record struct {
-	ID            uuid.UUID  `json:"id"`
-	Code          string     `json:"code"`
-	DisplayName   string     `json:"display_name"`
-	Protocols     []Protocol `json:"protocols"`
-	BaseURL       string     `json:"base_url"`
-	ModelListPath string     `json:"model_list_path"`
-	Weight        int        `json:"weight"`
-	APIKeyHint    string     `json:"api_key_hint"`
-	HasAPIKey     bool       `json:"has_api_key"`
-	Status        Status     `json:"status"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID             uuid.UUID      `json:"id"`
+	Code           string         `json:"code"`
+	DisplayName    string         `json:"display_name"`
+	Protocols      []Protocol     `json:"protocols"`
+	OutboundFormat OutboundFormat `json:"outbound_format"`
+	BaseURL        string         `json:"base_url"`
+	ModelListPath  string         `json:"model_list_path"`
+	Weight         int            `json:"weight"`
+	APIKeyHint     string         `json:"api_key_hint"`
+	HasAPIKey      bool           `json:"has_api_key"`
+	Status         Status         `json:"status"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Code          string     `json:"code"`
-	DisplayName   string     `json:"display_name"`
-	Protocols     []Protocol `json:"protocols"`
-	BaseURL       string     `json:"base_url"`
-	ModelListPath string     `json:"model_list_path"`
-	Weight        int        `json:"weight"`
-	APIKey        string     `json:"api_key"`
+	Code           string         `json:"code"`
+	DisplayName    string         `json:"display_name"`
+	Protocols      []Protocol     `json:"protocols"`
+	OutboundFormat OutboundFormat `json:"outbound_format"`
+	BaseURL        string         `json:"base_url"`
+	ModelListPath  string         `json:"model_list_path"`
+	Weight         int            `json:"weight"`
+	APIKey         string         `json:"api_key"`
 }
 
 type UpdateInput struct {
-	DisplayName   *string     `json:"display_name"`
-	Protocols     *[]Protocol `json:"protocols"`
-	BaseURL       *string     `json:"base_url"`
-	ModelListPath *string     `json:"model_list_path"`
-	Weight        *int        `json:"weight"`
-	APIKey        *string     `json:"api_key"`
+	DisplayName    *string         `json:"display_name"`
+	Protocols      *[]Protocol     `json:"protocols"`
+	OutboundFormat *OutboundFormat `json:"outbound_format"`
+	BaseURL        *string         `json:"base_url"`
+	ModelListPath  *string         `json:"model_list_path"`
+	Weight         *int            `json:"weight"`
+	APIKey         *string         `json:"api_key"`
 }
 
 type UpdateParams struct {
 	DisplayName     *string
 	Protocols       *[]Protocol
 	PrimaryProtocol *Protocol
+	OutboundFormat  *OutboundFormat
 	BaseURL         *string
 	ModelListPath   *string
 	Weight          *int
@@ -122,6 +132,10 @@ func SupportsProtocol(values []Protocol, target Protocol) bool {
 		}
 	}
 	return false
+}
+
+func ValidOutboundFormat(value OutboundFormat) bool {
+	return value == OutboundFormatNone || value == OutboundFormatChatCompletions || value == OutboundFormatResponses || value == OutboundFormatMessages
 }
 
 func PrimaryProtocol(values []Protocol) Protocol {

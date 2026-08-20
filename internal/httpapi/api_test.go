@@ -88,16 +88,19 @@ func (f *fakeAPIAuth) Logout(_ context.Context, token string) error {
 }
 
 type fakeAPIUsers struct {
-	createInput   user.CreateInput
-	updateInput   user.UpdateInput
-	registerInput user.RegisterInput
-	listFilter    user.ListFilter
-	listPage      user.Page
-	emailTaken    bool
-	emailCheckErr error
-	setupRequired bool
-	initializeErr error
-	statusErr     error
+	createInput     user.CreateInput
+	updateInput     user.UpdateInput
+	registerInput   user.RegisterInput
+	validationInput user.RegisterInput
+	listFilter      user.ListFilter
+	listPage        user.Page
+	emailTaken      bool
+	emailCheckErr   error
+	setupRequired   bool
+	initializeErr   error
+	registerErr     error
+	validationErr   error
+	statusErr       error
 }
 
 type fakeAPIEmailVerification struct {
@@ -784,7 +787,7 @@ func (f *fakeProviderModels) Link(_ context.Context, providerID uuid.UUID, bindi
  */
 func (f *fakeProviders) Create(_ context.Context, input provider.CreateInput) (provider.Record, error) {
 	f.createInput = input
-	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocols: input.Protocols, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
+	return provider.Record{ID: uuid.New(), Code: input.Code, DisplayName: input.DisplayName, Protocols: input.Protocols, OutboundFormat: input.OutboundFormat, BaseURL: input.BaseURL, APIKeyHint: "1234", HasAPIKey: true, Status: provider.StatusActive}, f.err
 }
 
 /**
@@ -806,7 +809,11 @@ func (f *fakeProviders) List(context.Context, provider.ListFilter) ([]provider.R
  */
 func (f *fakeProviders) Update(_ context.Context, id uuid.UUID, input provider.UpdateInput) (provider.Record, error) {
 	f.updateInput = input
-	return provider.Record{ID: id}, f.err
+	record := provider.Record{ID: id}
+	if input.OutboundFormat != nil {
+		record.OutboundFormat = *input.OutboundFormat
+	}
+	return record, f.err
 }
 
 /**
@@ -959,7 +966,12 @@ func (f *fakeAPIUsers) Create(_ context.Context, input user.CreateInput) (user.R
  */
 func (f *fakeAPIUsers) Register(_ context.Context, input user.RegisterInput) (user.Record, error) {
 	f.registerInput = input
-	return user.Record{ID: uuid.New(), Username: input.Username, Role: user.RoleMember, Status: user.StatusActive}, nil
+	return user.Record{ID: uuid.New(), Username: input.Username, Role: user.RoleMember, Status: user.StatusActive}, f.registerErr
+}
+
+func (f *fakeAPIUsers) ValidateRegistration(input user.RegisterInput) error {
+	f.validationInput = input
+	return f.validationErr
 }
 
 /**
@@ -1201,6 +1213,31 @@ func TestRegistrationCreatesMemberAndSetsSession(t *testing.T) {
 	testAPI(authService, users).ServeHTTP(response, request)
 	if response.Code != http.StatusCreated || users.registerInput.Username != "member.one" || users.registerInput.Email != "member@example.com" || users.registerInput.ReferralCode != "ABCD1234EF56" {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), users.registerInput)
+	}
+}
+
+func TestRegistrationValidatesFieldsBeforeConsumingVerificationCode(t *testing.T) {
+	users := &fakeAPIUsers{validationErr: &user.ValidationError{Field: user.ValidationFieldUsername}}
+	verification := &fakeAPIEmailVerification{}
+	handler := New(Dependencies{
+		Auth: &fakeAPIAuth{}, Users: users, EmailVerification: verification,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
+		AllowedOrigins: []string{"http://localhost:3000"}, RegistrationEnabled: true,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(`{"username":"yuuang4099@gmail.com","email":"yuuang4099@gmail.com","password":"long-test-password1","verification_code":"219273"}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest ||
+		!strings.Contains(response.Body.String(), `"field":"username"`) ||
+		!strings.Contains(response.Body.String(), "用户名需为 3 到 64 位") {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if verification.verifiedCode != "" || users.registerInput.Username != "" {
+		t.Fatalf("verification or registration ran before validation: verified=%q register=%+v", verification.verifiedCode, users.registerInput)
+	}
+	if users.validationInput.Username != "yuuang4099@gmail.com" {
+		t.Fatalf("validation input=%+v", users.validationInput)
 	}
 }
 
@@ -2707,33 +2744,50 @@ func TestAdminCreatesAndUpdatesProviderWithoutCredentialLeak(t *testing.T) {
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), CookieName: "novro_session",
 		AllowedOrigins: []string{"http://localhost:3000"},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocols":["openai","anthropic"],"base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/providers", strings.NewReader(`{"code":"deepseek","display_name":"DeepSeek","protocols":["openai","anthropic"],"outbound_format":"messages","base_url":"https://api.deepseek.com","model_list_path":"/catalog/models","weight":250,"api_key":"upstream-secret"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || len(providers.createInput.Protocols) != 2 || strings.Contains(response.Body.String(), "upstream-secret") {
+	if response.Code != http.StatusCreated || providers.createInput.APIKey != "upstream-secret" || providers.createInput.OutboundFormat != provider.OutboundFormatMessages || providers.createInput.ModelListPath != "/catalog/models" || providers.createInput.Weight != 250 || len(providers.createInput.Protocols) != 2 || !strings.Contains(response.Body.String(), `"outbound_format":"messages"`) || strings.Contains(response.Body.String(), "upstream-secret") {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.createInput)
 	}
 
 	id := uuid.New()
-	request = httptest.NewRequest(http.MethodPatch, "/api/admin/providers/"+id.String(), strings.NewReader(`{"display_name":"DeepSeek API","model_list_path":"/v1/model/list"}`))
+	request = httptest.NewRequest(http.MethodPatch, "/api/admin/providers/"+id.String(), strings.NewReader(`{"display_name":"DeepSeek API","outbound_format":"responses","model_list_path":"/v1/model/list"}`))
 	request.Header.Set("Origin", "http://localhost:3000")
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || providers.updateInput.DisplayName == nil || *providers.updateInput.DisplayName != "DeepSeek API" || providers.updateInput.ModelListPath == nil || *providers.updateInput.ModelListPath != "/v1/model/list" {
+	if response.Code != http.StatusOK || providers.updateInput.DisplayName == nil || *providers.updateInput.DisplayName != "DeepSeek API" || providers.updateInput.OutboundFormat == nil || *providers.updateInput.OutboundFormat != provider.OutboundFormatResponses || providers.updateInput.ModelListPath == nil || *providers.updateInput.ModelListPath != "/v1/model/list" || !strings.Contains(response.Body.String(), `"outbound_format":"responses"`) {
 		t.Fatalf("status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.updateInput)
+	}
+
+	request = httptest.NewRequest(http.MethodPatch, "/api/admin/providers/"+id.String(), strings.NewReader(`{"outbound_format":""}`))
+	request.Header.Set("Origin", "http://localhost:3000")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || providers.updateInput.OutboundFormat == nil || *providers.updateInput.OutboundFormat != provider.OutboundFormatNone || !strings.Contains(response.Body.String(), `"outbound_format":""`) {
+		t.Fatalf("clear status=%d body=%s input=%+v", response.Code, response.Body.String(), providers.updateInput)
 	}
 }
 
 func TestProviderValidationErrorIdentifiesField(t *testing.T) {
-	response := httptest.NewRecorder()
-	(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeProviderError(
-		response,
-		"create provider",
-		&provider.ValidationError{Field: provider.ValidationFieldModelListPath},
-	)
-	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"field":"model_list_path"`) || !strings.Contains(response.Body.String(), "必须留空或以 / 开头") {
-		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	tests := []struct {
+		field   provider.ValidationField
+		message string
+	}{
+		{field: provider.ValidationFieldModelListPath, message: "必须留空或以 / 开头"},
+		{field: provider.ValidationFieldOutboundFormat, message: "出口格式必须留空"},
+	}
+	for _, test := range tests {
+		response := httptest.NewRecorder()
+		(&apiHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}).writeProviderError(
+			response,
+			"create provider",
+			&provider.ValidationError{Field: test.field},
+		)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"field":"`+string(test.field)+`"`) || !strings.Contains(response.Body.String(), test.message) {
+			t.Fatalf("field=%s status=%d body=%s", test.field, response.Code, response.Body.String())
+		}
 	}
 }
 
