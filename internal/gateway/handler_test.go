@@ -2436,7 +2436,7 @@ func TestProviderOutboundFormatRejectsMalformedFirstSSEEventBeforeCommittingHead
 	}
 }
 
-func TestProviderOutboundFormatDropsOnlyUnrepresentableBuiltInTool(t *testing.T) {
+func TestProviderOutboundFormatMapsRepresentableWebSearchAndFunctionTools(t *testing.T) {
 	route := anthropicRoute()
 	route.Provider.OutboundFormat = provider.OutboundFormatMessages
 	called := false
@@ -2447,8 +2447,13 @@ func TestProviderOutboundFormatDropsOnlyUnrepresentableBuiltInTool(t *testing.T)
 			t.Fatalf("decode upstream request: %v", err)
 		}
 		tools := sliceValue(payload["tools"])
-		if len(tools) != 1 || stringValue(mapValue(tools[0])["name"]) != "lookup" {
-			t.Fatalf("converted tools = %#v, want only portable lookup tool", tools)
+		if len(tools) != 2 {
+			t.Fatalf("converted tools = %#v, want Web Search and lookup tools", tools)
+		}
+		webSearch := mapValue(tools[0])
+		lookup := mapValue(tools[1])
+		if stringValue(webSearch["type"]) != "web_search_20250305" || stringValue(webSearch["name"]) != "web_search" || stringValue(lookup["name"]) != "lookup" {
+			t.Fatalf("converted tools = %#v, want Anthropic Web Search plus portable lookup", tools)
 		}
 		return jsonHTTPResponse(http.StatusOK, `{"id":"msg-tools","type":"message","role":"assistant","model":"kimi-k3","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":1}}`), nil
 	})}

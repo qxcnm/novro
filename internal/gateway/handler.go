@@ -260,6 +260,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, id := requestid.Ensure(r.Context())
 	r = r.WithContext(ctx)
 	w.Header().Set(requestid.Header, id.String())
+	w = withProtocolResponseWriter(w, r.URL.Path)
 	actor, ok := h.authenticate(w, r)
 	if !ok {
 		return
@@ -441,6 +442,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	type upstreamAttempt struct {
 		route         modelroute.Resolved
 		inputEstimate int
+		lostFields    []string
 	}
 	attempts := make([]upstreamAttempt, 0, len(compatible))
 	unsupportedConversion := false
@@ -503,7 +505,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			h.logger.Error("estimate gateway reservation", "request_id", requestid.FromContext(r.Context()), "route_id", route.ID, "error", err)
 			continue
 		}
-		attempts = append(attempts, upstreamAttempt{route: route, inputEstimate: inputEstimate})
+		attempts = append(attempts, upstreamAttempt{route: route, inputEstimate: inputEstimate, lostFields: requestConversionLostFields(routePayload, endpoint, upstreamEndpoint)})
 		// 可能因故障切换到任意候选路由，故冻结所有候选估算中的最大值；
 		// 成功后仍按实际命中路由的已确认 usage 退差额或补扣，不会按这个最大值收费。
 		reserved = max(reserved, reservation.CostMicros)
@@ -571,6 +573,10 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 		route := attempt.route
 		lastRoute = route
 		upstreamEndpoint := outboundEndpointForRoute(route, endpoint)
+		setConversionLostFieldsHeader(w, attempt.lostFields)
+		if len(attempt.lostFields) > 0 {
+			h.logger.Warn("gateway protocol conversion omitted fields", "request_id", requestID, "source", endpoint, "target", upstreamEndpoint, "fields", attempt.lostFields)
+		}
 		routePayload := payload
 		if endpoint == "responses" && upstreamEndpoint != "responses" && strings.TrimSpace(stringValue(payload["previous_response_id"])) != "" {
 			routePayload = expandedPayload
@@ -797,6 +803,11 @@ func (h *Handler) doUpstreamWithRetries(request *http.Request, retryDelays []tim
  * @date 2026-08-13
  */
 func (h *Handler) bufferedStreamResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time, payload map[string]any) {
+	responseLostFields := responseConversionLostFields(body, upstreamEndpoint, endpoint)
+	mergeConversionLostFieldsHeader(w, responseLostFields)
+	if len(responseLostFields) > 0 {
+		h.logger.Warn("gateway protocol conversion omitted fields", "request_id", requestID, "source", upstreamEndpoint, "target", endpoint, "fields", responseLostFields)
+	}
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, upstreamEndpoint, body, startedAt) {
 		return
 	}
@@ -971,6 +982,11 @@ func retryableUpstreamStatus(status int) bool {
  * @date 2026-08-13
  */
 func (h *Handler) bufferedResponse(w http.ResponseWriter, r *http.Request, response *http.Response, body []byte, actor apikey.Actor, route modelroute.Resolved, requestID uuid.UUID, endpoint, upstreamEndpoint string, reserved int64, inputEstimate, outputMaximum int, startedAt time.Time, payload map[string]any) {
+	responseLostFields := responseConversionLostFields(body, upstreamEndpoint, endpoint)
+	mergeConversionLostFieldsHeader(w, responseLostFields)
+	if len(responseLostFields) > 0 {
+		h.logger.Warn("gateway protocol conversion omitted fields", "request_id", requestID, "source", upstreamEndpoint, "target", endpoint, "fields", responseLostFields)
+	}
 	if !h.acceptBufferedOutcome(w, actor, route, requestID, endpoint, upstreamEndpoint, body, startedAt) {
 		return
 	}
@@ -2689,9 +2705,5 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
  * @date 2026-08-13
  */
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	value := map[string]any{"error": map[string]any{"message": message, "type": "novro_error", "code": code}}
-	if id := requestid.ResponseID(w); id != uuid.Nil {
-		value["request_id"] = id.String()
-	}
-	writeJSON(w, status, value)
+	writeProtocolError(w, status, code, message)
 }

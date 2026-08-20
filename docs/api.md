@@ -186,6 +186,10 @@ GET /v1/models
 Chat Completions、Responses 和 Messages 之间转换请求、非流响应及 SSE 事件，并请求所选格式对应的上游路径。
 转换层覆盖文本、URL/Data URI 图片、函数工具及结果、reasoning/thinking、JSON Schema 结构化输出，以及 usage、缓存和推理 Token 明细。
 目标协议无法表示的服务端内置工具会单独省略，其他可转换的函数工具和请求内容仍会继续转发，不会因为一个不可移植工具而拒绝整个请求。
+发生跨协议转换且存在不能表示的字段时，响应头 `X-Conversion-Lost-Fields` 会返回被省略字段的
+数量；它不包含字段名、提示词、工具参数、URL、文件数据或其他请求/响应值。服务端会另外用
+不含字段值的 JSON Schema 路径记录结构化告警。非流式响应会合并请求侧和响应侧损失，流式响应至少报告写入响应头前
+已知的请求侧损失。
 SSE 会按目标协议生成完整生命周期和终止事件；正文和函数工具参数都按上游事件逐段转换并立即刷新，不等待完整生成结束，
 并行工具调用通过目标协议各自的 block/item 索引保持独立。Chat 上游在 `finish_reason` 后仍继续读取 usage 与 `[DONE]`。
 若传输在 usage 或真正终止事件前异常中断，不会合成成功终止或把缺失 usage 当作已确认的零 Token 结算。
@@ -336,8 +340,11 @@ POST /v1/messages
 
 ## 7. 错误响应
 
-错误响应统一返回 JSON，并保留 OpenAI 风格的 `error` 对象。错误中不得泄露供应商密钥、
-内部 URL 或数据库信息。错误响应包含顶层 `request_id`。单个渠道的错误不会直接暴露；所有
+错误响应统一返回 JSON，并使用调用入口对应的协议外壳：Chat Completions 和 Responses 返回
+OpenAI 风格的 `error` 对象，Messages 返回 Anthropic 风格的顶层 `type: "error"` 和
+`error.type`。三种入口都包含顶层 `request_id`，稳定的 Novro 错误码同时通过
+`X-Novro-Error-Code` 返回（OpenAI 风格响应也保留 `error.code`）。错误中不得泄露供应商密钥、
+内部 URL、上游原始错误体或数据库信息。单个渠道的错误不会直接暴露；所有
 兼容渠道均失败时返回 `502 upstream_unavailable`，同时附带最后一次失败的安全错误码和原因，
 便于区分上游 HTTP 错误、连接超时、客户端取消或上游地址自指等情况。上游地址不能配置为
 当前网关对外提供服务的域名，否则请求会递归回到网关自身。

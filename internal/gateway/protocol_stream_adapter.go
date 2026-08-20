@@ -9,15 +9,47 @@ import (
 )
 
 type adapterStreamDelta struct {
-	Text       string
-	Reasoning  string
-	Signature  string
-	Tools      []adapterStreamToolDelta
-	StopReason string
-	Done       bool
-	ID         string
-	Model      string
-	Usage      map[string]any
+	Text        string
+	Refusal     string
+	Reasoning   string
+	Signature   string
+	Annotations []any
+	Tools       []adapterStreamToolDelta
+	WebSearches []adapterStreamWebSearchEvent
+	StopReason  string
+	Done        bool
+	ID          string
+	Model       string
+	Usage       map[string]any
+	Error       map[string]any
+}
+
+type adapterStreamWebSearchEvent struct {
+	Key       string
+	Index     int
+	ID        string
+	Name      string
+	Arguments string
+	Action    map[string]any
+	Result    any
+	Status    string
+	Stage     string
+}
+
+type adapterStreamWebSearchState struct {
+	Key             string
+	SourceIndex     int
+	OutputIndex     int
+	ID              string
+	Name            string
+	Arguments       string
+	Action          map[string]any
+	Result          any
+	Status          string
+	Added           bool
+	Searching       bool
+	Completed       bool
+	SpecialRecorded bool
 }
 
 type adapterStreamToolDelta struct {
@@ -38,54 +70,72 @@ type adapterSourceTool struct {
 }
 
 type protocolStreamAdapter struct {
-	source                    string
-	target                    string
-	response                  adapterResponse
-	started                   bool
-	targetBlock               string
-	targetBlockIndex          int
-	responsesTextStarted      bool
-	responsesTextDone         bool
-	responsesReasoningStarted bool
-	responsesReasoningDone    bool
-	toolIndex                 map[string]int
-	toolArgs                  map[string]string
-	sourceTools               map[int]adapterSourceTool
-	sourceItems               map[string]int
-	responsesToolIndex        map[string]int
-	responsesToolItemID       map[string]string
-	responsesToolKeys         []string
-	responsesSequence         int
-	responsesNextOutputIndex  int
-	responsesReasoningIndex   int
-	responsesTextOutputIndex  int
-	messagesTextCommitted     bool
-	messagesTextSent          int
-	messagesToolBlockIndex    map[string]int
-	messagesToolBlockOpen     map[string]bool
-	messagesToolKeys          []string
-	toolIdentityCommitted     map[string]bool
-	committedToolIDs          map[string]struct{}
-	finished                  bool
-	anthropicBlockOpened      bool
+	source                       string
+	target                       string
+	response                     adapterResponse
+	started                      bool
+	targetBlock                  string
+	targetBlockIndex             int
+	responsesTextStarted         bool
+	responsesTextDone            bool
+	responsesMessageStarted      bool
+	responsesMessageDone         bool
+	responsesRefusalStarted      bool
+	responsesRefusalDone         bool
+	responsesTextContentIndex    int
+	responsesRefusalContentIndex int
+	responsesNextContentIndex    int
+	responsesReasoningStarted    bool
+	responsesReasoningDone       bool
+	toolIndex                    map[string]int
+	toolArgs                     map[string]string
+	sourceTools                  map[int]adapterSourceTool
+	sourceItems                  map[string]int
+	responsesToolIndex           map[string]int
+	responsesToolItemID          map[string]string
+	responsesToolKeys            []string
+	responsesSequence            int
+	responsesNextOutputIndex     int
+	responsesReasoningIndex      int
+	responsesTextOutputIndex     int
+	webSearches                  map[string]*adapterStreamWebSearchState
+	sourceWebSearch              map[int]string
+	webSearchKeyByID             map[string]string
+	responsesWebSearchKeys       []string
+	annotations                  []any
+	annotationsEmitted           int
+	messagesTextCommitted        bool
+	messagesTextSent             int
+	messagesToolBlockIndex       map[string]int
+	messagesToolBlockOpen        map[string]bool
+	messagesToolKeys             []string
+	toolIdentityCommitted        map[string]bool
+	committedToolIDs             map[string]struct{}
+	finished                     bool
+	anthropicBlockOpened         bool
 }
 
 func newProtocolStreamAdapter(source, target string) *protocolStreamAdapter {
 	return &protocolStreamAdapter{
 		source: source, target: target,
-		response:                 adapterResponse{Created: time.Now().Unix(), Usage: map[string]any{}},
-		toolIndex:                map[string]int{},
-		toolArgs:                 map[string]string{},
-		sourceTools:              map[int]adapterSourceTool{},
-		sourceItems:              map[string]int{},
-		responsesToolIndex:       map[string]int{},
-		responsesToolItemID:      map[string]string{},
-		messagesToolBlockIndex:   map[string]int{},
-		messagesToolBlockOpen:    map[string]bool{},
-		toolIdentityCommitted:    map[string]bool{},
-		committedToolIDs:         map[string]struct{}{},
-		responsesReasoningIndex:  -1,
-		responsesTextOutputIndex: -1,
+		response:                     adapterResponse{Created: time.Now().Unix(), Usage: map[string]any{}},
+		toolIndex:                    map[string]int{},
+		toolArgs:                     map[string]string{},
+		sourceTools:                  map[int]adapterSourceTool{},
+		sourceItems:                  map[string]int{},
+		responsesToolIndex:           map[string]int{},
+		responsesToolItemID:          map[string]string{},
+		webSearches:                  map[string]*adapterStreamWebSearchState{},
+		sourceWebSearch:              map[int]string{},
+		webSearchKeyByID:             map[string]string{},
+		messagesToolBlockIndex:       map[string]int{},
+		messagesToolBlockOpen:        map[string]bool{},
+		toolIdentityCommitted:        map[string]bool{},
+		committedToolIDs:             map[string]struct{}{},
+		responsesReasoningIndex:      -1,
+		responsesTextOutputIndex:     -1,
+		responsesTextContentIndex:    -1,
+		responsesRefusalContentIndex: -1,
 	}
 }
 
@@ -100,7 +150,13 @@ func (a *protocolStreamAdapter) Translate(eventName string, data []byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	if a.target == "responses" && a.responsesTextStarted && delta.Reasoning != "" {
+	if delta.Error != nil {
+		var output bytes.Buffer
+		a.writeStreamError(&output, delta.Error)
+		a.finished = true
+		return output.Bytes(), nil
+	}
+	if a.target == "responses" && a.responsesMessageStarted && delta.Reasoning != "" {
 		// The reasoning item is already closed once the message item starts.
 		// Do not expose a late vendor-specific reasoning delta as output text:
 		// that can leak hidden reasoning or duplicate answer text. Keeping the
@@ -127,9 +183,18 @@ func (a *protocolStreamAdapter) Translate(eventName string, data []byte) ([]byte
 			a.writeContentDelta(&output, "text", delta.Text)
 		}
 	}
+	if delta.Refusal != "" {
+		a.writeContentDelta(&output, "refusal", delta.Refusal)
+	}
+	for _, annotation := range delta.Annotations {
+		a.writeAnnotationDelta(&output, annotation)
+	}
 	for _, tool := range delta.Tools {
 		a.mergeTool(tool)
 		a.writeToolDelta(&output, tool)
+	}
+	for _, webSearch := range delta.WebSearches {
+		a.writeWebSearchEvent(&output, webSearch)
 	}
 	if delta.Done {
 		if a.target == "messages" {
@@ -150,6 +215,7 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 		response.ID = a.response.ID
 	}
 	a.response = response
+	a.annotations = append(a.annotations[:0], response.Annotations...)
 	if a.target == "messages" && duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature) {
 		response.Text = ""
 		a.response.Text = ""
@@ -162,6 +228,15 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 	}
 	if response.Text != "" {
 		a.writeContentDelta(&output, "text", response.Text)
+	}
+	if response.Refusal != "" {
+		a.writeContentDelta(&output, "refusal", response.Refusal)
+	}
+	for _, annotation := range response.Annotations {
+		a.writeAnnotationDelta(&output, annotation)
+	}
+	for _, citation := range response.Citations {
+		a.writeAnnotationDelta(&output, citation)
 	}
 	for _, call := range response.ToolCalls {
 		arguments, _ := json.Marshal(nonNilObject(call.Arguments))
@@ -220,8 +295,14 @@ func (a *protocolStreamAdapter) merge(delta adapterStreamDelta) {
 		a.response.Model = delta.Model
 	}
 	a.response.Text += delta.Text
+	a.response.Refusal += delta.Refusal
 	a.response.Reasoning += delta.Reasoning
 	a.response.ReasoningSignature += delta.Signature
+	if len(delta.Annotations) > 0 {
+		for _, annotation := range delta.Annotations {
+			a.appendAnnotation(annotation)
+		}
+	}
 	if delta.StopReason != "" {
 		a.response.StopReason = delta.StopReason
 	}
@@ -331,12 +412,43 @@ func (a *protocolStreamAdapter) writeStart(output *bytes.Buffer) {
 	}
 }
 
+func (a *protocolStreamAdapter) writeStreamError(output *bytes.Buffer, streamError map[string]any) {
+	message := firstNonEmptyString(streamError["message"], "upstream stream failed")
+	errorType := firstNonEmptyString(streamError["type"], "api_error")
+	code := stringValue(streamError["code"])
+	param := stringValue(streamError["param"])
+	switch a.target {
+	case "chat_completions":
+		value := map[string]any{"message": message, "type": errorType}
+		if code != "" {
+			value["code"] = code
+		}
+		if param != "" {
+			value["param"] = param
+		}
+		writeAdapterSSE(output, "", map[string]any{"error": value})
+	case "messages":
+		writeAdapterSSE(output, "error", map[string]any{"type": "error", "error": map[string]any{"type": errorType, "message": message}})
+	case "responses":
+		value := map[string]any{"type": "error", "message": message}
+		if code != "" {
+			value["code"] = code
+		}
+		if param != "" {
+			value["param"] = param
+		}
+		a.writeResponsesSSE(output, "error", value)
+	}
+}
+
 func (a *protocolStreamAdapter) writeContentDelta(output *bytes.Buffer, kind, text string) {
 	switch a.target {
 	case "chat_completions":
 		delta := map[string]any{}
 		if kind == "reasoning" {
 			delta["reasoning_content"] = text
+		} else if kind == "refusal" {
+			delta["refusal"] = text
 		} else {
 			delta["content"] = text
 		}
@@ -363,10 +475,31 @@ func (a *protocolStreamAdapter) writeContentDelta(output *bytes.Buffer, kind, te
 		if kind == "reasoning" {
 			a.ensureResponsesReasoning(output)
 			a.writeResponsesSSE(output, "response.reasoning_summary_text.delta", map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": "rs_" + safeID(a.response.ID), "output_index": a.responsesReasoningIndex, "summary_index": 0, "delta": text})
+		} else if kind == "refusal" {
+			a.ensureResponsesRefusal(output)
+			a.writeResponsesSSE(output, "response.refusal.delta", map[string]any{"type": "response.refusal.delta", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "delta": text})
 		} else {
 			a.ensureResponsesText(output)
-			a.writeResponsesSSE(output, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": 0, "delta": text})
+			a.writeResponsesSSE(output, "response.output_text.delta", map[string]any{"type": "response.output_text.delta", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "delta": text})
 		}
+	}
+}
+
+func (a *protocolStreamAdapter) writeAnnotationDelta(output *bytes.Buffer, annotation any) {
+	if annotation == nil {
+		return
+	}
+	annotationIndex := a.annotationsEmitted
+	a.annotationsEmitted++
+	switch a.target {
+	case "chat_completions":
+		writeAdapterSSE(output, "", map[string]any{"id": a.response.ID, "object": "chat.completion.chunk", "created": a.response.Created, "model": a.response.Model, "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"annotations": []any{openAIStreamAnnotation(annotation)}}, "finish_reason": nil}}})
+	case "messages":
+		a.ensureAnthropicBlock(output, "text")
+		writeAdapterSSE(output, "content_block_delta", map[string]any{"type": "content_block_delta", "index": a.targetBlockIndex, "delta": map[string]any{"type": "citations_delta", "citation": anthropicStreamCitation(annotation, a.response.Text)}})
+	case "responses":
+		a.ensureResponsesText(output)
+		a.writeResponsesSSE(output, "response.output_text.annotation.added", map[string]any{"type": "response.output_text.annotation.added", "item_id": "msg_" + safeID(a.response.ID), "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "annotation_index": annotationIndex, "annotation": openAIStreamAnnotation(annotation)})
 	}
 }
 
@@ -423,7 +556,7 @@ func (a *protocolStreamAdapter) writeToolDelta(output *bytes.Buffer, delta adapt
 			// parallel calls can be forwarded immediately without serializing or
 			// buffering their arguments until the terminal event.
 			a.closeResponsesReasoning(output)
-			a.closeResponsesText(output)
+			a.closeResponsesMessage(output)
 			outputIndex = a.nextResponsesOutputIndex()
 			a.responsesToolIndex[key] = outputIndex
 			a.responsesToolKeys = append(a.responsesToolKeys, key)
@@ -438,6 +571,238 @@ func (a *protocolStreamAdapter) writeToolDelta(output *bytes.Buffer, delta adapt
 			a.writeResponsesSSE(output, "response.function_call_arguments.delta", map[string]any{"type": "response.function_call_arguments.delta", "item_id": a.responsesToolItemID[key], "output_index": outputIndex, "delta": delta.Arguments})
 		}
 	}
+}
+
+func (a *protocolStreamAdapter) writeWebSearchEvent(output *bytes.Buffer, event adapterStreamWebSearchEvent) {
+	state := a.ensureWebSearchState(event)
+	if event.Arguments != "" {
+		state.Arguments += event.Arguments
+	}
+	if event.Action != nil {
+		state.Action = cloneMap(event.Action)
+	}
+	if event.Result != nil {
+		state.Result = event.Result
+	}
+	if event.Status != "" {
+		state.Status = event.Status
+	}
+	switch a.target {
+	case "messages":
+		// A Responses web_search_call does not expose its query and sources until
+		// output_item.done. Emitting an empty server_tool_use at item.added would
+		// leave Anthropic clients waiting for JSON deltas that never arrive.
+		if event.Stage == "done" {
+			a.writeMessagesWebSearch(output, state)
+		}
+	case "responses":
+		a.writeResponsesWebSearch(output, state, event.Stage)
+	}
+}
+
+func (a *protocolStreamAdapter) ensureWebSearchState(event adapterStreamWebSearchEvent) *adapterStreamWebSearchState {
+	key := strings.TrimSpace(event.Key)
+	if key == "" && event.ID != "" {
+		key = "web_search:" + event.ID
+	}
+	if key == "" {
+		key = fmt.Sprintf("web_search:%d", event.Index)
+	}
+	state := a.webSearches[key]
+	if state == nil {
+		state = &adapterStreamWebSearchState{Key: key, SourceIndex: event.Index, OutputIndex: -1, Status: "in_progress"}
+		a.webSearches[key] = state
+	}
+	if event.ID != "" {
+		state.ID = event.ID
+		a.webSearchKeyByID[event.ID] = key
+	}
+	if event.Name != "" {
+		state.Name = event.Name
+	}
+	if state.Name == "" {
+		state.Name = "web_search"
+	}
+	return state
+}
+
+func (a *protocolStreamAdapter) writeMessagesWebSearch(output *bytes.Buffer, state *adapterStreamWebSearchState) {
+	if state.Completed {
+		return
+	}
+	a.closeAnthropicBlock(output)
+	a.closeMessagesToolBlocks(output)
+	a.startNextAnthropicBlock()
+	serverIndex := a.targetBlockIndex
+	args := webSearchArguments(state)
+	writeAdapterSSE(output, "content_block_start", map[string]any{"type": "content_block_start", "index": serverIndex, "content_block": map[string]any{"type": "server_tool_use", "id": state.ID, "name": state.Name, "input": args}})
+	writeAdapterSSE(output, "content_block_stop", map[string]any{"type": "content_block_stop", "index": serverIndex})
+
+	a.startNextAnthropicBlock()
+	resultIndex := a.targetBlockIndex
+	result := anthropicWebSearchResult(state)
+	writeAdapterSSE(output, "content_block_start", map[string]any{"type": "content_block_start", "index": resultIndex, "content_block": map[string]any{"type": "web_search_tool_result", "tool_use_id": state.ID, "content": result}})
+	writeAdapterSSE(output, "content_block_stop", map[string]any{"type": "content_block_stop", "index": resultIndex})
+	state.Completed = true
+	a.recordWebSearchSpecialParts(state)
+}
+
+func (a *protocolStreamAdapter) writeResponsesWebSearch(output *bytes.Buffer, state *adapterStreamWebSearchState, stage string) {
+	if !state.Added {
+		a.closeResponsesReasoning(output)
+		a.closeResponsesMessage(output)
+		if state.ID == "" {
+			state.ID = fmt.Sprintf("ws_novro_%s_%d", safeID(a.response.ID), len(a.responsesWebSearchKeys))
+		}
+		state.OutputIndex = a.nextResponsesOutputIndex()
+		state.Added = true
+		a.responsesWebSearchKeys = append(a.responsesWebSearchKeys, state.Key)
+		a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": state.OutputIndex, "item": map[string]any{"id": state.ID, "type": "web_search_call", "status": "in_progress"}})
+		a.writeResponsesSSE(output, "response.web_search_call.in_progress", map[string]any{"type": "response.web_search_call.in_progress", "output_index": state.OutputIndex, "item_id": state.ID})
+	}
+	if (stage == "server_args" || stage == "server_stop" || stage == "searching") && !state.Searching {
+		state.Searching = true
+		a.writeResponsesSSE(output, "response.web_search_call.searching", map[string]any{"type": "response.web_search_call.searching", "output_index": state.OutputIndex, "item_id": state.ID})
+	}
+	if stage == "result_start" || stage == "result_stop" || stage == "done" {
+		a.completeResponsesWebSearch(output, state)
+	}
+}
+
+func (a *protocolStreamAdapter) completeResponsesWebSearch(output *bytes.Buffer, state *adapterStreamWebSearchState) {
+	if state.Completed {
+		return
+	}
+	if !state.Searching {
+		state.Searching = true
+		a.writeResponsesSSE(output, "response.web_search_call.searching", map[string]any{"type": "response.web_search_call.searching", "output_index": state.OutputIndex, "item_id": state.ID})
+	}
+	status := state.Status
+	if status == "" || status == "in_progress" {
+		status = "completed"
+	}
+	action := webSearchAction(state)
+	a.writeResponsesSSE(output, "response.web_search_call.completed", map[string]any{"type": "response.web_search_call.completed", "output_index": state.OutputIndex, "item_id": state.ID})
+	a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": state.OutputIndex, "item": map[string]any{"id": state.ID, "type": "web_search_call", "status": status, "action": action}})
+	state.Status = status
+	state.Action = action
+	state.Completed = true
+	a.recordWebSearchSpecialParts(state)
+}
+
+func (a *protocolStreamAdapter) recordWebSearchSpecialParts(state *adapterStreamWebSearchState) {
+	if state.SpecialRecorded {
+		return
+	}
+	args := webSearchArguments(state)
+	a.response.SpecialParts = append(a.response.SpecialParts,
+		adapterPart{Type: "server_tool_use", ID: state.ID, Name: state.Name, Arguments: args},
+		adapterPart{Type: "web_search_tool_result", ID: state.ID, Content: webSearchResultParts(state), IsError: state.Status == "failed", ErrorCode: webSearchErrorCode(state)},
+	)
+	state.SpecialRecorded = true
+}
+
+func webSearchArguments(state *adapterStreamWebSearchState) map[string]any {
+	if raw := strings.TrimSpace(state.Arguments); raw != "" {
+		if value := mapValue(decodeJSONValue(raw)); value != nil {
+			return value
+		}
+	}
+	if state.Action != nil {
+		query := firstNonEmptyString(state.Action["query"], firstStringValue(state.Action["queries"]), state.Action["url"], state.Action["pattern"])
+		if query != "" {
+			return map[string]any{"query": query}
+		}
+	}
+	return map[string]any{}
+}
+
+func webSearchAction(state *adapterStreamWebSearchState) map[string]any {
+	action := cloneMap(state.Action)
+	if action == nil {
+		action = map[string]any{}
+	}
+	if action["type"] == nil {
+		action["type"] = "search"
+	}
+	args := webSearchArguments(state)
+	if action["query"] == nil && stringValue(args["query"]) != "" {
+		action["query"] = stringValue(args["query"])
+	}
+	if action["sources"] == nil {
+		sources := make([]any, 0)
+		for _, part := range webSearchResultParts(state) {
+			if part.ImageURL == "" {
+				continue
+			}
+			source := map[string]any{"type": "url", "url": part.ImageURL}
+			if part.Text != "" {
+				source["title"] = part.Text
+			}
+			sources = append(sources, source)
+		}
+		action["sources"] = sources
+	}
+	return action
+}
+
+func anthropicWebSearchResult(state *adapterStreamWebSearchState) any {
+	if state.Status == "failed" || webSearchErrorCode(state) != "" {
+		return map[string]any{"type": "web_search_tool_result_error", "error_code": firstNonEmptyString(webSearchErrorCode(state), "failed")}
+	}
+	results := make([]any, 0)
+	for _, part := range webSearchResultParts(state) {
+		results = append(results, map[string]any{"type": "web_search_result", "url": part.ImageURL, "title": firstNonEmptyString(part.Text, part.ImageURL)})
+	}
+	return results
+}
+
+func webSearchResultParts(state *adapterStreamWebSearchState) []adapterPart {
+	var rawResults []any
+	if state.Result != nil {
+		rawResults = sliceValue(state.Result)
+	}
+	if len(rawResults) == 0 && state.Action != nil {
+		rawResults = sliceValue(state.Action["sources"])
+	}
+	parts := make([]adapterPart, 0, len(rawResults))
+	for _, raw := range rawResults {
+		result := mapValue(raw)
+		url := stringValue(result["url"])
+		if url == "" {
+			continue
+		}
+		parts = append(parts, adapterPart{Type: "web_search_result", Text: firstNonEmptyString(result["title"], url), ImageURL: url, Extra: cloneMap(result)})
+	}
+	return parts
+}
+
+func webSearchErrorCode(state *adapterStreamWebSearchState) string {
+	result := mapValue(state.Result)
+	if stringValue(result["type"]) == "web_search_tool_result_error" {
+		return stringValue(result["error_code"])
+	}
+	return ""
+}
+
+func firstStringValue(value any) string {
+	values := sliceValue(value)
+	if len(values) == 0 {
+		return ""
+	}
+	return stringValue(values[0])
+}
+
+func (a *protocolStreamAdapter) ensureResponsesMessage(output *bytes.Buffer) {
+	if a.responsesMessageStarted {
+		return
+	}
+	a.closeResponsesReasoning(output)
+	a.responsesMessageStarted = true
+	a.responsesTextOutputIndex = a.nextResponsesOutputIndex()
+	a.responsesNextContentIndex = 0
+	itemID := "msg_" + safeID(a.response.ID)
+	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": a.responsesTextOutputIndex, "item": map[string]any{"id": itemID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}})
 }
 
 func (a *protocolStreamAdapter) ensureStreamingToolIdentity(key string, index int, delta adapterStreamToolDelta) adapterPart {
@@ -470,6 +835,14 @@ func (a *protocolStreamAdapter) ensureStreamingToolIdentity(key string, index in
 
 func (a *protocolStreamAdapter) writeDone(output *bytes.Buffer) {
 	a.response.ToolCalls = normalizeAdapterToolCalls(a.response.ID, a.response.ToolCalls)
+	// Refusal is a terminal semantic state across all three protocols. Some
+	// upstream streams emit only refusal deltas and omit a finish/stop reason;
+	// infer the protocol-neutral reason before choosing the target terminal
+	// event so Chat does not report `stop` and Anthropic does not report
+	// `end_turn` for a filtered response.
+	if strings.TrimSpace(a.response.Refusal) != "" {
+		a.response.StopReason = "refusal"
+	}
 	if a.response.StopReason == "" {
 		a.response.StopReason = "stop"
 	}
@@ -492,7 +865,7 @@ func (a *protocolStreamAdapter) writeDone(output *bytes.Buffer) {
 		writeAdapterSSE(output, "message_stop", map[string]any{"type": "message_stop"})
 	case "responses":
 		a.closeResponsesReasoning(output)
-		a.closeResponsesText(output)
+		a.closeResponsesMessage(output)
 		for _, key := range a.responsesToolKeys {
 			callIndex, exists := a.toolIndex[key]
 			if !exists || callIndex < 0 || callIndex >= len(a.response.ToolCalls) {
@@ -511,6 +884,12 @@ func (a *protocolStreamAdapter) writeDone(output *bytes.Buffer) {
 			}
 			a.writeResponsesSSE(output, "response.function_call_arguments.done", map[string]any{"type": "response.function_call_arguments.done", "item_id": itemID, "output_index": outputIndex, "name": call.Name, "arguments": string(arguments)})
 			a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": outputIndex, "item": map[string]any{"id": itemID, "type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": string(arguments), "status": "completed"}})
+		}
+		for _, key := range a.responsesWebSearchKeys {
+			state := a.webSearches[key]
+			if state != nil && !state.Completed {
+				a.completeResponsesWebSearch(output, state)
+			}
 		}
 		// Responses distinguishes a successful terminal response from one that
 		// stopped incomplete (for example, because max_output_tokens was hit).
@@ -587,13 +966,25 @@ func (a *protocolStreamAdapter) ensureResponsesText(output *bytes.Buffer) {
 	if a.responsesTextStarted {
 		return
 	}
-	a.closeResponsesReasoning(output)
+	a.ensureResponsesMessage(output)
 	a.responsesTextStarted = true
-	a.responsesTextOutputIndex = a.nextResponsesOutputIndex()
+	a.responsesTextContentIndex = a.responsesNextContentIndex
+	a.responsesNextContentIndex++
 	index := a.responsesTextIndex()
 	itemID := "msg_" + safeID(a.response.ID)
-	a.writeResponsesSSE(output, "response.output_item.added", map[string]any{"type": "response.output_item.added", "output_index": index, "item": map[string]any{"id": itemID, "type": "message", "status": "in_progress", "role": "assistant", "content": []any{}}})
-	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": index, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
+	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": index, "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
+}
+
+func (a *protocolStreamAdapter) ensureResponsesRefusal(output *bytes.Buffer) {
+	if a.responsesRefusalStarted {
+		return
+	}
+	a.ensureResponsesMessage(output)
+	a.responsesRefusalStarted = true
+	a.responsesRefusalContentIndex = a.responsesNextContentIndex
+	a.responsesNextContentIndex++
+	itemID := "msg_" + safeID(a.response.ID)
+	a.writeResponsesSSE(output, "response.content_part.added", map[string]any{"type": "response.content_part.added", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": ""}})
 }
 
 func (a *protocolStreamAdapter) closeResponsesReasoning(output *bytes.Buffer) {
@@ -612,11 +1003,38 @@ func (a *protocolStreamAdapter) closeResponsesText(output *bytes.Buffer) {
 		return
 	}
 	itemID := "msg_" + safeID(a.response.ID)
-	item := map[string]any{"id": itemID, "type": "message", "status": "completed", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": a.response.Text, "annotations": []any{}}}}
-	a.writeResponsesSSE(output, "response.output_text.done", map[string]any{"type": "response.output_text.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": 0, "text": a.response.Text})
-	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": 0, "part": map[string]any{"type": "output_text", "text": a.response.Text, "annotations": []any{}}})
-	a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": a.responsesTextIndex(), "item": item})
+	a.writeResponsesSSE(output, "response.output_text.done", map[string]any{"type": "response.output_text.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "text": a.response.Text})
+	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesTextContentIndex, "part": map[string]any{"type": "output_text", "text": a.response.Text, "annotations": openAIStreamAnnotations(a.annotations)}})
 	a.responsesTextDone = true
+}
+
+func (a *protocolStreamAdapter) closeResponsesRefusal(output *bytes.Buffer) {
+	if !a.responsesRefusalStarted || a.responsesRefusalDone {
+		return
+	}
+	itemID := "msg_" + safeID(a.response.ID)
+	a.writeResponsesSSE(output, "response.refusal.done", map[string]any{"type": "response.refusal.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "refusal": a.response.Refusal})
+	a.writeResponsesSSE(output, "response.content_part.done", map[string]any{"type": "response.content_part.done", "item_id": itemID, "output_index": a.responsesTextIndex(), "content_index": a.responsesRefusalContentIndex, "part": map[string]any{"type": "refusal", "refusal": a.response.Refusal}})
+	a.responsesRefusalDone = true
+}
+
+func (a *protocolStreamAdapter) closeResponsesMessage(output *bytes.Buffer) {
+	if !a.responsesMessageStarted || a.responsesMessageDone {
+		return
+	}
+	a.closeResponsesText(output)
+	a.closeResponsesRefusal(output)
+	itemID := "msg_" + safeID(a.response.ID)
+	content := make([]any, 0, 2)
+	if a.responsesTextStarted {
+		content = append(content, map[string]any{"type": "output_text", "text": a.response.Text, "annotations": openAIStreamAnnotations(a.annotations)})
+	}
+	if a.responsesRefusalStarted {
+		content = append(content, map[string]any{"type": "refusal", "refusal": a.response.Refusal})
+	}
+	item := map[string]any{"id": itemID, "type": "message", "status": "completed", "role": "assistant", "content": content}
+	a.writeResponsesSSE(output, "response.output_item.done", map[string]any{"type": "response.output_item.done", "output_index": a.responsesTextIndex(), "item": item})
+	a.responsesMessageDone = true
 }
 
 func (a *protocolStreamAdapter) responsesTextIndex() int {
@@ -649,7 +1067,8 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 	switch a.source {
 	case "chat_completions":
 		if root["error"] != nil {
-			return adapterStreamDelta{}, fmt.Errorf("upstream chat stream returned an error")
+			delta.Error = normalizeStreamError(mapValue(root["error"]), "chat_error")
+			return delta, nil
 		}
 		if usage := mapValue(root["usage"]); usage != nil {
 			delta.Usage = normalizeUsageMap(usage, a.source)
@@ -659,6 +1078,8 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 			choice := mapValue(choices[0])
 			content := mapValue(choice["delta"])
 			delta.Text = stringValue(content["content"])
+			delta.Refusal = stringValue(content["refusal"])
+			delta.Annotations = sliceValue(content["annotations"])
 			delta.Reasoning = firstNonEmptyString(content["reasoning_content"], content["reasoning"], content["reasoning_text"])
 			delta.StopReason = stringValue(choice["finish_reason"])
 			for _, rawCall := range sliceValue(content["tool_calls"]) {
@@ -681,8 +1102,18 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 		}
 	case "responses":
 		typeName := stringValue(root["type"])
-		if typeName == "error" || typeName == "response.failed" {
-			return adapterStreamDelta{}, fmt.Errorf("upstream Responses stream returned %s", typeName)
+		if typeName == "error" {
+			delta.Error = normalizeStreamError(root, "api_error")
+			return delta, nil
+		}
+		if typeName == "response.failed" {
+			response := mapValue(root["response"])
+			streamError := mapValue(response["error"])
+			if streamError == nil {
+				streamError = mapValue(root["error"])
+			}
+			delta.Error = normalizeStreamError(streamError, "responses_failed")
+			return delta, nil
 		}
 		if response := mapValue(root["response"]); response != nil {
 			delta.ID, delta.Model = stringValue(response["id"]), stringValue(response["model"])
@@ -693,11 +1124,25 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 		switch typeName {
 		case "response.output_text.delta":
 			delta.Text = stringValue(root["delta"])
+		case "response.refusal.delta":
+			delta.Refusal = stringValue(root["delta"])
+		case "response.output_text.annotation.added":
+			if annotation := root["annotation"]; annotation != nil {
+				delta.Annotations = append(delta.Annotations, annotation)
+			}
+		case "response.content_part.done":
+			part := mapValue(root["part"])
+			if stringValue(part["type"]) == "output_text" && len(a.annotations) == 0 {
+				delta.Annotations = append(delta.Annotations, sliceValue(part["annotations"])...)
+			} else if stringValue(part["type"]) == "refusal" && a.response.Refusal == "" {
+				delta.Refusal = stringValue(part["refusal"])
+			}
 		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
 			delta.Reasoning = stringValue(root["delta"])
 		case "response.output_item.added":
 			item := mapValue(root["item"])
-			if stringValue(item["type"]) == "function_call" {
+			switch stringValue(item["type"]) {
+			case "function_call":
 				index := intValue(root["output_index"])
 				itemID := stringValue(item["id"])
 				state := adapterSourceTool{Key: "responses:" + itemID, ID: stringValue(item["call_id"]), ItemID: itemID, Name: stringValue(item["name"])}
@@ -709,7 +1154,28 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 					a.sourceItems[itemID] = index
 				}
 				delta.Tools = append(delta.Tools, adapterStreamToolDelta{Key: state.Key, Index: index, ID: state.ID, ItemID: state.ItemID, Name: state.Name, Started: true})
+			case "web_search_call":
+				index := intValue(root["output_index"])
+				itemID := stringValue(item["id"])
+				key := "responses-web-search:" + itemID
+				if itemID == "" {
+					key = fmt.Sprintf("responses-web-search:%d", index)
+				}
+				a.sourceWebSearch[index] = key
+				if itemID != "" {
+					a.webSearchKeyByID[itemID] = key
+				}
+				delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: itemID, Name: "web_search", Status: stringValue(item["status"]), Stage: "added"})
 			}
+		case "response.web_search_call.in_progress", "response.web_search_call.searching", "response.web_search_call.completed":
+			itemID := stringValue(root["item_id"])
+			index := intValue(root["output_index"])
+			key := a.webSearchKeyByID[itemID]
+			if key == "" {
+				key = a.sourceWebSearch[index]
+			}
+			stage := strings.TrimPrefix(typeName, "response.web_search_call.")
+			delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: itemID, Name: "web_search", Stage: stage})
 		case "response.function_call_arguments.delta":
 			itemID := stringValue(root["item_id"])
 			index, exists := a.sourceItems[itemID]
@@ -736,16 +1202,73 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 			if a.toolArgs[state.Key] == "" {
 				delta.Tools = append(delta.Tools, adapterStreamToolDelta{Key: state.Key, Index: index, ID: state.ID, ItemID: state.ItemID, Name: state.Name, Arguments: stringValue(root["arguments"]), Started: !known})
 			}
+		case "response.output_item.done":
+			item := mapValue(root["item"])
+			if stringValue(item["type"]) == "web_search_call" {
+				index := intValue(root["output_index"])
+				itemID := stringValue(item["id"])
+				key := a.webSearchKeyByID[itemID]
+				if key == "" {
+					key = a.sourceWebSearch[index]
+				}
+				delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: itemID, Name: "web_search", Action: mapValue(item["action"]), Status: stringValue(item["status"]), Stage: "done"})
+			} else if stringValue(item["type"]) == "message" {
+				for _, rawPart := range sliceValue(item["content"]) {
+					part := mapValue(rawPart)
+					if stringValue(part["type"]) == "output_text" && len(a.annotations) == 0 {
+						delta.Annotations = append(delta.Annotations, sliceValue(part["annotations"])...)
+					} else if stringValue(part["type"]) == "refusal" && a.response.Refusal == "" {
+						delta.Refusal = stringValue(part["refusal"])
+					}
+				}
+			}
 		case "response.completed", "response.incomplete":
+			response := mapValue(root["response"])
+			for index, rawItem := range sliceValue(response["output"]) {
+				item := mapValue(rawItem)
+				switch stringValue(item["type"]) {
+				case "message":
+					for _, rawPart := range sliceValue(item["content"]) {
+						part := mapValue(rawPart)
+						switch stringValue(part["type"]) {
+						case "output_text":
+							if a.response.Text == "" {
+								delta.Text += stringValue(part["text"])
+							}
+							if len(a.annotations) == 0 {
+								delta.Annotations = append(delta.Annotations, sliceValue(part["annotations"])...)
+							}
+						case "refusal":
+							if a.response.Refusal == "" {
+								delta.Refusal += stringValue(part["refusal"])
+							}
+						}
+					}
+				case "web_search_call":
+					id := stringValue(item["id"])
+					key := a.webSearchKeyByID[id]
+					if key == "" {
+						key = fmt.Sprintf("responses-web-search:%d", index)
+					}
+					if state := a.webSearches[key]; state == nil || !state.Completed {
+						delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: id, Name: "web_search", Action: mapValue(item["action"]), Status: stringValue(item["status"]), Stage: "done"})
+					}
+				}
+			}
 			delta.Done = true
 			if typeName == "response.incomplete" {
-				delta.StopReason = "length"
+				delta.StopReason = responseStopReason(response)
+			} else if stringValue(response["status"]) == "incomplete" {
+				// Some compatible Responses servers use response.completed as the
+				// transport sentinel even when the embedded response is incomplete.
+				delta.StopReason = responseStopReason(response)
 			}
 		}
 	case "messages":
 		typeName := stringValue(root["type"])
 		if typeName == "error" {
-			return adapterStreamDelta{}, fmt.Errorf("upstream Messages stream returned an error")
+			delta.Error = normalizeStreamError(mapValue(root["error"]), "messages_error")
+			return delta, nil
 		}
 		switch typeName {
 		case "message_start":
@@ -756,29 +1279,78 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 			}
 		case "content_block_start":
 			block := mapValue(root["content_block"])
-			if stringValue(block["type"]) == "tool_use" {
+			switch stringValue(block["type"]) {
+			case "tool_use":
 				index := intValue(root["index"])
 				state := adapterSourceTool{Key: fmt.Sprintf("messages:%d", index), ID: stringValue(block["id"]), Name: stringValue(block["name"])}
 				a.sourceTools[index] = state
 				delta.Tools = append(delta.Tools, adapterStreamToolDelta{Key: state.Key, Index: index, ID: state.ID, Name: state.Name, Started: true})
+			case "server_tool_use":
+				index := intValue(root["index"])
+				id := stringValue(block["id"])
+				key := "messages-web-search:" + id
+				if id == "" {
+					key = fmt.Sprintf("messages-web-search:%d", index)
+				}
+				a.sourceWebSearch[index] = key
+				if id != "" {
+					a.webSearchKeyByID[id] = key
+				}
+				arguments := ""
+				if input := mapValue(block["input"]); len(input) > 0 {
+					encoded, _ := json.Marshal(block["input"])
+					arguments = string(encoded)
+				}
+				delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: id, Name: firstNonEmptyString(block["name"], "web_search"), Arguments: arguments, Stage: "server_start"})
+			case "web_search_tool_result":
+				index := intValue(root["index"])
+				id := stringValue(block["tool_use_id"])
+				key := a.webSearchKeyByID[id]
+				if key == "" {
+					key = "messages-web-search:" + id
+				}
+				a.sourceWebSearch[index] = key
+				status := "completed"
+				if result := mapValue(block["content"]); stringValue(result["type"]) == "web_search_tool_result_error" {
+					status = "failed"
+				}
+				delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, ID: id, Name: "web_search", Result: block["content"], Status: status, Stage: "result_start"})
 			}
 		case "content_block_delta":
 			content := mapValue(root["delta"])
 			switch stringValue(content["type"]) {
 			case "text_delta":
 				delta.Text = stringValue(content["text"])
+			case "citations_delta", "citation_delta":
+				if citation := content["citation"]; citation != nil {
+					delta.Annotations = append(delta.Annotations, citation)
+				}
 			case "thinking_delta":
 				delta.Reasoning = stringValue(content["thinking"])
 			case "signature_delta":
 				delta.Signature = stringValue(content["signature"])
 			case "input_json_delta":
 				index := intValue(root["index"])
+				if key := a.sourceWebSearch[index]; key != "" {
+					delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, Arguments: stringValue(content["partial_json"]), Stage: "server_args"})
+					break
+				}
 				state, exists := a.sourceTools[index]
 				if !exists {
 					state = adapterSourceTool{Key: fmt.Sprintf("messages:%d", index)}
 					a.sourceTools[index] = state
 				}
 				delta.Tools = append(delta.Tools, adapterStreamToolDelta{Key: state.Key, Index: index, ID: state.ID, Name: state.Name, Arguments: stringValue(content["partial_json"]), Started: !exists})
+			}
+		case "content_block_stop":
+			index := intValue(root["index"])
+			if key := a.sourceWebSearch[index]; key != "" {
+				state := a.webSearches[key]
+				stage := "server_stop"
+				if state != nil && state.Result != nil {
+					stage = "result_stop"
+				}
+				delta.WebSearches = append(delta.WebSearches, adapterStreamWebSearchEvent{Key: key, Index: index, Stage: stage})
 			}
 		case "message_delta":
 			change := mapValue(root["delta"])
@@ -796,7 +1368,35 @@ func (a *protocolStreamAdapter) decodeProtocolStreamDelta(data []byte) (adapterS
 }
 
 func (delta adapterStreamDelta) empty() bool {
-	return delta.Text == "" && delta.Reasoning == "" && len(delta.Tools) == 0 && delta.StopReason == "" && !delta.Done && delta.ID == "" && delta.Model == "" && len(delta.Usage) == 0
+	return delta.Text == "" && delta.Refusal == "" && delta.Reasoning == "" && len(delta.Annotations) == 0 && len(delta.Tools) == 0 && len(delta.WebSearches) == 0 && delta.StopReason == "" && !delta.Done && delta.ID == "" && delta.Model == "" && len(delta.Usage) == 0 && len(delta.Error) == 0
+}
+
+func normalizeStreamError(value map[string]any, fallbackType string) map[string]any {
+	if value == nil {
+		value = map[string]any{}
+	}
+	errorType := stringValue(value["type"])
+	if errorType == "" || errorType == "error" {
+		errorType = fallbackType
+	}
+	return map[string]any{
+		"type":    errorType,
+		"code":    value["code"],
+		"message": firstNonEmptyString(value["message"], "upstream stream failed"),
+		"param":   value["param"],
+	}
+}
+
+func (a *protocolStreamAdapter) appendAnnotation(annotation any) {
+	wanted, _ := json.Marshal(openAIStreamAnnotation(annotation))
+	for _, existing := range a.annotations {
+		encoded, _ := json.Marshal(openAIStreamAnnotation(existing))
+		if bytes.Equal(wanted, encoded) {
+			return
+		}
+	}
+	a.annotations = append(a.annotations, annotation)
+	a.response.Annotations = append(a.response.Annotations, annotation)
 }
 
 func writeAdapterSSE(output *bytes.Buffer, eventName string, value any) {
@@ -817,4 +1417,116 @@ func rawSSEFrame(eventName string, data []byte) []byte {
 	}
 	fmt.Fprintf(&output, "data: %s\n\n", bytes.TrimSpace(data))
 	return output.Bytes()
+}
+
+func openAIStreamAnnotations(values []any) []any {
+	result := make([]any, 0, len(values))
+	for _, value := range values {
+		if value != nil {
+			result = append(result, openAIStreamAnnotation(value))
+		}
+	}
+	return result
+}
+
+func openAIStreamAnnotation(value any) map[string]any {
+	citation := canonicalStreamCitation(value)
+	result := map[string]any{"type": firstNonEmptyString(citation["type"], "url_citation")}
+	for _, key := range []string{"url", "title", "start_index", "end_index"} {
+		if citation[key] != nil && citation[key] != "" {
+			result[key] = citation[key]
+		}
+	}
+	return result
+}
+
+func anthropicStreamCitation(value any, text string) map[string]any {
+	citation := canonicalStreamCitation(value)
+	result := map[string]any{}
+	if stringValue(citation["url"]) != "" {
+		result["type"] = "web_search_result_location"
+		result["url"] = citation["url"]
+		if citation["title"] != nil {
+			result["title"] = citation["title"]
+		}
+	} else {
+		result["type"] = firstNonEmptyString(citation["type"], "char_location")
+		if citation["title"] != nil {
+			result["document_title"] = citation["title"]
+		}
+	}
+	start, hasStart := anyInt(citation["start_index"])
+	end, hasEnd := anyInt(citation["end_index"])
+	if hasStart {
+		result["start_char_index"] = start
+	}
+	if hasEnd {
+		result["end_char_index"] = end
+	}
+	if hasStart && hasEnd && start >= 0 && end >= start && end <= len(text) {
+		result["cited_text"] = text[start:end]
+	}
+	return result
+}
+
+func canonicalStreamCitation(value any) map[string]any {
+	if citation, ok := value.(adapterCitation); ok {
+		result := cloneMap(citation.Raw)
+		if result == nil {
+			result = map[string]any{}
+		}
+		if citation.Type != "" {
+			result["type"] = citation.Type
+		}
+		if citation.URL != "" {
+			result["url"] = citation.URL
+		}
+		if citation.Title != "" {
+			result["title"] = citation.Title
+		}
+		if citation.Start != nil {
+			result["start_index"] = *citation.Start
+		}
+		if citation.End != nil {
+			result["end_index"] = *citation.End
+		}
+		return result
+	}
+	result := cloneMap(mapValue(value))
+	if result == nil {
+		return map[string]any{}
+	}
+	if nested := mapValue(result["url_citation"]); nested != nil {
+		for key, nestedValue := range nested {
+			if result[key] == nil {
+				result[key] = nestedValue
+			}
+		}
+	}
+	if result["start_index"] == nil {
+		result["start_index"] = result["start_char_index"]
+	}
+	if result["end_index"] == nil {
+		result["end_index"] = result["end_char_index"]
+	}
+	if result["title"] == nil {
+		result["title"] = result["document_title"]
+	}
+	return result
+}
+
+func anyInt(value any) (int, bool) {
+	switch number := value.(type) {
+	case int:
+		return number, true
+	case int64:
+		return int(number), true
+	case float64:
+		return int(number), true
+	case json.Number:
+		parsed, err := number.Int64()
+		return int(parsed), err == nil
+	default:
+		return 0, false
+	}
 }
