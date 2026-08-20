@@ -141,9 +141,16 @@ func inspectChatMessagesForLosses(report *conversionLossReport, messages []any, 
 			case "input_audio":
 				if target == "messages" {
 					report.add("messages[].content[]." + typeName)
+				} else if target == "responses" {
+					if audio := mapValue(part["input_audio"]); audio != nil && audio["format"] != nil {
+						report.add("messages[].content[].input_audio.format")
+					}
 				}
 			case "file":
-				report.add("messages[].content[].file")
+				file := mapValue(part["file"])
+				if file == nil || stringValue(file["file_data"]) == "" {
+					report.add("messages[].content[].file")
+				}
 			case "image_url":
 				if image := mapValue(part["image_url"]); image != nil {
 					if _, exists := image["detail"]; exists && target == "messages" {
@@ -176,13 +183,19 @@ func inspectResponsesInputForLosses(report *conversionLossReport, input any, tar
 			switch typeName {
 			case "input_file":
 				if target == "chat_completions" {
-					report.add("input[].content[].input_file")
+					if stringValue(part["file_data"]) == "" {
+						report.add("input[].content[].input_file")
+					}
 				} else if target == "messages" && stringValue(part["file_id"]) != "" {
 					report.add("input[].content[].input_file.file_id")
 				}
 			case "input_audio":
 				if target == "messages" {
 					report.add("input[].content[].input_audio")
+				} else if target == "responses" {
+					if audio := mapValue(part["input_audio"]); audio != nil && audio["format"] != nil {
+						report.add("input[].content[].input_audio.format")
+					}
 				}
 			}
 			if target != "messages" {
@@ -223,7 +236,10 @@ func inspectAnthropicContentForLosses(report *conversionLossReport, content any,
 		switch typeName {
 		case "document":
 			if target == "chat_completions" {
-				report.add(prefix + ".document")
+				source := mapValue(part["source"])
+				if stringValue(source["type"]) != "base64" || stringValue(source["data"]) == "" {
+					report.add(prefix + ".document")
+				}
 			}
 		case "redacted_thinking":
 			report.add(prefix + ".redacted_thinking")

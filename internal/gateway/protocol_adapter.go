@@ -156,8 +156,10 @@ func decodeAdapterRequest(payload map[string]any, source string) (adapterRequest
 	switch source {
 	case "chat_completions":
 		request.MaxTokens = firstPositiveInt(payload["max_completion_tokens"], payload["max_tokens"])
-		request.Messages, request.System, err = decodeChatMessages(sliceValue(payload["messages"]))
-		request.SystemParts = textParts(request.System)
+		var systemParts []adapterPart
+		request.Messages, systemParts, err = decodeChatMessages(sliceValue(payload["messages"]))
+		request.SystemParts = systemParts
+		request.System = textFromParts(systemParts)
 	case "responses":
 		request.MaxTokens = intValue(payload["max_output_tokens"])
 		request.System = stringValue(payload["instructions"])
@@ -314,17 +316,17 @@ func encodeAdapterRequest(request adapterRequest, target string) (map[string]any
 	return payload, nil
 }
 
-func decodeChatMessages(values []any) ([]adapterMessage, string, error) {
+func decodeChatMessages(values []any) ([]adapterMessage, []adapterPart, error) {
 	messages := make([]adapterMessage, 0, len(values))
-	systems := make([]string, 0, 2)
+	systemParts := make([]adapterPart, 0, 2)
 	for _, raw := range values {
 		message := mapValue(raw)
 		if message == nil {
-			return nil, "", fmt.Errorf("%w: invalid chat message", errUnsupportedProtocolConversion)
+			return nil, nil, fmt.Errorf("%w: invalid chat message", errUnsupportedProtocolConversion)
 		}
 		role := stringValue(message["role"])
 		if role == "system" || role == "developer" {
-			systems = append(systems, textFromParts(decodeCommonContent(message["content"])))
+			systemParts = append(systemParts, decodeCommonContent(message["content"])...)
 			continue
 		}
 		parts := decodeCommonContent(message["content"])
@@ -348,7 +350,7 @@ func decodeChatMessages(values []any) ([]adapterMessage, string, error) {
 		}
 		messages = append(messages, adapterMessage{Role: role, Parts: parts})
 	}
-	return messages, strings.Join(nonEmptyStrings(systems), "\n\n"), nil
+	return messages, systemParts, nil
 }
 
 func decodeAnthropicMessages(values []any) ([]adapterMessage, string, error) {
@@ -491,6 +493,14 @@ func decodePortableContent(raw any, source string) []adapterPart {
 				audio = part
 			}
 			parts = append(parts, adapterPart{Type: "audio", Data: stringValue(audio["data"]), MediaType: firstNonEmptyString(audio["format"], audio["media_type"])})
+		case "file":
+			// OpenAI Chat represents inline files as a nested file object. Keep
+			// them in the portable document shape for the other two protocols.
+			file := mapValue(part["file"])
+			if file == nil {
+				file = part
+			}
+			parts = append(parts, adapterPart{Type: "document", Data: stringValue(file["file_data"]), Filename: firstNonEmptyString(file["filename"], file["file_name"])})
 		case "input_file":
 			document := adapterPart{Type: "document", FileID: stringValue(part["file_id"]), FileURL: stringValue(part["file_url"]), Data: stringValue(part["file_data"]), Filename: stringValue(part["filename"])}
 			if strings.HasPrefix(strings.ToLower(document.Data), "data:") {
@@ -534,7 +544,11 @@ func decodePortableContent(raw any, source string) []adapterPart {
 
 func encodeChatMessages(request adapterRequest) []any {
 	result := make([]any, 0, len(request.Messages)+1)
-	if request.System != "" {
+	if len(request.SystemParts) > 0 {
+		if content := encodeChatContent(request.SystemParts); content != nil {
+			result = append(result, map[string]any{"role": "system", "content": content})
+		}
+	} else if request.System != "" {
 		result = append(result, map[string]any{"role": "system", "content": request.System})
 	}
 	for _, message := range coalesceAssistantMessages(request.Messages) {
@@ -550,8 +564,6 @@ func encodeChatMessages(request adapterRequest) []any {
 			continue
 		}
 		entry := map[string]any{"role": normalizeRole(message.Role)}
-		content := encodeChatContent(remaining)
-		entry["content"] = content
 		calls := make([]any, 0)
 		for _, part := range remaining {
 			if part.Type == "tool_call" {
@@ -565,6 +577,13 @@ func encodeChatMessages(request adapterRequest) []any {
 				entry["refusal"] = part.Refusal
 			}
 		}
+		content := encodeChatContent(remaining)
+		if content == nil && len(calls) == 0 && entry["reasoning_content"] == nil && entry["refusal"] == nil {
+			// Do not emit an invalid content:null message when every remaining
+			// part is unsupported by Chat.
+			continue
+		}
+		entry["content"] = content
 		if len(calls) > 0 {
 			entry["tool_calls"] = calls
 		}
@@ -605,7 +624,10 @@ func encodeResponsesInput(messages []adapterMessage) []any {
 				}
 			case "audio":
 				if part.Data != "" {
-					content = append(content, map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": part.Data, "format": part.MediaType}})
+					// Responses input does not define an input_audio content part.
+					// The reference adapters carry audio as an inline input_file so
+					// the converted request remains valid upstream.
+					content = append(content, map[string]any{"type": "input_file", "file_data": part.Data})
 				}
 			case "tool_call":
 				arguments, _ := json.Marshal(nonNilObject(part.Arguments))
@@ -1406,6 +1428,11 @@ func copyOptionalSampling(payload map[string]any, request adapterRequest, target
 			}
 		case "chat_completions":
 			payload["stop"] = request.Stop
+		case "responses":
+			// Responses accepts the same stop sequence value under `stop`;
+			// preserve it when importing Chat `stop` or Messages
+			// `stop_sequences` instead of silently dropping the constraint.
+			payload["stop"] = request.Stop
 		}
 	}
 }
@@ -1943,12 +1970,47 @@ func sanitizeConvertedToolChoice(choice any, tools []any, target string) any {
 			names[name] = struct{}{}
 		}
 		if typeName := stringValue(tool["type"]); typeName != "" {
-			types[typeName] = struct{}{}
+			normalizedType := normalizePortableToolType(typeName, target)
+			types[normalizedType] = struct{}{}
+			if normalizedType != "function" {
+				if _, exists := names[normalizedType]; !exists {
+					names[normalizedType] = struct{}{}
+				}
+			}
 		}
 	}
 	choiceMap := mapValue(choice)
 	if choiceMap == nil {
 		return choice
+	}
+	if stringValue(choiceMap["type"]) == "allowed_tools" {
+		selectors := sliceValue(choiceMap["tools"])
+		filtered := make([]any, 0, len(selectors))
+		for _, rawSelector := range selectors {
+			selector := mapValue(rawSelector)
+			if selector == nil {
+				continue
+			}
+			name := stringValue(selector["name"])
+			typeName := normalizePortableToolType(stringValue(selector["type"]), target)
+			if name == "" && typeName != "function" {
+				name = typeName
+			}
+			_, nameExists := names[name]
+			_, typeExists := types[typeName]
+			if (name != "" && nameExists) || (typeName != "" && typeExists) {
+				filtered = append(filtered, cloneMap(selector))
+			}
+		}
+		if len(filtered) == 0 {
+			if target == "messages" {
+				return map[string]any{"type": "auto"}
+			}
+			return "auto"
+		}
+		result := cloneMap(choiceMap)
+		result["tools"] = filtered
+		return result
 	}
 	name := stringValue(choiceMap["name"])
 	if function := mapValue(choiceMap["function"]); function != nil {
@@ -2029,6 +2091,17 @@ func encodeChatContent(parts []adapterPart) any {
 		case "audio":
 			if part.Data != "" {
 				content = append(content, map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": part.Data, "format": part.MediaType}})
+			}
+		case "document":
+			// Chat's file content contract accepts inline file data. A remote
+			// URL or provider file id has no equivalent portable Chat field and
+			// is intentionally omitted rather than emitting an invalid shape.
+			if part.Data != "" {
+				file := map[string]any{"file_data": part.Data}
+				if part.Filename != "" {
+					file["filename"] = part.Filename
+				}
+				content = append(content, map[string]any{"type": "file", "file": file})
 			}
 		}
 	}
@@ -2178,6 +2251,11 @@ func responseStopReason(root map[string]any) string {
 			return reason
 		}
 		return "max_output_tokens"
+	}
+	if stringValue(root["status"]) == "failed" {
+		// Chat and Messages have no failed response envelope. Preserve the
+		// non-success terminal meaning through their closest safety stop state.
+		return "content_filter"
 	}
 	return "stop"
 }

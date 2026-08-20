@@ -114,7 +114,7 @@ func TestConversionLostFieldsReportsPathsWithoutValues(t *testing.T) {
 		"input": []any{
 			map[string]any{"type": "item_reference", "id": secret},
 			map[string]any{"type": "message", "role": "user", "content": []any{
-				map[string]any{"type": "input_file", "file_data": secret, "filename": "secret.txt"},
+				map[string]any{"type": "input_file", "file_id": secret, "filename": "secret.txt"},
 			}},
 		},
 		"tools":            []any{map[string]any{"type": "web_search", "filters": map[string]any{"allowed_domains": []any{secret}}}},

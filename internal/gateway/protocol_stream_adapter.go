@@ -215,7 +215,7 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 		response.ID = a.response.ID
 	}
 	a.response = response
-	a.annotations = append(a.annotations[:0], response.Annotations...)
+	a.annotations = uniqueStreamAnnotations(response.Annotations, response.Citations)
 	if a.target == "messages" && duplicatesUnsignedReasoning(response.Text, response.Reasoning, response.ReasoningSignature) {
 		response.Text = ""
 		a.response.Text = ""
@@ -232,11 +232,8 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 	if response.Refusal != "" {
 		a.writeContentDelta(&output, "refusal", response.Refusal)
 	}
-	for _, annotation := range response.Annotations {
+	for _, annotation := range a.annotations {
 		a.writeAnnotationDelta(&output, annotation)
-	}
-	for _, citation := range response.Citations {
-		a.writeAnnotationDelta(&output, citation)
 	}
 	for _, call := range response.ToolCalls {
 		arguments, _ := json.Marshal(nonNilObject(call.Arguments))
@@ -244,9 +241,55 @@ func (a *protocolStreamAdapter) FromBufferedResponse(body []byte) ([]byte, error
 		a.mergeTool(tool)
 		a.writeToolDelta(&output, tool)
 	}
+	for _, part := range response.SpecialParts {
+		if part.Type != "server_tool_use" {
+			continue
+		}
+		resultPart := findPartByTypeAndID(response.SpecialParts, "web_search_tool_result", part.ID)
+		arguments := ""
+		if value := mapValue(part.Arguments); value != nil {
+			encoded, _ := json.Marshal(value)
+			arguments = string(encoded)
+		}
+		status := firstNonEmptyString(part.Status, resultPart.Status)
+		if resultPart.IsError {
+			status = "failed"
+		}
+		a.writeWebSearchEvent(&output, adapterStreamWebSearchEvent{
+			Key:       "buffered-web-search:" + firstNonEmptyString(part.ID, fmt.Sprintf("%d", len(a.webSearches))),
+			ID:        part.ID,
+			Name:      firstNonEmptyString(part.Name, "web_search"),
+			Arguments: arguments,
+			Action:    cloneMap(part.Extra),
+			Result:    bufferedWebSearchResult(resultPart),
+			Status:    status,
+			Stage:     "done",
+		})
+	}
 	a.writeDone(&output)
 	a.finished = true
 	return output.Bytes(), nil
+}
+
+func bufferedWebSearchResult(part adapterPart) any {
+	if part.IsError {
+		return map[string]any{"type": "web_search_tool_result_error", "error_code": firstNonEmptyString(part.ErrorCode, "failed")}
+	}
+	results := make([]any, 0, len(part.Content))
+	for _, item := range part.Content {
+		if item.ImageURL == "" {
+			continue
+		}
+		value := cloneMap(item.Extra)
+		if value == nil {
+			value = map[string]any{}
+		}
+		value["type"] = "web_search_result"
+		value["url"] = item.ImageURL
+		value["title"] = firstNonEmptyString(item.Text, item.ImageURL)
+		results = append(results, value)
+	}
+	return results
 }
 
 func (a *protocolStreamAdapter) setFallbackResponseID(responseID string) {
@@ -1397,6 +1440,30 @@ func (a *protocolStreamAdapter) appendAnnotation(annotation any) {
 	}
 	a.annotations = append(a.annotations, annotation)
 	a.response.Annotations = append(a.response.Annotations, annotation)
+}
+
+func uniqueStreamAnnotations(annotations []any, citations []adapterCitation) []any {
+	result := make([]any, 0, len(annotations)+len(citations))
+	appendUnique := func(value any) {
+		if value == nil {
+			return
+		}
+		wanted, _ := json.Marshal(openAIStreamAnnotation(value))
+		for _, existing := range result {
+			encoded, _ := json.Marshal(openAIStreamAnnotation(existing))
+			if bytes.Equal(wanted, encoded) {
+				return
+			}
+		}
+		result = append(result, value)
+	}
+	for _, annotation := range annotations {
+		appendUnique(annotation)
+	}
+	for _, citation := range citations {
+		appendUnique(citation)
+	}
+	return result
 }
 
 func writeAdapterSSE(output *bytes.Buffer, eventName string, value any) {
