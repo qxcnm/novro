@@ -38,6 +38,7 @@ const (
 	maxGatewayBodyBytes          int64 = 0
 	maxUpstreamBodyBytes         int64 = 0
 	maxUpstreamErrorBodyBytes    int64 = 64 << 10
+	maxUpstreamHTTPAttempts            = 3
 	defaultMaxOutputTokens             = 4096
 	streamSettlementDrainTimeout       = 30 * time.Second
 )
@@ -569,6 +570,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 	failureCode := "upstream_unavailable"
 	failureMessage := "所有上游渠道均暂时不可用"
 	failureStatus := http.StatusBadGateway
+candidateLoop:
 	for index, attempt := range attempts {
 		route := attempt.route
 		lastRoute = route
@@ -601,80 +603,107 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 			continue
 		}
 		attemptContext, cancelAttempt := context.WithCancel(upstreamContext)
-		upstreamRequest, err := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
-		if err != nil {
-			cancelAttempt()
-			h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
-			continue
-		}
-		setUpstreamHeaders(upstreamRequest, r, route, upstreamProtocol)
-		setUpstreamIdempotencyKey(upstreamRequest, requestID)
-		retryDelays := h.upstreamRetryDelays
-		if stream && upstreamStream {
-			// A failed upstream stream can be safely retried as a buffered chat
-			// completion below, without waiting through several long header timeouts.
-			retryDelays = nil
-		}
-		response, err, requestWritten := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
-		streamRetry := stream && upstreamStream && upstreamEndpoint == "chat_completions" && err != nil
-		if streamRetry && !requestWritten {
-			if response != nil {
-				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
-				_ = response.Body.Close()
+		for httpAttempt := 0; httpAttempt < maxUpstreamHTTPAttempts; httpAttempt++ {
+			upstreamRequest, err := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
+			if err != nil {
+				cancelAttempt()
+				h.logger.Warn("create gateway upstream request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
+				continue candidateLoop
 			}
-			fallbackBody, fallbackErr := buildAdaptedUpstreamBody(routePayload, route, endpoint, upstreamEndpoint, false)
-			if fallbackErr == nil {
-				fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
-				if requestErr == nil {
-					setUpstreamHeaders(fallbackRequest, r, route, upstreamProtocol)
-					setUpstreamIdempotencyKey(fallbackRequest, requestID)
-					fallbackRetryDelays := h.upstreamRetryDelays
-					if len(fallbackRetryDelays) > 0 {
-						fallbackRetryDelays = fallbackRetryDelays[:len(fallbackRetryDelays)-1]
-					}
-					fallbackResponse, fallbackRequestErr, fallbackWritten := h.doUpstreamWithRetries(fallbackRequest, fallbackRetryDelays)
-					response, err, requestWritten = fallbackResponse, fallbackRequestErr, fallbackWritten
-					if fallbackRequestErr == nil {
-						h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
+			setUpstreamHeaders(upstreamRequest, r, route, upstreamProtocol)
+			setUpstreamIdempotencyKey(upstreamRequest, requestID)
+			retryDelays := h.upstreamRetryDelays
+			if stream && upstreamStream {
+				// A failed upstream stream can be safely retried as a buffered chat
+				// completion below, without waiting through several long header timeouts.
+				retryDelays = nil
+			}
+			response, err, requestWritten := h.doUpstreamWithRetries(upstreamRequest, retryDelays)
+			streamRetry := stream && upstreamStream && upstreamEndpoint == "chat_completions" && err != nil
+			if streamRetry && !requestWritten {
+				if response != nil {
+					_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+					_ = response.Body.Close()
+				}
+				fallbackBody, fallbackErr := buildAdaptedUpstreamBody(routePayload, route, endpoint, upstreamEndpoint, false)
+				if fallbackErr == nil {
+					fallbackRequest, requestErr := http.NewRequestWithContext(attemptContext, http.MethodPost, upstreamURL, bytes.NewReader(fallbackBody))
+					if requestErr == nil {
+						setUpstreamHeaders(fallbackRequest, r, route, upstreamProtocol)
+						setUpstreamIdempotencyKey(fallbackRequest, requestID)
+						fallbackRetryDelays := h.upstreamRetryDelays
+						if len(fallbackRetryDelays) > 0 {
+							fallbackRetryDelays = fallbackRetryDelays[:len(fallbackRetryDelays)-1]
+						}
+						fallbackResponse, fallbackRequestErr, fallbackWritten := h.doUpstreamWithRetries(fallbackRequest, fallbackRetryDelays)
+						response, err, requestWritten = fallbackResponse, fallbackRequestErr, fallbackWritten
+						if fallbackRequestErr == nil {
+							h.logger.Warn("fallback to buffered upstream completion", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID)
+						}
 					}
 				}
 			}
-		}
-		if err != nil {
-			cancelAttempt()
-			if requestWritten {
-				// 请求字节已经写出时无法判断上游是否执行成功；保留预占并等待人工核对，
-				// 不能切换渠道重放，否则用户可能在未知情况下被执行两次。
-				h.markOperationPendingUnknown(requestID, "upstream_result_unknown")
-				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游请求结果无法确认；预占已保留，系统不会自动重放请求")
+			if err != nil {
+				cancelAttempt()
+				if requestWritten {
+					// 请求字节已经写出时无法判断上游是否执行成功；保留预占并等待人工核对，
+					// 不能切换渠道重放，否则用户可能在未知情况下被执行两次。
+					h.markOperationPendingUnknown(requestID, "upstream_result_unknown")
+					writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游请求结果无法确认；预占已保留，系统不会自动重放请求")
+					return
+				}
+				failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
+				h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
+				if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+					failureStatus = http.StatusGatewayTimeout
+					failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
+					break candidateLoop
+				}
+				continue candidateLoop
+			}
+			if retryableUpstreamStatus(response.StatusCode) {
+				failureCode = "upstream_http_error"
+				failureMessage = fmt.Sprintf("上游返回 HTTP %d", response.StatusCode)
+				errorBody, errorBodyErr := readLimited(response.Body, maxUpstreamErrorBodyBytes)
+				_ = response.Body.Close()
+				upstreamError := summarizeUpstreamError(errorBody)
+				if upstreamError != "" {
+					failureMessage += "：" + upstreamError
+				}
+				h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts), "http_attempt", httpAttempt+1, "upstream_error", upstreamError, "error_body_read_failed", errorBodyErr != nil)
+				if httpAttempt+1 < maxUpstreamHTTPAttempts {
+					h.logger.Warn("retry gateway provider after HTTP failure", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts))
+					continue
+				}
+				cancelAttempt()
+				if index+1 < len(attempts) {
+					h.logger.Warn("switch gateway provider after repeated HTTP failure", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts))
+				}
+				continue candidateLoop
+			}
+			if stream && !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+				responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
+				_ = response.Body.Close()
+				cancelAttempt()
+				if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
+					h.markOperationPendingUnknown(requestID, "upstream_response_timeout")
+					writeError(w, http.StatusGatewayTimeout, "upstream_result_unknown", "上游响应读取超时；预占已保留，系统不会自动重放请求")
+					return
+				}
+				if readErr != nil {
+					h.logger.Warn("read buffered stream fallback", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
+					h.markOperationPendingUnknown(requestID, "upstream_response_incomplete")
+					writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
+					return
+				}
+				h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
 				return
 			}
-			failureCode, failureMessage = "upstream_connection_error", "连接上游失败"
-			h.logger.Warn("gateway upstream request failed", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", err)
-			if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
-				failureStatus = http.StatusGatewayTimeout
-				failureCode, failureMessage = "upstream_timeout", "上游请求超过总超时时间"
-				break
+			if stream || strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+				h.streamResponse(w, r, response, attemptContext, cancelAttempt, requestSettings, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
+				_ = response.Body.Close()
+				return
 			}
-			continue
-		}
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			failureCode = "upstream_http_error"
-			failureMessage = fmt.Sprintf("上游返回 HTTP %d", response.StatusCode)
-			errorBody, errorBodyErr := readLimited(response.Body, maxUpstreamErrorBodyBytes)
-			_ = response.Body.Close()
-			upstreamError := summarizeUpstreamError(errorBody)
-			if upstreamError != "" {
-				failureMessage += "：" + upstreamError
-			}
-			cancelAttempt()
-			h.logger.Warn("gateway upstream rejected request", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "status", response.StatusCode, "attempt", index+1, "candidates", len(attempts), "upstream_error", upstreamError, "error_body_read_failed", errorBodyErr != nil)
-			h.failOperation(requestID, failureCode)
-			h.recordFailure(actor, route, requestID, endpoint, failureStatus, failureCode, failureMessage, publicModel, startedAt)
-			writeError(w, failureStatus, "upstream_unavailable", fmt.Sprintf("上游渠道返回失败：%s（%s）", failureMessage, failureCode))
-			return
-		}
-		if stream && !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 			responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
 			_ = response.Body.Close()
 			cancelAttempt()
@@ -684,35 +713,15 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request, actor apikey.Act
 				return
 			}
 			if readErr != nil {
-				h.logger.Warn("read buffered stream fallback", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
+				h.logger.Warn("read gateway upstream response", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
 				h.markOperationPendingUnknown(requestID, "upstream_response_incomplete")
 				writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
 				return
 			}
-			h.bufferedStreamResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
+			h.bufferedResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
 			return
 		}
-		if stream || strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
-			h.streamResponse(w, r, response, attemptContext, cancelAttempt, requestSettings, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
-			_ = response.Body.Close()
-			return
-		}
-		responseBody, readErr := readLimited(response.Body, maxUpstreamBodyBytes)
-		_ = response.Body.Close()
 		cancelAttempt()
-		if errors.Is(upstreamContext.Err(), context.DeadlineExceeded) {
-			h.markOperationPendingUnknown(requestID, "upstream_response_timeout")
-			writeError(w, http.StatusGatewayTimeout, "upstream_result_unknown", "上游响应读取超时；预占已保留，系统不会自动重放请求")
-			return
-		}
-		if readErr != nil {
-			h.logger.Warn("read gateway upstream response", "request_id", requestID, "provider", route.Provider.Code, "route_id", route.ID, "attempt", index+1, "candidates", len(attempts), "error", readErr)
-			h.markOperationPendingUnknown(requestID, "upstream_response_incomplete")
-			writeError(w, http.StatusBadGateway, "upstream_result_unknown", "上游响应不完整；预占已保留，系统不会自动重放请求")
-			return
-		}
-		h.bufferedResponse(w, r, response, responseBody, actor, route, requestID, endpoint, upstreamEndpoint, reserved, attempt.inputEstimate, maximum, startedAt, payload)
-		return
 	}
 	h.failOperation(requestID, failureCode)
 	if lastRoute.ID != uuid.Nil {
